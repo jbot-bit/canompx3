@@ -421,10 +421,6 @@ def _build_strict_zero_warn_summary(
     if c12.get("valid") is not True:
         blockers.append("Criterion 12 invalid")
 
-    alarm_count = int((c12.get("counts") or {}).get("ALARM", 0) or 0)
-    if alarm_count > 0:
-        blockers.append(f"Criterion 12 alarm count > 0 ({alarm_count})")
-
     if allocator_summary.get("available") is not True:
         blockers.append("Allocator unavailable")
     elif allocator_summary.get("profile_match") is not True:
@@ -436,14 +432,30 @@ def _build_strict_zero_warn_summary(
             "Deployed not validated: " + ", ".join(str(strategy_id) for strategy_id in deployed_not_validated)
         )
 
+    # SR alarms are reported once per active lane, carrying the lane id and the
+    # watch/unreviewed qualifier so the entry is operator-actionable. The strict
+    # gate intentionally blocks on ANY active alarm — watch-reviewed or not —
+    # because watch-adjudication only permits continued trading under multi-cyclic
+    # SR monitoring (Pepelyshev-Polunchenko 2015), it does not zero the warning for
+    # a fresh --live capital flip. An un-reviewed alarm is the *cause* of its lane's
+    # lifecycle block, so the two are collapsed into one entry rather than counted
+    # twice. The Criterion 12 aggregate below then covers only alarms on strategies
+    # NOT in the active set, preserving fail-closed coverage without double-counting.
+    alarmed_active_ids: set[str] = set()
     for lane in active_lanes:
         strategy_id = str(lane.get("strategy_id") or "unknown")
-        if lane.get("lifecycle_blocked"):
-            blockers.append(f"Active lane lifecycle blocked: {strategy_id}")
         if str(lane.get("sr_status") or "").upper() == "ALARM":
+            alarmed_active_ids.add(strategy_id)
             review_outcome = lane.get("sr_review_outcome")
             review_note = "watch reviewed" if review_outcome == "watch" else "no watch review"
             blockers.append(f"Active lane SR alarm ({review_note}): {strategy_id}")
+        elif lane.get("lifecycle_blocked"):
+            blockers.append(f"Active lane lifecycle blocked: {strategy_id}")
+
+    alarm_count = int((c12.get("counts") or {}).get("ALARM", 0) or 0)
+    uncovered_alarms = alarm_count - len(alarmed_active_ids)
+    if uncovered_alarms > 0:
+        blockers.append(f"Criterion 12 alarm not on active lane ({uncovered_alarms})")
 
     if str(telemetry_maturity.get("verdict") or "") != VERDICT_MATURE:
         blockers.append(

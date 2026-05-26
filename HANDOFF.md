@@ -610,10 +610,9 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-26
-- **Commit:** be4400d8 — chore(stage): close daily-loss-dollar-cap-wiring (shipped c9ba1b92 + audit-fix 89f8e97b, re-audit PASS)
-- **Files changed:** 2 files
+- **Commit:** df8db840 — docs(handoff): live go-live Stage 0+1 shipped (dollar daily-loss breaker, audit PASS); Stages 2-5 next
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-26-daily-loss-dollar-cap-wiring.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

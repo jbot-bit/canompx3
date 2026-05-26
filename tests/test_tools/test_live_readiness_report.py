@@ -578,8 +578,14 @@ def test_strict_zero_warn_blocks_when_active_lane_blocked_and_sr_alarm(tmp_path:
     assert report["active_lanes"][0]["lifecycle_blocked"] is True
     assert report["active_lanes"][0]["sr_status"] == "ALARM"
     assert report["strict_zero_warn"]["green"] is False
-    assert any("lifecycle" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
-    assert any("sr alarm" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+    # An un-reviewed SR alarm IS the cause of the lifecycle block — it is reported
+    # once via the richer SR-alarm entry, not double-counted as a separate
+    # "lifecycle blocked" line for the same lane.
+    blockers = report["strict_zero_warn"]["blockers"]
+    sr_alarm_blockers = [b for b in blockers if "sr alarm" in b.lower() and "SID_A" in b]
+    lifecycle_blockers = [b for b in blockers if "lifecycle blocked" in b.lower() and "SID_A" in b]
+    assert len(sr_alarm_blockers) == 1
+    assert lifecycle_blockers == []
 
 
 def test_strict_zero_warn_blocks_any_active_sr_alarm_even_when_watch_reviewed(
@@ -606,6 +612,59 @@ def test_strict_zero_warn_blocks_any_active_sr_alarm_even_when_watch_reviewed(
     assert report["active_lanes"][0]["sr_review_outcome"] == "watch"
     assert report["strict_zero_warn"]["green"] is False
     assert any("watch reviewed" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+
+
+def test_strict_zero_warn_counts_one_active_alarm_once(tmp_path: Path, monkeypatch) -> None:
+    """One active SR alarm produces exactly one blocker entry, not a per-lane
+    entry plus a redundant Criterion 12 aggregate entry for the same alarm."""
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        criterion12={"valid": True, "counts": {"ALARM": 1}, "state_age_days": 0},
+        strategy_state={
+            "sr_status": "ALARM",
+            "sr_review_outcome": "watch",
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    blockers = report["strict_zero_warn"]["blockers"]
+    alarm_related = [b for b in blockers if "alarm" in b.lower()]
+    assert len(alarm_related) == 1
+    assert "SID_A" in alarm_related[0]
+    # The standalone Criterion 12 aggregate must NOT fire when the alarm is
+    # already covered by an active-lane entry.
+    assert not any("alarm count" in b.lower() or "alarm not on active lane" in b.lower() for b in blockers)
+
+
+def test_strict_zero_warn_flags_alarm_not_on_active_lane(tmp_path: Path, monkeypatch) -> None:
+    """Fail-closed coverage: an SR alarm count exceeding the active-lane alarms
+    (i.e. an orphan alarm on a strategy dropped from the active set) still
+    produces a blocker via the narrowed Criterion 12 aggregate."""
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        # Two alarms reported by C12, but the single active lane carries no alarm.
+        criterion12={"valid": True, "counts": {"ALARM": 2}, "state_age_days": 0},
+        strategy_state={"sr_status": "CONTINUE", "sr_review_outcome": None},
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    blockers = report["strict_zero_warn"]["blockers"]
+    assert report["strict_zero_warn"]["green"] is False
+    aggregate = [b for b in blockers if "alarm not on active lane" in b.lower()]
+    assert len(aggregate) == 1
+    assert "(2)" in aggregate[0]
 
 
 def test_strict_zero_warn_blocks_when_live_stage_pending(tmp_path: Path, monkeypatch) -> None:
