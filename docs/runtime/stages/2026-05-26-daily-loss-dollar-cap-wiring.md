@@ -75,7 +75,21 @@ task: |
     - Partial fills / multi-contract → pnl_dollars uses event.contracts.
     - Signal-only → breaker still accrues (preview), never routes orders.
 
-mode: IMPLEMENTATION
+mode: CLOSED
+closed_note: |
+  SHIPPED 2026-05-26. Commits c9ba1b92 (feature) + 89f8e97b (audit fix).
+  $450/account dollar daily-loss breaker, true-dollar end-to-end.
+  Adversarial-audit gate: FIRST PASS FAIL (evidence-auditor caught CRITICAL —
+  breaker wired only into session-end SCRATCH path, dead for live _exit_trade
+  exits). Fixed in 89f8e97b: _exit_trade now computes + forwards pnl_dollars
+  for all win/loss/early-exit/hold-timeout/ib-opposed outcomes. RE-AUDIT: PASS
+  (double-accrual structurally impossible — EXITED trades pruned before scratch
+  path; sign correct; regression test would have caught the original bug).
+  Verification: 224 unit + 235 orchestrator pass; drift 165/0; ruff clean.
+  DEFERRED (audit CONDITIONAL, separate stage): daily-loss halt blocks new
+  entries but does not auto-flatten open positions. Same behavior as existing
+  R-cap; broker bracket + $2K MLL HWM tracker are the live guards. Flatten-on-
+  daily-halt is a design decision affecting BOTH caps — needs its own stage.
 scope_lock:
   - trading_app/prop_profiles.py
   - trading_app/risk_manager.py

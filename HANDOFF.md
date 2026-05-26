@@ -585,18 +585,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-26
-- **Commit:** c9ba1b92 — [judgment] HIGH feat(risk): true dollar daily-loss circuit breaker ($450/account, Carver+2026-sim grounded)
-- **Files changed:** 10 files
+- **Commit:** 89f8e97b — [judgment] HIGH fix(risk): wire dollar breaker into _exit_trade (adversarial-audit CRITICAL on c9ba1b92)
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-26-daily-loss-dollar-cap-wiring.md`
-  - `pipeline/check_drift.py`
-  - `tests/test_trading_app/test_risk_manager.py`
-  - `tests/test_trading_app/test_session_safety_state.py`
+  - `tests/test_trading_app/test_execution_engine.py`
   - `trading_app/execution_engine.py`
-  - `trading_app/live/session_orchestrator.py`
-  - `trading_app/live/session_safety_state.py`
-  - `trading_app/prop_profiles.py`
-  - `trading_app/risk_manager.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
