@@ -1553,10 +1553,17 @@ class ExecutionEngine:
                 4,
             )
 
+        # Realized dollars (per-account) for the dollar circuit breaker:
+        # pnl_r × risk_points × point_value × contracts. risk_points > 0 here
+        # (entry≠stop asserted at L1521); mirrors the scratch-path accrual and
+        # session_orchestrator exit accounting. Without this, the dollar breaker
+        # would be dead for all live stop/target/early exits (audit c9ba1b92).
+        pnl_dollars = trade.pnl_r * risk_points * cost.point_value * trade.contracts
         self.daily_pnl_r += trade.pnl_r
+        self.daily_pnl_dollars += pnl_dollars
         self.completed_trades.append(trade)
         if self.risk_manager is not None:
-            self.risk_manager.on_trade_exit(trade.pnl_r)
+            self.risk_manager.on_trade_exit(trade.pnl_r, pnl_dollars=pnl_dollars)
 
         # Build reason string
         if outcome == "early_exit":

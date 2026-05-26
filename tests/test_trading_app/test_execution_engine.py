@@ -411,6 +411,33 @@ class TestPnL:
         summary = engine.get_daily_summary()
         assert summary["daily_pnl_r"] == -1.0
 
+    def test_daily_pnl_dollars_accrues_through_real_exit(self):
+        """The dollar accumulator must credit a real stop-out via _exit_trade
+        (not only the session-end scratch path). Regression for the
+        adversarial-audit FAIL on commit c9ba1b92: _exit_trade forwarded no
+        pnl_dollars, leaving the dollar circuit breaker dead for live trades."""
+        from trading_app.risk_manager import RiskLimits, RiskManager
+
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, rr_target=2.0)
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=1.0))
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost(), risk_manager=rm)
+        engine.on_trading_day_start(date(2024, 1, 5))
+        rm.daily_reset(date(2024, 1, 5))
+
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+        engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2712, 2707, 2710))
+        engine.on_bar(_bar(ts_base + timedelta(minutes=7), 2704, 2706, 2694, 2695))  # stop hit
+
+        # A real loss occurred: engine dollar accumulator must be negative...
+        assert engine.daily_pnl_dollars < 0, "engine.daily_pnl_dollars did not accrue the real exit loss"
+        # ...and it must have been forwarded to the risk manager (cap=$1 so any
+        # real-dollar loss trips it).
+        assert rm.daily_pnl_dollars < 0, "risk_manager.daily_pnl_dollars not credited from _exit_trade"
+        assert rm.is_halted(), "dollar circuit breaker did not halt after real stop-out exceeded $1 cap"
+
 
 # ============================================================================
 # Daily Summary Tests
