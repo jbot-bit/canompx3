@@ -188,3 +188,24 @@ class TestRecoverRingRoundTrip:
         assert rc == 3
         # Ring preserved for re-attempt.
         assert (isolated_ring_dir / "MNQ.json").exists()
+
+    def test_flush_raising_non_duckdb_exception_returns_3_and_preserves_ring(
+        self, isolated_ring_dir, tmp_db, recover_module, monkeypatch
+    ):
+        """flush_to_db catches only (duckdb.Error, OSError); any other exception
+        class must still map to the fail-closed exit-3 contract (ring preserved),
+        not escape as an uncontrolled traceback."""
+        bars = [_bar(0)]
+        _populate_ring("MNQ", bars)
+
+        from trading_app.live import bar_persister as _bp
+
+        def _raise(self):
+            raise RuntimeError("connection pool misconfigured")
+
+        monkeypatch.setattr(_bp.BarPersister, "flush_to_db", _raise)
+
+        rc = recover_module.recover("MNQ", db_path=tmp_db)
+        assert rc == 3
+        # Ring preserved for re-attempt.
+        assert (isolated_ring_dir / "MNQ.json").exists()

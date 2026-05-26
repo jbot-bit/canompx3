@@ -125,7 +125,20 @@ def recover(
     # would also re-enqueue to the ring writer, which is the wrong direction.)
     with bp._lock:
         bp._bars.extend(bars)
-    n_persisted = bp.flush_to_db()
+    # flush_to_db catches only (duckdb.Error, OSError) and returns 0; any other
+    # exception class would otherwise escape with an uncontrolled traceback,
+    # breaking the documented fail-closed exit-code contract (exit 3). Map every
+    # write failure to the same operator-facing outcome: ring preserved, exit 3.
+    try:
+        n_persisted = bp.flush_to_db()
+    except Exception as exc:  # noqa: BLE001 — operator escape valve: any write failure → exit 3
+        print(
+            f"[recover_ring] {symbol}: ERROR flush_to_db raised {type(exc).__name__}: {exc} — "
+            "ring file PRESERVED for re-attempt. Check gold.db permissions / "
+            "free space and re-run.",
+            file=sys.stderr,
+        )
+        return 3
     if n_persisted == 0:
         print(
             f"[recover_ring] {symbol}: ERROR flush_to_db returned 0 — "
