@@ -609,10 +609,12 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-05-27
-- **Commit:** d355d441 — docs(handoff): point Last Session at 28a70f70 audit-artifact commit
-- **Files changed:** 1 files
+- **Date:** 2026-05-28
+- **Commit:** 68c5893a — chore(drift): advisory check for stale validated_setups not reproducing from canonical
+- **Files changed:** 3 files
   - `HANDOFF.md`
+  - `docs/audit/results/2026-05-27-validated-setups-canonical-reproduction-mes-mgc.md`
+  - `pipeline/check_drift.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

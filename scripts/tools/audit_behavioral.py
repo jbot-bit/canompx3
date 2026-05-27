@@ -37,22 +37,42 @@ INSTRUMENT_ALLOWLIST = {
 INSTRUMENT_ALLOWLIST_DIRS = {"tests", "docs", "research"}
 
 
+def _git_ignored(path: Path) -> bool:
+    """True if git ignores this path. Fail-open: any error / no-git → False (scan it).
+
+    Generated, gitignored scratch artifacts under scanned dirs (e.g. the
+    sync_pinecone.py auto-memory bundle) are not source and must not trip the
+    anti-pattern regexes. The scanner targets tracked source only.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", str(path)],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+    # exit 0 = ignored, 1 = not ignored, 128 = not a git repo / error → fail-open
+    return result.returncode == 0
+
+
 def _python_files(dirs: list[Path]) -> list[Path]:
-    """Collect .py files from given directories."""
+    """Collect tracked .py files from given directories (skips git-ignored)."""
     files = []
     for d in dirs:
         if d.exists():
-            files.extend(d.rglob("*.py"))
+            files.extend(f for f in d.rglob("*.py") if not _git_ignored(f))
     return sorted(files)
 
 
 def _text_files(dirs: list[Path], exts: tuple[str, ...] = (".py", ".yml", ".yaml", ".md")) -> list[Path]:
-    """Collect text files from given directories."""
+    """Collect tracked text files from given directories (skips git-ignored)."""
     files = []
     for d in dirs:
         if d.exists():
             for ext in exts:
-                files.extend(d.rglob(f"*{ext}"))
+                files.extend(f for f in d.rglob(f"*{ext}") if not _git_ignored(f))
     return sorted(set(files))
 
 
