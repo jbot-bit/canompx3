@@ -1273,6 +1273,81 @@ class TestKillSwitch:
         # No orders submitted
         assert len(orch.order_router.submitted) == 0
 
+    def test_post_session_verifies_broker_flat_before_skip(self):
+        """Flag set + broker query_open returns flat → EOD close skipped (broker-confirmed)."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0, orphans=[]))
+        orch._kill_switch_fired = True
+        orch._notify = MagicMock()
+
+        orch.post_session()
+
+        # Broker confirmed flat → no EOD close, no close orders, no MANUAL CLOSE alert
+        orch.engine.on_trading_day_end.assert_not_called()
+        assert len(orch.order_router.submitted) == 0
+        manual = [c for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
+        assert not manual, f"spurious MANUAL CLOSE alert on confirmed-flat shutdown: {orch._notify.call_args_list}"
+
+    def test_post_session_attempts_close_when_broker_shows_open(self):
+        """Flag set + broker query_open shows an OPEN position → EOD close attempted + alert."""
+        orch = build_orchestrator(
+            FakeBrokerComponents(
+                fill_price=2350.0,
+                orphans=[{"contract_id": "MGCJ6", "side": "long", "size": 1, "avg_price": 2350.0}],
+            )
+        )
+        orch._kill_switch_fired = True
+        orch._notify = MagicMock()
+        orch.engine.on_trading_day_end.return_value = [_exit_event()]
+
+        orch.post_session()
+
+        # Race closed: EOD close was attempted (not skipped) and operator alerted
+        orch.engine.on_trading_day_end.assert_called_once()
+        manual = [c for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
+        assert manual, f"operator not alerted when broker shows open position: {orch._notify.call_args_list}"
+        assert len(orch.order_router.submitted) >= 1, "EOD close order not submitted despite open position"
+
+    def test_post_session_falls_back_to_local_tracker_when_query_unsupported(self):
+        """Flag set + query_open NotImplementedError + local tracker active → close attempted + alert."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._kill_switch_fired = True
+        orch._notify = MagicMock()
+        orch.engine.on_trading_day_end.return_value = [_exit_event()]
+
+        def _raise(account_id):
+            raise NotImplementedError
+
+        orch.positions.query_open = _raise
+        # Local tracker shows an active position (emergency flatten left it open)
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        orch.post_session()
+
+        orch.engine.on_trading_day_end.assert_called_once()
+        manual = [c for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
+        assert manual, f"operator not alerted on local-tracker fallback: {orch._notify.call_args_list}"
+        assert len(orch.order_router.submitted) >= 1
+
+    def test_post_session_alerts_when_query_fails(self):
+        """Flag set + query_open raises generic Exception → CRITICAL + alert, does NOT skip."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._kill_switch_fired = True
+        orch._notify = MagicMock()
+        orch.engine.on_trading_day_end.return_value = [_exit_event()]
+
+        def _raise(account_id):
+            raise RuntimeError("broker auth down at EOD")
+
+        orch.positions.query_open = _raise
+
+        orch.post_session()
+
+        # Fail-closed: did NOT skip the close, alerted the operator
+        orch.engine.on_trading_day_end.assert_called_once()
+        manual = [c for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
+        assert manual, f"operator not alerted on query failure: {orch._notify.call_args_list}"
+
     async def test_emergency_flatten_uses_correct_qty(self):
         """Kill switch uses record.contracts (not hardcoded 1) for multi-contract."""
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))

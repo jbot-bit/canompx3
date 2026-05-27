@@ -610,10 +610,11 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-27
-- **Commit:** b8937962 — chore(live): revert START_BOT.bat to --signal-only
-- **Files changed:** 2 files
+- **Commit:** 99958a51 — [judgment] fix(live): alert operator on silent feed-dead flatten path
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `START_BOT.bat`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

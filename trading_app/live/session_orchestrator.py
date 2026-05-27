@@ -1042,7 +1042,12 @@ class SessionOrchestrator:
         self._notify(f"Session started: {instrument} ({mode})")
 
     def _fire_kill_switch(self) -> None:
-        """Trigger emergency flatten. Persisted to survive crashes."""
+        """Set + persist the kill-switch flag (survives crashes).
+
+        Does NOT flatten — flattening is a separate ``_emergency_flatten()``
+        call. The flag being True is not evidence that a flatten succeeded;
+        ``post_session`` verifies broker truth before skipping the EOD close.
+        """
         self._kill_switch_fired = True
         self._safety_state.kill_switch_fired = True
         self._safety_state.save()
@@ -3016,6 +3021,64 @@ class SessionOrchestrator:
             )
         return False, ""
 
+    def _kill_switch_positions_confirmed_flat(self) -> bool:
+        """Whether positions are CONFIRMED flat after a kill switch fired.
+
+        The kill-switch flag is not evidence a flatten succeeded, so
+        ``post_session`` must verify against broker truth before skipping the
+        EOD close. Returns True only when we can affirmatively confirm flat:
+
+        - Signal-only / no order router / no positions: no live position is
+          possible, so confirmed flat (short-circuit, same as
+          ``_broker_equity_stale``).
+        - Broker ``query_open`` returns empty AND the local tracker is flat:
+          confirmed flat.
+        - Broker shows an open position: NOT flat.
+        - ``query_open`` unsupported (NotImplementedError): fall back to the
+          local tracker — confirmed flat only if it has no active positions.
+        - ``query_open`` fails (generic Exception): fail-closed — NOT confirmed
+          (assume a position may be open), with an operator alert.
+        """
+        if self.signal_only or self.order_router is None or self.positions is None:
+            return True
+        try:
+            broker_open = self.positions.query_open(self.order_router.account_id)
+        except NotImplementedError:
+            local_active = self._positions.active_positions()
+            if local_active:
+                msg = (
+                    f"MANUAL CLOSE REQUIRED: {self._broker_name} broker does not implement query_open() "
+                    f"and local tracker shows {len(local_active)} active position(s) after kill switch"
+                )
+                log.critical(msg)
+                self._notify(msg)
+                return False
+            log.warning(
+                "Kill switch flat-check: %s broker does not implement query_open() — relying on local tracker (flat)",
+                self._broker_name,
+            )
+            return True
+        except Exception as e:
+            msg = (
+                f"MANUAL CLOSE REQUIRED: broker position query failed at EOD after kill switch ({e}) — "
+                "cannot confirm flat"
+            )
+            log.critical(msg)
+            self._notify(msg)
+            return False
+
+        if broker_open:
+            log.critical("Kill switch flat-check: broker shows OPEN position(s): %s", broker_open)
+            return False
+        local_active = self._positions.active_positions()
+        if local_active:
+            log.critical(
+                "Kill switch flat-check: broker reports flat but local tracker shows %d active position(s)",
+                len(local_active),
+            )
+            return False
+        return True
+
     async def _watchdog(self) -> None:
         """Independent watchdog task — fires kill switch if feed goes silent
         OR if the broker stops acknowledging equity reads with positions open.
@@ -3763,11 +3826,24 @@ class SessionOrchestrator:
         Each event is wrapped individually so one failure doesn't abort the rest
         (CRIT-4: preventing open positions from being abandoned on error).
         """
-        # If kill switch already fired, positions are already closed at the broker.
-        # Skip EOD close to avoid duplicate close orders.
-        if self._kill_switch_fired:
-            log.info("Kill switch was activated — skipping EOD close (positions already flattened)")
+        # If the kill switch fired, the EOD close is normally redundant — the
+        # kill-switch path attempts an emergency flatten. But the flag being
+        # True is NOT evidence the flatten succeeded (_emergency_flatten leaves
+        # the position open if all retries fail; the no-loop feed-dead path
+        # never flattens at all). Verify against broker truth before skipping,
+        # so an abandoned position is caught at shutdown rather than deferred to
+        # the next session-start orphan check.
+        if self._kill_switch_fired and self._kill_switch_positions_confirmed_flat():
+            log.info("Kill switch was activated and positions confirmed flat — skipping EOD close")
             eod_events = []
+        elif self._kill_switch_fired:
+            msg = (
+                "MANUAL CLOSE REQUIRED: Kill switch fired but positions are NOT confirmed flat — "
+                "attempting EOD close instead of abandoning"
+            )
+            log.critical(msg)
+            self._notify(msg)
+            eod_events = self.engine.on_trading_day_end()
         else:
             eod_events = self.engine.on_trading_day_end()
 
