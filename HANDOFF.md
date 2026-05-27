@@ -610,10 +610,10 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-27
-- **Commit:** dc2500a8 — test(live): pin kill-switch degraded-flat skip path (audit finding)
+- **Commit:** 28a70f70 — docs(audit): adversarial-audit gate artifact for Gap #2 kill-switch fix
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `docs/audit/2026-05-27-gap2-killswitch-post-session-broker-truth.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
