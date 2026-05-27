@@ -19,6 +19,7 @@ from pipeline.check_drift import (
     check_chordia_result_threshold_matches_prereg,
     check_config_filter_sync,
     check_daily_features_row_integrity,
+    check_dow_classification_complete,
     check_hardcoded_mgc_sql,
     check_holdout_policy_declaration_consistency,
     check_non_bars1m_writes,
@@ -3568,3 +3569,35 @@ class TestDocHygieneDeferredAuthoringPrereg:
         violations = self._setup(tmp_path, self._PREREG_NO_GATE, monkeypatch)
         path_violations = [v for v in violations if "references missing path" in v]
         assert len(path_violations) == 1, violations
+
+
+class TestDowClassificationComplete:
+    """Check: every dynamic SESSION_CATALOG session DOW-classified exactly once."""
+
+    def test_current_catalog_passes(self):
+        # The real catalog must be clean (NYSE_PREOPEN + all others classified).
+        assert check_dow_classification_complete() == []
+
+    def test_catches_unclassified_session(self, monkeypatch):
+        # Inject a fake dynamic session in NEITHER DOW set -> must be flagged.
+        from pipeline import dst
+
+        patched = dict(dst.SESSION_CATALOG)
+        patched["FAKE_UNCLASSIFIED"] = {
+            "type": "dynamic",
+            "resolver": dst.tokyo_open_brisbane,
+            "break_group": "asia",
+            "event": "injected test session",
+        }
+        monkeypatch.setattr(dst, "SESSION_CATALOG", patched)
+        violations = check_dow_classification_complete()
+        assert any("FAKE_UNCLASSIFIED" in v and "not DOW-classified" in v for v in violations), violations
+
+    def test_catches_double_classified_session(self, monkeypatch):
+        # A session in BOTH DOW sets is contradictory -> must be flagged.
+        from pipeline import dst
+
+        both_aligned = set(dst.DOW_ALIGNED_SESSIONS) | {"NYSE_PREOPEN"}
+        monkeypatch.setattr(dst, "DOW_ALIGNED_SESSIONS", both_aligned)
+        violations = check_dow_classification_complete()
+        assert any("NYSE_PREOPEN" in v and "BOTH" in v for v in violations), violations

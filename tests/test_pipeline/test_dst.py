@@ -5,6 +5,7 @@ from datetime import date
 import pytest
 
 from pipeline.dst import (
+    DOW_MISALIGNED_SESSIONS,
     DYNAMIC_ORB_RESOLVERS,
     SESSION_CATALOG,
     cme_close_brisbane,
@@ -16,12 +17,15 @@ from pipeline.dst import (
     is_us_dst,
     london_open_brisbane,
     nyse_close_brisbane,
+    nyse_preopen_brisbane,
+    orb_utc_window,
     singapore_open_brisbane,
     tokyo_open_brisbane,
     us_data_open_brisbane,
     us_equity_open_brisbane,
     us_post_equity_brisbane,
     validate_catalog,
+    validate_dow_filter_alignment,
 )
 from pipeline.init_db import ORB_LABELS
 
@@ -194,6 +198,106 @@ class TestSingaporeOpenBrisbane:
 
 
 # =========================================================================
+# NYSE_PREOPEN resolver (NYSE Order Imbalance 09:00 ET, 30 min pre cash open)
+# =========================================================================
+
+
+class TestNysePreopenBrisbane:
+    """NYSE pre-open 09:00 ET -> Brisbane local time. Mirrors NYSE_OPEN, 30 min earlier."""
+
+    def test_summer_edt(self):
+        # EDT: 09:00 ET = 13:00 UTC = 23:00 AEST (same cal day)
+        h, m = nyse_preopen_brisbane(date(2024, 7, 15))
+        assert (h, m) == (23, 0)
+
+    def test_winter_est(self):
+        # EST: 09:00 ET = 14:00 UTC = 00:00 AEST (next cal day -> hour 0)
+        h, m = nyse_preopen_brisbane(date(2024, 1, 15))
+        assert (h, m) == (0, 0)
+
+    def test_transition_day_spring_2024(self):
+        # Mar 10 2024 is DST start -- 09:00 EDT
+        h, m = nyse_preopen_brisbane(date(2024, 3, 10))
+        assert (h, m) == (23, 0)
+
+    def test_transition_day_fall_2024(self):
+        # Nov 3 2024 is DST end -- 09:00 EST
+        h, m = nyse_preopen_brisbane(date(2024, 11, 3))
+        assert (h, m) == (0, 0)
+
+    def test_is_exactly_30min_before_nyse_open_both_regimes(self):
+        # The whole premise: PREOPEN is the cash open minus 30 minutes.
+        for d in (date(2024, 7, 15), date(2024, 1, 15)):
+            ph, pm = nyse_preopen_brisbane(d)
+            oh, om = us_equity_open_brisbane(d)
+            assert (om - pm) % 60 == 30
+            # hour rolls correctly: EDT 23:00->23:30 (same h); EST 00:00->00:30 (same h)
+            assert oh == ph
+
+
+class TestNysePreopenOrbWindow:
+    """orb_utc_window resolves NYSE_PREOPEN in both DST regimes, all apertures."""
+
+    def test_edt_window_same_cal_day(self):
+        # EDT trading_day 2024-07-15: 23:00 Brisbane = 13:00 UTC same cal day.
+        start, end = orb_utc_window(date(2024, 7, 15), "NYSE_PREOPEN", 5)
+        assert (start.hour, start.minute) == (13, 0)
+        assert start.day == 15
+        assert (end - start).total_seconds() == 5 * 60
+
+    def test_est_window_next_cal_day_bump(self):
+        # EST trading_day 2024-01-15: 00:00 Brisbane NEXT cal day (16th) = 14:00 UTC the 15th.
+        start, end = orb_utc_window(date(2024, 1, 15), "NYSE_PREOPEN", 5)
+        assert (start.hour, start.minute) == (14, 0)
+        assert start.day == 15  # UTC still the 15th (Brisbane 16th 00:00 = UTC 15th 14:00)
+        assert (end - start).total_seconds() == 5 * 60
+
+    def test_all_apertures_resolve_both_regimes(self):
+        # Fail-closed in-window guard must be satisfied for every aperture/regime.
+        for d in (date(2024, 7, 15), date(2024, 1, 15)):
+            for minutes in (5, 15, 30):
+                start, end = orb_utc_window(d, "NYSE_PREOPEN", minutes)
+                assert (end - start).total_seconds() == minutes * 60
+
+    def test_adjacency_no_overlap_with_nyse_open(self):
+        # PREOPEN must close at or before NYSE_OPEN starts (30-min gap), both regimes.
+        for d in (date(2024, 7, 15), date(2024, 1, 15)):
+            for minutes in (5, 15, 30):
+                _, pre_end = orb_utc_window(d, "NYSE_PREOPEN", minutes)
+                open_start, _ = orb_utc_window(d, "NYSE_OPEN", minutes)
+                assert pre_end <= open_start
+
+    def test_adjacency_us_data_830_o30_abuts_preopen_start(self):
+        # Draft CLEAN_GAP claim, mechanically verified: US_DATA_830 O30 ends EXACTLY
+        # at NYSE_PREOPEN start (end-exclusive sequential abutment, NOT overlap).
+        for d in (date(2024, 7, 15), date(2024, 1, 15)):
+            _, data_end = orb_utc_window(d, "US_DATA_830", 30)
+            pre_start, _ = orb_utc_window(d, "NYSE_PREOPEN", 5)
+            assert data_end == pre_start
+
+
+class TestNysePreopenDowMisalignment:
+    """NYSE_PREOPEN inherits the NYSE_OPEN EST midnight-crossing -1 DOW offset."""
+
+    def test_registered_misaligned_offset(self):
+        assert DOW_MISALIGNED_SESSIONS.get("NYSE_PREOPEN") == -1
+
+    def test_dow_filter_guard_raises(self):
+        # Any DOW skip filter on NYSE_PREOPEN must fail-closed (offset registered).
+        with pytest.raises(ValueError):
+            validate_dow_filter_alignment("NYSE_PREOPEN", (4,))
+
+    def test_in_dynamic_resolvers_and_orb_labels(self):
+        # Five-list lock-step: catalog resolver + schema label both present.
+        assert "NYSE_PREOPEN" in DYNAMIC_ORB_RESOLVERS
+        assert "NYSE_PREOPEN" in ORB_LABELS
+
+    def test_validate_catalog_still_passes(self):
+        # No permanent collision introduced.
+        validate_catalog()
+
+
+# =========================================================================
 # NYSE_OPEN resolver (NYSE 09:30 ET)
 # =========================================================================
 
@@ -301,6 +405,7 @@ class TestDynamicOrbResolvers:
             "LONDON_METALS",
             "EUROPE_FLOW",
             "US_DATA_830",
+            "NYSE_PREOPEN",
             "NYSE_OPEN",
             "US_DATA_1000",
             "COMEX_SETTLE",
@@ -377,8 +482,8 @@ class TestSessionCatalog:
     def test_get_break_group_unknown_returns_none(self):
         assert get_break_group("NONEXISTENT") is None
 
-    def test_catalog_has_exactly_12_sessions(self):
-        assert len(SESSION_CATALOG) == 12
+    def test_catalog_has_exactly_13_sessions(self):
+        assert len(SESSION_CATALOG) == 13
 
     def test_dst_sets_cover_all_sessions(self):
         """Every session must be in either DST_AFFECTED or DST_CLEAN."""

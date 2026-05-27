@@ -2394,6 +2394,58 @@ def check_orb_labels_session_catalog_sync() -> list[str]:
     return violations
 
 
+def check_dow_classification_complete() -> list[str]:
+    """Every dynamic SESSION_CATALOG session must be DOW-classified exactly once.
+
+    Companion invariant to check_orb_labels_session_catalog_sync (#32). The five
+    canonical session lists (resolver, SESSION_CATALOG, DST_CLEAN_SESSIONS,
+    DOW_*_SESSIONS, ORB_LABELS) must move together when a session is added.
+    Check #32 covers ORB_LABELS<->SESSION_CATALOG; the build_daily_features
+    import guard covers DST_CLEAN_SESSIONS; but the DOW classification
+    (DOW_ALIGNED_SESSIONS / DOW_MISALIGNED_SESSIONS) had NO mechanical check —
+    a new session could land DOW-unclassified and pass commit silently, leaving
+    validate_dow_filter_alignment with undefined behavior for that session.
+
+    Fail-closed: each dynamic session must be in EXACTLY one of the two DOW sets.
+      - In neither: silent undefined DOW behavior (the gap this check closes).
+      - In both: contradictory classification (aligned AND misaligned).
+    """
+    violations = []
+
+    dst_file = PIPELINE_DIR / "dst.py"
+    if not dst_file.exists():
+        return violations
+
+    try:
+        from pipeline.dst import (
+            DOW_ALIGNED_SESSIONS,
+            DOW_MISALIGNED_SESSIONS,
+            SESSION_CATALOG,
+        )
+    except ImportError as e:
+        violations.append(f"  Cannot import for DOW-classification check: {e}")
+        return violations
+
+    catalog_dynamic = {k for k, v in SESSION_CATALOG.items() if v.get("type") == "dynamic"}
+    aligned = set(DOW_ALIGNED_SESSIONS)
+    misaligned = set(DOW_MISALIGNED_SESSIONS)
+
+    unclassified = catalog_dynamic - aligned - misaligned
+    both = (aligned & misaligned) & catalog_dynamic
+
+    if unclassified:
+        violations.append(
+            f"  Dynamic sessions not DOW-classified (add to DOW_ALIGNED_SESSIONS "
+            f"or DOW_MISALIGNED_SESSIONS in dst.py): {sorted(unclassified)}"
+        )
+    if both:
+        violations.append(
+            f"  Sessions in BOTH DOW_ALIGNED_SESSIONS and DOW_MISALIGNED_SESSIONS (must be exactly one): {sorted(both)}"
+        )
+
+    return violations
+
+
 def check_stale_session_names_in_code() -> list[str]:
     """Check #33: No old fixed-clock session names in Python source code.
 
@@ -3920,7 +3972,7 @@ def check_trading_rules_authority() -> list[str]:
         )
         from trading_app.outcome_builder import RR_TARGETS
 
-        # 1. Session catalog must have all 12 dynamic sessions
+        # 1. Session catalog must have all expected dynamic sessions
         expected_sessions = {
             "CME_REOPEN",
             "TOKYO_OPEN",
@@ -3928,6 +3980,7 @@ def check_trading_rules_authority() -> list[str]:
             "LONDON_METALS",
             "EUROPE_FLOW",
             "US_DATA_830",
+            "NYSE_PREOPEN",
             "NYSE_OPEN",
             "US_DATA_1000",
             "COMEX_SETTLE",
@@ -13960,6 +14013,7 @@ CHECKS = [
     ("E2+E3 restricted to CB1 (no CB2+ for stop-market/retrace)", check_e2_e3_cb1_only, False, False),
     ("Non-5m strategy IDs include _O{minutes} suffix", check_orb_minutes_in_strategy_id, False, False),
     ("ORB_LABELS matches SESSION_CATALOG dynamic entries", check_orb_labels_session_catalog_sync, False, False),
+    ("Every dynamic session DOW-classified exactly once", check_dow_classification_complete, False, False),
     ("No old fixed-clock session names in Python source", check_stale_session_names_in_code, False, False),
     ("sql_adapter VALID_* sets match outcome_builder grids", check_sql_adapter_validation_sync, False, False),
     ("No E0 rows in trading tables", check_no_e0_in_db, False, True),  # requires_db

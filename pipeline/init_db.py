@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS bars_5m (
 # The ORB is the high-low range of the first N minutes (configurable).
 # A "break" occurs when a 1-min bar closes above orb_high (long) or
 # below orb_low (short). See pipeline/build_daily_features.py for logic.
-# All 12 sessions are dynamic (DST-aware, resolver per-day).
+# All sessions are dynamic (DST-aware, resolver per-day).
 # See pipeline/dst.py SESSION_CATALOG for the master registry.
 #
 #   CME_REOPEN      - CME Globex electronic reopen at 5:00 PM CT
@@ -86,6 +86,7 @@ ORB_LABELS_DYNAMIC = [
     "LONDON_METALS",
     "EUROPE_FLOW",
     "US_DATA_830",
+    "NYSE_PREOPEN",
     "NYSE_OPEN",
     "US_DATA_1000",
     "COMEX_SETTLE",
@@ -360,7 +361,7 @@ CREATE TABLE IF NOT EXISTS daily_features (
     -- MNQ NYSE_OPEN RR1.5 LOW garch_forecast_vol in_ExpR +0.240 WFE 1.00 p=0.042.
     garch_forecast_vol_pct  DOUBLE,
 
-    -- ORB columns (12 dynamic sessions x 14 columns = 168)
+    -- ORB columns (len(ORB_LABELS) dynamic sessions x 14 columns each)
 {orb_block}
 
     PRIMARY KEY (symbol, trading_day, orb_minutes)
@@ -460,7 +461,7 @@ def init_db(db_path: Path, force: bool = False):
                 pass  # column already exists
 
         # Migration: add break_delay_min + break_bar_continues (were in DDL but never migrated)
-        # 12 sessions × 2 columns = 24 columns
+        # len(ORB_LABELS) sessions × 2 columns
         for label in ORB_LABELS:
             for col, typedef in [
                 (f"orb_{label}_break_delay_min", "DOUBLE"),
@@ -473,7 +474,7 @@ def init_db(db_path: Path, force: bool = False):
                     pass  # column already exists
 
         # Migration: add per-session volume + relative volume columns (Feb 2026)
-        # 12 sessions × 3 columns = 36 new columns
+        # len(ORB_LABELS) sessions × 3 columns
         for label in ORB_LABELS:
             for col, typedef in [
                 (f"orb_{label}_volume", "BIGINT"),

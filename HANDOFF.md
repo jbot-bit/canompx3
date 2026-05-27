@@ -610,11 +610,12 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-28
-- **Commit:** 68c5893a — chore(drift): advisory check for stale validated_setups not reproducing from canonical
-- **Files changed:** 3 files
+- **Commit:** 07db6fba — fix(audit): behavioral scanner must skip git-ignored files
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/audit/results/2026-05-27-validated-setups-canonical-reproduction-mes-mgc.md`
-  - `pipeline/check_drift.py`
+  - `docs/runtime/stages/2026-05-28-behavioral-audit-skip-gitignored.md`
+  - `scripts/tools/audit_behavioral.py`
+  - `tests/test_tools/test_audit_behavioral.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

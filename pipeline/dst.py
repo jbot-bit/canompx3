@@ -170,6 +170,7 @@ DST_CLEAN_SESSIONS = {
     "LONDON_METALS",
     "EUROPE_FLOW",
     "US_DATA_830",
+    "NYSE_PREOPEN",
     "NYSE_OPEN",
     "US_DATA_1000",
     "COMEX_SETTLE",
@@ -195,6 +196,7 @@ DST_CLEAN_SESSIONS = {
 #   LONDON_METALS: Brisbane DOW = London DOW (both morning same calendar day) ✓
 #   EUROPE_FLOW: Brisbane DOW = London DOW (same morning calendar day) ✓
 #   US_DATA_830: Brisbane DOW = US DOW (13:00 UTC = US morning same day) ✓
+#   NYSE_PREOPEN: Brisbane DOW = US DOW + 1 in EST (00:00 Bris = 14:00 UTC PREV day) ✗
 #   NYSE_OPEN: Brisbane DOW = US DOW + 1 (00:30 Bris = 14:30 UTC PREV day) ✗
 #   US_DATA_1000: Brisbane DOW = US DOW (01:00 Bris = 15:00 UTC same US day) ✓
 #   COMEX_SETTLE: Brisbane DOW = US DOW (next cal day, but same US trading day) ✓
@@ -205,6 +207,14 @@ DST_CLEAN_SESSIONS = {
 # day.  Brisbane-Friday 00:30 = UTC Thursday 14:30 = US Thursday 9:30 AM.
 # So Brisbane-Friday at NYSE_OPEN is the US THURSDAY equity open.
 # Any DOW filter for NYSE_OPEN must account for this -1 day offset.
+#
+# NYSE_PREOPEN (09:00 ET) has the identical EST midnight-crossing: in winter
+# 09:00 ET = 14:00 UTC = 00:00 Brisbane NEXT cal day, so Brisbane-Friday 00:00
+# at NYSE_PREOPEN = US Thursday 09:00 ET pre-open. Same -1 offset as NYSE_OPEN.
+# (In summer EDT it resolves to 23:00 Brisbane same day = aligned, but the
+# offset is registered for the regime where the crossing occurs, matching the
+# NYSE_OPEN convention — validate_dow_filter_alignment then fail-closes on any
+# DOW filter for this session.)
 
 DOW_ALIGNED_SESSIONS = {
     "CME_REOPEN",
@@ -220,6 +230,7 @@ DOW_ALIGNED_SESSIONS = {
     "BRISBANE_1025",
 }
 DOW_MISALIGNED_SESSIONS = {
+    "NYSE_PREOPEN": -1,  # EST: Brisbane 00:00 crosses midnight -> US prev day (same as NYSE_OPEN)
     "NYSE_OPEN": -1,  # Brisbane DOW = exchange DOW + 1 (i.e. exchange is 1 day behind)
 }
 
@@ -321,6 +332,24 @@ def us_equity_open_brisbane(trading_day: date) -> tuple[int, int]:
     """
     et_open = datetime(trading_day.year, trading_day.month, trading_day.day, 9, 30, 0, tzinfo=_US_EASTERN)
     bris = et_open.astimezone(_BRISBANE)
+    return (bris.hour, bris.minute)
+
+
+def nyse_preopen_brisbane(trading_day: date) -> tuple[int, int]:
+    """NYSE Order Imbalance publication (09:00 ET, 30 min before cash open) in Brisbane.
+
+    Returns (hour, minute) in Australia/Brisbane.
+      Summer (EDT): 09:00 ET = 13:00 UTC = 23:00 AEST (same cal day)
+      Winter (EST): 09:00 ET = 14:00 UTC = 00:00 AEST (next cal day)
+
+    Mirrors us_equity_open_brisbane tz arithmetic exactly (NYSE cash open is
+    09:30 ET, this is 30 minutes earlier). The winter 00:00 case crosses
+    midnight in Brisbane — orb_utc_window handles the next-cal-day bump via its
+    `hour < TRADING_DAY_START_HOUR_LOCAL` branch, identical to NYSE_OPEN. The
+    same midnight-crossing is why DOW_MISALIGNED_SESSIONS["NYSE_PREOPEN"] = -1.
+    """
+    et_preopen = datetime(trading_day.year, trading_day.month, trading_day.day, 9, 0, 0, tzinfo=_US_EASTERN)
+    bris = et_preopen.astimezone(_BRISBANE)
     return (bris.hour, bris.minute)
 
 
@@ -483,6 +512,12 @@ SESSION_CATALOG = {
         "resolver": us_data_open_brisbane,
         "break_group": "us",
         "event": "US economic data release 8:30 AM ET",
+    },
+    "NYSE_PREOPEN": {
+        "type": "dynamic",
+        "resolver": nyse_preopen_brisbane,
+        "break_group": "us",
+        "event": "NYSE Order Imbalance publication 9:00 AM ET (30 min pre cash open)",
     },
     "NYSE_OPEN": {
         "type": "dynamic",

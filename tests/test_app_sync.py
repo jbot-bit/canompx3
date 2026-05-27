@@ -68,6 +68,7 @@ class TestOrbLabelsSync:
         "LONDON_METALS",
         "EUROPE_FLOW",
         "US_DATA_830",
+        "NYSE_PREOPEN",
         "NYSE_OPEN",
         "US_DATA_1000",
         "COMEX_SETTLE",
