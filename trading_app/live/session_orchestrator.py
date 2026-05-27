@@ -1253,8 +1253,16 @@ class SessionOrchestrator:
                     loop = asyncio.get_running_loop()
                     loop.create_task(self._emergency_flatten())
                 except RuntimeError:
-                    # No running event loop (post_session context) — cannot schedule
-                    log.critical("FEED DEAD: cannot schedule flatten (no event loop) — MANUAL CLOSE REQUIRED")
+                    # No running event loop (post_session context) — cannot schedule.
+                    # Alert the operator: this is the one flatten path that fails
+                    # silently to Telegram (log-only), and it fires with a position
+                    # open + feed dead — the worst moment to be invisible.
+                    msg = (
+                        f"FEED DEAD: cannot schedule flatten for {self.instrument} "
+                        "(no event loop) — MANUAL CLOSE REQUIRED"
+                    )
+                    log.critical(msg)
+                    self._notify(msg)
         else:
             self._feed_status["status"] = "stale"
             self._feed_status["dead"] = False

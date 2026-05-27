@@ -610,11 +610,10 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-27
-- **Commit:** bce90c56 — feat(paper-trade): wire forward-paper --sync into daily refresh chain
-- **Files changed:** 3 files
+- **Commit:** b8937962 — chore(live): revert START_BOT.bat to --signal-only
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-27-paper-trade-sync-automation.md`
-  - `scripts/daily_refresh.bat`
+  - `START_BOT.bat`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
