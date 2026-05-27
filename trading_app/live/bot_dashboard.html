@@ -54,7 +54,7 @@
   button, input { font: inherit; }
 
   /* ── SHELL ──────────────────────────── */
-  .shell { max-width: 1500px; margin: 0 auto; padding: 0 16px 32px; }
+  .shell { max-width: 1760px; margin: 0 auto; padding: 0 16px 32px; }
 
   /* ── TOP BAR ────────────────────────── */
   .topbar {
@@ -447,8 +447,13 @@
   .chart-tf-btn.active { background: var(--cyan-soft, rgba(0,212,255,0.12)); color: var(--cyan, #00d4ff); }
   /* Canvas host. 360px is the documented honest minimum — Lightweight Charts
      refuses to render usefully below ~200px and below 360 the entry/SL/TP
-     price-lines collide with each other on RR=1.5 strategies. */
-  .chart-cockpit-body { position: relative; height: 360px; }
+     price-lines collide with each other on RR=1.5 strategies. The chart now
+     GROWS to fill available vertical space (ResizeObserver repaints), with
+     360px kept as the floor so the price-line guarantee still holds. */
+  .chart-cockpit-body { position: relative; height: 360px; min-height: 360px; }
+  /* On a tall viewport, let the chart claim the otherwise-dead bottom space. */
+  body:not(:has(#focus-toggle:checked)) .chart-cockpit { display: flex; flex-direction: column; }
+  body:not(:has(#focus-toggle:checked)) .chart-cockpit-body { flex: 1 1 auto; height: auto; min-height: 56vh; }
   #chart-host { position: absolute; inset: 0; }
   /* ORB rectangle is now painted by an ISeriesPrimitive on the chart's own
      canvas — canonical Lightweight Charts v5 path per
@@ -1784,6 +1789,82 @@
     content: '!';
     font-size: 11px;
   }
+
+  /* ── STALE-BOT BANNER ────────────────────────────────
+     Calm-by-default principle: this element is hidden entirely when the bot
+     is healthy. It only appears (and pulses) when the heartbeat goes stale
+     while a session should be live — the one thing that demands attention. */
+  .stale-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 18px;
+    background: linear-gradient(90deg, rgba(245,158,11,0.16), rgba(239,68,68,0.16));
+    border-top: 1px solid rgba(245,158,11,0.45);
+    border-bottom: 1px solid rgba(239,68,68,0.45);
+    color: var(--text);
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    animation: stale-flash 1.1s var(--ease) infinite;
+  }
+  .stale-banner[hidden] { display: none; }
+  .stale-banner-pulse {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 0 0 rgba(239,68,68,0.7);
+    animation: stale-dot 1.1s var(--ease) infinite;
+    flex: 0 0 auto;
+  }
+  .stale-banner-msg { display: flex; align-items: baseline; gap: 9px; flex: 1 1 auto; min-width: 0; }
+  .stale-banner-msg strong {
+    color: var(--red);
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+  #stale-banner-detail { color: var(--text-2); font-family: var(--font-mono); font-size: 13px; }
+  .stale-banner-btn {
+    flex: 0 0 auto;
+    padding: 7px 18px;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: var(--r);
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(239,68,68,0.4);
+    transition: filter var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+  }
+  .stale-banner-btn:hover { filter: brightness(1.12); }
+  .stale-banner-btn:active { transform: translateY(1px); }
+  .stale-banner-btn:disabled { opacity: 0.55; cursor: progress; }
+  .stale-banner-x {
+    flex: 0 0 auto;
+    background: transparent;
+    border: none;
+    color: var(--text-2);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .stale-banner-x:hover { color: var(--text); }
+  @keyframes stale-flash {
+    0%, 100% { background: linear-gradient(90deg, rgba(245,158,11,0.16), rgba(239,68,68,0.16)); }
+    50%      { background: linear-gradient(90deg, rgba(245,158,11,0.28), rgba(239,68,68,0.30)); }
+  }
+  @keyframes stale-dot {
+    0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.7); }
+    70%  { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+  }
+  /* respect reduced-motion: keep it visible & colored, just don't flash */
+  @media (prefers-reduced-motion: reduce) {
+    .stale-banner, .stale-banner-pulse { animation: none; }
+  }
+
   body.cockpit #signal-strip { display: none; }
   body.cockpit #signal-strip.force-show { display: block; }
 
@@ -2145,10 +2226,16 @@
     --font-sans: 'DM Sans', -apple-system, 'Segoe UI', sans-serif;
     --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
 
-    /* geometry — sharper, tighter */
-    --r:    4px;
-    --r-lg: 6px;
-    --r-xl: 8px;
+    /* geometry — softened for depth without losing the technical feel */
+    --r:    7px;
+    --r-lg: 10px;
+    --r-xl: 14px;
+
+    /* elevation — subtle layered depth (was none; gives cards lift) */
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.35);
+    --shadow:    0 2px 8px rgba(0,0,0,0.40), 0 1px 2px rgba(0,0,0,0.30);
+    --shadow-lg: 0 8px 28px rgba(0,0,0,0.50), 0 2px 6px rgba(0,0,0,0.35);
+    --shadow-accent: 0 0 0 1px var(--accent-strong), 0 4px 18px rgba(59,130,246,0.18);
 
     /* bigger text globally */
     --fs-body:  16px;
@@ -2555,6 +2642,17 @@
     <button id="btn-refresh" class="topbar-btn warn">Refresh</button>
     <button id="btn-kill" class="topbar-btn danger">Kill All</button>
   </header>
+
+  <!-- STALE-BOT BANNER — hidden unless the bot stops beating while a session should be live -->
+  <div id="stale-banner" class="stale-banner" role="alert" aria-live="assertive" hidden>
+    <span class="stale-banner-pulse" aria-hidden="true"></span>
+    <span class="stale-banner-msg">
+      <strong>BOT STALE</strong>
+      <span id="stale-banner-detail">no heartbeat</span>
+    </span>
+    <button id="stale-banner-restart" class="stale-banner-btn" type="button">RESTART</button>
+    <button id="stale-banner-dismiss" class="stale-banner-x" type="button" title="Dismiss until it goes stale again" aria-label="Dismiss">×</button>
+  </div>
 
   <!-- TAB BAR -->
   <nav class="tab-bar">
@@ -3740,16 +3838,109 @@ async function fetchStatus() {
 
 function updateHeartbeatWarning(statusData) {
   const el = $("heartbeat-warn");
-  if (!el) return;
   const mode = statusData?.mode || "STOPPED";
   const age = Number(statusData?.heartbeat_age_s);
-  if (mode === "STOPPED" || mode === "Offline" || !Number.isFinite(age) || age < 60) {
-    el.style.display = "none";
+  const hidden = (mode === "STOPPED" || mode === "Offline" || !Number.isFinite(age) || age < 60);
+  if (el) {
+    if (hidden) {
+      el.style.display = "none";
+    } else {
+      el.style.display = "";
+      el.textContent = age < 120 ? `${Math.round(age)}s` : `${Math.round(age/60)}m`;
+      el.title = `Heartbeat ${Math.round(age)}s old — bot may be unresponsive. Check the session terminal.`;
+    }
+  }
+  updateStaleBanner(mode, age);
+}
+
+/* ── Stale-bot banner ────────────────────────────────────────────────
+   Loud only when it matters: a session is meant to be live but the bot
+   has gone STALE_AFTER_S without a heartbeat. Beep fires once per stale
+   episode; dismiss hides it for the current episode; both beep and dismiss
+   re-arm only after the bot recovers (a NEW stale episode alerts again).
+   Restart is manual. */
+const STALE_AFTER_S = 120;
+let _staleActive = false;   // banner currently shown for this stale episode
+let _staleBeeped = false;   // one-shot beep guard for this episode
+let _staleDismissed = false; // user dismissed THIS episode; re-arms on recovery
+
+function staleEligible(mode) {
+  // Only sessions that should be beating: signal/demo/live runners.
+  return mode && mode !== "STOPPED" && mode !== "Offline";
+}
+
+function updateStaleBanner(mode, age) {
+  const banner = $("stale-banner");
+  if (!banner) return;
+  const isStale = staleEligible(mode) && Number.isFinite(age) && age >= STALE_AFTER_S;
+
+  if (!isStale) {
+    // Healthy (or stopped) → hide and re-arm for the next episode.
+    if (_staleActive || banner.hidden === false) banner.hidden = true;
+    _staleActive = false;
+    _staleBeeped = false;
+    _staleDismissed = false;
     return;
   }
-  el.style.display = "";
-  el.textContent = age < 120 ? `${Math.round(age)}s` : `${Math.round(age/60)}m`;
-  el.title = `Heartbeat ${Math.round(age)}s old — bot may be unresponsive. Check the session terminal.`;
+
+  // Stale. Keep the detail text fresh even while hidden-by-dismiss.
+  const ageStr = age < 120 ? `${Math.round(age)}s` : `${Math.round(age / 60)}m`;
+  setText("stale-banner-detail", `no heartbeat for ${ageStr} · ${escapeHtml(String(mode))}`);
+
+  if (_staleDismissed) { banner.hidden = true; return; }
+  banner.hidden = false;
+
+  if (!_staleBeeped) {
+    _staleBeeped = true;
+    playStaleBeep();
+  }
+  _staleActive = true;
+}
+
+/* One short WebAudio beep — no asset file, no autoplay nag. Wrapped so a
+   blocked AudioContext (no user gesture yet) fails silent, never throws. */
+function playStaleBeep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+    osc.onended = () => { try { ctx.close(); } catch (_) {} };
+  } catch (_) { /* audio unavailable — banner still flashes */ }
+}
+
+function wireStaleBanner() {
+  const restart = $("stale-banner-restart");
+  const dismiss = $("stale-banner-dismiss");
+  if (restart) restart.onclick = () => {
+    const acct = _lastStatusData?.broker_status || {};
+    const pid = runningProfile || activeProfileData?.profile_id || acct.account_name;
+    if (!pid) { showToast("Restart", "No active profile to restart.", "warning"); return; }
+    const mode = acct.demo ? "demo" : acct.signal_only ? "signal" : "live";
+    const firm = activeProfileData?.firm || "";
+    const instr = activeProfileData?.instruments?.join("+") || "ALL";
+    restart.disabled = true;
+    restart.textContent = "RESTARTING…";
+    // launchSession → POST /api/action/start; the server arbitrates a still-
+    // running session via handoff (bot_dashboard.py), so no double-launch.
+    Promise.resolve(launchSession(pid, firm, instr, mode))
+      .catch((e) => showToast("Restart failed", String(e?.message || e), "error"))
+      .finally(() => { restart.disabled = false; restart.textContent = "RESTART"; });
+  };
+  if (dismiss) dismiss.onclick = () => {
+    _staleDismissed = true;
+    const b = $("stale-banner");
+    if (b) b.hidden = true;
+  };
 }
 async function fetchOperatorState() {
   try {
@@ -3830,13 +4021,18 @@ function updatePrimaryCta() {
   }
 
   // Not running — show Start if we have an active profile
+  // Mirror the orchestrator's configured mode (demo/live/signal) from bot_state broker_status
   if (acct && acct.profile_id) {
     btn.style.display = "";
-    btn.className = "topbar-btn primary";
-    btn.innerHTML = `Start Signal <span class="cta-sub">${escapeHtml(acct.profile_id)}</span>`;
+    const bs = _lastStatusData?.broker_status || {};
+    const orchMode = bs.demo ? "demo" : bs.signal_only ? "signal" : "demo";
+    const modeLabel = orchMode === "demo" ? "START DEMO" : orchMode === "live" ? "START LIVE" : "START SIGNAL";
+    const modeClass = orchMode === "live" ? "topbar-btn primary danger" : "topbar-btn primary";
+    btn.className = modeClass;
+    btn.innerHTML = `${modeLabel} <span class="cta-sub">${escapeHtml(acct.profile_id)}</span>`;
     btn.onclick = () => {
       if (_primaryCtaBusy) return;
-      launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal");
+      launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", orchMode);
     };
     return;
   }
@@ -4629,6 +4825,8 @@ window.attachHoldToFireLive = function(button, ring, wrap, acct) {
   button.addEventListener("pointerleave", () => { if (!fired) cancel(); });
   button.addEventListener("pointercancel", cancel);
 };
+
+wireStaleBanner();
 
 $("btn-refresh").addEventListener("click", async () => {
   showToast("Refresh", "Starting data refresh...", "busy", {id: "refresh"});

@@ -610,11 +610,11 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-27
-- **Commit:** f8ee9b05 — chore(live): flip START_BOT.bat to --demo for TOKYO_OPEN order-path proving + close double-dashboard stage as NOT-A-BUG
+- **Commit:** 50dc2b6a — fix(dashboard): self-heal candlestick chart after idle / tab-switch / SSE zombie-stall
 - **Files changed:** 3 files
   - `HANDOFF.md`
-  - `START_BOT.bat`
-  - `docs/runtime/stages/2026-05-26-start-bot-double-dashboard-bug.md`
+  - `docs/runtime/stages/2026-05-27-dashboard-chart-idle-resync.md`
+  - `trading_app/live/bot_dashboard.html`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
