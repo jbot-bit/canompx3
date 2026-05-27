@@ -1329,6 +1329,31 @@ class TestKillSwitch:
         assert manual, f"operator not alerted on local-tracker fallback: {orch._notify.call_args_list}"
         assert len(orch.order_router.submitted) >= 1
 
+    def test_post_session_skips_close_when_query_unsupported_and_local_flat(self):
+        """Flag set + query_open NotImplementedError + local tracker FLAT → EOD close skipped.
+
+        Distinct from the broker-confirmed-flat path: query_open is unavailable, so
+        the helper falls back to the local tracker. When that is also flat we must
+        still skip the duplicate close (no spurious MANUAL CLOSE alert).
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._kill_switch_fired = True
+        orch._notify = MagicMock()
+
+        def _raise(account_id):
+            raise NotImplementedError
+
+        orch.positions.query_open = _raise
+        # Local tracker is flat — no on_entry_* calls.
+
+        orch.post_session()
+
+        # Degraded-but-confirmed-flat: skip the close, submit nothing, no MANUAL CLOSE alert.
+        orch.engine.on_trading_day_end.assert_not_called()
+        assert len(orch.order_router.submitted) == 0
+        manual = [c for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
+        assert not manual, f"spurious MANUAL CLOSE on degraded-flat shutdown: {orch._notify.call_args_list}"
+
     def test_post_session_alerts_when_query_fails(self):
         """Flag set + query_open raises generic Exception → CRITICAL + alert, does NOT skip."""
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
