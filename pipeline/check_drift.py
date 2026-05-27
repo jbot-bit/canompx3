@@ -4056,6 +4056,150 @@ def check_audit_columns_populated(con=None) -> list[str]:
     return violations
 
 
+def check_validated_setups_canonical_reproduction(con=None) -> list[str]:
+    """Validated_setups C4 claims must reproduce from canonical orb_outcomes.
+
+    A row in validated_setups stores `sharpe_ratio` (per-trade) and `sample_size`,
+    from which Chordia Criterion 4 t = sharpe_ratio * sqrt(N) is derived. That
+    stored claim is a DERIVED snapshot — it may have been computed under a stale
+    sample (e.g. Mode-B grandfathered window) and no longer reproduce against the
+    canonical orb_outcomes population under the current Mode-A holdout.
+
+    This check recomputes the IS Chordia t from CANONICAL layers only
+    (orb_outcomes JOIN daily_features, filter applied via the canonical
+    research.filter_utils.filter_signal delegation, strict holdout
+    trading_day < HOLDOUT_SACRED_FROM). A row is a VIOLATION only when it
+    *claims* C4-pass (stored t >= CHORDIA_T_WITH_THEORY) but the canonical IS t
+    falls below that bar — i.e. the stored claim does not reproduce. Weak rows
+    that never claimed C4-pass are not flagged; this check polices stale LIES
+    about significance, not honest weakness.
+
+    Read-only. No DB mutation.
+
+    ADVISORY (2026-05-27): registered non-blocking because 25 known-stale
+    MES/MGC rows currently fail to reproduce, and the remediation (retiring
+    those rows) is gated on operator approval. The check PRINTS each stale row
+    to stdout and returns an EMPTY violations list so it surfaces the contamination
+    on every run without blocking commits. Flip the registration to blocking
+    (is_advisory=False) once the stale rows are retired — at which point a
+    non-empty return becomes a hard gate. The detection logic is identical in
+    both modes; only the surfacing differs.
+
+    Scope: active MES + MGC setups — the cross-instrument promotion candidates.
+    MNQ live lanes are validated separately by the allocator's Chordia audit
+    and reproduce cleanly (verified 2026-05-27 lane-expansion audit). Bounding
+    to MES/MGC keeps this a tractable SLOW check.
+
+    @canonical-source: trading_app/chordia.py (compute_chordia_t, thresholds)
+    @research-source: docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
+    """
+    import math
+
+    stale: list[str] = []
+    violations: list[str] = []
+    _own_con = False
+    try:
+        import pandas as pd
+
+        from research.filter_utils import filter_signal
+        from trading_app.chordia import CHORDIA_T_WITH_THEORY, compute_chordia_t
+        from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
+
+        if con is None:
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = open_read_only_with_retry(db_path)
+            _own_con = True
+
+        cut = pd.Timestamp(HOLDOUT_SACRED_FROM)
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, orb_minutes, rr_target,
+                   entry_model, confirm_bars, filter_type, sample_size, sharpe_ratio
+            FROM validated_setups
+            WHERE instrument IN ('MES', 'MGC') AND status = 'active'
+            """
+        ).fetchall()
+
+        for sid, instr, orb_label, orb_min, rr, entry, cb, filt, n, sharpe in rows:
+            if sharpe is None or not n or n < 2:
+                continue
+            stored_t = compute_chordia_t(sharpe, int(n))
+            # Only police rows that CLAIM C4-pass with theory. Honest weakness
+            # (stored_t < bar) is not a reproduction failure.
+            if stored_t < CHORDIA_T_WITH_THEORY:
+                continue
+
+            df = con.execute(
+                """
+                SELECT o.trading_day, o.pnl_r, d.*
+                FROM orb_outcomes o
+                JOIN daily_features d
+                  ON o.trading_day = d.trading_day
+                 AND o.symbol = d.symbol
+                 AND o.orb_minutes = d.orb_minutes
+                WHERE o.symbol = ? AND o.orb_label = ? AND o.entry_model = ?
+                  AND o.confirm_bars = ? AND o.rr_target = ? AND o.orb_minutes = ?
+                  AND o.pnl_r IS NOT NULL
+                ORDER BY o.trading_day
+                """,
+                [instr, orb_label, entry, int(cb), rr, int(orb_min)],
+            ).df()
+            if df.empty:
+                stale.append(
+                    f"  {sid}: stored Chordia t={stored_t:.2f} claims C4-pass but "
+                    f"ZERO canonical orb_outcomes rows reproduce it (STALE/no-data)"
+                )
+                continue
+
+            if filt and filt != "NO_FILTER":
+                try:
+                    df = df[filter_signal(df, filt, orb_label).astype(bool)].copy()
+                except Exception:
+                    # Filter not applicable on canonical layer — cannot reproduce.
+                    stale.append(
+                        f"  {sid}: stored Chordia t={stored_t:.2f} claims C4-pass but "
+                        f"filter '{filt}' cannot be applied on canonical layer (STALE)"
+                    )
+                    continue
+
+            df["trading_day"] = pd.to_datetime(df["trading_day"])
+            is_r = df[df["trading_day"] < cut]["pnl_r"].to_numpy(dtype=float)
+            if len(is_r) < 2 or is_r.std(ddof=1) == 0:
+                stale.append(
+                    f"  {sid}: stored Chordia t={stored_t:.2f} claims C4-pass but "
+                    f"canonical IS sample is degenerate (N={len(is_r)}) — does not reproduce"
+                )
+                continue
+            canon_t = is_r.mean() / (is_r.std(ddof=1) / math.sqrt(len(is_r)))
+            if canon_t < CHORDIA_T_WITH_THEORY:
+                stale.append(
+                    f"  {sid}: stored Chordia t={stored_t:.2f} claims C4-pass but canonical "
+                    f"IS t={canon_t:.2f} (N={len(is_r)}) < {CHORDIA_T_WITH_THEORY} — STALE, "
+                    f"does not reproduce from orb_outcomes under holdout {HOLDOUT_SACRED_FROM}"
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_validated_setups_canonical_reproduction: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+
+    # ADVISORY surfacing: print stale rows so they are visible on every run,
+    # return EMPTY so the gate does not block. See docstring for the flip-to-
+    # blocking contract once the stale rows are retired.
+    if stale:
+        print(
+            f"  ADVISORY: {len(stale)} validated_setups row(s) claim Chordia C4-pass "
+            f"but do NOT reproduce from canonical orb_outcomes (holdout "
+            f"{HOLDOUT_SACRED_FROM}). These are STALE derived snapshots — do not "
+            f"promote. Cleanup pending operator approval. Detail:"
+        )
+        for line in stale:
+            print(line)
+    return violations
+
+
 # =============================================================================
 # Check 54+: New checks added by deep audit (Mar 2026)
 # =============================================================================
@@ -13930,6 +14074,13 @@ CHECKS = [
     #   check_ml_model_freshness — all validated invariants of a dead subsystem.
     #   See docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md.
     ("Audit columns populated (n_trials, fst_hurdle, DSR)", check_audit_columns_populated, False, True),  # requires_db
+    (
+        "Validated_setups C4 claims reproduce from canonical orb_outcomes (MES/MGC)",
+        check_validated_setups_canonical_reproduction,
+        True,  # ADVISORY: surfaces 25 known-stale rows without blocking; flip to
+        # blocking after the stale rows are retired (pending operator approval).
+        True,
+    ),  # requires_db (advisory)
     # ── New checks from deep audit (Mar 2026) ──────────────────────────
     ("Live config spec validity (orb_label, entry_model, filter, tier)", check_live_config_spec_validity, False, False),
     (
@@ -14549,6 +14700,7 @@ CHECKS = [
 # Pre-commit hook + CI run the full set — no coverage loss end-to-end.
 SLOW_CHECK_LABELS = frozenset(
     {
+        "Validated_setups C4 claims reproduce from canonical orb_outcomes (MES/MGC)",
         "All imports resolve",
         "Generated task views preserve strict truth-class boundaries",
         "ENTRY_MODELS sync",
