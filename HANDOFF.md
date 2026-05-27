@@ -610,13 +610,11 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-27
-- **Commit:** 10869621 — [judgment] code-review: harden live-order halt gate + dashboard silent-failure sweep
-- **Files changed:** 5 files
+- **Commit:** bce90c56 — feat(paper-trade): wire forward-paper --sync into daily refresh chain
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/deferred-findings.md`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `trading_app/live/bot_dashboard.html`
-  - `trading_app/live/session_orchestrator.py`
+  - `docs/runtime/stages/2026-05-27-paper-trade-sync-automation.md`
+  - `scripts/daily_refresh.bat`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
