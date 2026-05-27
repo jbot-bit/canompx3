@@ -610,12 +610,17 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-28
-- **Commit:** 07db6fba — fix(audit): behavioral scanner must skip git-ignored files
-- **Files changed:** 4 files
+- **Commit:** 62c51a14 — feat(sessions): add NYSE_PREOPEN dynamic session (09:00 ET order-imbalance) + DOW-classification hardening
+- **Files changed:** 9 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-28-behavioral-audit-skip-gitignored.md`
-  - `scripts/tools/audit_behavioral.py`
-  - `tests/test_tools/test_audit_behavioral.py`
+  - `docs/runtime/stages/2026-05-27-nyse-preopen-session-build-stage1.md`
+  - `pipeline/build_daily_features.py`
+  - `pipeline/check_drift.py`
+  - `pipeline/dst.py`
+  - `pipeline/init_db.py`
+  - `tests/test_app_sync.py`
+  - `tests/test_pipeline/test_check_drift.py`
+  - `tests/test_pipeline/test_dst.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
