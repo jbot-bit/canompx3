@@ -2624,7 +2624,7 @@
   <header class="topbar">
     <span class="topbar-brand">ORB</span>
     <span class="topbar-sep">│</span>
-    <select id="acct-select" class="acct-select"><option value="">Loading accounts...</option></select>
+    <select id="acct-select" class="acct-select"><option value="">Accounts…</option></select>
     <span id="topbar-acct" class="topbar-acct"></span>
     <span id="topbar-acct-detail" class="topbar-acct-detail"></span>
     <span id="header-mode-badge" class="topbar-mode stopped"><span class="dot"></span> <span id="summary-mode">Stopped</span></span>
@@ -2695,18 +2695,18 @@
   <section id="pnl-strip" class="pnl-strip">
     <div class="pnl-cell">
       <span class="pnl-cell-lbl">Day P&amp;L</span>
-      <span id="pnl-day" class="pnl-cell-val">—</span>
-      <span id="pnl-day-sub" class="pnl-cell-sub"></span>
+      <span id="pnl-day" class="pnl-cell-val muted">—</span>
+      <span id="pnl-day-sub" class="pnl-cell-sub">no session</span>
     </div>
     <div class="pnl-cell">
-      <span class="pnl-cell-lbl">Open P&amp;L</span>
-      <span id="pnl-open" class="pnl-cell-val">—</span>
-      <span id="pnl-open-sub" class="pnl-cell-sub"></span>
+      <span class="pnl-cell-lbl">Open</span>
+      <span id="pnl-open" class="pnl-cell-val muted">—</span>
+      <span id="pnl-open-sub" class="pnl-cell-sub">no session</span>
     </div>
     <div class="pnl-cell">
-      <span class="pnl-cell-lbl">Trades Today</span>
-      <span id="pnl-trades" class="pnl-cell-val">—</span>
-      <span id="pnl-trades-sub" class="pnl-cell-sub"></span>
+      <span class="pnl-cell-lbl">Bars</span>
+      <span id="pnl-trades" class="pnl-cell-val muted">—</span>
+      <span id="pnl-trades-sub" class="pnl-cell-sub">no session</span>
     </div>
     <div class="pnl-cell">
       <span class="pnl-cell-lbl">Feed</span>
@@ -3795,6 +3795,26 @@ function updateStatus(state) {
   $("metric-pnl").className = `metric-val ${pnl >= 0 ? "positive" : pnl < 0 ? "negative" : "muted"}`;
   $("metric-pnl-sub").textContent = mode !== "STOPPED" ? "session active" : "no session";
 
+  // Bottom P&L strip — share updateStatus's canonical source (state.daily_pnl_r),
+  // never recompute. Idle reads as intentional ("no session", dimmed) instead of a
+  // bare "—" that looks broken.
+  const stopped = mode === "STOPPED";
+  setText("pnl-day", stopped ? "—" : fmtR(pnl));
+  $("pnl-day").className = `pnl-cell-val ${stopped ? "muted" : pnl >= 0 ? "positive" : "negative"}`;
+  setText("pnl-day-sub", stopped ? "no session" : "");
+  // Open positions = lane_cards with status IN_TRADE (canonical taxonomy:
+  // trading_app.live.bot_state.build_state_snapshot). NEVER a position_qty/
+  // open_position field — those don't exist in the state shape (caused the
+  // 2026-05-14 kill-switch-skip bug; see _count_open_positions_from_state).
+  const inTrade = (Array.isArray(state.lane_cards) ? state.lane_cards : [])
+    .filter(c => c && c.status === "IN_TRADE").length;
+  setText("pnl-open", stopped ? "—" : (inTrade === 0 ? "flat" : `${inTrade} open`));
+  $("pnl-open").className = `pnl-cell-val ${stopped ? "muted" : inTrade > 0 ? "warning" : ""}`;
+  setText("pnl-open-sub", stopped ? "no session" : "");
+  setText("pnl-trades", stopped ? "—" : String(state.bars_received || 0) + " bars");
+  $("pnl-trades").className = `pnl-cell-val ${stopped ? "muted" : ""}`;
+  setText("pnl-trades-sub", stopped ? "no session" : "this session");
+
   const limit = Math.abs(Number(state.daily_loss_limit_r || 0)) || 1;
   const used = Math.abs(Math.min(pnl, 0));
   const pct = Math.min(100, (used / limit) * 100);
@@ -4739,6 +4759,13 @@ async function fetchEquity() {
     updateMetricsFromEquity(data);
   } catch (e) {
     showEquityError(e.message || "Network error");
+    // Never leave the selector frozen on the "Loading accounts..." placeholder
+    // when /api/equity throws — fetchEquity's only renderAccountSelector call is
+    // inside the try, so a throw would strand it indefinitely.
+    const sel = $("acct-select");
+    if (sel && (!sel.value || sel.options.length <= 1)) {
+      sel.innerHTML = '<option value="">Accounts unavailable</option>';
+    }
   }
 }
 

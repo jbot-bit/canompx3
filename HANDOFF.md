@@ -610,10 +610,10 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-27
-- **Commit:** 50dc2b6a — fix(dashboard): self-heal candlestick chart after idle / tab-switch / SSE zombie-stall
+- **Commit:** 2503d4e9 — feat(dashboard): flashing stale-bot banner + manual restart + sleek depth/space polish
 - **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-27-dashboard-chart-idle-resync.md`
+  - `docs/runtime/stages/2026-05-27-dashboard-stale-banner-sleek-ui.md`
   - `trading_app/live/bot_dashboard.html`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
