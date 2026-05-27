@@ -3983,7 +3983,12 @@ async function fetchTrades() {
   try {
     const data = await (await fetch("/api/trades")).json();
     renderTrades(data.trades || [], data);
-  } catch (_) {}
+  } catch (e) {
+    // Don't silently swallow — a thrown fetch would otherwise strand the
+    // blotter on its "Loading..." placeholder forever (same bug class as the
+    // account dropdown, ef3b626c). Route through renderTrades' error path.
+    renderTrades([], {error: e.message || "Failed to load trades"});
+  }
 }
 async function fetchAlerts() {
   try {

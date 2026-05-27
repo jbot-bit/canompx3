@@ -610,10 +610,9 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-27
-- **Commit:** ef3b626c — feat(dashboard): wire dead P&L-strip cells to live data + fix stuck account dropdown
-- **Files changed:** 3 files
+- **Commit:** 8756dcb3 — fix(dashboard): wire dead drawer-handle counts + fix Connections tab stacking on desktop
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-27-dashboard-wire-dead-pnl-strip.md`
   - `trading_app/live/bot_dashboard.html`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
