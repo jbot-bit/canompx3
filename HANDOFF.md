@@ -610,7 +610,7 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-27
-- **Commit:** 8756dcb3 — fix(dashboard): wire dead drawer-handle counts + fix Connections tab stacking on desktop
+- **Commit:** bf3f6d7a — fix(dashboard): fetchTrades no longer silently swallows errors (stranded blotter)
 - **Files changed:** 2 files
   - `HANDOFF.md`
   - `trading_app/live/bot_dashboard.html`

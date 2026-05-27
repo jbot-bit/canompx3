@@ -154,6 +154,13 @@ bash
 cd
 git
 tasks.txt
+
+# Playwright MCP throwaway verification artifacts (intentional baselines live in output/playwright/)
+.playwright-mcp/
+/dash-*.png
+/chart-*.png
+/dashboard_chart.png
+/dash-v2.png
 *.tmp
 _tmp_*.py
 tmp_*.py
