@@ -18,5 +18,10 @@ if "%DOW%"=="Sunday" (
     python -m scripts.tools.refresh_data 2>&1 >> logs\daily_refresh.log
 )
 
+REM Sync forward-paper accrual from freshly-built orb_outcomes (idempotent;
+REM per-lane MAX(trading_day)+1 cursor self-heals any missed days).
+echo [%date% %time%] Paper-trade sync >> logs\daily_refresh.log
+python -m trading_app.paper_trade_logger --sync 2>&1 >> logs\daily_refresh.log
+
 REM Log completion
 echo [%date% %time%] Daily refresh completed >> logs\daily_refresh.log
