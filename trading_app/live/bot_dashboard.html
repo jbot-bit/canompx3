@@ -2450,7 +2450,10 @@
 
   /* ── cockpit grid: chart LEFT, status RIGHT ─────── */
   @media (min-width: 1100px) {
-    #tab-dashboard { display: block; }
+    /* Must keep .active so switchTab can hide it for the Connections tab —
+       a bare #tab-dashboard ID selector outranks .tab-content.active and
+       left the dashboard stacked above Connections on desktop. */
+    #tab-dashboard.active { display: block; }
 
     .cockpit-grid {
       display: grid;
@@ -3331,6 +3334,10 @@ function renderLiveLanes(lanes) {
 function renderTrades(trades, meta) {
   const tbody = $("trade-log"), summary = $("trade-summary");
   tbody.innerHTML = "";
+  // Drawer-handle count — set before any early-return so the locked/error
+  // paths don't leave a stale number. Was a static "0" never written.
+  const dhTrades = $("dh-trades-count");
+  if (dhTrades) dhTrades.textContent = String((trades || []).length);
   // Locked journal — show friendly message instead of empty table
   if (meta && meta.locked) {
     tbody.innerHTML = `<tr><td colspan="8" class="muted">${escapeHtml(meta.note || "Live session is writing the journal — refresh after session close.")}</td></tr>`;
@@ -4437,6 +4444,13 @@ async function fetchBrokerHealth() {
 function renderConnHealthDot(connections, errorMsg) {
   const dot = $("conn-health-dot");
   if (!dot) return;
+  // Drawer-handle count — set first so every early-return path keeps it fresh.
+  // Was a static "—" never written. Shows connected/enabled (e.g. "1/1").
+  const list0 = Array.isArray(connections) ? connections : [];
+  const enabled0 = list0.filter(c => c.enabled !== false);
+  const connected0 = enabled0.filter(c => String(c.status || "").toLowerCase() === "connected");
+  const dhBrokers = $("dh-brokers-count");
+  if (dhBrokers) dhBrokers.textContent = errorMsg ? "err" : `${connected0.length}/${enabled0.length}`;
   if (errorMsg) {
     dot.className = "conn-health-dot err";
     dot.title = `Broker connections: ${errorMsg}`;
