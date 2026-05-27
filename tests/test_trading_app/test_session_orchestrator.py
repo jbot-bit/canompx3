@@ -271,6 +271,11 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch.cost_spec = MagicMock()
     orch.cost_spec.friction_in_points = 0.5
     orch.risk_mgr = MagicMock()
+    # Default to a non-halted session: real RiskManager.is_halted() returns a
+    # bool, but a bare MagicMock returns a truthy Mock, which would trip the
+    # _handle_event Layer-1 halt gate and block every entry-path test. Tests
+    # exercising the halt gate override this explicitly.
+    orch.risk_mgr.is_halted.return_value = False
     orch.engine = MagicMock()
     orch.orb_builder = MagicMock()
     orch.monitor = MagicMock()
@@ -1578,6 +1583,47 @@ class TestEmergencyFlattenTradovateParity:
             f"submit at={first_submit_idx} — bracket legs must be cancelled "
             f"BEFORE exit submit to prevent orphaned-leg re-entry"
         )
+
+
+# ---------------------------------------------------------------------------
+# RISK-MANAGER HALT GATE tests (Layer-1 belt-and-suspenders in _handle_event)
+# ---------------------------------------------------------------------------
+
+
+class TestRiskManagerHaltGate:
+    """_handle_event blocks NEW entries when RiskManager.is_halted() is True.
+
+    Layer 1 of the two-layer DD guard. RiskManager.can_enter already blocks
+    halted entries pre-event inside the engine; this redundant orchestrator-
+    level gate fail-closes the live-order path if an ENTRY ever reaches
+    _handle_event without having gone through can_enter.
+    """
+
+    async def test_entry_blocked_when_risk_manager_halted(self):
+        """is_halted() True → ENTRY blocked, no order submitted, signal logged."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.risk_mgr.is_halted.return_value = True
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        assert len(orch.order_router.submitted) == 0
+        orch._write_signal_record.assert_called()
+        call_args = orch._write_signal_record.call_args[0][0]
+        assert call_args["type"] == "ENTRY_BLOCKED_RISK_HALT"
+        assert call_args["strategy_id"] == STRATEGY_ID
+
+    async def test_exit_allowed_when_risk_manager_halted(self):
+        """A halt must NOT block exits — can't leave positions open under halt."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        orch.risk_mgr.is_halted.return_value = True
+
+        await orch._handle_event(_exit_event(2355.0))
+
+        # Exit reaches the broker despite the halt (no RISK_HALT block emitted).
+        for c in orch._write_signal_record.call_args_list:
+            assert c[0][0].get("type") != "ENTRY_BLOCKED_RISK_HALT"
 
 
 # ---------------------------------------------------------------------------

@@ -2411,9 +2411,29 @@ class SessionOrchestrator:
                     )
                     return
 
-            # HWM DD halt gate — fail-closed on prop accounts.
-            # Checked on every entry (not just every 10 bars) to close the gap
-            # between periodic equity polls and actual order submission.
+            # DD halt gate — TWO layers, both fail-closed at the order path.
+            #
+            # Layer 1 (RiskManager): intraday R-cap + the $450/account dollar
+            # daily-loss belt + equity-R drawdown (see __init__ "DD PROTECTION
+            # — TWO LAYERS"). RiskManager.can_enter already blocks halted entries
+            # pre-event inside the engine, so under the current flow no halted
+            # ENTRY event reaches here. This redundant orchestrator-level check
+            # closes the asymmetry with Layer 2 below and fail-closes the
+            # live-order path if a future refactor ever emits an ENTRY without
+            # routing through can_enter (e.g. a replay / manual-entry path).
+            if self.risk_mgr.is_halted():
+                log.critical(
+                    "ENTRY BLOCKED — RiskManager halt (Layer 1: daily loss / equity DD): strategy=%s",
+                    event.strategy_id,
+                )
+                self._notify(f"ENTRY BLOCKED (RISK HALT): {event.strategy_id} — daily loss / equity DD breaker")
+                self._write_signal_record({"type": "ENTRY_BLOCKED_RISK_HALT", "strategy_id": event.strategy_id})
+                return
+
+            # Layer 2 (HWM tracker): cross-session broker-equity trailing DD
+            # (e.g. the $2K TopStep MLL). Fail-closed on prop accounts. Checked
+            # on every entry (not just every 10 bars) to close the gap between
+            # periodic equity polls and actual order submission.
             if self._hwm_tracker is not None:
                 halted, reason = self._hwm_tracker.check_halt()
                 if halted:

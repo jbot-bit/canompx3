@@ -610,10 +610,11 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-27
-- **Commit:** bf3f6d7a — fix(dashboard): fetchTrades no longer silently swallows errors (stranded blotter)
-- **Files changed:** 2 files
+- **Commit:** ba13c681 — chore(dashboard): gitignore Playwright verification artifacts + close UX stage
+- **Files changed:** 3 files
+  - `.gitignore`
   - `HANDOFF.md`
-  - `trading_app/live/bot_dashboard.html`
+  - `docs/runtime/stages/2026-05-27-dashboard-wire-dead-pnl-strip.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

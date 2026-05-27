@@ -4507,7 +4507,12 @@ async function fetchSessions() {
       setText("next-session-detail", getCountdownText(next.name) || "");
     }
     try { renderHero(); } catch (_) {}
-  } catch (_) {}
+  } catch (e) {
+    // Surface a thrown /api/sessions fetch instead of stranding the next-session
+    // strip on its placeholder (no-silent-failures, institutional-rigor §6).
+    setText("next-session", "Error");
+    setText("next-session-detail", e.message || "sessions fetch failed");
+  }
 }
 
 async function fetchDataStatus() {
@@ -4524,7 +4529,16 @@ async function fetchDataStatus() {
     setText("data-status-detail", parts.join(" · "));
     if (data.any_stale) { btn.className = "topbar-btn danger pulse"; if (!autoRefreshTriggered && !refreshPolling) { autoRefreshTriggered = true; btn.click(); } }
     else { btn.className = "topbar-btn warn"; }
-  } catch (_) {}
+  } catch (e) {
+    // Don't silently swallow — a thrown fetch (endpoint dead / non-JSON) would
+    // otherwise strand the freshness indicator on "Checking..." forever (same
+    // bug class as fetchTrades, bf3f6d7a). Mirror the data.error path so a dead
+    // endpoint reads "Error" not a stale "Current".
+    setText("data-status", "Error");
+    setText("data-status-detail", e.message || "data-status fetch failed");
+    const btn = $("btn-refresh");
+    if (btn) btn.className = "topbar-btn warn";
+  }
 }
 
 /* ── Signal Strip ──────────────────── */
