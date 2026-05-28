@@ -35,10 +35,11 @@ set ACTIVE_PROFILE=topstep_50k_mnq_auto
 
 :: Default mode is SIGNAL (no broker orders). For demo/live, edit BOT_MODE_FLAGS.
 :: Multi-instrument profile + --demo/--live is rejected by run_live_session.py.
-:: 2026-05-27: reverted to --signal-only (dashboard/bar-feed only, no orders).
-:: For TOKYO_OPEN demo order-path proving, set --demo (TopstepX practice
-:: endpoint, zero real capital). For real trading, set --live (gated).
-set BOT_MODE_FLAGS=--signal-only
+:: 2026-05-28: --demo for Stage 4 NYSE_OPEN order-path smoke (TopstepX practice
+:: endpoint, ZERO real capital). After smoke green, revert to --signal-only
+:: until Stage 5 explicitly flips to --live. See
+:: docs/runtime/stages/2026-05-28-live-golive-stage4-demo-smoke.md.
+set BOT_MODE_FLAGS=--demo
 
 :: Step 1: Clean up stale lock + stop files (don't kill python — other terminals may be running)
 ::   The .stop file triggers graceful-shutdown on the next feed scan; a stale one
