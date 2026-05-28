@@ -25,6 +25,7 @@ from pipeline.check_drift import (
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
     check_prereg_present_for_recent_runs,
+    check_session_order_covers_orb_labels,
     check_pyright_config_exists,
     check_python_version_file,
     check_ruff_rules_minimum,
@@ -3601,3 +3602,21 @@ class TestDowClassificationComplete:
         monkeypatch.setattr(dst, "DOW_ALIGNED_SESSIONS", both_aligned)
         violations = check_dow_classification_complete()
         assert any("NYSE_PREOPEN" in v and "BOTH" in v for v in violations), violations
+
+
+class TestSessionOrderCoversOrbLabels:
+    """Check: every ORB_LABELS session present in session_guard._SESSION_ORDER."""
+
+    def test_current_state_passes(self):
+        # Real state must be clean (NYSE_PREOPEN + all others present).
+        assert check_session_order_covers_orb_labels() == []
+
+    def test_catches_missing_session(self, monkeypatch):
+        # Remove a session from _SESSION_ORDER while leaving it in ORB_LABELS
+        # -> its orb_*_ columns would be silently masked -> must be flagged.
+        from pipeline import session_guard
+
+        truncated = [s for s in session_guard._SESSION_ORDER if s != "NYSE_PREOPEN"]
+        monkeypatch.setattr(session_guard, "_SESSION_ORDER", truncated)
+        violations = check_session_order_covers_orb_labels()
+        assert any("NYSE_PREOPEN" in v and "_SESSION_ORDER" in v for v in violations), violations
