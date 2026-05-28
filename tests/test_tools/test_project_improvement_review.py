@@ -1,0 +1,179 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import pytest
+
+from scripts.tools import project_improvement_review as review
+
+
+def _write(path: Path, text: str = "") -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _config(root: Path, **kwargs) -> review.ReviewConfig:
+    return review.ReviewConfig(root=root, since_ref="HEAD~1", **kwargs)
+
+
+def _clean_git(monkeypatch: pytest.MonkeyPatch, *, staged=(), dirty=(), untracked=(), changed=()) -> None:
+    def fake_git(root: Path, args: list[str]) -> tuple[int, str, str]:
+        if args == ["symbolic-ref", "--short", "HEAD"]:
+            return 0, "main", ""
+        if args == ["status", "--porcelain=v1"]:
+            lines = [f"A  {item}" for item in staged]
+            lines.extend(f" M {item}" for item in dirty)
+            lines.extend(f"?? {item}" for item in untracked)
+            return 0, "\n".join(lines), ""
+        if args[:2] == ["diff", "--name-only"]:
+            return 0, "\n".join(changed), ""
+        if args == ["worktree", "list", "--porcelain"]:
+            return 0, f"worktree {root}\nHEAD abc123\nbranch refs/heads/main\n", ""
+        raise AssertionError(f"unexpected git args: {args}")
+
+    monkeypatch.setattr(review, "_run_git", fake_git)
+
+
+def test_stdout_markdown_renders_fixed_categories_and_highest_action(tmp_path, monkeypatch, capsys) -> None:
+    _write(tmp_path / "CLAUDE.md", "Project operating contract with threshold ≤ 1.")
+    _clean_git(monkeypatch, changed=("CLAUDE.md",))
+    monkeypatch.setattr(review, "PROJECT_ROOT", tmp_path)
+
+    assert review.main([]) == 0
+
+    out = capsys.readouterr().out
+    assert "# Project Improvement Review" in out
+    for category in review.CATEGORIES:
+        assert f"## {category}" in out
+    assert out.count("## Highest-EV next action") == 1
+
+
+def test_out_writes_only_under_project_reviews(tmp_path) -> None:
+    allowed = review._resolve_output_path(tmp_path, "docs/runtime/project_reviews/report.md")
+    assert allowed == (tmp_path / "docs/runtime/project_reviews/report.md").resolve()
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        review._resolve_output_path(tmp_path, "docs/runtime/project_reviews/../escape.md")
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        review._resolve_output_path(tmp_path, "docs/runtime/project_reviews/report.txt")
+
+
+def test_tool_does_not_import_or_open_duckdb_and_has_no_mutating_protected_calls() -> None:
+    source = Path(review.__file__).read_text(encoding="utf-8")
+    assert "import duckdb" not in source
+    assert "duckdb.connect(" not in source
+    assert ".upsert(" not in source
+    assert ".delete(" not in source
+    assert "apply_allocation" not in source
+    assert "write_live_config" not in source
+
+
+def test_flags_staged_handoff(tmp_path, monkeypatch) -> None:
+    _write(tmp_path / "HANDOFF.md", "baton")
+    _clean_git(monkeypatch, staged=("HANDOFF.md",), changed=("HANDOFF.md",))
+
+    report = review.review(_config(tmp_path))
+
+    assert any(item.evidence_path == "HANDOFF.md" and item.severity == "HIGH" for item in report.findings)
+
+
+def test_detached_or_git_failure_reports_blocked_context(tmp_path, monkeypatch) -> None:
+    def fake_git(root: Path, args: list[str]) -> tuple[int, str, str]:
+        if args == ["symbolic-ref", "--short", "HEAD"]:
+            return 1, "", "fatal: ref HEAD is not a symbolic ref"
+        if args == ["status", "--porcelain=v1"]:
+            return 0, "", ""
+        if args[:2] == ["diff", "--name-only"]:
+            return 1, "", "bad revision"
+        if args == ["worktree", "list", "--porcelain"]:
+            return 0, "", ""
+        raise AssertionError(f"unexpected git args: {args}")
+
+    monkeypatch.setattr(review, "_run_git", fake_git)
+
+    report = review.review(_config(tmp_path))
+
+    assert report.git_state.context_status == "UNKNOWN/BLOCKED CONTEXT"
+    assert any(item.evidence_path == "git" for item in report.findings)
+
+
+def test_flags_non_read_only_db_pattern_as_advisory_drift_route(tmp_path, monkeypatch) -> None:
+    _write(tmp_path / "scripts/tools/risky_reader.py", "import duckdb\ncon = duckdb.connect(str(path))\n")
+    _clean_git(monkeypatch, changed=("scripts/tools/risky_reader.py",))
+
+    report = review.review(_config(tmp_path))
+
+    finding = next(item for item in report.findings if item.evidence_path == "scripts/tools/risky_reader.py")
+    assert finding.category == "Code quality"
+    assert "check_drift.py" in finding.rationale
+    assert "check_drift.py --fast" in finding.suggested_test
+
+
+def test_flags_e2_lookahead_fixture_without_policy(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "research/e2_scan.py",
+        "entry_model='E2'\nfeature = row['rel_vol_NYSE_OPEN']\n",
+    )
+    _clean_git(monkeypatch, changed=("research/e2_scan.py",))
+
+    report = review.review(_config(tmp_path))
+
+    assert any(item.category == "Research integrity" and "E2" in item.evidence_snippet for item in report.findings)
+
+
+def test_e2_policy_annotation_suppresses_lookahead_fixture(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "research/e2_scan.py",
+        "# e2-lookahead-policy: late-fill-only\nentry_model='E2'\nfeature = row['rel_vol_NYSE_OPEN']\n",
+    )
+    _clean_git(monkeypatch, changed=("research/e2_scan.py",))
+
+    report = review.review(_config(tmp_path))
+
+    assert not any("break-bar-derived predictor" in item.evidence_snippet for item in report.findings)
+
+
+def test_live_safe_doc_without_evidence_is_flagged(tmp_path, monkeypatch) -> None:
+    _write(tmp_path / "docs/runtime/live.md", "This lane is LIVE_SAFE and ready to deploy.")
+    _clean_git(monkeypatch, changed=("docs/runtime/live.md",))
+
+    report = review.review(_config(tmp_path))
+
+    assert any(item.category == "Source-of-truth integrity" for item in report.findings)
+
+
+def test_oversized_file_is_scan_silence(tmp_path, monkeypatch) -> None:
+    _write(tmp_path / "docs/runtime/large.md", "x" * 20)
+    _clean_git(monkeypatch, changed=("docs/runtime/large.md",))
+
+    report = review.review(_config(tmp_path, max_file_bytes=5))
+
+    assert any(item.evidence_path == "docs/runtime/large.md" and "exceeds" in item.evidence_snippet for item in report.findings)
+
+
+def test_highest_ev_prefers_blocker_over_lower_severity(tmp_path, monkeypatch) -> None:
+    _write(tmp_path / "trading_app/prop_profiles.py", "x = 1")
+    _write(tmp_path / "docs/runtime/live.md", "This is LIVE_SAFE.")
+    _clean_git(monkeypatch, dirty=("trading_app/prop_profiles.py",), changed=("docs/runtime/live.md",))
+
+    report = review.review(_config(tmp_path))
+
+    assert report.highest_ev.severity == "BLOCKER"
+    assert report.highest_ev.evidence_path == "git"
+
+
+def test_protected_surface_mentions_need_nearby_mutation_language(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "trading_app/live_reader.py",
+        "from trading_app import prop_profiles\n\n"
+        "def explain():\n"
+        "    return 'read-only report'\n",
+    )
+    _clean_git(monkeypatch, changed=("trading_app/live_reader.py",))
+
+    report = review.review(_config(tmp_path))
+
+    assert not any(item.evidence_path == "trading_app/live_reader.py" and item.category == "Git/worktree hygiene" for item in report.findings)
