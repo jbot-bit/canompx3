@@ -1,6 +1,7 @@
-# DRAFT — quarantine route per memory/feedback_lhp_validator_vs_field_presence_trap_n1.md.
-# Awaiting human review before promotion out of drafts/ to docs/audit/hypotheses/.
-# This file is drift-excluded while it lives under drafts/; promotion requires user approval.
+# PROMOTED — passed human review 2026-05-29; promoted out of drafts/ into docs/audit/hypotheses/
+# and committed (2e6f8024). Schema-conformance fixes applied post-review: research_question_type
+# and role.kind coerced to loader-allowed values (see metadata.notes). This file is no longer
+# drift-excluded; Drift Check 57 (hypothesis MinBTL) now governs it at commit time.
 #
 # Authoring provenance:
 #   - Parent verdict (LEAD evidence, not validation): docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.md (commit 3b125773).
@@ -101,10 +102,11 @@ metadata:
   total_expected_trials: 6
   testing_mode: "family"
   pathway: "A_family"
-  research_question_type: "overlay_filter_family"
+  research_question_type: "conditional_role"
   notes:
-    - "theory_grant=false; theory_citation is INTENTIONALLY OMITTED on every hypothesis per memory/feedback_chordia_theory_citation_field_presence_trap.md — any truthy string silently flips loader has_theory=True and downgrades strict 3.79 -> 3.00 via trading_app/hypothesis_loader.py:262-269."
-    - "Quarantine route per memory/feedback_lhp_validator_vs_field_presence_trap_n1.md — file lives under drafts/ until human review and explicit promotion."
+    - "theory_grant=false (explicit bool, Amendment 3.3 trading_app/hypothesis_loader.py:262-334). theory_citation is INTENTIONALLY OMITTED on every hypothesis: under Amendment 3.3 a theory_grant=false file carrying ANY non-empty hypothesis-level theory_citation FAILS CLOSED at load (loader:323-334), so omission both preserves strict t>=3.79 and keeps the file loadable. Historical context: memory/feedback_chordia_theory_citation_field_presence_trap.md (pre-3.3 the field-presence trap silently downgraded 3.79 -> 3.00)."
+    - "PROMOTED: passed human review and promoted out of drafts/ to docs/audit/hypotheses/ on 2026-05-29 (committed 2e6f8024). Original quarantine route per memory/feedback_lhp_validator_vs_field_presence_trap_n1.md is now satisfied."
+    - "Loader-conformance fixes applied post-review (2026-05-29): research_question_type was 'overlay_filter_family' (REJECTED by _ALLOWED_RESEARCH_QUESTION_TYPES) -> 'conditional_role' (an entry-overlay IS a conditional-role test, matching the *-chordia-unlock overlay corpus); role.kind was 'overlay_filter' (REJECTED by _ALLOWED_ROLE_KINDS) -> 'filter'. Both verified to load clean via load_hypothesis_metadata before commit. The science (K=6, strict 3.79, 14 kill criteria, RULE 3.3 power floor) is unchanged."
     - "Stage 4b lead evidence is upstream discovery provenance, NOT validation. The 4b K=27 family is closed; this K=6 family is independent at Bailey per-discovery family accounting (pre_registered_criteria.md Criterion 2)."
     - "Source feature `orb_NYSE_PREOPEN_size` is canonical-knowable at 09:30 ET = NYSE_OPEN ORB start. The audit of `break_dir`-based framing surfaced a silent E2-look-ahead contamination (break-detection window overlaps NYSE_OPEN ORB); size avoids this entirely."
 
@@ -131,7 +133,14 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "2e6f8024"
+  commit_sha_note: >-
+    SHA of the commit that first wrote this pre-reg (2e6f8024, [judgment] prereg ...
+    FRAMING 1, K=6). A follow-up commit applies loader-conformance fixes
+    (research_question_type overlay_filter_family -> conditional_role; role.kind
+    overlay_filter -> filter; draft-header staleness). The runner binds to whichever
+    committed SHA carries the loader-clean file; committed_required_before_run enforces
+    that no scan runs against an uncommitted working copy.
   committed_required_before_run: true
 
 scope:
@@ -339,7 +348,7 @@ hypotheses:
       the full 30min aperture, suggesting the imbalance prior needs the full window to
       express). 4b is LEAD ONLY, not validation.
     role:
-      kind: "overlay_filter"
+      kind: "filter"
       parent: "Single-feature binary overlay on 2 adjacent target lanes (NYSE_OPEN + US_DATA_1000) at 3 RR each."
       comparator: "Each filtered cell tested against (a) strict Chordia threshold AND (b) unfiltered baseline ExpR on the same (instrument, target_session, orb_minutes, rr_target, entry_model, confirm_bars) cell. Both gates required for promotion."
       primary_metric: "selected_trade_mean_r on overlay-fire days"
@@ -533,9 +542,9 @@ outputs_required_after_run:
 execution_gate:
   allowed_now: false
   blockers:
-    - "File lives in drafts/; human review required before promotion to docs/audit/hypotheses/."
-    - "After promotion: `python scripts/tools/estimate_k_budget.py --hypothesis docs/audit/hypotheses/2026-05-29-mnq-nyse-preopen-o30-size-adjacent-overlay-v1.yaml` must PASS (expected PASS at headroom 21)."
-    - "After K-budget PASS: runner authoring (separate stage). Runner imports compute primitives from canonical (research/oos_power.py, research/filter_utils.py); does not re-encode any filter logic per research-truth-protocol § Canonical filter delegation."
+    - "RESOLVED 2026-05-29: human review PASSED, file promoted out of drafts/ and committed (2e6f8024 + loader-conformance follow-up)."
+    - "RESOLVED 2026-05-29: `python scripts/tools/estimate_k_budget.py --hypothesis docs/audit/hypotheses/2026-05-29-mnq-nyse-preopen-o30-size-adjacent-overlay-v1.yaml` returns PASS (N=6, requires 3.58yr, MNQ horizon 6.65yr, 3.07yr headroom; N_max=27 so 21 trials of slack)."
+    - "OPEN: runner authoring (separate stage). Runner imports compute primitives from canonical (research/oos_power.py, research/filter_utils.py); does not re-encode any filter logic per research-truth-protocol § Canonical filter delegation. This is the only remaining gate before a scan."
   execution_surface_when_unblocked: "WSL with .venv-wsl OR Windows with .venv (runner platform-agnostic)"
   forbidden_now:
     - "theory-grant upgrade without new /resources-backed citation directly asserting 09:00 ET NYSE imbalance size -> adjacent cash-lane price discovery on equity-index futures (Pathway A theory-citation specificity requirement)"
