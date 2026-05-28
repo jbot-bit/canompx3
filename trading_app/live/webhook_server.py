@@ -43,6 +43,7 @@ WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 DEMO = os.environ.get("WEBHOOK_DEMO", "true").lower() != "false"
 PORT = int(os.environ.get("WEBHOOK_PORT", "8765"))
 BROKER = os.environ.get("WEBHOOK_BROKER", "tradovate")  # "tradovate" | "projectx"
+WEBHOOK_PROFILE_ID = os.environ.get("WEBHOOK_PROFILE_ID", "")
 
 # Dedup: reject identical (instrument, direction, action) within window (guards against TV double-fire)
 DEDUP_WINDOW = float(os.environ.get("WEBHOOK_DEDUP_SECONDS", "10"))
@@ -80,6 +81,28 @@ CONTRACT_TTL = 3600.0  # re-resolve front month after 1 hour
 
 
 _broker_components = None
+
+
+def _get_account_profile():
+    """Return optional profile for execution symbol substitution."""
+    if not WEBHOOK_PROFILE_ID:
+        return None
+    from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+    try:
+        return ACCOUNT_PROFILES[WEBHOOK_PROFILE_ID]
+    except KeyError as exc:
+        raise ValueError(f"Unknown WEBHOOK_PROFILE_ID {WEBHOOK_PROFILE_ID!r}") from exc
+
+
+def _resolve_execution_request(instrument: str, qty: int) -> tuple[str, int]:
+    profile = _get_account_profile()
+    if profile is None:
+        return instrument, qty
+    from trading_app.prop_profiles import resolve_execution_order
+
+    broker_instrument, broker_qty, _ = resolve_execution_order(profile, instrument, qty)
+    return broker_instrument, broker_qty
 
 
 def _get_broker():
@@ -252,10 +275,11 @@ def _check_rate_limit() -> None:
     _ORDER_TIMESTAMPS.append(now)
 
 
-def _place_order(req: TradeRequest, contract: str) -> int | None:
+def _place_order(req: TradeRequest, contract: str, qty: int | None = None) -> int | None:
     """Build and submit order. Returns order_id (or None if unavailable). Runs in a thread executor."""
     router_cls = _get_broker()["router_class"]
     router = router_cls(account_id=_get_account_id(), auth=_get_auth(), demo=DEMO)
+    order_qty = req.qty if qty is None else qty
 
     if req.action == "entry":
         if req.entry_model == "E2" and req.entry_price is None:
@@ -265,13 +289,13 @@ def _place_order(req: TradeRequest, contract: str) -> int | None:
             entry_model=req.entry_model,
             entry_price=req.entry_price or 0.0,
             symbol=contract,
-            qty=req.qty,
+            qty=order_qty,
         )
     else:  # exit
         spec = router.build_exit_spec(
             direction=req.direction,
             symbol=contract,
-            qty=req.qty,
+            qty=order_qty,
         )
 
     result = router.submit(spec)
@@ -327,16 +351,21 @@ async def trade(req: TradeRequest, request: Request):
     # 6. Position limit (entry only)
     _check_position_limit(req)
 
-    # 7. Resolve contract (cached, async-safe)
+    # 7. Apply optional profile execution mapping, then resolve contract.
+    try:
+        execution_instrument, execution_qty = _resolve_execution_request(req.instrument, req.qty)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     loop = asyncio.get_running_loop()
     try:
-        contract = await loop.run_in_executor(None, _get_contract, req.instrument)
+        contract = await loop.run_in_executor(None, _get_contract, execution_instrument)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Contract resolution failed: {e}") from e
 
     # 8. Place order (synchronous HTTP in thread pool to avoid blocking event loop)
     try:
-        order_id = await loop.run_in_executor(None, _place_order, req, contract)
+        order_id = await loop.run_in_executor(None, _place_order, req, contract, execution_qty)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
@@ -348,7 +377,7 @@ async def trade(req: TradeRequest, request: Request):
         req.action,
         req.instrument,
         req.direction,
-        req.qty,
+        execution_qty,
         order_id,
         "DEMO" if DEMO else "LIVE",
     )
@@ -359,7 +388,7 @@ async def trade(req: TradeRequest, request: Request):
         contract=contract,
         action=req.action,
         direction=req.direction,
-        qty=req.qty,
+        qty=execution_qty,
         demo=DEMO,
         timestamp=datetime.now(UTC).isoformat(),
     )

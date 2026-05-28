@@ -186,6 +186,24 @@ def resolve_execution_symbol(profile: AccountProfile, strategy_symbol: str) -> t
     return sym_map[strategy_symbol], qty_div[strategy_symbol]
 
 
+def resolve_execution_order(profile: AccountProfile, strategy_symbol: str, strategy_qty: int) -> tuple[str, int, int]:
+    """Return (broker_symbol, broker_qty, qty_divisor) for execution routing.
+
+    The divisor is explicit profile data, not inferred from point values. A
+    non-integer result fails closed because truncating would under-size and
+    rounding would over-size the live broker order.
+    """
+    broker_symbol, qty_divisor = resolve_execution_symbol(profile, strategy_symbol)
+    if qty_divisor == 1:
+        return broker_symbol, strategy_qty, qty_divisor
+    if strategy_qty % qty_divisor != 0:
+        raise ValueError(
+            f"execution qty for {strategy_symbol}->{broker_symbol} is not divisible: "
+            f"strategy_qty={strategy_qty}, divisor={qty_divisor}"
+        )
+    return broker_symbol, strategy_qty // qty_divisor, qty_divisor
+
+
 @dataclass(frozen=True)
 class TradingBookEntry:
     """A strategy selected for a specific account profile."""

@@ -1,7 +1,11 @@
 # Stage 2 NQ-Mini Plumbing Gap — Design Note (Parked 2026-05-16)
 
-**Status:** PARKED. Not shipping. Captured for the next person (or future-self) who picks
-this up.
+**Status:** STAGE 2 DORMANT WIRING IMPLEMENTED 2026-05-29. Real profile
+activation remains parked until Josh explicitly names the profile/divisor and
+rollout conditions.
+
+This note originally parked the work. It is retained because the plumbing gap
+and activation cautions remain the right context for Stage 3.
 
 ## Context
 
@@ -113,9 +117,9 @@ Reopen Stage 2 when ANY of the following is true:
 
 ## What was NOT parked
 
-`docs/runtime/action-queue.yaml::nq_mini_stage2_wiring_2026_05_15` remains `status: open`.
-This document is a finding, not a status change on the queue item. When Stage 2 is
-reopened, the implementer should consult this note BEFORE re-estimating the work.
+`docs/runtime/action-queue.yaml::nq_mini_stage2_wiring_2026_05_15` is now `status:
+parked` for Stage 3 profile activation. Stage 2 wiring exists, but no real profile row
+has been activated.
 
 ## Lessons
 

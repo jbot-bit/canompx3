@@ -36,6 +36,7 @@ from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
 from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.trade_journal import TradeJournal, generate_trade_id
 from trading_app.portfolio import Portfolio, PortfolioStrategy
+from trading_app.prop_profiles import resolve_execution_order, resolve_execution_symbol
 from trading_app.risk_manager import RiskLimits, RiskManager
 
 log = logging.getLogger(__name__)
@@ -627,6 +628,14 @@ class SessionOrchestrator:
 
         # Contract resolution (needed even in signal-only for front-month lookup)
         contracts = contracts_cls(auth=self.auth, demo=demo)
+        account_profile = getattr(self.portfolio, "account_profile", None)
+        if account_profile is None:
+            self.execution_instrument = instrument
+            self.execution_qty_divisor = 1
+        else:
+            self.execution_instrument, self.execution_qty_divisor = resolve_execution_symbol(
+                account_profile, instrument
+            )
 
         # Order routing only needed when placing real/demo orders
         if signal_only:
@@ -704,7 +713,7 @@ class SessionOrchestrator:
             _cleanup_orphan_brackets(
                 order_router=self.order_router,
                 contracts=contracts,
-                instrument=instrument,
+                instrument=self.execution_instrument,
                 force_orphans=force_orphans,
                 notify_fn=self._notify,
                 logger=log,
@@ -928,6 +937,10 @@ class SessionOrchestrator:
 
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
+        if self.execution_instrument == instrument:
+            self.execution_contract_symbol = self.contract_symbol
+        else:
+            self.execution_contract_symbol = contracts.resolve_front_month(self.execution_instrument)
         self._account_name = self.portfolio.name  # For dashboard display
 
         # R4 (Ralph iter 181): daily-rotation signal log rotator.
@@ -949,6 +962,16 @@ class SessionOrchestrator:
             self.contract_symbol,
             "SIGNAL-ONLY" if signal_only else ("DEMO" if demo else "LIVE"),
         )
+
+        if self.execution_contract_symbol != self.contract_symbol or self.execution_qty_divisor != 1:
+            log.info(
+                "Execution substitution active: strategy=%s/%s -> broker=%s/%s divisor=%d",
+                instrument,
+                self.contract_symbol,
+                self.execution_instrument,
+                self.execution_contract_symbol,
+                self.execution_qty_divisor,
+            )
 
         # Write session-start marker to signals file
         self._write_signal_record(
@@ -1370,8 +1393,9 @@ class SessionOrchestrator:
             # Surface profile_id so the dashboard can display the authoritative
             # profile (not scraped from account_name). When running, this is
             # the source of truth that supersedes data/bot_planned_launch.json.
-            if self._profile_id is not None:
-                snapshot["profile_id"] = self._profile_id
+            profile_id = getattr(self, "_profile_id", None)
+            if profile_id is not None:
+                snapshot["profile_id"] = profile_id
             write_state(snapshot)
         except Exception:
             pass  # Dashboard state is best-effort — never kill the trading loop
@@ -2105,6 +2129,27 @@ class SessionOrchestrator:
         self._safety_state.trading_day = str(self.trading_day)
         self._safety_state.save()
 
+    def _resolve_execution_order(self, strategy_qty: int) -> tuple[str, int]:
+        """Return broker contract + qty for the current profile's execution map."""
+        account_profile = getattr(self.portfolio, "account_profile", None)
+        if account_profile is None:
+            return self.contract_symbol, strategy_qty
+        _, broker_qty, _ = resolve_execution_order(account_profile, self.instrument, strategy_qty)
+        return getattr(self, "execution_contract_symbol", self.contract_symbol), broker_qty
+
+    def _reject_execution_qty(self, *, strategy_id: str, strategy_qty: int, error: Exception) -> None:
+        msg = f"ENTRY BLOCKED - {strategy_id}: invalid execution quantity for strategy_qty={strategy_qty}: {error}"
+        log.critical(msg)
+        self._notify(msg)
+        self._write_signal_record(
+            {
+                "type": "EXECUTION_QTY_REJECTED",
+                "strategy_id": strategy_id,
+                "strategy_qty": strategy_qty,
+                "reason": str(error),
+            }
+        )
+
     async def _submit_bracket(self, event, strategy, entry_price: float) -> None:
         """Submit broker-side stop/target bracket after entry fill. Never raises.
 
@@ -2125,6 +2170,7 @@ class SessionOrchestrator:
         if self.order_router is None or not self.order_router.supports_native_brackets():
             return
         try:
+            execution_contract, execution_qty = self._resolve_execution_order(event.contracts)
             risk_pts = event.risk_points or strategy.median_risk_points
             if not risk_pts:
                 # F4-1: Cannot compute stop/target without risk_points.
@@ -2147,11 +2193,11 @@ class SessionOrchestrator:
 
             bracket = self.order_router.build_bracket_spec(
                 direction=event.direction,
-                symbol=self.contract_symbol,
+                symbol=execution_contract,
                 entry_price=entry_price,
                 stop_price=stop_price,
                 target_price=target_price,
-                qty=event.contracts,
+                qty=execution_qty,
             )
             if bracket is None:
                 # F4-2: Broker cannot represent this bracket spec.
@@ -2310,7 +2356,7 @@ class SessionOrchestrator:
 
         exit_spec = self.order_router.build_exit_spec(
             direction=record.direction,
-            symbol=self.contract_symbol,
+            symbol=getattr(self, "execution_contract_symbol", self.contract_symbol),
             qty=record.contracts,
         )
         try:
@@ -2475,9 +2521,15 @@ class SessionOrchestrator:
                 self._write_signal_record({"type": "ALLOCATOR_BLOCKED", "strategy_id": event.strategy_id})
                 return
 
+            try:
+                signal_execution_contract, signal_execution_qty = self._resolve_execution_order(event.contracts)
+            except ValueError as exc:
+                self._reject_execution_qty(strategy_id=event.strategy_id, strategy_qty=event.contracts, error=exc)
+                return
+
             if self.signal_only:
                 record = self._positions.on_signal_entry(
-                    event.strategy_id, event.price, event.direction, contracts=event.contracts
+                    event.strategy_id, event.price, event.direction, contracts=signal_execution_qty
                 )
                 if record is None:
                     log.warning("Duplicate entry REJECTED for %s (signal-only)", event.strategy_id)
@@ -2486,7 +2538,7 @@ class SessionOrchestrator:
                     "⚡ SIGNAL [%s]: %s %s @ %.2f  ← trade this manually on Tradovate/TradingView",
                     event.strategy_id,
                     event.direction.upper(),
-                    self.contract_symbol,
+                    signal_execution_contract,
                     event.price,
                 )
                 # Persist signal entry to journal (fail-open)
@@ -2500,17 +2552,17 @@ class SessionOrchestrator:
                     direction=event.direction,
                     entry_model=strategy.entry_model,
                     engine_entry=event.price,
-                    contracts=event.contracts,
+                    contracts=signal_execution_qty,
                 )
 
                 self._write_signal_record(
                     {
                         "type": "SIGNAL_ENTRY",
                         "strategy_id": event.strategy_id,
-                        "contract": self.contract_symbol,
+                        "contract": signal_execution_contract,
                         "direction": event.direction.upper(),
                         "price": event.price,
-                        "contracts": event.contracts,
+                        "contracts": signal_execution_qty,
                     }
                 )
                 return
@@ -2527,6 +2579,12 @@ class SessionOrchestrator:
                 self._write_signal_record({"type": "CIRCUIT_BREAKER", "strategy_id": event.strategy_id})
                 return
 
+            try:
+                execution_contract, execution_qty = self._resolve_execution_order(event.contracts)
+            except ValueError as exc:
+                self._reject_execution_qty(strategy_id=event.strategy_id, strategy_qty=event.contracts, error=exc)
+                return
+
             # Post-market buffer: block entries within 10 minutes of firm close
             mins_to_close = self._minutes_to_close_et()
             if mins_to_close is not None and mins_to_close <= 10.0:
@@ -2538,7 +2596,7 @@ class SessionOrchestrator:
             # Check position tracker BEFORE broker submit — reject duplicates
             # before they become orphaned broker orders
             pre_record = self._positions.on_entry_sent(
-                event.strategy_id, event.direction, event.price, contracts=event.contracts
+                event.strategy_id, event.direction, event.price, contracts=execution_qty
             )
             if pre_record is None:
                 log.warning("Duplicate entry REJECTED for %s — not submitting to broker", event.strategy_id)
@@ -2548,8 +2606,8 @@ class SessionOrchestrator:
                 direction=event.direction,
                 entry_model=strategy.entry_model,
                 entry_price=event.price,
-                symbol=self.contract_symbol,
-                qty=event.contracts,
+                symbol=execution_contract,
+                qty=execution_qty,
             )
 
             # Merge bracket into entry for atomic submission (native brackets only)
@@ -2564,11 +2622,11 @@ class SessionOrchestrator:
                     target_price = event.price + sign * stop_dist * strategy.rr_target
                     bracket = self.order_router.build_bracket_spec(
                         direction=event.direction,
-                        symbol=self.contract_symbol,
+                        symbol=execution_contract,
                         entry_price=event.price,
                         stop_price=stop_price,
                         target_price=target_price,
-                        qty=event.contracts,
+                        qty=execution_qty,
                     )
                     if bracket:
                         spec = self.order_router.merge_bracket_into_entry(spec, bracket)
@@ -2657,18 +2715,18 @@ class SessionOrchestrator:
                 fill_entry=fill_price,
                 broker=self._broker_name,
                 order_id_entry=order_id,
-                contracts=event.contracts,
+                contracts=execution_qty,
             )
 
             self._write_signal_record(
                 {
                     "type": "ORDER_ENTRY",
                     "strategy_id": event.strategy_id,
-                    "contract": self.contract_symbol,
+                    "contract": execution_contract,
                     "direction": event.direction.upper(),
                     "price": event.price,
                     "fill_price": fill_price,
-                    "contracts": event.contracts,
+                    "contracts": execution_qty,
                     "order_id": order_id,
                 }
             )
@@ -2682,7 +2740,7 @@ class SessionOrchestrator:
                     # ProjectX creates bracket legs as separate orders with IDs entry_id+1 (SL)
                     # and entry_id+2 (TP), tagged with 'AutoBracket'.
                     try:
-                        sl_id, tp_id = self.order_router.verify_bracket_legs(order_id, self.contract_symbol)
+                        sl_id, tp_id = self.order_router.verify_bracket_legs(order_id, execution_contract)
                         if sl_id and tp_id:
                             record.bracket_order_ids = [sl_id, tp_id]
                             log.info(
@@ -2786,11 +2844,26 @@ class SessionOrchestrator:
 
             exit_pos_rec = self._positions.get(event.strategy_id)
             exit_jtid = exit_pos_rec.journal_trade_id if exit_pos_rec else None
+            try:
+                execution_contract, execution_qty = self._resolve_execution_order(event.contracts)
+            except ValueError as exc:
+                msg = f"EXIT BLOCKED - {event.strategy_id}: invalid execution quantity for strategy_qty={event.contracts}: {exc}"
+                log.critical(msg)
+                self._notify(msg)
+                self._write_signal_record(
+                    {
+                        "type": "EXECUTION_QTY_REJECTED",
+                        "strategy_id": event.strategy_id,
+                        "strategy_qty": event.contracts,
+                        "reason": str(exc),
+                    }
+                )
+                return
             self._positions.on_exit_sent(event.strategy_id)
             exit_spec = self.order_router.build_exit_spec(
                 direction=event.direction,
-                symbol=self.contract_symbol,
-                qty=event.contracts,
+                symbol=execution_contract,
+                qty=execution_qty,
             )
             try:
                 result = await self._submit_exit_with_retry(exit_spec, event.strategy_id)
@@ -2964,7 +3037,7 @@ class SessionOrchestrator:
                     self.auth.refresh_if_needed()
                     exit_spec = self.order_router.build_exit_spec(
                         direction=direction,
-                        symbol=self.contract_symbol,
+                        symbol=getattr(self, "execution_contract_symbol", self.contract_symbol),
                         qty=record.contracts,
                     )
                     result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
@@ -3758,6 +3831,10 @@ class SessionOrchestrator:
                             self.contract_symbol = new_symbol
                         else:
                             log.info("Contract unchanged on reconnect: %s", self.contract_symbol)
+                        if getattr(self, "execution_instrument", self.instrument) == self.instrument:
+                            self.execution_contract_symbol = self.contract_symbol
+                        else:
+                            self.execution_contract_symbol = _contracts.resolve_front_month(self.execution_instrument)
                     except Exception as exc:
                         log.warning(
                             "Contract re-resolution failed on reconnect: %s (keeping %s)", exc, self.contract_symbol

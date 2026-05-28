@@ -9,6 +9,25 @@ from unittest.mock import patch
 import pytest
 from fastapi import HTTPException
 
+from trading_app.prop_profiles import AccountProfile
+
+
+def _nq_mini_profile() -> AccountProfile:
+    """Real AccountProfile that exercises the __post_init__ NQ-mini validator.
+
+    SimpleNamespace bypasses the dataclass validator (cross-map keys, divisor
+    int>=1, source-in-ASSET_CONFIGS, target-in-COST_SPECS). Use this helper
+    so webhook tests probe the same construction path live profiles take.
+    """
+    return AccountProfile(
+        profile_id="test_nq_mini",
+        firm="test_firm",
+        account_size=50_000,
+        is_express_funded=True,
+        execution_symbol_map={"MNQ": "NQ"},
+        execution_qty_divisor={"MNQ": 4},
+    )
+
 
 def _load_ws(secret: str = "s3cret"):
     """Import webhook server with a test secret and reset mutable state."""
@@ -222,3 +241,54 @@ async def test_qty_within_max_accepted():
     ):
         resp = await _run_trade(ws, {**_ENTRY_PAYLOAD, "qty": 3})
         assert resp.status == "submitted"
+
+
+async def test_profile_execution_map_resolves_contract_and_divides_qty():
+    """Configured webhook profile routes MNQ alerts to NQ broker contracts."""
+    ws = _load_ws()
+    ws.WEBHOOK_PROFILE_ID = "test_nq_mini"
+    submitted = {}
+
+    class Router:
+        def __init__(self, **_kwargs):
+            pass
+
+        def build_order_spec(self, **kwargs):
+            submitted.update(kwargs)
+            return {"spec": kwargs}
+
+        def submit(self, _spec):
+            return {"order_id": 123}
+
+    profile = _nq_mini_profile()
+
+    with (
+        patch("trading_app.live.webhook_server.asyncio.get_running_loop", return_value=_ImmediateLoop()),
+        patch("trading_app.live.webhook_server._get_account_profile", return_value=profile),
+        patch("trading_app.live.webhook_server._get_contract", side_effect=lambda instrument: f"{instrument}M6"),
+        patch(
+            "trading_app.live.webhook_server._get_broker",
+            return_value={"router_class": Router},
+        ),
+        patch("trading_app.live.webhook_server._get_account_id", return_value=1),
+        patch("trading_app.live.webhook_server._get_auth", return_value=object()),
+    ):
+        resp = await _run_trade(ws, {**_ENTRY_PAYLOAD, "instrument": "MNQ", "qty": 4})
+
+    assert resp.contract == "NQM6"
+    assert resp.qty == 1
+    assert submitted["symbol"] == "NQM6"
+    assert submitted["qty"] == 1
+
+
+async def test_profile_execution_map_rejects_fractional_webhook_qty():
+    """Webhook execution mapping fails closed when qty/divisor is not an integer lot."""
+    ws = _load_ws()
+    profile = _nq_mini_profile()
+
+    with patch("trading_app.live.webhook_server._get_account_profile", return_value=profile):
+        with pytest.raises(HTTPException) as exc:
+            await _run_trade(ws, {**_ENTRY_PAYLOAD, "instrument": "MNQ", "qty": 3})
+
+    assert exc.value.status_code == 400
+    assert "not divisible" in exc.value.detail

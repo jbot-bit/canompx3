@@ -6,6 +6,20 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-29 — NQ-mini Stage 2 of 3 SHIPPED dormant-only)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode. On `main`. **5 commits unpushed (4 prior + this); origin/main = `62c51a14`.**
+- **Done:** wired `resolve_execution_symbol` / new `resolve_execution_order` (fail-closed integer-divisor) into `SessionOrchestrator` + `webhook_server`. Closed plumbing gap from 2026-05-16 design note: `Portfolio.account_profile` now carries the `AccountProfile` reference so the orchestrator can resolve broker contract + qty without re-plumbing. **DORMANT-ONLY** — no `ACCOUNT_PROFILES` row populates `execution_symbol_map`. Stage 3 = explicit profile-activation decision (parked, user-gated).
+- **Adversarial-audit gate:** evidence-auditor pass returned **CONDITIONAL, 0 critical**. Finding #1 (webhook test used `SimpleNamespace`, bypassing `AccountProfile.__post_init__`) **closed in-stage** via new `_nq_mini_profile()` helper. Finding #2 (orchestrator vs webhook config surfaces are independent; no parity enforcement) **deferred to Stage 3 activation checklist** (already noted in stage file).
+- **Drift:** healed Check 73 (MGC 2026-05-27 weekend gap) via `refresh_data.py --instrument MGC`; rebuilt `fast_lane_graveyard_digest.yaml` to resolve Check 178 (queue-item status transition). **Drift 167/0.**
+- **Tests:** 260/260 webhook+orchestrator pass. In-stage cascade fix: pre-existing `TestOperatorStateExport::test_publish_state_passes_operator_payloads` was failing because `_publish_state` accessed `self._profile_id` (added in `8d5669a8`) without `getattr` safety — `except Exception: pass` swallowed the AttributeError, dashboard write silently dropped. Fixed with `getattr(self, "_profile_id", None)`. Same class as the institutional-rigor § 6 (no silent failures) rule.
+- **Stage file:** `docs/runtime/stages/2026-05-29-nq-mini-stage2-wiring-closeout.md`. Supersedes `docs/plans/2026-05-16-stage2-nq-mini-plumbing-gap-finding.md`.
+
+### NEXT SESSION
+1. **NYSE_PREOPEN Stage 4 follow-ups (research-decision territory, NOT `/next`-eligible):** the 4b verdict (`3b125773`) found 0/27 cells PASS strict-Chordia on the NFP-spillover framing, but 6 O30 cells cleared strict-IS (t in [3.87, 4.65], q < 5e-4). Three potential follow-up framings — most compelling is **O30 NYSE_PREOPEN aperture-base-effect** as its own prereg (the signal that survived is "30-min aperture regardless of NFP status"). Needs `/design` not rush — write new prereg + K-budget + thoughtful OOS-power-floor methodology for "lead discovered out of an underpowered binary IS/OOS framing."
+2. **NQ-mini Stage 3 (parked, user-gated):** explicit profile-activation decision (which profile, divisor, firm-policy review, demo/live rollout, rollback condition). Stage 2 wiring is DORMANT until this lands. Also: adversarial-audit finding #2 (orchestrator vs webhook profile config are independent surfaces) belongs in the Stage 3 activation checklist.
+3. Lane B chain (post-rebase) still unpushed under this NQ-mini commit: `ed2535d6` → `296c54f2` → `15149e60` → `6aed3f72` → `3b125773` → `<this commit>`.
+
 ## This Session (2026-05-28 — NYSE_PREOPEN Lane B: Stages 1+2+3A+3B SHIPPED end-to-end)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode. On `main`. **4 commits unpushed; Stage 1 (`62c51a14`) already on origin.**
@@ -626,17 +640,16 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 - **Stage NOT closed:** `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` remains open. Criteria 1-4 met with positive test coverage; criteria 5-6 show no regression vs baseline; criterion 7 (operator hits `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirms non-blocked status + `logs/live/live_signals_2026-05-18.jsonl` appears within 30s) requires a live dashboard run.
 
 ## Last Session
-- **Tool:** Claude Code (opus 4.7)
-- **Date:** 2026-05-28
-- **Stage 4b verdict:** 0/27 PASS strict-Chordia on NYSE_PREOPEN MNQ E2 NFP-spillover v1 prereg. 12 FAIL_CHORDIA_STRICT, 9 UNVERIFIED_DST_IMBALANCE (all NFP-only splits, EST=26 < 30 floor), **6 CONDITIONAL_OOS_UNDERPOWERED** on O30 all_days/non_nfp_days (IS t=3.87-4.65, BH q < 3e-4 at K=27, but 4-month tail OOS at STATISTICALLY_USELESS power). Real edge appears to live at the O30 aperture irrespective of NFP, not the pre-registered NFP-spillover framing.
-- **Tip:** `<pending Stage 4b commit>` (Stage 4a at 774a7356 -- silently restored by sibling-session safety-rebase reset, n=3 same-class shared-worktree shared-tip incident with feedback_shared_index_db_lock_precommit_race_2026_05_28.md class).
-- **Files changed (Stage 4b):**
-  - `docs/runtime/stages/2026-05-28-nyse-preopen-stage4b-verdict-emission.md` (NEW)
-  - `scripts/research/emit_nyse_preopen_verdict.py` (NEW — thin I/O wrapper over Stage 4a runner; refuses --emit without --force re-overwrite)
-  - `tests/test_scripts/test_emit_nyse_preopen_verdict.py` (NEW — 15 tests, all pass)
-  - `docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.md` (NEW verdict artifact)
-  - `docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.csv` (NEW row-level CSV)
-- **Audit/integrity:** 52/52 tests pass (Stage 4a 37 + Stage 4b 15); drift 167/0; gold.db read-only enforced (no DB writes anywhere). Verdict MD declares 3 framings NOT tested by this prereg (overlay/filter on adjacent US-cash lanes, portfolio-forecast layer per Carver Ch 11, alternative OOS framings per Harvey-Liu / CPCV — none of which are refuted by 0/27 PASS).
+- **Tool:** Claude Code
+- **Date:** 2026-05-29
+- **Commit:** 3b125773 — [judgment] verdict: NYSE_PREOPEN MNQ E2 NFP-spillover v1 (Lane B Stage 4b)
+- **Files changed:** 6 files
+  - `HANDOFF.md`
+  - `docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.csv`
+  - `docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.md`
+  - `docs/runtime/stages/2026-05-28-nyse-preopen-stage4b-verdict-emission.md`
+  - `scripts/research/emit_nyse_preopen_verdict.py`
+  - `tests/test_scripts/test_emit_nyse_preopen_verdict.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

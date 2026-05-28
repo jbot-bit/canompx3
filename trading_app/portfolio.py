@@ -14,6 +14,7 @@ import json
 import sys
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pipeline.log import get_logger
 
@@ -41,6 +42,9 @@ from trading_app.validated_shelf import (
     deployable_validated_relation,
     validated_setups_has_deployment_scope,
 )
+
+if TYPE_CHECKING:
+    from trading_app.prop_profiles import AccountProfile
 
 
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
@@ -100,6 +104,7 @@ class Portfolio:
     max_daily_loss_r: float
     max_per_orb_positions: int = 1
     corr_lookup: dict[tuple[str, str], float] = field(default_factory=dict)
+    account_profile: "AccountProfile | None" = None
 
     def to_json(self) -> str:
         """Serialize portfolio to JSON."""
@@ -952,6 +957,7 @@ def build_profile_portfolio(
         risk_per_trade_pct=risk_per_trade_pct,
         max_concurrent_positions=max_concurrent_positions,
         max_daily_loss_r=max_daily_loss_r,
+        account_profile=profile,
     )
 
 

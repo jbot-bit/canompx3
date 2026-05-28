@@ -9,7 +9,7 @@ When SessionOrchestrator.__init__ gains new attributes, add them here once.
 
 import asyncio
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -102,6 +102,7 @@ def _inline_executor_offloads():
 
 
 from trading_app.portfolio import Portfolio, PortfolioStrategy
+from trading_app.prop_profiles import AccountProfile
 
 # ---------------------------------------------------------------------------
 # Fake broker components — single source of truth for test mocks
@@ -141,6 +142,17 @@ def _test_portfolio(strategy: PortfolioStrategy | None = None) -> Portfolio:
         risk_per_trade_pct=2.0,
         max_concurrent_positions=3,
         max_daily_loss_r=5.0,
+    )
+
+
+def _nq_mini_profile(*, divisor: int = 4) -> AccountProfile:
+    return AccountProfile(
+        profile_id="test_nq_mini",
+        firm="topstep",
+        account_size=50_000,
+        is_express_funded=True,
+        execution_symbol_map={"MNQ": "NQ"},
+        execution_qty_divisor={"MNQ": divisor},
     )
 
 
@@ -314,6 +326,8 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._probe_results = {}  # Populated by run_self_tests; consumed by live_health snapshot.
     orch._fill_reconnect_gen = 0  # F7/R3: reconnect generation counter
     orch.contract_symbol = "MGCJ6"
+    orch.execution_contract_symbol = orch.contract_symbol
+    orch.execution_qty_divisor = 1
 
     from trading_app.live.circuit_breaker import CircuitBreaker
 
@@ -338,6 +352,22 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     return orch
 
 
+def build_nq_mini_orchestrator(*, divisor: int = 4) -> SessionOrchestrator:
+    strategy = replace(_test_strategy(), instrument="MNQ")
+    portfolio = _test_portfolio(strategy)
+    portfolio.instrument = "MNQ"
+    portfolio.account_profile = _nq_mini_profile(divisor=divisor)
+    orch = build_orchestrator()
+    orch.instrument = "MNQ"
+    orch.portfolio = portfolio
+    orch._strategy_map = {strategy.strategy_id: strategy}
+    orch.contract_symbol = "MNQM6"
+    orch.execution_contract_symbol = "NQM6"
+    orch.execution_qty_divisor = divisor
+    orch.cost_spec.point_value = 2.0
+    return orch
+
+
 @pytest.fixture
 def orch():
     """Default orchestrator: no orphans, no fill price, order routing enabled."""
@@ -356,25 +386,25 @@ def orch_signal_only():
     return build_orchestrator(FakeBrokerComponents(signal_only=True))
 
 
-def _entry_event(price: float = 2350.5) -> FakeTradeEvent:
+def _entry_event(price: float = 2350.5, *, contracts: int = 1) -> FakeTradeEvent:
     return FakeTradeEvent(
         event_type="ENTRY",
         strategy_id=STRATEGY_ID,
         timestamp=datetime.now(UTC),
         price=price,
         direction="long",
-        contracts=1,
+        contracts=contracts,
     )
 
 
-def _exit_event(price: float = 2355.0, pnl_r: float | None = 1.5) -> FakeTradeEvent:
+def _exit_event(price: float = 2355.0, pnl_r: float | None = 1.5, *, contracts: int = 1) -> FakeTradeEvent:
     return FakeTradeEvent(
         event_type="EXIT",
         strategy_id=STRATEGY_ID,
         timestamp=datetime.now(UTC),
         price=price,
         direction="long",
-        contracts=1,
+        contracts=contracts,
         pnl_r=pnl_r,
     )
 
@@ -723,6 +753,48 @@ class TestFillPriceTracking:
 
         record = orch_with_fill.monitor.record_trade.call_args[0][0]
         assert record.entry_price == 2351.0  # broker fill, not engine
+
+
+class TestNQMiniExecutionSubstitution:
+    async def test_entry_uses_execution_contract_and_integer_divided_qty(self):
+        """MNQ strategy contracts route to mapped NQ contract with exact integer qty."""
+        orch = build_nq_mini_orchestrator(divisor=4)
+
+        await orch._handle_event(_entry_event(2350.5, contracts=4))
+
+        assert len(orch.order_router.submitted) == 1
+        submitted = orch.order_router.submitted[0]
+        assert submitted["symbol"] == "NQM6"
+        assert submitted["qty"] == 1
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
+        assert record.contracts == 1
+        orch.journal.record_entry.assert_called_once()
+        assert orch.journal.record_entry.call_args.kwargs["contracts"] == 1
+
+    async def test_entry_rejects_non_integer_execution_qty_before_broker_submit(self):
+        """Mapped execution refuses fractional NQ lots instead of truncating or over-sizing."""
+        orch = build_nq_mini_orchestrator(divisor=4)
+
+        await orch._handle_event(_entry_event(2350.5, contracts=3))
+
+        assert orch.order_router.submitted == []
+        assert orch._positions.get(STRATEGY_ID) is None
+        blocked = [c.args[0] for c in orch._write_signal_record.call_args_list]
+        assert any(r.get("type") == "EXECUTION_QTY_REJECTED" for r in blocked)
+
+    async def test_exit_uses_execution_contract_and_recorded_execution_qty(self):
+        """Open NQ execution lots close on the NQ contract, not the MNQ data contract."""
+        orch = build_nq_mini_orchestrator(divisor=4)
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.5, order_id=1, contracts=1)
+
+        await orch._handle_event(_exit_event(2355.0, contracts=4))
+
+        assert len(orch.order_router.submitted) == 1
+        submitted = orch.order_router.submitted[0]
+        assert submitted["type"] == "fake_exit"
+        assert submitted["symbol"] == "NQM6"
+        assert submitted["qty"] == 1
 
 
 class TestBestPrice:

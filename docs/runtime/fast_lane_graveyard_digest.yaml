@@ -1,6 +1,6 @@
 do_not_hand_edit: true
 schema_version: 1
-built_at_utc: '2026-05-19T22:51:23Z'
+built_at_utc: '2026-05-28T20:37:46Z'
 source_files:
 - chatgpt_bundle/06_RD_GRAVEYARD.md
 - docs/STRATEGY_BLUEPRINT.md
@@ -349,8 +349,14 @@ entries:
   structural_hash: f7a9ca1c18a20c8f
   lane_inputs: {}
 - source_path: docs/runtime/action-queue.yaml
+  title: nq_mini_stage2_wiring_2026_05_15
+  status: PARKED
+  hash_kind: class
+  structural_hash: 506b179024382e2b
+  lane_inputs: {}
+- source_path: docs/runtime/action-queue.yaml
   title: park_mnq_usdata1000_e1_pd_clear_long_o30_oos_unpowered_2026_05_19
-  status: PARK
+  status: PARKED
   hash_kind: class
   structural_hash: e599265fce7dd75a
   lane_inputs: {}
