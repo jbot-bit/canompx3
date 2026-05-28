@@ -6,9 +6,24 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-29 — /next state reconcile: HANDOFF git facts corrected to truth)
+
+- **Tool:** Claude Code (Opus 4.8), explanatory mode. On `main`.
+- **Git truth (verified `git fetch` + `git rev-parse`):** origin/main = `2e6f8024` (NYSE_PREOPEN MNQ O30 size-adjacent overlay v1 prereg). **Only 1 commit unpushed: `f235fb79`** (`[judgment] fix(prereg): loader-conformance + staleness fixes on NYSE_PREOPEN O30 overlay v1`). The earlier "5 commits unpushed / origin = `62c51a14`" accounting (block below) is **STALE** — the Lane B chain (`ed2535d6`→`6aed3f72`), the 4b verdict (`3b125773`), the NQ-mini Stage 2 wiring (`ea0d4fec`), and the O30 overlay prereg (`2e6f8024`) all reached origin since. Pushing `f235fb79` is a `[judgment]` capital-class push → operator-gated, not done here.
+- **Why this block exists:** `/next` found no implementation-eligible task (every open thread is research-decision or user-gated), and the operator pulse flagged the decaying signal "HANDOFF.md no longer matches the canonical action queue render." This corrects the load-bearing stale fact (unpushed-commit accounting) to git truth.
+- **Deliberately NOT done (deferred, needs its own pass):** (1) 14 `mode: IMPLEMENTATION` stage files lack `updated:` — but several carry genuine non-done status (`rebuild-outcomes-mnq` = PARTIAL_FAILURE; `ring-orphan-startup-sweep` = IMPLEMENTED_PENDING_OPERATOR_LIVE_REPRO; `stop-live-auto-on-startup` = DESIGN_LOCKED_PENDING_POST_SESSION). Mass-deletion would destroy real pending-work records → needs per-file git verification. (2) Working-tree WIP `register_topstep_telemetry_task.ps1` + test belong to sibling branch `codex/topstep-telemetry-scheduler` (`8c03a739`) — branch-hygiene decision left to operator.
+- **Stage file:** `docs/runtime/stages/2026-05-29-reconcile-stale-handoff-state.md` (TRIVIAL, scope_lock = HANDOFF.md only).
+
+### NEXT SESSION
+1. **Push** `f235fb79` (the lone unpushed commit) once operator OKs the `[judgment]` push.
+2. The two genuine open threads remain (research-decision / user-gated, both `/design` or operator-gated, NOT `/next`): **NYSE_PREOPEN O30 aperture-base-effect** prereg follow-up, and **NQ-mini Stage 3** profile-activation. See the block below for full context.
+3. Optional housekeeping: per-file verify + sweep the 14 mode-mislabeled stage files (verify each is truly done via git before deleting; preserve PARTIAL_FAILURE / PENDING_OPERATOR entries).
+
+---
+
 ## This Session (2026-05-29 — NQ-mini Stage 2 of 3 SHIPPED dormant-only)
 
-- **Tool:** Claude Code (Opus 4.7), explanatory mode. On `main`. **5 commits unpushed (4 prior + this); origin/main = `62c51a14`.**
+- **Tool:** Claude Code (Opus 4.7), explanatory mode. On `main`. **5 commits unpushed (4 prior + this); origin/main = `62c51a14`.** _(NOTE 2026-05-29 reconcile: this accounting is STALE — see corrected block above; actual origin/main = `2e6f8024`, 1 unpushed.)_
 - **Done:** wired `resolve_execution_symbol` / new `resolve_execution_order` (fail-closed integer-divisor) into `SessionOrchestrator` + `webhook_server`. Closed plumbing gap from 2026-05-16 design note: `Portfolio.account_profile` now carries the `AccountProfile` reference so the orchestrator can resolve broker contract + qty without re-plumbing. **DORMANT-ONLY** — no `ACCOUNT_PROFILES` row populates `execution_symbol_map`. Stage 3 = explicit profile-activation decision (parked, user-gated).
 - **Adversarial-audit gate:** evidence-auditor pass returned **CONDITIONAL, 0 critical**. Finding #1 (webhook test used `SimpleNamespace`, bypassing `AccountProfile.__post_init__`) **closed in-stage** via new `_nq_mini_profile()` helper. Finding #2 (orchestrator vs webhook config surfaces are independent; no parity enforcement) **deferred to Stage 3 activation checklist** (already noted in stage file).
 - **Drift:** healed Check 73 (MGC 2026-05-27 weekend gap) via `refresh_data.py --instrument MGC`; rebuilt `fast_lane_graveyard_digest.yaml` to resolve Check 178 (queue-item status transition). **Drift 167/0.**
@@ -642,7 +657,7 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-29
-- **Commit:** 2e6f8024 — [judgment] prereg: NYSE_PREOPEN MNQ O30 size-adjacent overlay v1 (FRAMING 1, K=6)
+- **Commit:** f235fb79 — [judgment] fix(prereg): loader-conformance + staleness fixes on NYSE_PREOPEN O30 overlay v1
 - **Files changed:** 2 files
   - `HANDOFF.md`
   - `docs/audit/hypotheses/2026-05-29-mnq-nyse-preopen-o30-size-adjacent-overlay-v1.yaml`

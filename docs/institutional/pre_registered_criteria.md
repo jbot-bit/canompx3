@@ -21,6 +21,7 @@
 | v3.1 | 2026-04-10 | **Revised Proxy Data Policy.** GC proxy expanded from validation-only to discovery-eligible for price-safe filters (ORB_G, GAP, PDR, ATR, OVNRNG, COST_LT). Volume-unsafe filters remain micro-only. Regime-awareness requirement added. Empirical evidence: 4-gate research (price corr=0.99999, 96% trigger match, 99.5% GAP filter agreement). | Claude Code session (user: *"can we use the gc for our strats or not? it doesn't have to do with price movement does it?"*) |
 | v3.0 | 2026-04-09 | **Theory-Driven Individual Hypothesis Testing.** Adds dual-pathway to Criterion 3: individual hypothesis pathway (raw p < 0.05) for theory-grounded, mechanism-specific predictions alongside existing BH FDR pathway for exploratory search. Incorporates canonical-base-truth methodology for admissible search space definition. Downstream gates (WF, OOS, era stability) mandatory and non-waivable under individual pathway. | Claude Code session (user: *"There is a way that people realistically trade ORB breakouts that are valid and profitable without using 20 years of data and such hard tests, right?"*) |
 | v3.1 | 2026-04-09 | **Structural Data Boundary for Discovery + Era Stability.** WF_START_OVERRIDE now applies to both discovery IS scope (outcomes + daily_features) and Criterion 9 era bins. Years before the override are excluded from both. Justified by 5-variable structural audit (ATR, volume, ORB size, G-filter pass rates, trading days) confirming MNQ/MES 2019 micro-launch data is non-representative. MNQ CME_PRECLOSE 2019: ATR 0.42x, G8 pass 39%, vol 0.16x. NOT performance-snooped — zero strategy PnL consulted. See Amendment 3.1 at bottom. | Claude Code session (user: *"ensure we do not use v1 of anything. we always check back over to verify our work"*) |
+| v3.5 | 2026-05-29 | **DSR reference universe LOCKED — research validation without calendar-OOS wait.** Criterion 5 SR_0 inputs (`V[SR]`, `N̂`) pinned to the pre-declared prereg family/run, pre-2026 only, all sibling trials + failures included (no winner-filter, no global dump). Closes the documented "implementation gap" — verified empirically that the same candidate scored DSR 0.000→0.982 purely by universe choice. DSR is a research-validation gate (available now, full clean history); **Criterion 8 forward-OOS remains REQUIRED for deployment and is NOT demoted.** Status: DSR_FIXED_UNIV_CLEAR / FORWARD_OOS_PENDING / ONC_PENDING — never "OOS-clean." Threshold 0.95 unchanged. ONC queued as audit upgrade, not blocker. See Amendment 3.5 at bottom. | Claude Code session (user: *"make sure we never have to wait for OOS again ... i aint waiting for real time for trades"* + scope-narrowing corrections) |
 
 ---
 
@@ -137,7 +138,16 @@ with:
 
 **Required threshold:** DSR > 0.95.
 
-**Implementation gap:** `validated_setups` has `dsr_score` and `sr0_at_discovery` columns but actual DSR computation needs to be verified. Task for next session: audit the DSR calculation code path.
+**Reference universe (LOCKED — Amendment 3.5, 2026-05-29):** SR_0 in the formula above is governed by two inputs that were previously a free parameter — `V[SR]` (cross-sectional Sharpe variance) and `N̂` (effective trials). Both are now pre-declared per prereg, not chosen post-hoc:
+
+- **`V[SR]` reference universe** = the **pre-declared prereg family/run**, **pre-2026 only** (`trading_day < HOLDOUT_SACRED_FROM`), computed over **ALL tested cells in that family/run including failures and sibling trials** — NOT winner-filtered, NOT a global dump. No `sharpe_ratio > 0` filter. The universe is named in the prereg before any candidate is scored; selecting it after seeing results is banned (selection bias per `literature/lopez_de_prado_bailey_2018_false_strategy.md`).
+- **`N̂` (effective trials)** = the prereg's declared K (or `K_effective_informational` where upstream-discovery provenance applies, e.g. an overlay inheriting a parent scan's K). Conservative posture: when in doubt, use the larger K — a higher N̂ raises SR_0 and makes the gate stricter, never looser.
+
+**Role — research-validation gate, NOT a deployment gate:** DSR_FIXED_UNIV_CLEAR establishes the edge is real given how many things were tried, on clean pre-2026 history, with zero calendar wait. It does **not** substitute for Criterion 8 forward-OOS, which remains REQUIRED for deployment status. A candidate may be `DSR_FIXED_UNIV_CLEAR` and simultaneously `FORWARD_OOS_PENDING` — never claim it is "OOS-clean."
+
+**Status taxonomy (LOCKED):** a DSR-validated research candidate carries `DSR_FIXED_UNIV_CLEAR / FORWARD_OOS_PENDING / ONC_PENDING`. The `ONC_PENDING` tag records that N̂ uses the conservative declared-K heuristic rather than López de Prado ONC clustering (Eq. 9 proper estimation); ONC is a queued audit upgrade, NOT a blocker for research validation.
+
+**Implementation:** `trading_app.dsr.compute_dsr` / `compute_sr0` are the canonical math (verified 2026-05-29 — the formula is correct; the gap was the un-pinned reference universe, now closed by this amendment). Runners MUST compute `V[SR]` over the locked universe via the canonical helper, never hand-roll it. The `validated_setups.dsr_score` / `sr0_at_discovery` columns predate this lock and are stale-by-definition for the new universe rule — relabel, do not silently reinterpret.
 
 ---
 
@@ -1093,5 +1103,33 @@ A `theory_grant: true` prereg MAY cite a parent-mechanism extract as theory_gran
 - Currently live `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` (status=DEPLOY) continues operating. No forced reversal.
 - Currently audit-log-only entries (`MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12`, `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08`) MAY proceed to allocator consideration in normal rebalance flow, BUT operators are aware that Amendment 3.4 re-audit may retroactively revoke their PASS status. No sizing-up under any circumstances.
 - Any new mechanism-class-transfer prereg drafts must be rejected pending re-audit closure.
+
+---
+
+## Amendment 3.5 — DSR reference universe LOCKED; research-validation without calendar-OOS wait (added 2026-05-29, binding)
+
+**Status:** BINDING.
+
+**Date:** 2026-05-29
+
+**Trigger (operator mandate):** *"make sure we never have to wait for OOS again. ensure we always holdout properly or use the other method. i aint waiting for real time for trades."* The sacred-holdout OOS window (`trading_day >= 2026-01-01`) is only ~5 months of calendar time — statistically underpowered (Criterion 8 + RULE 3.3). Strong pre-2026 IS edges sat in `CONDITIONAL_OOS_UNDERPOWERED` purgatory waiting for the calendar to fill, which is equivalent to waiting for live trades. The operator required a validation path that uses the full clean history NOW.
+
+**The bug this closes (empirically diagnosed 2026-05-29):** DSR (Criterion 5) was the obvious no-wait method — it scores an edge against a noise floor using the entire history, no IS/OOS split. But it had been demoted to "informational" in v2 (2026-04-07) because `SR_0` is governed by `V[SR]` and `N̂`, and **`V[SR]` was an un-pinned free parameter**. Verification on canonical `experimental_strategies` proved the failure mode: the identical strong candidate (per-trade Sharpe 0.10, from Stage 4b's O30 NYSE_PREOPEN cells) scored **DSR = 0.000 over the full 191k-row dump, but 0.982 over a winners-only universe** — purely from the choice of reference set. A gate whose verdict is chosen by the universe selector is not a gate. The `compute_dsr` math itself was verified correct; the gap was always the universe.
+
+**The fix (operator-specified):** lock the reference universe so it cannot be chosen post-hoc.
+
+1. **`V[SR]` reference universe** = the pre-declared prereg family/run, **pre-2026 only**, **including ALL tested sibling cells and failures** (no winner-filter, no global dump). Named in the prereg before scoring. Selecting it after seeing results is banned per `literature/lopez_de_prado_bailey_2018_false_strategy.md`.
+2. **`N̂`** = the prereg's declared K (or `K_effective_informational` with provenance). Conservative: larger K → higher SR_0 → stricter gate.
+3. **Calendar/forward-OOS (Criterion 8) is NOT demoted.** It remains REQUIRED for *deployment* status. DSR is a *research-validation* gate only: it answers "is this edge real given the multiple-testing burden?" — which unblocks research ranking/prioritisation immediately — but it does not authorise capital. Deployment still earns its forward record.
+4. **Status taxonomy:** `DSR_FIXED_UNIV_CLEAR / FORWARD_OOS_PENDING / ONC_PENDING`. No candidate validated this way may be described as "OOS-clean."
+
+**Explicitly NOT changed by this amendment:**
+- DSR threshold stays `> 0.95` (no relaxation).
+- Criterion 8 forward-OOS deployment requirement is untouched.
+- All other locked numeric thresholds unchanged.
+
+**Honest limitation (recorded, not hidden):** at the locked conservative universe (e.g. MNQ full canonical `V[SR] ≈ 0.0576`, N̂ = 33), `SR_0 ≈ 0.49` per-trade, which the strongest thin-overlay candidates (~0.10 per-trade) do NOT clear. This is the conservative floor working as designed, not a defect — but it means DSR-as-gate is strict and will leave many thin edges `ONC_PENDING`. ONC clustering (López de Prado Eq. 9) typically estimates true independent-trial count well below the raw cell count, which would lower SR_0 toward what real edges can clear. ONC is queued as a follow-up **audit upgrade**, not a blocker: research validation proceeds today under the conservative declared-K heuristic.
+
+**Mechanized enforcement (follow-up stage, not this commit):** a drift check asserting any prereg claiming DSR-clearance pins its `V[SR]` reference universe to the locked definition (pre-2026, family-scoped, failures-included) is queued. Until it lands, this amendment is doctrine-enforced by review.
 
 **Cross-reference:** Doctrine question note `docs/audit/doctrine-questions/2026-05-23-protocol-a-theory-grant-attachment-class.md`. Trigger result MD `docs/audit/results/2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1.md`. Affected audit-log entries at `docs/runtime/chordia_audit_log.yaml` lines 229 (NYSE_OPEN RR1.0), 257 (NYSE_OPEN RR1.5), 709 (TOKYO_OPEN).
