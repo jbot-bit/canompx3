@@ -642,14 +642,19 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-29
-- **Commit:** 3b125773 — [judgment] verdict: NYSE_PREOPEN MNQ E2 NFP-spillover v1 (Lane B Stage 4b)
-- **Files changed:** 6 files
+- **Commit:** ea0d4fec — [judgment] feat(live): wire NQ-mini symbol substitution into order-routing (Stage 2 of 3, dormant-only)
+- **Files changed:** 11 files
   - `HANDOFF.md`
-  - `docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.csv`
-  - `docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.md`
-  - `docs/runtime/stages/2026-05-28-nyse-preopen-stage4b-verdict-emission.md`
-  - `scripts/research/emit_nyse_preopen_verdict.py`
-  - `tests/test_scripts/test_emit_nyse_preopen_verdict.py`
+  - `docs/plans/2026-05-16-stage2-nq-mini-plumbing-gap-finding.md`
+  - `docs/runtime/action-queue.yaml`
+  - `docs/runtime/fast_lane_graveyard_digest.yaml`
+  - `docs/runtime/stages/2026-05-29-nq-mini-stage2-wiring-closeout.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `tests/test_trading_app/test_webhook_server.py`
+  - `trading_app/live/session_orchestrator.py`
+  - `trading_app/live/webhook_server.py`
+  - `trading_app/portfolio.py`
+  - `trading_app/prop_profiles.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

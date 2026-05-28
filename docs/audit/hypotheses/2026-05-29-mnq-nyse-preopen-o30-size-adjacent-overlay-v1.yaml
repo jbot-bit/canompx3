@@ -1,0 +1,575 @@
+# DRAFT — quarantine route per memory/feedback_lhp_validator_vs_field_presence_trap_n1.md.
+# Awaiting human review before promotion out of drafts/ to docs/audit/hypotheses/.
+# This file is drift-excluded while it lives under drafts/; promotion requires user approval.
+#
+# Authoring provenance:
+#   - Parent verdict (LEAD evidence, not validation): docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.md (commit 3b125773).
+#     Stage 4b returned 0/27 PASS_CHORDIA_STRICT on the NFP-spillover standalone framing.
+#     SIX O30 cells (RR1.0/1.5/2.0 x all_days/non_nfp_days) cleared strict-IS gates
+#     (t_IS in [3.87, 4.65], BH q in [4.2e-5, 2.5e-4] at K=27, N_IS in [1600, 1674],
+#     ExpR_IS in [+0.0934, +0.1488], DST-balanced) but were blocked from promotion by
+#     tail-OOS dir-flip at STATISTICALLY_USELESS power tier (RULE 3.3).
+#     4b's "Where the data suggests the edge lives" section explicitly identifies
+#     the unconfounded signal as the O30 aperture regardless of NFP status, consistent
+#     with a slow-prior 09:00-ET cash-imbalance regime that needs the fuller 30-minute
+#     aperture to express. THIS PRE-REG IS THE FOLLOW-UP FRAMING 1 ("overlay on adjacent
+#     US-cash lanes") enumerated by 4b's "Framings NOT tested" section.
+#
+#   - Stage 4b is a LEAD ONLY for this pre-reg. It is NOT validation. This pre-reg's
+#     K_family is its own (K=6). The 4b strict-IS positives are disclosed as upstream
+#     discovery provenance per the writer prompt's § OUTPUT RULE 5 boundary.
+#
+#   - Lineage chain on the SHIPPED NYSE_PREOPEN session build:
+#       Stage 1 (resolver):              commit 62c51a14 (origin/main)
+#       Stage 2 (NYSE holiday source):   commit 296c54f2 (origin/main)
+#       Stage 3A (session_guard):        commit 15149e60 (origin/main)
+#       Stage 3B (materialise outcomes): commit 6aed3f72 (origin/main)
+#       Stage 4a (prereg+runner NFP):    commit 774a7356 (origin/main)
+#       Stage 4b (NFP verdict run):      commit 3b125773 (origin/main)
+#     The NYSE_PREOPEN session is now a first-class catalog entry; orb_outcomes +
+#     daily_features are materialised over 2019-05-06..2026-05-22 (live-verified
+#     Stage 3B). This pre-reg adds NO new session, NO new catalog entry, NO new
+#     code path. It is a research pre-reg that consumes already-materialised data.
+#
+# Source feature selection — design audit caught a silent contamination
+#   The natural "direction match" overlay framing (use NYSE_PREOPEN dir on target lane)
+#   FAILED PASS 1 audit:
+#   (a) `orb_NYSE_PREOPEN_break_dir` is computed AFTER the ORB closes by scanning bars
+#       in the break-detection window, which for NYSE_PREOPEN runs from 09:30 ET onward
+#       and overlaps NYSE_OPEN's ORB window. break_dir is not knowable at NYSE_PREOPEN
+#       O30 close; it is a banned look-ahead suffix per RULE 6.3 regardless.
+#   (b) No `orb_NYSE_PREOPEN_close` or `_dir_close` column exists in daily_features
+#       (verified by `SELECT column_name FROM information_schema.columns WHERE table_name
+#       ='daily_features' AND column_name LIKE 'orb_NYSE_PREOPEN_%' ORDER BY column_name`,
+#       2026-05-29; 15 NYSE_PREOPEN columns enumerated, no close/dir_close present).
+#   (c) Building a new feature column for "ORB close direction" is material data work
+#       (rebuild + drift checks), out of scope for a research pre-reg.
+#
+#   Re-spec: source feature is `orb_NYSE_PREOPEN_size` (existing canonical column,
+#   knowable at 09:30 ET ORB close, look-ahead safe). This also better matches 4b's
+#   actual mechanism evidence: 4b found APERTURE-significance (O30 > O5/O15), not
+#   directional significance. The 30-minute aperture-size measures how much the
+#   imbalance regime expressed; binary "above-IS-median size" vs "below-IS-median"
+#   captures the regime-expression overlay cleanly.
+#
+# Target-lane temporal-knowability audit (PASS 1 § 4):
+#   - US_DATA_830 (08:30 ET anchor): EXCLUDED — fires 30min BEFORE NYSE_PREOPEN starts,
+#     hard look-ahead.
+#   - NYSE_OPEN (09:30 ET anchor): ADMISSIBLE — NYSE_PREOPEN O30 closes EXACTLY at 09:30 ET
+#     (sequential abutment per pipeline.dst.orb_utc_window [start, end) end-exclusive
+#     contract, no bar-level overlap; same shoulder-relationship class as the existing
+#     US_DATA_830 -> NYSE_OPEN sequence).
+#   - US_DATA_1000 (10:00 ET anchor): ADMISSIBLE — NYSE_PREOPEN O30 closes 30 minutes
+#     BEFORE US_DATA_1000 starts.
+#
+# K-budget gate (Bailey 2013 MinBTL):
+#   total_expected_trials: 6. MNQ clean horizon 6.65yr per pre_registered_criteria.md
+#   Criterion 2. estimate_k_budget.py must run after this file lands; expected PASS at
+#   well under N_max=27 ceiling (which Stage 4a's K=27 sat exactly at). K=6 leaves
+#   headroom 21.
+#
+# Graveyard check (PASS 1 § 3):
+#   /nogo NYSE_PREOPEN returns no NO-GO/KILL/PARK verdicts (per Stage 1 stage file).
+#   Grep of chatgpt_bundle/06_RD_GRAVEYARD.md + docs/STRATEGY_BLUEPRINT.md for
+#   {NYSE_PREOPEN, preopen, adjacent lane, session cascade, aperture overlay} returned
+#   0 kill matches; US_DATA_830/NYSE_OPEN/US_DATA_1000 appear only as deployed-session
+#   anchors. CLEAN.
+#
+# Honest framing — Harvey-Liu inheritance disclosure:
+#   We have already SEEN 4b's per-cell O30 IS strength. Choosing O30 as source aperture
+#   and "above-median size" as discriminator both follow that lead. This is upstream
+#   discovery provenance, disclosed under § upstream_discovery_provenance below with
+#   role: PROVENANCE_ONLY per writer prompt § OUTPUT RULE 5. The K=6 family is THIS
+#   pre-reg's own framing; the 4b K=27 is not summed.
+
+metadata:
+  theory_grant: false
+  name: "mnq_nyse_preopen_o30_size_adjacent_overlay_v1"
+  purpose: |
+    Test whether restricting MNQ {NYSE_OPEN, US_DATA_1000} E2 CB1 O5 RR{1.0,1.5,2.0}
+    entries to days where NYSE_PREOPEN O30 ORB size exceeds the IS-only median produces
+    a strict-Chordia-significant overlay edge (t_IS >= 3.79, N_IS_on >= 100, ExpR_IS > 0,
+    ExpR_overlay > ExpR_baseline_unfiltered, BH-FDR q < 0.05 at K_family=6) over the
+    unfiltered baseline, with DST-balanced IS sample. K=6 family Pathway A. Mechanism is
+    plausible synthesis from 4b's aperture-significance finding (NYSE_PREOPEN O30 cells
+    were strict-IS positive standalone) extrapolated to adjacent US-cash lanes within
+    90min of NYSE_PREOPEN ORB close. Theory grant: false. No /resources PDF anchors
+    "09:00 ET imbalance publication size -> adjacent cash-lane price discovery" — same
+    posture as 4a/4b.
+  date_locked: "2026-05-29T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 6
+  testing_mode: "family"
+  pathway: "A_family"
+  research_question_type: "overlay_filter_family"
+  notes:
+    - "theory_grant=false; theory_citation is INTENTIONALLY OMITTED on every hypothesis per memory/feedback_chordia_theory_citation_field_presence_trap.md — any truthy string silently flips loader has_theory=True and downgrades strict 3.79 -> 3.00 via trading_app/hypothesis_loader.py:262-269."
+    - "Quarantine route per memory/feedback_lhp_validator_vs_field_presence_trap_n1.md — file lives under drafts/ until human review and explicit promotion."
+    - "Stage 4b lead evidence is upstream discovery provenance, NOT validation. The 4b K=27 family is closed; this K=6 family is independent at Bailey per-discovery family accounting (pre_registered_criteria.md Criterion 2)."
+    - "Source feature `orb_NYSE_PREOPEN_size` is canonical-knowable at 09:30 ET = NYSE_OPEN ORB start. The audit of `break_dir`-based framing surfaced a silent E2-look-ahead contamination (break-detection window overlaps NYSE_OPEN ORB); size avoids this entirely."
+
+authority:
+  primary:
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+    - "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+    - "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+    - "docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/hypothesis-prereg-discipline.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.md"
+    - "docs/audit/hypotheses/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.yaml"
+    - "pipeline/dst.py"
+    - "pipeline/calendar_filters.py"
+    - "trading_app/holdout_policy.py"
+    - "research/oos_power.py"
+  legacy_unlinked_citations: []
+  notes:
+    - "Pre-reg makes NO theory grant. theory_grant=false; strict Chordia t>=3.79 threshold applies per pre_registered_criteria.md Criterion 4 (no-theory bound) and Chordia et al 2018 empirical 2-million-strategies bound."
+    - "Adjacent literature class (Fitschen Ch 3 ORB premise, Chan Ch 7 intraday momentum, Harris Ch 14 auction-print microstructure) is included to ground the strategy CLASS, NOT the specific overlay mechanism. Pathway A theory-citation specificity required (writer prompt § PATHWAY A THEORY CITATION) is NOT met for the overlay mechanism — therefore theory_grant: false. Citations live in `authority.primary` for reviewer reference, NOT in hypothesis-level `theory_citation` fields."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instrument: MNQ
+  source_session: NYSE_PREOPEN
+  source_session_orb_minutes: 30
+  source_session_event_anchor: "09:00 ET (NYSE Order Imbalance initial publication)"
+  source_session_orb_close_et: "09:30 ET"
+  target_sessions: [NYSE_OPEN, US_DATA_1000]
+  excluded_targets:
+    - session: US_DATA_830
+      reason: "Anchor 08:30 ET fires 30min BEFORE NYSE_PREOPEN starts. Source feature not knowable at target ORB-decision time. Hard temporal-look-ahead per backtesting-methodology RULE 1.1/6.3."
+  entry_model: E2
+  confirm_bars: 1
+  target_orb_minutes: 5
+  rr_targets: [1.0, 1.5, 2.0]
+  direction: pooled
+  source_feature: "orb_NYSE_PREOPEN_size_above_IS_median"
+  source_feature_definition: "binary; 1 iff orb_NYSE_PREOPEN_size > median(orb_NYSE_PREOPEN_size) computed on IS-only window (trading_day < HOLDOUT_SACRED_FROM), 0 otherwise. Median threshold is FROZEN at IS computation and applied identically to IS and OOS rows (no re-fit on OOS). Quantile look-ahead avoidance per writer prompt § QUANTILE LOOK-AHEAD CHECK."
+  out_of_scope:
+    - "MGC (Bailey horizon 2.70yr; cannot fit K=6 budget at MGC clean data, separate prereg if MNQ verdict warrants)"
+    - "MES (mirror reserved for a separate pre-reg if MNQ verdict warrants and a MES validated_setups canonical-reproduction audit clears per project_lane_expansion_mes_campaign_2026_05_27)"
+    - "E1, E3 entry models (E2-only for parity with deployed adjacent MNQ setups: NYSE_OPEN MNQ O5 RR1.0 ORB_G5 is the deployed lane closest in spec)"
+    - "Target apertures other than O5 (O15/O30 reserved for separate pre-regs; this pre-reg locks O5 for deployed-lane shape parity)"
+    - "Source apertures other than O30 (4b found O5/O15 are real-null on NYSE_PREOPEN; O30 is the only aperture with lead evidence — disclosed under upstream_discovery_provenance)"
+    - "Source-feature variants other than size_above_IS_median (e.g., size-tercile, magnitude continuous, ORB-high vs ORB-low location) — binary above/below median is the minimal-K framing for this pre-reg; ranked / continuous variants need separate K-budget"
+    - "Direction-match overlays (require a non-look-ahead direction column that does NOT exist canonically; see metadata.notes)"
+    - "Allocator / sizing / deployment changes (Carver Ch11 forecast-combination framing is OUT OF SCOPE; this pre-reg only authorizes binary entry-overlay verdict per cell)"
+    - "Writes to validated_setups before execution evidence"
+    - "Cross-asset filters (clean overlay verdict first)"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: >-
+      Descriptive corroboration only. Never tunes IS verdict, never rescues,
+      never kills without OOS power floor per research.oos_power.POWER_TIERS.
+      dir_match (or sign-match equivalent on the filtered subset's ExpR) cannot
+      kill an underpowered OOS. Stage 4b's same 4-month OOS window is expected
+      to underpower a meaningful fraction of cells; this is declared expected,
+      NOT surprise.
+  tuning_against_oos: false
+  canonical_layers_only: true
+  canonical_layers:
+    - "bars_1m"
+    - "daily_features"
+    - "orb_outcomes"
+  holiday_exclusion:
+    required: true
+    source_status: "CANONICAL_IN_REPO"
+    source: "pipeline.calendar_filters.is_nyse_holiday (Stage 2 of NYSE_PREOPEN session build, commit 296c54f2)"
+    note: "NYSE official holiday calendar exclusion is mandatory for both IS and OOS counts on both source and target sessions. Holiday-bar contamination is an explicit kill criterion. Stage 2 wiring is already on origin/main; runner must confirm at execution time."
+
+scratch_policy:
+  policy: "realized-eod"
+  justification: >-
+    Capital-routing-class research (verdict could motivate adjacent-lane overlay
+    deployment). Per pre_registered_criteria.md Criterion 13 (BINDING), realized-eod
+    is required to ensure scratch rows are not silently dropped via
+    WHERE pnl_r IS NOT NULL. Origin: 2026-04-27 silent-scratch-dropout discovery
+    inflated measured ExpR by 10-45% on MNQ E2 confirm_bars=1 survivor lanes.
+
+calendar_and_dst:
+  dst_resolver: "pipeline.dst.is_us_dst(trading_day)"
+  source_edt_brisbane_start: "23:00 same-cal-day"
+  source_est_brisbane_start: "00:00 next-cal-day"
+  target_nyse_open_edt_brisbane_start: "23:30 same-cal-day"
+  target_nyse_open_est_brisbane_start: "00:30 next-cal-day"
+  target_us_data_1000_edt_brisbane_start: "00:00 next-cal-day"
+  target_us_data_1000_est_brisbane_start: "01:00 next-cal-day"
+  dst_split_reporting_required: true
+  dst_imbalance_kill: "If N_EST_filtered < 30 OR N_EDT_filtered < 30 on any cell, verdict is UNVERIFIED_DST_IMBALANCE (NOT DEAD) per canonical DST-split rule. Stage 4b's 9 NFP-only cells were UNVERIFIED on N_EST=26 < 30 floor; the all-days cells here are EDT-heavy (EDT N ~1118 / EST N ~556 over 4b's 1674-row sample) and unlikely to thin out under above-IS-median filtering provided fire rate is >= 25%."
+  orb_window_function: "pipeline.dst.orb_utc_window(trading_day, orb_label, orb_minutes) — single canonical source; never derive from break_delay_min, never fall back to break_ts"
+
+feature_definition:
+  feature_name: "orb_NYSE_PREOPEN_size_above_IS_median"
+  column_source: "derived; computed at runtime from daily_features.orb_NYSE_PREOPEN_size"
+  canonical_source_of_truth: "daily_features.orb_NYSE_PREOPEN_size (materialised Stage 3B commit 6aed3f72 over 2019-05-06..2026-05-22)"
+  trade_time_knowable: true
+  first_complete_time: "09:30 ET = NYSE_PREOPEN O30 ORB close; NYSE_OPEN ORB starts at 09:30 ET (sequential abutment); US_DATA_1000 ORB starts at 10:00 ET (30min gap)"
+  temporal_alignment_note: |
+    Source ORB size is computed at NYSE_PREOPEN O30 close (09:30 ET). Target lane
+    ORB-decision moments are:
+      - NYSE_OPEN E2 CB1 O5: 09:35 ET (5min after ORB start at 09:30 ET, plus CB1 confirm)
+      - US_DATA_1000 E2 CB1 O5: 10:05 ET (5min after ORB start at 10:00 ET, plus CB1 confirm)
+    Both target decisions are STRICTLY AFTER source feature is fixed. No look-ahead.
+    Median threshold is computed on IS-only sample (trading_day < 2026-01-01) and frozen
+    before any OOS row is evaluated, per writer prompt § QUANTILE LOOK-AHEAD CHECK.
+  lookahead_check: |
+    Verified column-by-column:
+      - orb_NYSE_PREOPEN_size: SAFE (ORB end primitive; no break detection involved)
+      - orb_NYSE_PREOPEN_break_dir: BANNED (RULE 6.3 E2 break-bar family; break-detection
+        window overlaps NYSE_OPEN ORB)
+      - orb_NYSE_PREOPEN_break_ts / _break_delay_min / _break_bar_*: BANNED (same)
+      - orb_NYSE_PREOPEN_double_break / _mae_r / _mfe_r / _outcome: BANNED (RULE 1.1
+        hard-coded look-ahead family)
+      - orb_NYSE_PREOPEN_pre_velocity: SAFE (pre-ORB window)
+      - orb_NYSE_PREOPEN_vwap: SAFE (computed pre-ORB)
+      - orb_NYSE_PREOPEN_high / _low: SAFE (ORB end primitives)
+      - orb_NYSE_PREOPEN_volume: SAFE (ORB end primitive)
+    This pre-reg uses ONLY orb_NYSE_PREOPEN_size.
+
+calibration:
+  quantile_source: "IS-only sample of orb_NYSE_PREOPEN_size where trading_day < HOLDOUT_SACRED_FROM AND NOT is_nyse_holiday(trading_day) AND target session has a valid ORB on the same trading_day"
+  threshold_source: "median of the IS-only sample, computed once at calibration time, frozen for IS and OOS evaluation"
+  lock_policy: "Median value is committed in the runner emission MD before per-cell evaluation. Re-computing the median on full IS+OOS sample is a look-ahead violation per RULE 1 and the writer prompt § QUANTILE LOOK-AHEAD CHECK."
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  source: "docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.md (Stage 4b verdict, commit 3b125773)"
+  upstream_scan_k_framings:
+    k_global: 27
+    k_family: 27
+    note: "Stage 4b's K=27 was the NFP-spillover family budget. It is closed and does NOT contribute to this pre-reg's K accounting."
+  inherited_selections:
+    - field: "source_aperture"
+      value: 30
+      reason: "4b found O5/O15 NYSE_PREOPEN cells were real-null (t in [-1.55, +0.51], BH q in [0.13, 0.47]); O30 cells were strict-IS positive. O30 selection follows the lead, disclosed here per Lopez de Prado false-strategy Eq.1 prior-inspection accounting."
+    - field: "source_session"
+      value: "NYSE_PREOPEN"
+      reason: "NYSE_PREOPEN session itself was justified by Stage 4a's adjacency audit + literature class synthesis; this pre-reg inherits that decision."
+  not_inherited:
+    - "Target-lane selection (NYSE_OPEN + US_DATA_1000) is derived independently from temporal-knowability audit, not from 4b."
+    - "Source feature family (size, not direction) is derived from PASS 1 design audit on canonical column availability, not from 4b."
+    - "Promotion gate (overlay must beat unfiltered baseline) is a Pathway A family requirement, not inherited."
+  honest_disclosure: |
+    The author of this pre-reg has seen the 4b per-cell K=27 results table BEFORE
+    writing this file. Choosing O30 as source aperture follows that observation
+    rather than being a pristine pre-look. Per Lopez de Prado false-strategy Eq.1
+    (docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md),
+    every previously-inspected cell contributes to the multiple-testing inflation
+    factor for any downstream deflated Sharpe. K_effective_informational for any
+    H-L / DSR haircut on a survivor from THIS pre-reg = 27 (4b) + 6 (this) = 33.
+    The K=6 in primary_schema is the CURRENT pre-reg's family budget; it is NOT
+    summed with K=27 for Bailey MinBTL purposes (per-discovery family rule), but
+    it IS summed for deflated-Sharpe / Harvey-Liu haircut purposes downstream.
+
+prior_art:
+  overlap_check_verdict: "CLEAN_GAP"
+  overlap_check_method: >-
+    /nogo NYSE_PREOPEN (per Stage 1 stage file) returned 0 NO-GO/KILL/PARK matches.
+    Grep on chatgpt_bundle/06_RD_GRAVEYARD.md and docs/STRATEGY_BLUEPRINT.md for
+    {NYSE_PREOPEN, preopen, adjacent lane, session cascade, aperture overlay} returned
+    0 kill verdicts. US_DATA_830 / NYSE_OPEN / US_DATA_1000 appear only as deployed-session
+    anchors (DEPLOYED_LANE_SPECS in research/comprehensive_deployed_lane_scan.py).
+  current_session_duplicate: "NONE"
+  deployed_filter_overlap:
+    - target: "NYSE_OPEN MNQ O5 RR1.0 (this pre-reg's RR1.0 cell)"
+      deployed_filter: "ORB_G5"
+      overlap_class: "size-class overlay tested ON the deployed lane's exact spec"
+      t0_correlation_required: true
+      t0_kill_threshold: "|corr(NYSE_PREOPEN_size_above_IS_median, ORB_G5_fire on NYSE_OPEN)| > 0.70 -> DUPLICATE_FILTER (no additive edge)"
+    - target: "US_DATA_1000 MNQ O5 (this pre-reg's all RR cells)"
+      deployed_filter: "VWAP_MID_ALIGNED (deployed at O15 RR1.5, NOT this pre-reg's O5)"
+      overlap_class: "deployed filter is on different aperture; T0 still required against the O5 universe"
+      t0_correlation_required: true
+      t0_kill_threshold: "|corr| > 0.70 -> DUPLICATE_FILTER"
+  catalog_blocker:
+    condition: "NYSE_PREOPEN session resolver and DOW_MISALIGNED_SESSIONS entry SHIPPED in Stage 1 (commit 62c51a14); NYSE holiday source SHIPPED in Stage 2 (commit 296c54f2); orb_outcomes + daily_features materialised in Stage 3B (commit 6aed3f72) over 2019-05-06..2026-05-22"
+    consequence: "No catalog blocker. Runner can execute on canonical gold.db immediately upon promotion of this draft. Pre-reg execution gate is GATED ON HUMAN PROMOTION (draft -> hypotheses/), NOT on any code-change requirement."
+  family_health: "N/A — first overlay-feature pre-reg targeting NYSE_PREOPEN as a feature source on adjacent US-cash lanes. K_family=6 starts from zero."
+
+primary_schema:
+  k_global: 6
+  k_family: 6
+  k_lane: 3   # 3 RR per target session
+  k_session: 3
+  k_decomposition: "2 target sessions x 3 RR targets x 1 source aperture (O30) x 1 target aperture (O5) x 1 source feature (size_above_IS_median) x 1 entry_model (E2) x 1 confirm_bars (1) x 1 direction mode (pooled) x 1 instrument (MNQ) = 6 cells"
+  promotion_gate: "Strict Chordia t>=3.79 (theory_grant=false). PASS_PROTOCOL_A is NOT available per Amendment 3.1."
+  budget_check:
+    instrument: MNQ
+    instrument_clean_horizon_years: 6.65
+    n_max_at_horizon_strict: 27
+    declared_n: 6
+    status: "PASS with headroom 21"
+    minbtl_note: >-
+      MNQ horizon 6.65yr at E[max_N]=1.0 noise floor allows N_max=27.
+      Declared K=6 is well within ceiling. estimate_k_budget.py to be
+      run after this file lands at the file path (NOT as draft).
+
+hypotheses:
+  - id: 1
+    name: "MNQ {NYSE_OPEN, US_DATA_1000} E2 CB1 O5 RR{1.0,1.5,2.0} NYSE_PREOPEN O30 size-above-IS-median overlay"
+    economic_basis: >-
+      MECHANISM_STATUS: plausible_synthesis_not_locally_verified.
+      Hypothesised mechanism: the NYSE 09:00 ET Order Imbalance publication, when it
+      produces a large 30-minute ORB aperture on MNQ, indicates that the imbalance
+      regime materially expressed into the futures tape. On those days, the subsequent
+      cash-open auction (09:30 ET = NYSE_OPEN) and the post-equity-open data window
+      (10:00 ET = US_DATA_1000) inherit directional momentum from the pre-open
+      price-discovery process, producing tradable ORB breakouts. On days when the
+      NYSE_PREOPEN aperture is small (below IS-median), the imbalance regime did NOT
+      express, and the subsequent adjacent-lane ORB breakouts are noise-dominated.
+      The overlay restricts entry to "regime expressed" days. No /resources PDF directly
+      anchors this specific mechanism on equity-index futures; the chain is synthesis from
+      Fitschen 2013 Ch 3 (intraday trend-follow class), Chan 2013 Ch 7 (intraday momentum
+      class), and Harris 2002 Ch 14 (auction-print microstructure adjacency). Therefore
+      theory_grant=false and strict Chordia t>=3.79 applies.
+      Lead evidence: Stage 4b's 6 strict-IS-positive O30 NYSE_PREOPEN cells are consistent
+      with the regime-expression hypothesis (the standalone signal was significant ONLY at
+      the full 30min aperture, suggesting the imbalance prior needs the full window to
+      express). 4b is LEAD ONLY, not validation.
+    role:
+      kind: "overlay_filter"
+      parent: "Single-feature binary overlay on 2 adjacent target lanes (NYSE_OPEN + US_DATA_1000) at 3 RR each."
+      comparator: "Each filtered cell tested against (a) strict Chordia threshold AND (b) unfiltered baseline ExpR on the same (instrument, target_session, orb_minutes, rr_target, entry_model, confirm_bars) cell. Both gates required for promotion."
+      primary_metric: "selected_trade_mean_r on overlay-fire days"
+      promotion_target: "deployment_eligibility_decision_only (allocator correlation gate adjudicates downstream — out of scope for this pre-reg)"
+    scope:
+      instruments: [MNQ]
+      target_sessions: [NYSE_OPEN, US_DATA_1000]
+      rr_targets: [1.0, 1.5, 2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      target_orb_minutes: [5]
+      source_orb_minutes: [30]
+      source_feature: "orb_NYSE_PREOPEN_size_above_IS_median"
+      direction: pooled
+    expected_trial_count: 6
+    pass_metric:
+      metric: "t_IS_overlay AND ExpR_overlay_uplift"
+      formula: |
+        t_IS_overlay = compute_chordia_t(sharpe_overlay_IS, N_overlay_IS) on overlay-fire IS trades
+        ExpR_overlay_uplift = ExpR_overlay_IS - ExpR_unfiltered_baseline_IS
+        where ExpR_unfiltered_baseline_IS = ExpR over ALL IS trades on the same (target_session, RR, instrument, entry_model, confirm_bars) cell (regardless of NYSE_PREOPEN size)
+      threshold_gte:
+        t_is_overlay: 3.79
+        n_is_overlay_on: 100
+        expr_overlay_uplift: 0.0
+        expr_overlay_is: 0.0
+      extra_gates:
+        - "BH-FDR q<0.05 at K_family=6 (Benjamini-Hochberg 1995)"
+        - "dir_match_oos = true when OOS N_overlay >= 30 AND OOS power tier >= CAN_REFUTE per research.oos_power.POWER_TIERS (RULE 3.3)"
+        - "WR_spread (overlay vs unfiltered baseline) >= 3 percentage points OR delta_payoff < 0 — guards against ARITHMETIC_ONLY arithmetic-of-costs class (RULE 8.2)"
+        - "fire_rate of overlay on target lane in [0.25, 0.75] — guards against EXTREME_FIRE (RULE 8.1)"
+        - "T0 |corr(overlay_fire, deployed_filter_fire)| < 0.70 on the relevant target lane (RULE 7)"
+        - "T6 bootstrap permutation p_overlay < 0.05 (1000 perms, seed 20260529, RULE 3 / Phipson-Smyth)"
+        - "DST-balanced: N_EST_overlay_on >= 30 AND N_EDT_overlay_on >= 30 (else UNVERIFIED_DST_IMBALANCE not DEAD)"
+        - "Adversarial per-year split: at least 4/7 IS-years positive on the overlay subset (RULE 7 absolute count, years with N<10 excluded from positive count, denominator 7 fixed)"
+        - "Scratch-inclusive realized-eod accounting (Criterion 13)"
+    kill_criteria:
+      - id: K1
+        metric: "t_IS_overlay"
+        threshold: "< 3.79"
+        action: "kill_cell as FAIL_CHORDIA_STRICT"
+      - id: K2
+        metric: "ExpR_overlay_uplift"
+        threshold: "<= 0.0 (overlay does not beat unfiltered baseline ExpR)"
+        action: "kill_cell as NO_ADDITIVE_EDGE (cost-screen at best)"
+      - id: K3
+        metric: "ExpR_overlay_IS"
+        threshold: "<= 0.0"
+        action: "kill_cell as ABSOLUTE_NEGATIVE_OVERLAY (overlay-fire days losing money on average)"
+      - id: K4
+        metric: "N_overlay_IS_on"
+        threshold: "< 100"
+        action: "kill_cell as UNDERPOWERED_DEPLOYABLE (HL 2015 Exhibit 4)"
+      - id: K5
+        metric: "OOS sign vs IS sign on overlay subset"
+        threshold: "OOS sign opposes IS sign AND OOS power tier == CAN_REFUTE"
+        action: "kill_cell as FAIL_OOS_REFUTED (RULE 3.3 binary kill only at CAN_REFUTE)"
+      - id: K6
+        metric: "|corr(overlay_fire, deployed_filter_fire)|"
+        threshold: "> 0.70"
+        action: "kill_cell as DUPLICATE_FILTER (RULE 7 tautology)"
+      - id: K7
+        metric: "WR_spread overlay vs unfiltered"
+        threshold: "< 0.03 AND delta_payoff > 0 (WR flat, only payoff improving)"
+        action: "downgrade_cell to ARITHMETIC_ONLY (RULE 8.2 cost-screen, NOT signal — not deployable as edge)"
+      - id: K8
+        metric: "fire_rate of overlay"
+        threshold: "< 0.25 OR > 0.75"
+        action: "kill_cell as EXTREME_FIRE (RULE 8.1, exception: not applicable here as binary-median by construction targets ~0.5)"
+      - id: K9
+        metric: "bootstrap p_overlay"
+        threshold: "> 0.05"
+        action: "kill_cell as NO_EDGE (T6 null-floor failure)"
+      - id: K10
+        metric: "years_positive_IS"
+        threshold: "< 4 (absolute count, denominator 7 fixed, years with N<10 excluded from positive count)"
+        action: "kill_cell as ERA_DEPENDENT (RULE 7 / writer-prompt absolute-count requirement)"
+      - id: K11
+        metric: "DST split: N_EST_overlay_on AND N_EDT_overlay_on"
+        threshold: "N_EST_overlay_on < 30 OR N_EDT_overlay_on < 30"
+        action: "verdict UNVERIFIED_DST_IMBALANCE (NOT DEAD, deferred per canonical DST-split rule)"
+      - id: K12
+        metric: "look-ahead column usage in runner code"
+        threshold: "any column in {orb_NYSE_PREOPEN_break_ts, _break_delay_min, _break_bar_*, _break_dir, _double_break, _mae_r, _mfe_r, _outcome, _pnl_r} referenced"
+        action: "kill_pre_reg (RULE 6.3 hard-coded look-ahead family)"
+      - id: K13
+        metric: "holiday-bar contamination"
+        threshold: "any IS or OOS row included where is_nyse_holiday(trading_day) returns True for NYSE_PREOPEN, NYSE_OPEN, or US_DATA_1000"
+        action: "kill_pre_reg (data discipline)"
+      - id: K14
+        metric: "BH FDR at K_family=6"
+        threshold: "q >= 0.05"
+        action: "kill_cell as FAIL_BH_FDR_FAMILY"
+    statement: >-
+      On MNQ {NYSE_OPEN, US_DATA_1000} E2 CB1 O5 RR{1.0,1.5,2.0} enumerated across
+      3 RR targets and 2 target sessions (6 cells total), restricting trade entry to
+      days where orb_NYSE_PREOPEN_size > IS-only median produces strict-Chordia overlay
+      uplift: at least one cell clears t_IS_overlay >= 3.79 AND N_overlay_IS_on >= 100
+      AND ExpR_overlay_uplift > 0 AND ExpR_overlay_IS > 0 AND survives family-level
+      BH-FDR at K_family=6 AND survives T0 tautology + T6 null-floor + per-year stability
+      + DST-balanced subgroup checks, justifying a separate downstream allocator gate
+      for overlay deployment on the surviving cell.
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 6
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2"
+    n_trials: 6
+    e_max_n: 1.0
+    minbtl_required_years: 3.58
+    available_clean_years: 6.65
+    within_cap: true
+    cap_reference: "pre_registered_criteria.md Criterion 2 (Bailey et al 2013 loose-form; MNQ horizon per scripts/tools/minbtl_retro_report.CLEAN_YEARS_BY_INSTRUMENT)"
+    headroom_years: 3.07
+
+total_hypothesis_count: 1
+total_expected_trials: 6
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+  minbtl_note: >-
+    K=6 family overlay-discovery. MNQ horizon 6.65yr at E=1.0 noise floor allows
+    N_max=27. estimate_k_budget.py PASS expected with substantial headroom.
+
+decision_rule:
+  continue_if: >-
+    At least one cell clears strict t_overlay >= 3.79 with N_overlay_IS_on >= 100,
+    ExpR_overlay_uplift > 0, ExpR_overlay_IS > 0, survives BH-FDR at K_family=6,
+    survives T0 + T6 + per-year + DST-balanced subgroup checks. OOS verdict labeled
+    CONDITIONAL_OOS_UNDERPOWERED if OOS power tier < CAN_REFUTE (NOT killed; deferred
+    per RULE 3.3).
+  park_if: >-
+    Cells clear strict IS gates but OOS directional corroboration is ambiguous AND
+    OOS power tier == STATISTICALLY_USELESS (same class as 4b's 6 held-back O30 cells).
+    PARK as CONDITIONAL_OOS_UNDERPOWERED; do NOT promote to allocator review until OOS
+    matures or until a Harvey-Liu Sharpe haircut framing (separate pre-reg, FRAMING 3
+    enumerated by 4b) is built and applied.
+  kill_if: >-
+    All 6 cells fail strict t_overlay or ExpR_overlay_uplift or ExpR_overlay_IS gates,
+    OR execution integrity fails (banned look-ahead column, holiday contamination,
+    non-canonical data source, IS-quantile look-ahead), OR every cell with any IS signal
+    is killed at OOS sign-flip when OOS power tier == CAN_REFUTE.
+
+methodology_rules_applied:
+  - rule: "RULE 1 feature temporal alignment"
+    application: "Source feature `orb_NYSE_PREOPEN_size_above_IS_median` derived from orb_NYSE_PREOPEN_size, knowable at 09:30 ET (NYSE_PREOPEN O30 close). Target ORB-decision moments are 09:35 ET (NYSE_OPEN O5 + CB1) and 10:05 ET (US_DATA_1000 O5 + CB1), both STRICTLY AFTER source feature fixed. No look-ahead. Canonical implementation: research/comprehensive_deployed_lane_scan.py::_valid_session_features() to be imported, not re-derived."
+  - rule: "RULE 1.2 window-derived feature gates"
+    application: "NYSE_PREOPEN ORB is itself a window-derived feature for US-cash hours. Per backtesting-methodology RULE 1.2 valid-domain table, US-cash session features are valid for ORB sessions starting at or after 02:00 Brisbane (NYSE_OPEN and later). NYSE_OPEN (09:30 ET) and US_DATA_1000 (10:00 ET) both qualify. NYSE_PREOPEN starts at 09:00 ET (BEFORE 02:00 Brisbane equivalent), but is the SOURCE not the target — overlay direction is source -> target, and the valid-domain check applies to the target ORB consuming the source feature."
+  - rule: "RULE 2 filter application timing"
+    application: "Two-pass testing per canonical research/comprehensive_deployed_lane_scan.py::test_cell(pass_type): (a) unfiltered baseline on target lane full universe; (b) overlay-filtered subset where NYSE_PREOPEN size > IS-median. Overlay fires at NYSE_PREOPEN O30 close (09:30 ET), target trade decision happens at target ORB end + CB1. Filtered subset is what the lane WOULD trade with the overlay deployed."
+  - rule: "RULE 3 sacred holdout"
+    application: "IS and OOS partitioned by HOLDOUT_SACRED_FROM = 2026-01-01 only. Mode A. Quantile threshold (IS-only median) computed BEFORE OOS rows are touched and frozen."
+  - rule: "RULE 3.3 OOS power floor"
+    application: "research.oos_power.one_sample_power(d, N_OOS) computed before any binary OOS kill. cohen_d = |t_IS_overlay| / sqrt(N_overlay_IS). dir_match cannot kill underpowered OOS. Binary sign-flip kill admissible only at CAN_REFUTE tier. Expected: at least 1-3 cells land CONDITIONAL_OOS_UNDERPOWERED, declared up front."
+  - rule: "RULE 4 multiple testing"
+    application: "K_family = 6 (this pre-reg's family). BH-FDR at q=0.05. K_lane = 3 (per target session). K_session = 3. Upstream 4b K=27 is PROVENANCE_ONLY, NOT summed for Bailey MinBTL purposes per per-discovery family rule; IS disclosed under upstream_discovery_provenance.k_effective_informational for deflated-Sharpe / Harvey-Liu haircut accounting downstream."
+  - rule: "RULE 6 trade-time knowability"
+    application: "Feature audit completed in scope.feature_definition.lookahead_check. Only orb_NYSE_PREOPEN_size is consumed; all banned columns (RULE 6.3 E2 break-bar family) explicitly excluded with K12 kill criterion."
+  - rule: "RULE 7 tautology check"
+    application: "T0 correlation computed on overlay_fire vs deployed_filter_fire on each target lane (NYSE_OPEN ORB_G5; US_DATA_1000 VWAP_MID_ALIGNED, the latter at O15 not O5 but tested on the O5 universe as a sanity overlap). K6 kill at |corr| > 0.70."
+  - rule: "RULE 8 fire-rate and ARITHMETIC_ONLY guards"
+    application: "K8 fire-rate in [0.25, 0.75] (binary-median construction targets 0.5 absent strong correlation with target-lane subset selection). K7 WR_spread >= 3 percentage points or delta_payoff < 0 (cost-screen guard)."
+  - rule: "RULE 9 canonical data source"
+    application: "bars_1m, daily_features, orb_outcomes only. is_nyse_holiday from pipeline.calendar_filters (Stage 2). Filter delegation via research.filter_utils.filter_signal for any deployed-filter T0 fire-vector reference. No validated_setups / edge_families / live_config reads."
+  - rule: "RULE 10 pre-registration before discovery"
+    application: "This pre-reg file is the artifact. Promotion to docs/audit/hypotheses/ (out of drafts/) is gated on human review."
+  - rule: "RULE 13 pressure-test"
+    application: "Runner shall include a pressure-test that injects orb_NYSE_PREOPEN_break_dir as a sham feature and confirms it is rejected by K12 kill (not silently used). Pre-commit sanity."
+  - rule: "Criterion 13 (BINDING) scratch policy"
+    application: "scratch_policy: realized-eod."
+  - rule: "Pathway A theory-citation specificity"
+    application: "Theory grant intentionally false. Adjacent literature class citations (Fitschen, Chan, Harris, Chordia) live in `authority.primary` for reviewer reference. No hypothesis-level theory_citation field is present — this PRESERVES theory_grant=false at loader level per Amendment 3.3 and avoids the field-presence trap."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-29-mnq-nyse-preopen-o30-size-adjacent-overlay-v1.md"
+  - "row-level CSV with IS/OOS split, target session, target RR, overlay_fire (bool), unfiltered_pnl_r vs overlay_pnl_r, scratch handling, DST-regime column, is_nyse_holiday flag"
+  - "6-cell summary table: cell_id, target_session, target_RR, N_overlay_IS_on, ExpR_overlay_IS, ExpR_unfiltered_IS, ExpR_overlay_uplift, Sharpe_overlay_IS, t_IS_overlay, BH_q_K6, WR_overlay, WR_unfiltered, WR_spread, payoff_overlay, payoff_unfiltered, fire_rate_overlay, N_overlay_OOS, ExpR_overlay_OOS, dir_match, OOS_power_tier, N_EST_overlay, N_EDT_overlay, DST_balance_verdict, T0_corr, T6_p_bootstrap, years_positive_IS, verdict_label, verdict_reason"
+  - "K_family=6 BH-FDR q values table"
+  - "T0 correlation matrix (overlay_fire vs each deployed filter on target lane)"
+  - "Per-year ExpR table (IS, overlay subset)"
+  - "Per-DST-regime (EST/EDT) ExpR table (IS, overlay subset)"
+  - "T6 bootstrap null distribution histogram per cell (1000 perms, seed 20260529)"
+  - "Explicit statement: theory_grant=false applied throughout; strict t>=3.79 used"
+  - "Median value (IS-only) committed in MD header BEFORE per-cell evaluation table"
+  - "Pressure-test report: sham orb_NYSE_PREOPEN_break_dir injected, K12 kill confirmed"
+
+execution_gate:
+  allowed_now: false
+  blockers:
+    - "File lives in drafts/; human review required before promotion to docs/audit/hypotheses/."
+    - "After promotion: `python scripts/tools/estimate_k_budget.py --hypothesis docs/audit/hypotheses/2026-05-29-mnq-nyse-preopen-o30-size-adjacent-overlay-v1.yaml` must PASS (expected PASS at headroom 21)."
+    - "After K-budget PASS: runner authoring (separate stage). Runner imports compute primitives from canonical (research/oos_power.py, research/filter_utils.py); does not re-encode any filter logic per research-truth-protocol § Canonical filter delegation."
+  execution_surface_when_unblocked: "WSL with .venv-wsl OR Windows with .venv (runner platform-agnostic)"
+  forbidden_now:
+    - "theory-grant upgrade without new /resources-backed citation directly asserting 09:00 ET NYSE imbalance size -> adjacent cash-lane price discovery on equity-index futures (Pathway A theory-citation specificity requirement)"
+    - "RR widening, target-session expansion, source-aperture sweep, source-feature variant sweep, or any K expansion without a paired follow-up pre-reg"
+    - "Auto-writing PASS rows into any audit log without separate post-verdict authorization"
+    - "Promotion out of drafts/ quarantine before human review"
+    - "Re-grading Stage 4b's 6 O30 cells as 'validated' via this pre-reg's verdict — these cells are LEAD evidence, not the test population"
+    - "Use of any banned column in scope.feature_definition.lookahead_check banned list"
+    - "Tuning the IS-median threshold or any other parameter against OOS"
+    - "Computing the IS-median over IS+OOS combined (RULE 1 / writer-prompt quantile look-ahead)"
+    - "Carver Ch11 forecast-combination framing (FRAMING 2 enumerated by 4b is a separate research direction, not authorized here)"
+    - "Harvey-Liu Sharpe haircut OR CPCV methodology replacement (FRAMING 3 enumerated by 4b is a separate research direction, not authorized here)"
+    - "Adversarial-audit gate bypass on any commit that lands runner code touching trading_app/live/ or pipeline/ (NOT expected for a research-only runner, but flagged for completeness)"
+
+not_done_by_this_pre_reg:
+  - "Does not change NYSE_PREOPEN session catalog, resolver, or DOW alignment (all SHIPPED Stages 1-3B)."
+  - "Does not add new canonical columns to daily_features. Source feature is derived at runtime from existing orb_NYSE_PREOPEN_size."
+  - "Does not test MGC or MES — separate pre-regs if MNQ verdict warrants."
+  - "Does not test E1 or E3 entry models on the target lanes — parity with deployed MNQ NYSE_OPEN E2 setups."
+  - "Does not test source apertures O5 or O15 — 4b found these are real-null on NYSE_PREOPEN; O30 is the only aperture with lead evidence."
+  - "Does not test target apertures O15 or O30 — locked to O5 for deployed-lane shape parity."
+  - "Does not test direction-match overlays — the safe direction column does not canonically exist; building one is material data work out of scope here."
+  - "Does not test size-tercile, magnitude-continuous, or location-based variants of the source feature — minimum-K binary above/below IS-median only."
+  - "Does not extract or commit any new literature source for the 09:00 ET imbalance size mechanism — synthesis acknowledged, theory_grant=false."
+  - "Does not change live deployment or allocator state."
+  - "Does not address correlation between an overlay-passing cell and any deployed lane in the allocator's correlation gate (downstream Stage)."
+  - "Does not implement Carver Ch11 forecast-combination (4b's FRAMING 2)."
+  - "Does not implement Harvey-Liu Sharpe haircut or CPCV (4b's FRAMING 3)."
+  - "Does not write to experimental_strategies, validated_setups, or any deployment-state file regardless of verdict."
+  - "Does not re-grade Stage 4b's 6 held-back O30 cells. 4b is closed."
+
+# Pre-commit self-test (writer prompt § PRE-COMMIT SELF-TEST):
+# - If runner returns t_IS_overlay = 3.78 on all 6 cells exactly, K1 fires KILL on all 6 -> verdict KILL unambiguously.
+# - If runner returns t_IS_overlay = 3.79 + ExpR_overlay_uplift = -0.001 on all 6 cells exactly, K2 fires KILL on all 6 (uplift <= 0) -> verdict KILL unambiguously.
+# - If runner returns t_IS_overlay = 3.79 + ExpR_overlay_uplift = +0.01 + ExpR_overlay_IS = +0.05 + BH q = 0.04 + dir_match=YES + power=CAN_REFUTE on cell 1, with cells 2-6 killed: cell 1 PASS_CHORDIA_STRICT_OVERLAY. No ambiguity.
+# - If runner returns t_IS_overlay = 3.79 + ExpR_overlay_uplift = +0.05 + BH q = 0.04 + dir_match=NO + power=STATISTICALLY_USELESS on cell 1: cell 1 -> CONDITIONAL_OOS_UNDERPOWERED (RULE 3.3: STATISTICALLY_USELESS does not refute). PARK per decision_rule.park_if. No ambiguity.
+# All gates resolve cleanly. PASS.
