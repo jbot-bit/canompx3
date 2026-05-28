@@ -6,18 +6,18 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## This Session (2026-05-28 — NYSE_PREOPEN Lane B: audit gate PASSED + Stage 2+3A done/verified)
+## This Session (2026-05-28 — NYSE_PREOPEN Lane B: Stage 2+3A SHIPPED, Stage 3B rebuild + Stage 4 in flight)
 
-- **Tool:** Claude Code (Opus 4.7), explanatory mode. **NOT pushed.** On `main`.
-- **DONE + INDEPENDENTLY REVIEWED (PASS):** the dst.py NYSE_PREOPEN audit gate cleared (CONDITIONAL, 0 critical, artifact `docs/audit/2026-05-28-nyse-preopen-dst-session-definition.md`, committed `70362307`). Stage 2 + Stage 3A code complete: **258 tests pass, drift 167/0, evidence-auditor PASS on all 6 claims** (contamination None-cascade fully sealed; XNYS-vs-CMES correct source; session_guard insertion additive-only). Review finding fixed same-session (caplog warning assertion + real-boundary coverage test).
-- **Stage 2 (holiday source):** `is_nyse_holiday(d, *, strict=True)` in `pipeline/market_calendar.py` via XNYS calendar `is_session()` (NOT CMES — CME trades July4/Thanksgiving Globex, NYSE cash closed). Fail-CLOSED for backtests (raises beyond 2027-05-28 coverage), fail-open `strict=False` for future live. Scoped guard in `compute_orb_range` (`build_daily_features.py:230`): NYSE_PREOPEN on NYSE holiday → all-None (existing empty-ORB path). Stage file `docs/runtime/stages/2026-05-28-nyse-preopen-stage2-holiday-source.md`.
-- **Stage 3A (look-ahead ordering):** `NYSE_PREOPEN` inserted into `session_guard._SESSION_ORDER` between US_DATA_830 and NYSE_OPEN (index 7); stale ml/config.py comment fixed. New fail-closed drift check `check_session_order_covers_orb_labels` (ORB_LABELS ⊆ _SESSION_ORDER), injection-proven. Stage file `docs/runtime/stages/2026-05-28-nyse-preopen-stage3-session-guard.md`.
+- **Tool:** Claude Code (Opus 4.7), explanatory mode. **NOT pushed.** Worktree `.worktrees/nyse-preopen-stage3b-4`, branch `session/joshd-nyse-preopen-stage3b-4` (off main `ae2fbb9a`). Main worktree untouched on `main`.
+- **SHIPPED + INDEPENDENTLY REVIEWED (PASS):** the dst.py NYSE_PREOPEN audit gate cleared (CONDITIONAL, 0 critical, artifact `docs/audit/2026-05-28-nyse-preopen-dst-session-definition.md`, committed `70362307`). Stage 2 + Stage 3A **committed on main**: **258 tests pass, drift 167/0, evidence-auditor PASS on all 6 claims** (contamination None-cascade fully sealed; XNYS-vs-CMES correct source; session_guard insertion additive-only). Review finding fixed same-session (caplog warning assertion + real-boundary coverage test).
+- **Stage 2 (holiday source) — COMMIT `0209c3f0`:** `is_nyse_holiday(d, *, strict=True)` in `pipeline/market_calendar.py` via XNYS calendar `is_session()` (NOT CMES — CME trades July4/Thanksgiving Globex, NYSE cash closed). Fail-CLOSED for backtests (raises beyond 2027-05-28 coverage), fail-open `strict=False` for future live. Scoped guard in `compute_orb_range` (`build_daily_features.py:230`): NYSE_PREOPEN on NYSE holiday → all-None (existing empty-ORB path). Stage file `docs/runtime/stages/2026-05-28-nyse-preopen-stage2-holiday-source.md`.
+- **Stage 3A (look-ahead ordering) — COMMIT `ae2fbb9a`:** `NYSE_PREOPEN` inserted into `session_guard._SESSION_ORDER` between US_DATA_830 and NYSE_OPEN (index 7); stale ml/config.py comment fixed. New fail-closed drift check `check_session_order_covers_orb_labels` (ORB_LABELS ⊆ _SESSION_ORDER), injection-proven. Stage file `docs/runtime/stages/2026-05-28-nyse-preopen-stage3-session-guard.md`.
 
-### NEXT SESSION — finish in ONE step (work is DONE, only commit packaging + memory remain):
-1. **2 commits remain** (uncommitted working tree, all verified-clean): Stage 2 = `pipeline/market_calendar.py` + `pipeline/build_daily_features.py` + `tests/test_pipeline/test_market_calendar.py` + `tests/test_pipeline/test_build_daily_features.py` + stage2 file. Stage 3A = `pipeline/session_guard.py` + `pipeline/check_drift.py` + `tests/test_pipeline/test_session_guard.py` + `tests/test_pipeline/test_check_drift.py` + stage3 file. (Pre-commit ~6min each under gold.db contention — NOT a hang; do NOT kill git.)
-2. **Then update memory** `project_nyse_preopen_stage1_shipped_2026_05_28.md` (gate already marked PASSED there; append Stage 2+3A SHIPPED + the 2 new commit hashes) + MEMORY.md index line.
-3. **Stage 3B (deferred, separate stage+review):** the gold.db REBUILD — `run_rebuild_with_sync.sh MNQ` populates NYSE_PREOPEN orb_outcomes+daily_features. Capture IS/OOS day counts + DST-imbalance kill floor (N_EST≥30 AND N_EDT≥30). User chose "review code first THEN rebuild" — code now reviewed-clean, rebuild is safe to run. Then Stage 4: promote draft, K=27 strict Chordia (t≥3.79, NO_THEORY_GRANT).
-- **Process note:** shared-state-commit-guard false-positived on commit 1 (my own stage3 file *references* the audit-doc path in prose; not a peer lock). Acked via `# --shared-state-ack` after verifying HEAD unchanged + no peer. Same likely on remaining commits — verify peer-free, then ack.
+### IN FLIGHT this session — Stage 3B (rebuild) + Stage 4 (Chordia), operator-authorised (no other terminals running):
+1. ~~2 commits remain~~ **DONE** — Stage 2 = `0209c3f0`, Stage 3A = `ae2fbb9a`, both on main. Memory truth-update committed on the worktree branch.
+2. **Stage 3B (gold.db REBUILD, AUTHORISED):** `run_rebuild_with_sync.sh MNQ` populates NYSE_PREOPEN orb_outcomes+daily_features. Mutates the ONE shared gold.db (worktree resolves to canonical `C:\Users\joshd\canompx3\gold.db`). Preflight confirmed: write-lock acquirable, only read-only MCP/pyright processes running, no live session/dashboard/rebuild. Capture IS/OOS day counts + DST-imbalance kill floor (N_EST≥30 AND N_EDT≥30).
+3. **Stage 4:** promote draft out of `drafts/`, run K=27 strict Chordia (t≥3.79, NO_THEORY_GRANT). Report full stats; honest BLOCK/KILL/PARK on fail (no threshold rescue).
+- **Process note:** shared-state-commit-guard may false-positive (stage files *reference* audit-doc paths in prose; not peer locks). Ack via `# --shared-state-ack` after verifying HEAD unchanged + no peer.
 
 ## This Session (2026-05-26 — Live-trading go-live: Stage 0+1 of 5 shipped)
 
@@ -623,14 +623,14 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-28
-- **Commit:** 0209c3f0 — feat(sessions): NYSE_PREOPEN holiday-contamination source (Lane B Stage 2)
+- **Commit:** ae2fbb9a — fix(sessions): register NYSE_PREOPEN in session_guard look-ahead order (Lane B Stage 3A)
 - **Files changed:** 6 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-28-nyse-preopen-stage2-holiday-source.md`
-  - `pipeline/build_daily_features.py`
-  - `pipeline/market_calendar.py`
-  - `tests/test_pipeline/test_build_daily_features.py`
-  - `tests/test_pipeline/test_market_calendar.py`
+  - `docs/runtime/stages/2026-05-28-nyse-preopen-stage3-session-guard.md`
+  - `pipeline/check_drift.py`
+  - `pipeline/session_guard.py`
+  - `tests/test_pipeline/test_check_drift.py`
+  - `tests/test_pipeline/test_session_guard.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
