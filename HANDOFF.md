@@ -628,7 +628,7 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-28
-- **Commit:** fcf8a8dc — chore(launch): auto-minimise START_BOT console after browser open
+- **Commit:** 28eebc81 — [judgment] prereg+runner: NYSE_PREOPEN MNQ E2 NFP-spillover v1 (Lane B Stage 4a)
 - **Files changed:** 2 files
   - `HANDOFF.md`
   - `START_BOT.bat`
