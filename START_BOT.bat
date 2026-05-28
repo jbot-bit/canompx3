@@ -53,6 +53,17 @@ echo [2/5] Clearing stale state...
 del /f /q "data\bot_state.json" >nul 2>&1
 .venv\Scripts\python.exe scripts\tools\sweep_orphan_rings.py >nul 2>&1
 
+:: Step 2b: Publish the canonical planned-launch surface so the dashboard can
+:: render the unambiguous "Next launch: <MODE> · <profile> · <instruments> ·
+:: N broker accounts" banner BEFORE the orchestrator boots. The orchestrator's
+:: own state (bot_state.json) supersedes this once running. Schema/mode is
+:: validated by trading_app/live/planned_launch.py — bad inputs refuse to write.
+if /i "%BOT_MODE_FLAGS%"=="--signal-only" set PLANNED_MODE=SIGNAL
+if /i "%BOT_MODE_FLAGS%"=="--demo" set PLANNED_MODE=DEMO
+if /i "%BOT_MODE_FLAGS%"=="--live" set PLANNED_MODE=LIVE
+if not defined PLANNED_MODE set PLANNED_MODE=SIGNAL
+.venv\Scripts\python.exe -m trading_app.live.planned_launch write --profile %ACTIVE_PROFILE% --mode %PLANNED_MODE% --source START_BOT.bat >nul
+
 :: Step 3: Data freshness check
 echo [3/5] Checking data freshness...
 .venv\Scripts\python.exe -c "from pipeline.paths import GOLD_DB_PATH; import duckdb; con=duckdb.connect(str(GOLD_DB_PATH),read_only=True); r=con.execute('SELECT MAX(trading_day) FROM daily_features WHERE orb_minutes=5').fetchone(); print(f'  Latest daily_features: {r[0]}'); con.close()" 2>nul

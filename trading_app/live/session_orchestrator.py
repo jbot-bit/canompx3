@@ -1367,6 +1367,11 @@ class SessionOrchestrator:
             if isinstance(self.order_router, CopyOrderRouter):
                 snapshot["copy_accounts"] = self.order_router.all_account_ids
                 snapshot["shadow_count"] = self.order_router.shadow_count
+            # Surface profile_id so the dashboard can display the authoritative
+            # profile (not scraped from account_name). When running, this is
+            # the source of truth that supersedes data/bot_planned_launch.json.
+            if self._profile_id is not None:
+                snapshot["profile_id"] = self._profile_id
             write_state(snapshot)
         except Exception:
             pass  # Dashboard state is best-effort — never kill the trading loop

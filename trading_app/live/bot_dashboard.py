@@ -1479,6 +1479,26 @@ async def api_signals_recent(limit: int = 50, since: str | None = None):
     }
 
 
+@app.get("/api/planned-launch")
+async def api_planned_launch():
+    """Return the canonical planned-launch record (or status=unknown).
+
+    Source of truth: ``data/bot_planned_launch.json`` written by
+    ``trading_app.live.planned_launch`` from START_BOT.bat or the CLI codepath
+    in ``scripts/run_live_session.py``. Pre-start, the dashboard renders this
+    payload above the START CTA so the operator can see — unambiguously —
+    which mode (SIGNAL/DEMO/LIVE), which profile, and how many broker accounts
+    are about to receive orders.
+
+    Fail-visible: missing/stale/malformed file returns ``status=unknown`` or
+    ``status=stale`` rather than guessing. The UI must NOT show a green CTA
+    in those cases.
+    """
+    from trading_app.live.planned_launch import read_planned_launch
+
+    return read_planned_launch()
+
+
 @app.get("/api/status")
 async def api_status():
     """Read bot state from JSON file."""

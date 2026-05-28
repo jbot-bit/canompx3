@@ -901,6 +901,24 @@ def main() -> None:
         signal_only = False
         demo = False
 
+    # Publish the canonical planned-launch surface BEFORE orchestrator init so
+    # the dashboard can render the unambiguous "Next launch: …" banner. The
+    # orchestrator's own state (bot_state.json) will supersede this once
+    # running. Only write when --profile resolves the launch (CLI ad-hoc runs
+    # without a profile cannot be schema-verified against ACCOUNT_PROFILES).
+    if args.profile:
+        try:
+            from trading_app.live.planned_launch import write_planned_launch
+
+            _mode_label = "SIGNAL" if signal_only else ("DEMO" if demo else "LIVE")
+            write_planned_launch(
+                profile_id=args.profile,
+                mode=_mode_label,
+                source="CLI",
+            )
+        except Exception as _e:  # noqa: BLE001 — never block the launch on a UI surface
+            log.warning("planned_launch write failed: %s", _e)
+
     # Stop-file path — cleaned up after session ends (feeds no longer delete it)
     _stop_file = Path(__file__).parent.parent / "live_session.stop"
 
@@ -945,6 +963,15 @@ def main() -> None:
         finally:
             runner.post_session()
             release_instance_lock()
+            # Clear the planned-launch artifact so the dashboard does not
+            # display a stale "Next launch: …" banner after the session ends.
+            # Operator must re-run START_BOT.bat / CLI to re-publish intent.
+            try:
+                from trading_app.live.planned_launch import clear_planned_launch
+
+                clear_planned_launch()
+            except Exception:
+                pass
         return
 
     # Single-instrument mode (existing path)
@@ -1023,6 +1050,15 @@ def main() -> None:
             from trading_app.live.bot_state import clear_state
 
             clear_state()
+        except Exception:
+            pass
+        # Clear the planned-launch artifact too — same reason. Without this, the
+        # banner shows "Next launch: <mode>" indefinitely after a session ends
+        # which could mislead the operator about what the next click will do.
+        try:
+            from trading_app.live.planned_launch import clear_planned_launch
+
+            clear_planned_launch()
         except Exception:
             pass
         # Terminate dashboard subprocess (prevent orphan on Windows)

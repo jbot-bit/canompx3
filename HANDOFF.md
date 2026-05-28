@@ -628,11 +628,9 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-28
-- **Commit:** 6aed3f72 — feat(sessions): enable NYSE_PREOPEN on MNQ + materialize orb_outcomes (Lane B Stage 3B) [post-rebase; pre-rebase: 78751052]
-- **Files changed:** 3 files
+- **Commit:** e28e961b — chore(handoff): reconcile baton to post-rebase SHAs + Stage 3B SHIPPED
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `pipeline/asset_configs.py`
-  - `tests/test_pipeline/test_check_drift.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

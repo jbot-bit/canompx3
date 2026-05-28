@@ -76,6 +76,22 @@
   .topbar-mode.signal { background: var(--green-soft); color: var(--green); }
   .topbar-mode.demo { background: var(--blue-soft); color: var(--blue); }
   .topbar-mode.live { background: var(--red-soft); color: var(--red); }
+  /* Planned-launch banner — pre-start clarity for SIGNAL/DEMO/LIVE + profile + broker-account fan-out.
+     Source: data/bot_planned_launch.json (canonical). When the bot is running, bot_state.json takes
+     over and this banner hides. Fail-visible: unknown/stale states are explicitly labelled. */
+  .planned-launch-banner {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+    max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .planned-launch-banner.signal { border-color: rgba(34,197,94,0.35); background: var(--green-soft); color: var(--green); }
+  .planned-launch-banner.demo   { border-color: rgba(59,130,246,0.35); background: var(--blue-soft);  color: var(--blue);  }
+  .planned-launch-banner.live   { border-color: rgba(220,38,38,0.45);  background: var(--red-soft);   color: var(--red); font-weight: 800; }
+  .planned-launch-banner.stale,
+  .planned-launch-banner.unknown { border-color: rgba(255,193,7,0.35); background: var(--yellow-soft); color: var(--yellow); font-weight: 700; }
+  .planned-launch-banner b { font-weight: 800; letter-spacing: 0.06em; }
   .topbar-spacer { flex: 1; }
   .topbar-btn {
     padding: 5px 12px; border-radius: var(--r); border: 1px solid var(--border);
@@ -2637,6 +2653,7 @@
     <span id="running-profile" class="compat-hidden">Idle</span>
     <span id="running-profile-detail" class="compat-hidden"></span>
     <span class="topbar-spacer"></span>
+    <span id="planned-launch-banner" class="planned-launch-banner" style="display:none" title="Source of truth: data/bot_planned_launch.json — written by START_BOT.bat or run_live_session.py"></span>
     <button id="btn-primary-cta" class="topbar-btn primary" style="display:none" type="button"></button>
     <input type="checkbox" id="focus-toggle" tabindex="-1" aria-hidden="true">
     <label for="focus-toggle" class="show-all-label" title="Toggle FOCUS / SHOW ALL — reveals demoted panels (specs, profiles, brokers, live-session duplicate block)"></label>
@@ -3850,6 +3867,8 @@ function updateStatus(state) {
   renderLiveLanes(laneCards);
   renderSignalStrip(laneCards, mode);
   setText("last-update", fmtClock(new Date(), true));
+  // Hide planned-launch banner whenever a session is running; re-show on STOP.
+  try { renderPlannedLaunchBanner(); } catch (_) {}
 }
 
 /* ── Fetchers ───────────────────────── */
@@ -4003,6 +4022,53 @@ async function fetchAlerts() {
 }
 async function fetchAccounts() { try { renderAccounts((await (await fetch("/api/accounts")).json()).accounts || []); } catch (_) { $("accounts-grid").innerHTML = '<div class="empty">Could not load.</div>'; } }
 
+/* Tier 1.1b — planned-launch surface (data/bot_planned_launch.json).
+   This is the authoritative pre-start record of what START_BOT.bat / the CLI
+   intends to launch. The orchestrator's bot_state.json supersedes it once
+   running. Fail-visible: render unknown/stale states explicitly. */
+async function fetchPlannedLaunch() {
+  try {
+    _lastPlannedLaunch = await (await fetch("/api/planned-launch")).json();
+  } catch (_) {
+    _lastPlannedLaunch = {status: "unknown", reason: "fetch failed"};
+  }
+  renderPlannedLaunchBanner();
+  try { updatePrimaryCta(); } catch (_) {}
+}
+
+function renderPlannedLaunchBanner() {
+  const el = $("planned-launch-banner");
+  if (!el) return;
+  // While running, the orchestrator's state is the source of truth; hide the
+  // pre-start banner so the operator sees one mode badge, not two.
+  const runMode = ($("summary-mode")?.textContent || "Stopped").toString();
+  const isRunning = runMode !== "Stopped" && runMode !== "Offline" && runMode !== "—";
+  const p = _lastPlannedLaunch;
+  if (isRunning || !p) { el.style.display = "none"; return; }
+
+  el.style.display = "";
+  if (p.status === "unknown") {
+    el.className = "planned-launch-banner unknown";
+    el.innerHTML = `Next launch: <b>UNKNOWN</b> — ${escapeHtml(p.reason || "no planned launch")}`;
+    return;
+  }
+  const mode = String(p.mode || "").toUpperCase();
+  const cls = mode === "LIVE" ? "live" : mode === "DEMO" ? "demo" : "signal";
+  const profile = p.profile_id || "?";
+  const instr = (Array.isArray(p.instruments) && p.instruments.length) ? p.instruments.join("+") : "ALL";
+  const copies = Number(p.broker_accounts_count || p.copies || 1);
+  const acctTxt = copies > 1 ? `${copies} broker accounts` : `1 broker account`;
+  const realMoney = mode === "LIVE" ? " · REAL MONEY" : "";
+  const sourceTxt = p.source ? ` · src:${escapeHtml(p.source)}` : "";
+  if (p.status === "stale") {
+    el.className = "planned-launch-banner stale";
+    el.innerHTML = `Next launch: <b>STALE</b> — last set as <b>${escapeHtml(mode)}</b> · ${escapeHtml(profile)} · ${escapeHtml(instr)} · ${acctTxt}${sourceTxt} · re-run START_BOT.bat`;
+    return;
+  }
+  el.className = `planned-launch-banner ${cls}`;
+  el.innerHTML = `Next launch: <b>${escapeHtml(mode)}</b> · ${escapeHtml(profile)} · ${escapeHtml(instr)} · ${acctTxt}${realMoney}${sourceTxt}`;
+}
+
 /* Tier 1.1 — primary CTA in topbar (Start / Stop context-aware) */
 let _primaryCtaBusy = false;
 function updatePrimaryCta() {
@@ -4052,19 +4118,47 @@ function updatePrimaryCta() {
     return;
   }
 
-  // Not running — show Start if we have an active profile
-  // Mirror the orchestrator's configured mode (demo/live/signal) from bot_state broker_status
+  // Not running — derive START mode from the canonical planned-launch surface
+  // (data/bot_planned_launch.json) when it is fresh. That file is written by
+  // START_BOT.bat / run_live_session.py at launch time, so it reflects the
+  // operator's actual intent — NOT scraped from a stale prior broker_status.
+  //
+  // Fail-visible: if planned-launch is missing/stale/unknown, disable the
+  // CTA with a clear label rather than guessing a mode. The banner alongside
+  // shows the operator exactly why.
+  const planned = _lastPlannedLaunch || null;
   if (acct && acct.profile_id) {
     btn.style.display = "";
-    const bs = _lastStatusData?.broker_status || {};
-    const orchMode = bs.demo ? "demo" : bs.signal_only ? "signal" : "demo";
-    const modeLabel = orchMode === "demo" ? "START DEMO" : orchMode === "live" ? "START LIVE" : "START SIGNAL";
-    const modeClass = orchMode === "live" ? "topbar-btn primary danger" : "topbar-btn primary";
-    btn.className = modeClass;
-    btn.innerHTML = `${modeLabel} <span class="cta-sub">${escapeHtml(acct.profile_id)}</span>`;
+    if (!planned || planned.status !== "ok") {
+      btn.className = "topbar-btn primary";
+      btn.disabled = true;
+      btn.innerHTML = `START — UNKNOWN <span class="cta-sub">edit START_BOT.bat then refresh</span>`;
+      btn.onclick = null;
+      return;
+    }
+    btn.disabled = false;
+    // CORRECT precedence: SIGNAL > DEMO > LIVE. The planned-launch surface
+    // already validated mode ∈ {SIGNAL,DEMO,LIVE} at write time. Avoid the
+    // legacy bot_state.broker_status ternary entirely — it conflated
+    // signal_only with demo (run_live_session.py:883 sets demo=True for
+    // both signal-only AND demo runs).
+    const planMode = String(planned.mode || "SIGNAL").toUpperCase();
+    const cliMode = planMode === "LIVE" ? "live" : planMode === "DEMO" ? "demo" : "signal";
+    const modeLabel = planMode === "LIVE" ? "START LIVE" : planMode === "DEMO" ? "START DEMO" : "START SIGNAL";
+    btn.className = planMode === "LIVE" ? "topbar-btn primary danger" : "topbar-btn primary";
+    const planProfile = planned.profile_id || acct.profile_id;
+    const copies = Number(planned.broker_accounts_count || planned.copies || 1);
+    const acctSub = copies > 1 ? `${escapeHtml(planProfile)} · ${copies} accts` : escapeHtml(planProfile);
+    btn.innerHTML = `${modeLabel} <span class="cta-sub">${acctSub}</span>`;
     btn.onclick = () => {
       if (_primaryCtaBusy) return;
-      launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", orchMode);
+      // Launch against the profile named in planned-launch, not the topbar's
+      // "active" profile if they disagree. The .bat is the launcher truth.
+      const launchProfile = planProfile;
+      const launchInstruments = (planned.instruments && planned.instruments.length
+        ? planned.instruments.join("+")
+        : (acct.instruments?.join("+") || "ALL"));
+      launchSession(launchProfile, acct.firm, launchInstruments, cliMode);
     };
     return;
   }
@@ -4083,6 +4177,7 @@ function updatePrimaryCta() {
 
 let _lastSessionsData = null;
 let _lastStatusData = null;  // cached from fetchStatus so hero can read lane_cards/heartbeat
+let _lastPlannedLaunch = null;  // cached from /api/planned-launch — authoritative pre-start mode/profile
 
 /* derive hero state from current snapshot */
 function _heroDeriveState() {
@@ -5330,7 +5425,7 @@ initCockpit();
 // drawer tab is opened (Stage 4.2). fetchStatus/fetchAlerts/fetchLaneStatus
 // also bootstrapped once so the no-SSE path has a baseline; SSE events take
 // over on first connect.
-fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus();
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus(); fetchPlannedLaunch();
 
 /* Stage 4.2 poller taxonomy:
    _COCKPIT_POLLERS      = always-on (SSE-paused on OPEN, resumed on CLOSED>10s).
@@ -5348,6 +5443,9 @@ const _COCKPIT_POLLERS = [
   setInterval(fetchOperatorState, 5000),
   // Tier 1.3 — broker health dot (topbar) polled regardless of tab
   setInterval(fetchBrokerHealth, 30000),
+  // Planned-launch surface — 10s suffices since it only changes when the
+  // operator re-runs START_BOT.bat or shells the CLI. Cheap stat-then-read.
+  setInterval(fetchPlannedLaunch, 10000),
   // Auto-refresh broker list when on Connections tab (the standalone tab, NOT the drawer)
   setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000),
 ];
@@ -6093,6 +6191,7 @@ const SseClient = (() => {
         setInterval(fetchStatus, 5000),
         setInterval(fetchAlerts, 5000),
         setInterval(fetchLaneStatus, 60000),
+        setInterval(fetchPlannedLaunch, 10000),
       ];
       _FALLBACK_ONLY_POLLERS.active = true;
     }
