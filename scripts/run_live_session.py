@@ -409,7 +409,7 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
 
         signals_dir = SessionOrchestrator.SIGNALS_DIR
         target_instrument = ctx.instrument if ctx.instrument in ACTIVE_ORB_INSTRUMENTS else "MNQ"
-        report = evaluate_telemetry_maturity(signals_dir, instrument=target_instrument)
+        report = evaluate_telemetry_maturity(signals_dir, instrument=target_instrument, profile_id=ctx.profile_id)
 
         n = report.n_unique_trading_days
         floor = report.min_required

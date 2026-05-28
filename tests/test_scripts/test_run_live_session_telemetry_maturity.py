@@ -24,11 +24,18 @@ from trading_app.live import session_orchestrator
 from trading_app.live.telemetry_maturity import MIN_TELEMETRY_TRADING_DAYS
 
 
-def _write_n_distinct_days(signals_dir: Path, n: int, instrument: str = "MNQ") -> None:
+def _write_n_distinct_days(
+    signals_dir: Path,
+    n: int,
+    instrument: str = "MNQ",
+    *,
+    profile_id: str | None = None,
+    start_offset_days: int = 0,
+) -> None:
     """Synthesize n distinct trading_day SESSION_START records for instrument."""
     signals_dir.mkdir(parents=True, exist_ok=True)
     for i in range(n):
-        day = (datetime(2026, 5, 1, tzinfo=UTC) + timedelta(days=i)).date().isoformat()
+        day = (datetime(2026, 5, 1, tzinfo=UTC) + timedelta(days=i + start_offset_days)).date().isoformat()
         rec = {
             "ts": f"{day}T20:00:00+00:00",
             "instrument": instrument,
@@ -36,6 +43,8 @@ def _write_n_distinct_days(signals_dir: Path, n: int, instrument: str = "MNQ") -
             "contract": f"CON.F.US.{instrument}.M26",
             "mode": "signal_only",
         }
+        if profile_id is not None:
+            rec["profile_id"] = profile_id
         (signals_dir / f"live_signals_{day}.jsonl").write_text(json.dumps(rec) + "\n", encoding="utf-8")
 
 
@@ -71,6 +80,28 @@ def test_below_floor_signal_only_returns_passed_with_count(synthetic_signals_dir
     assert "29/30" in result.message
     assert "MNQ" in result.message
     assert "auto-clears at 30" in result.message
+
+
+def test_profile_signal_only_uses_profile_scoped_telemetry_count(synthetic_signals_dir):
+    """Profile launches must report the profile-scoped counter, not broad instrument telemetry."""
+    _write_n_distinct_days(
+        synthetic_signals_dir,
+        n=MIN_TELEMETRY_TRADING_DAYS,
+        profile_id="other_profile",
+    )
+    _write_n_distinct_days(
+        synthetic_signals_dir,
+        n=3,
+        profile_id="topstep_50k_mnq_auto",
+        start_offset_days=MIN_TELEMETRY_TRADING_DAYS,
+    )
+
+    result = _check_telemetry_maturity(_ctx(signal_only=True, profile_id="topstep_50k_mnq_auto"))
+
+    assert result.passed is True
+    assert "signal-only" in result.message
+    assert "3/30" in result.message
+    assert "gate clear" not in result.message
 
 
 def test_below_floor_live_returns_failed(synthetic_signals_dir):
@@ -133,7 +164,11 @@ def test_below_floor_demo_returns_warn(synthetic_signals_dir):
 
 def test_below_floor_live_xfa_profile_returns_warn(synthetic_signals_dir):
     """--live + Express-Funded prop profile (is_express_funded=True) is advisory WARN, not FAIL."""
-    _write_n_distinct_days(synthetic_signals_dir, n=MIN_TELEMETRY_TRADING_DAYS - 1)
+    _write_n_distinct_days(
+        synthetic_signals_dir,
+        n=MIN_TELEMETRY_TRADING_DAYS - 1,
+        profile_id="topstep_50k_mnq_auto",
+    )
     # topstep_50k_mnq_auto is the active deployment profile; per
     # prop_profiles.AccountProfile default at line 107, is_express_funded=True.
     result = _check_telemetry_maturity(_ctx(signal_only=False, demo=False, profile_id="topstep_50k_mnq_auto"))
