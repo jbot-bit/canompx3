@@ -1,6 +1,6 @@
 """Tests for pipeline.market_calendar — CME holiday and early close awareness."""
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -10,6 +10,7 @@ from pipeline.market_calendar import (
     is_cme_holiday,
     is_early_close,
     is_market_open_at,
+    is_nyse_holiday,
     session_close_utc,
 )
 
@@ -51,6 +52,84 @@ class TestIsCmeHoliday:
 
     def test_weekend_sunday(self):
         assert is_cme_holiday(date(2025, 7, 20)) is True
+
+
+class TestIsNyseHoliday:
+    """NYSE cash-market closures — the source for NYSE_PREOPEN (09:00-ET order imbalance)."""
+
+    def test_july_4_nyse_closed(self):
+        assert is_nyse_holiday(date(2024, 7, 4)) is True
+
+    def test_thanksgiving_nyse_closed(self):
+        assert is_nyse_holiday(date(2024, 11, 28)) is True
+
+    def test_mlk_day_nyse_closed(self):
+        assert is_nyse_holiday(date(2025, 1, 20)) is True
+
+    def test_presidents_day_nyse_closed(self):
+        assert is_nyse_holiday(date(2025, 2, 17)) is True
+
+    def test_good_friday_nyse_closed(self):
+        assert is_nyse_holiday(date(2024, 3, 29)) is True
+
+    def test_christmas_nyse_closed(self):
+        assert is_nyse_holiday(date(2024, 12, 25)) is True
+
+    def test_new_years_nyse_closed(self):
+        assert is_nyse_holiday(date(2025, 1, 1)) is True
+
+    def test_normal_tuesday_open(self):
+        assert is_nyse_holiday(date(2024, 1, 16)) is False
+
+    def test_weekend_saturday_closed(self):
+        assert is_nyse_holiday(date(2024, 7, 6)) is True
+
+    def test_weekend_sunday_closed(self):
+        assert is_nyse_holiday(date(2024, 7, 7)) is True
+
+    def test_cme_vs_nyse_divergence_july4(self):
+        """The whole reason XNYS is the correct source, not CMES.
+
+        CME equity-index futures trade a shortened Globex session on July 4
+        (is_cme_holiday=False), but the NYSE cash market is fully closed
+        (no 09:00-ET order-imbalance event). Using is_cme_holiday would admit
+        contaminated July-4 NYSE_PREOPEN rows.
+        """
+        assert is_cme_holiday(date(2024, 7, 4)) is False
+        assert is_nyse_holiday(date(2024, 7, 4)) is True
+
+    def test_cme_vs_nyse_divergence_thanksgiving(self):
+        assert is_cme_holiday(date(2024, 11, 28)) is False
+        assert is_nyse_holiday(date(2024, 11, 28)) is True
+
+    def test_strict_raises_beyond_coverage(self):
+        """Backtest builds fail-CLOSED: an uncovered date raises rather than
+        silently assuming 'open' (holiday contamination is a kill criterion).
+        Uses one day past the ACTUAL last covered session so the test tracks the
+        real boundary rather than an arbitrary far-future date."""
+        from pipeline.market_calendar import _XNYS
+
+        beyond = _XNYS.last_session.date() + timedelta(days=1)
+        with pytest.raises(ValueError, match="NYSE calendar coverage unavailable"):
+            is_nyse_holiday(beyond, strict=True)
+
+    def test_non_strict_fails_open_beyond_coverage(self, caplog):
+        """Fail-open path (future live use) returns False AND emits a WARNING
+        beyond coverage. The warning is the operator's only signal that a date
+        fell outside calendar coverage — a silent fail-open would leave live
+        trading blind, so the log emission is part of the contract, not optional.
+        """
+        import logging
+
+        from pipeline.market_calendar import _XNYS
+
+        beyond = _XNYS.last_session.date() + timedelta(days=1)
+        with caplog.at_level(logging.WARNING, logger="pipeline.market_calendar"):
+            result = is_nyse_holiday(beyond, strict=False)
+        assert result is False
+        assert any("NYSE calendar unavailable" in r.message and r.levelno == logging.WARNING for r in caplog.records), (
+            caplog.records
+        )
 
 
 class TestIsEarlyClose:

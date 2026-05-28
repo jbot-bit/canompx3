@@ -55,6 +55,7 @@ from pipeline.dst import (
 )
 from pipeline.init_db import ORB_LABELS
 from pipeline.log import get_logger
+from pipeline.market_calendar import is_nyse_holiday
 
 # Add project root to path
 from pipeline.paths import GOLD_DB_PATH
@@ -222,6 +223,13 @@ def compute_orb_range(bars_df: pd.DataFrame, trading_day: date, orb_label: str, 
     Returns dict with keys: high, low, size, volume (or all None if no bars in window).
     volume = total contracts traded during the ORB window.
     """
+    # NYSE_PREOPEN is defined by the NYSE 09:00-ET cash order-imbalance event,
+    # which does not occur on NYSE holidays. Route those days into the canonical
+    # empty-ORB path (no contaminated range from thin holiday Globex bars).
+    # Scoped to NYSE_PREOPEN only — other sessions trade their Globex window.
+    if orb_label == "NYSE_PREOPEN" and is_nyse_holiday(trading_day):
+        return {"high": None, "low": None, "size": None, "volume": None}
+
     utc_start, utc_end = _orb_utc_window(trading_day, orb_label, orb_minutes)
 
     # Filter bars within [start, end)

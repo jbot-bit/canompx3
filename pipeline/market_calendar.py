@@ -28,6 +28,7 @@ import pandas as pd
 log = logging.getLogger(__name__)
 
 _CMES = xcals.get_calendar("CMES")
+_XNYS = xcals.get_calendar("XNYS")
 _ET = ZoneInfo("America/New_York")
 
 
@@ -43,6 +44,48 @@ def is_cme_holiday(trading_day: date) -> bool:
     except (ValueError, KeyError, IndexError):
         log.warning(
             "Calendar data unavailable for %s — assuming NOT holiday (fail-open)",
+            trading_day,
+        )
+        return False
+
+
+def is_nyse_holiday(trading_day: date, *, strict: bool = True) -> bool:
+    """True if the NYSE cash market is closed (no 09:00-ET order-imbalance event).
+
+    The correct source for the NYSE_PREOPEN session, which is defined by the
+    NYSE cash-market order-imbalance publication (09:00 ET). On NYSE cash
+    holidays (July 4, Thanksgiving, MLK, Presidents Day, Memorial Day, Labor
+    Day, Good Friday, Christmas, New Year's) and weekends, that event does NOT
+    occur. CME equity-index futures (MNQ/MES) still trade a shortened Globex
+    session on most of those days, so ``is_cme_holiday`` is the WRONG source
+    here — it returns False for July 4 / Thanksgiving while the NYSE cash market
+    is fully closed. Uses ``is_session`` (authoritative) rather than
+    ``sessions_in_range`` (gives a false negative on MLK 2024-01-15).
+
+    Coverage: the XNYS calendar spans 2006-05-30 -> 2027-05-28.
+
+    strict (default True): fail-CLOSED for backtest builds. A date beyond
+        calendar coverage RAISES, because a contaminated holiday ORB feeding the
+        prereg is an explicit kill criterion — silently assuming "open" would
+        admit garbage data. See backtesting-methodology.md RULE 1.
+    strict=False: fail-OPEN, mirrors the is_cme_holiday contract (returns False
+        + WARNING beyond coverage) for any future live-trading use where missing
+        a trade is worse than blocking.
+    """
+    ts = pd.Timestamp(trading_day)
+    try:
+        return not _XNYS.is_session(ts)
+    except (ValueError, KeyError, IndexError) as e:
+        if strict:
+            raise ValueError(
+                f"NYSE calendar coverage unavailable for {trading_day} "
+                f"(XNYS spans {_XNYS.first_session.date()}..{_XNYS.last_session.date()}). "
+                f"Refusing to build NYSE_PREOPEN features for an uncovered date "
+                f"(holiday contamination is a prereg kill criterion). "
+                f"Extend exchange_calendars or restrict the build range."
+            ) from e
+        log.warning(
+            "NYSE calendar unavailable for %s — assuming NOT holiday (fail-open)",
             trading_day,
         )
         return False
