@@ -1,5 +1,11 @@
 @echo off
-title ORB Trading Bot
+:: Per-launch unique title suffix: prevents FindWindow collision in the
+:: auto-minimise step (line ~104) when a stale or sibling START_BOT
+:: console shares the title. %RANDOM% is 0-32767 per cmd instance;
+:: doubled gives ~1 in 1.07B collision odds — sufficient for single-user
+:: same-machine scope.
+set BOT_TITLE=ORB Trading Bot [%RANDOM%%RANDOM%]
+title %BOT_TITLE%
 color 0A
 cd /d "%~dp0"
 
@@ -79,15 +85,17 @@ echo [4/5] Launching orchestrator: profile=%ACTIVE_PROFILE% %BOT_MODE_FLAGS%
 start "ORB Orchestrator (%ACTIVE_PROFILE%)" /min cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS%"
 
 :: Step 5: Launch dashboard + open browser in this (main) console.
-:: Closing this window stops the dashboard; the orchestrator keeps running until
-:: you also close its minimised window (or use the dashboard's kill endpoint).
+:: This console auto-minimises ~3s after launch (line ~107). To stop the
+:: dashboard: restore the console from the taskbar, then press Ctrl+C, or
+:: close the window. Orchestrator window stays /min until closed separately
+:: (or use the dashboard's kill endpoint).
 echo [5/5] Launching dashboard...
 echo.
 echo ============================================
 echo   Profile:   %ACTIVE_PROFILE% %BOT_MODE_FLAGS%
 echo   Dashboard: http://localhost:8080
 echo   TopStepX:  https://app.topstepx.com
-echo   Press Ctrl+C to stop
+echo   To stop:   restore this window from taskbar, then Ctrl+C
 echo ============================================
 echo.
 
@@ -95,9 +103,11 @@ echo.
 start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:8080"
 
 :: Minimise THIS console ~3s after launch so the browser is the visible surface.
-:: Dashboard process keeps running here; closing this window still stops it
-:: (see Step 5 contract above). FindWindow-by-title uses the `title` set on line 2.
-:: Fail-open: any PowerShell error leaves the console as-is.
-start "" /b powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3; try { Add-Type -Name W -Namespace U -MemberDefinition '[System.Runtime.InteropServices.DllImport(\"user32.dll\")] public static extern System.IntPtr FindWindow(string c, string w); [System.Runtime.InteropServices.DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(System.IntPtr h, int n);'; $h=[U.W]::FindWindow($null,'ORB Trading Bot'); if ($h -ne [System.IntPtr]::Zero) { [void][U.W]::ShowWindowAsync($h,6) } } catch {}"
+:: Dashboard process keeps running here; restoring the console + Ctrl+C still
+:: stops it (see Step 5 contract above). FindWindow-by-title targets %BOT_TITLE%
+:: (set with unique per-launch suffix on line 2) to avoid collision with stale
+:: or sibling START_BOT consoles. Fail-open: any PowerShell error leaves the
+:: console as-is.
+start "" /b powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3; try { Add-Type -Name W -Namespace U -MemberDefinition '[System.Runtime.InteropServices.DllImport(\"user32.dll\")] public static extern System.IntPtr FindWindow(string c, string w); [System.Runtime.InteropServices.DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(System.IntPtr h, int n);'; $h=[U.W]::FindWindow($null,'%BOT_TITLE%'); if ($h -ne [System.IntPtr]::Zero) { [void][U.W]::ShowWindowAsync($h,6) } } catch {}"
 
 .venv\Scripts\python.exe -m trading_app.live.bot_dashboard

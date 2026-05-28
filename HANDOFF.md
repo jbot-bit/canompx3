@@ -628,14 +628,10 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-28
-- **Commit:** 825f4411 — feat(hooks): head-flip-guard — advisory on silent HEAD SHA rewrites
-- **Files changed:** 6 files
-  - `.claude/hooks/_branch_state.py`
-  - `.claude/hooks/head-flip-guard.py`
-  - `.claude/rules/branch-flip-protection.md`
-  - `.claude/settings.json`
+- **Commit:** fcf8a8dc — chore(launch): auto-minimise START_BOT console after browser open
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `tests/test_hooks/test_head_flip_guard.py`
+  - `START_BOT.bat`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
@@ -795,3 +791,11 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 
 - Follow-up hardening: added regression test `test_real_k1_nyse_close_prereg_loads_no_theory_pathway_b` to pin the real locked prereg (`docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml`) to Amendment 3.3 semantics (`testing_mode=individual`, `has_theory=False`) so audits cannot regress to stale pre-3.3 assumptions.
 - Extended verification: `pytest -q tests/test_trading_app/test_hypothesis_loader.py tests/test_llm_hypothesis_proposer.py` -> 111 passed.
+
+## This Session (2026-05-28 — Codex remote audit, non-duplicative lane expansion routing)
+- **Tool:** Codex (WSL), read-only audit + docs-only output.
+- **Scope:** User asked for a relevant project audit without heavy DB/copy workflows, with anti-duplication against parallel Claude terminal work.
+- **What was done:** Added audit artifact `docs/audit/results/2026-05-28-codex-remote-lanes-and-blockers-audit.md` using low-load surfaces (`action-queue`, `HANDOFF`, governance docs).
+- **Key routing decision:** Do **not** overlap active Claude live-trading Stage 2-5 work; prioritize the only open queue item `nq_mini_stage2_wiring_2026_05_15` as next Codex lane-opener.
+- **No DB/broker/runtime mutation.** No lane allocation/profile/live-state change in this session.
+- **2026-05-28 follow-up (user requested institutional-grade + DB-access clarity):** Upgraded audit artifact with explicit DB-access verdict: canonical `pipeline.paths.GOLD_DB_PATH` resolves to `/workspace/canompx3/gold.db`, but file is absent in this container. Added zero-duplication attach path using `DUCKDB_PATH` override + read-only probe sequence; retained non-duplication boundary (Claude owns live-readiness Stage 2–5; Codex next lane-opener is NQ-mini Stage 2 wiring).
