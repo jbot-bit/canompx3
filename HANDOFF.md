@@ -626,12 +626,17 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 - **Stage NOT closed:** `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` remains open. Criteria 1-4 met with positive test coverage; criteria 5-6 show no regression vs baseline; criterion 7 (operator hits `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirms non-blocked status + `logs/live/live_signals_2026-05-18.jsonl` appears within 30s) requires a live dashboard run.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Claude Code (opus 4.7)
 - **Date:** 2026-05-28
-- **Commit:** 28eebc81 — [judgment] prereg+runner: NYSE_PREOPEN MNQ E2 NFP-spillover v1 (Lane B Stage 4a)
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `START_BOT.bat`
+- **Stage 4b verdict:** 0/27 PASS strict-Chordia on NYSE_PREOPEN MNQ E2 NFP-spillover v1 prereg. 12 FAIL_CHORDIA_STRICT, 9 UNVERIFIED_DST_IMBALANCE (all NFP-only splits, EST=26 < 30 floor), **6 CONDITIONAL_OOS_UNDERPOWERED** on O30 all_days/non_nfp_days (IS t=3.87-4.65, BH q < 3e-4 at K=27, but 4-month tail OOS at STATISTICALLY_USELESS power). Real edge appears to live at the O30 aperture irrespective of NFP, not the pre-registered NFP-spillover framing.
+- **Tip:** `<pending Stage 4b commit>` (Stage 4a at 774a7356 -- silently restored by sibling-session safety-rebase reset, n=3 same-class shared-worktree shared-tip incident with feedback_shared_index_db_lock_precommit_race_2026_05_28.md class).
+- **Files changed (Stage 4b):**
+  - `docs/runtime/stages/2026-05-28-nyse-preopen-stage4b-verdict-emission.md` (NEW)
+  - `scripts/research/emit_nyse_preopen_verdict.py` (NEW — thin I/O wrapper over Stage 4a runner; refuses --emit without --force re-overwrite)
+  - `tests/test_scripts/test_emit_nyse_preopen_verdict.py` (NEW — 15 tests, all pass)
+  - `docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.md` (NEW verdict artifact)
+  - `docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.csv` (NEW row-level CSV)
+- **Audit/integrity:** 52/52 tests pass (Stage 4a 37 + Stage 4b 15); drift 167/0; gold.db read-only enforced (no DB writes anywhere). Verdict MD declares 3 framings NOT tested by this prereg (overlay/filter on adjacent US-cash lanes, portfolio-forecast layer per Carver Ch 11, alternative OOS framings per Harvey-Liu / CPCV — none of which are refuted by 0/27 PASS).
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
