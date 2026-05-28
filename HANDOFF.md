@@ -628,18 +628,14 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-28
-- **Commit:** 8d5669a8 — feat(dashboard): canonical planned-launch surface — unambiguous SIGNAL/DEMO/LIVE + profile + copies
-- **Files changed:** 10 files
+- **Commit:** 825f4411 — feat(hooks): head-flip-guard — advisory on silent HEAD SHA rewrites
+- **Files changed:** 6 files
+  - `.claude/hooks/_branch_state.py`
+  - `.claude/hooks/head-flip-guard.py`
+  - `.claude/rules/branch-flip-protection.md`
+  - `.claude/settings.json`
   - `HANDOFF.md`
-  - `START_BOT.bat`
-  - `docs/runtime/stages/2026-05-28-dashboard-planned-launch-surface.md`
-  - `scripts/run_live_session.py`
-  - `tests/test_trading_app/test_planned_launch.py`
-  - `tests/test_trading_app/test_planned_launch_integration.py`
-  - `trading_app/live/bot_dashboard.html`
-  - `trading_app/live/bot_dashboard.py`
-  - `trading_app/live/planned_launch.py`
-  - `trading_app/live/session_orchestrator.py`
+  - `tests/test_hooks/test_head_flip_guard.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

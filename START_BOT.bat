@@ -94,4 +94,10 @@ echo.
 :: Open browser after 2 second delay (gives server time to start)
 start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:8080"
 
+:: Minimise THIS console ~3s after launch so the browser is the visible surface.
+:: Dashboard process keeps running here; closing this window still stops it
+:: (see Step 5 contract above). FindWindow-by-title uses the `title` set on line 2.
+:: Fail-open: any PowerShell error leaves the console as-is.
+start "" /b powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3; try { Add-Type -Name W -Namespace U -MemberDefinition '[System.Runtime.InteropServices.DllImport(\"user32.dll\")] public static extern System.IntPtr FindWindow(string c, string w); [System.Runtime.InteropServices.DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(System.IntPtr h, int n);'; $h=[U.W]::FindWindow($null,'ORB Trading Bot'); if ($h -ne [System.IntPtr]::Zero) { [void][U.W]::ShowWindowAsync($h,6) } } catch {}"
+
 .venv\Scripts\python.exe -m trading_app.live.bot_dashboard
