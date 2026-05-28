@@ -623,10 +623,14 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-28
-- **Commit:** 70362307 — docs(audit): adversarial-audit gate artifact for NYSE_PREOPEN dst.py (62c51a14)
-- **Files changed:** 2 files
+- **Commit:** 0209c3f0 — feat(sessions): NYSE_PREOPEN holiday-contamination source (Lane B Stage 2)
+- **Files changed:** 6 files
   - `HANDOFF.md`
-  - `docs/audit/2026-05-28-nyse-preopen-dst-session-definition.md`
+  - `docs/runtime/stages/2026-05-28-nyse-preopen-stage2-holiday-source.md`
+  - `pipeline/build_daily_features.py`
+  - `pipeline/market_calendar.py`
+  - `tests/test_pipeline/test_build_daily_features.py`
+  - `tests/test_pipeline/test_market_calendar.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

@@ -32,9 +32,12 @@ import re
 
 import pandas as pd
 
-# Canonical session order (Brisbane time).
-# Source of truth: trading_app/ml/config.py SESSION_CHRONOLOGICAL_ORDER
-# Duplicated here to avoid circular imports (pipeline/ cannot import trading_app/).
+# Canonical session order (Brisbane time) — the STANDALONE source of truth for
+# chronological look-ahead ordering. (Previously mirrored a now-removed
+# trading_app/ml/config.py SESSION_CHRONOLOGICAL_ORDER; the ML subsystem was
+# deleted in the V3 sprint, so this list now stands alone — check_drift's
+# check_session_guard_sync is a registry-stable no-op.) Every dynamic ORB_LABELS
+# session MUST appear here, enforced by check_session_order_covers_orb_labels.
 _SESSION_ORDER: list[str] = [
     "CME_REOPEN",  # 08:00-09:00 Brisbane
     "TOKYO_OPEN",  # 10:00
@@ -43,6 +46,7 @@ _SESSION_ORDER: list[str] = [
     "LONDON_METALS",  # 17:00 winter / 18:00 summer
     "EUROPE_FLOW",  # 17:00 summer / 18:00 winter (swaps with LM)
     "US_DATA_830",  # ~23:30-00:30 Brisbane (8:30 AM ET)
+    "NYSE_PREOPEN",  # ~23:00 (summer) / ~00:00 (winter) Brisbane (9:00 AM ET order imbalance)
     "NYSE_OPEN",  # ~00:30 Brisbane (9:30 AM ET)
     "US_DATA_1000",  # ~01:00 Brisbane (10:00 AM ET)
     "COMEX_SETTLE",  # ~04:30 Brisbane (1:30 PM ET)

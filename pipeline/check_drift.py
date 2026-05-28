@@ -2446,6 +2446,47 @@ def check_dow_classification_complete() -> list[str]:
     return violations
 
 
+def check_session_order_covers_orb_labels() -> list[str]:
+    """Every dynamic ORB_LABELS session must appear in session_guard._SESSION_ORDER.
+
+    Companion invariant to check_dow_classification_complete and
+    check_orb_labels_session_catalog_sync (#32). _SESSION_ORDER is the
+    standalone canonical chronological-ordering source (the former
+    trading_app/ml/config.py SESSION_CHRONOLOGICAL_ORDER was removed in the V3
+    sprint). It feeds the _SESSION_COL_RE regex (session_guard.py) and every
+    look-ahead index comparison.
+
+    Fail-closed: a session present in ORB_LABELS but ABSENT from _SESSION_ORDER
+    is invisible to _SESSION_COL_RE, so its orb_<SESSION>_* feature columns fall
+    through is_feature_safe's "Unknown column -> fail CLOSED" branch and get
+    MASKED for every target session — a silent look-ahead-mask exclusion. This
+    is the exact gap the 2026-05-28 NYSE_PREOPEN audit surfaced
+    (docs/audit/2026-05-28-nyse-preopen-dst-session-definition.md).
+    """
+    violations = []
+
+    guard_file = PIPELINE_DIR / "session_guard.py"
+    if not guard_file.exists():
+        return violations
+
+    try:
+        from pipeline.init_db import ORB_LABELS
+        from pipeline.session_guard import _SESSION_ORDER
+    except ImportError as e:
+        violations.append(f"  Cannot import for session-order coverage check: {e}")
+        return violations
+
+    missing = set(ORB_LABELS) - set(_SESSION_ORDER)
+    if missing:
+        violations.append(
+            f"  ORB_LABELS sessions absent from session_guard._SESSION_ORDER "
+            f"(insert them in chronological position — otherwise their "
+            f"orb_<SESSION>_* columns are silently masked for all sessions): {sorted(missing)}"
+        )
+
+    return violations
+
+
 def check_stale_session_names_in_code() -> list[str]:
     """Check #33: No old fixed-clock session names in Python source code.
 
@@ -14014,6 +14055,12 @@ CHECKS = [
     ("Non-5m strategy IDs include _O{minutes} suffix", check_orb_minutes_in_strategy_id, False, False),
     ("ORB_LABELS matches SESSION_CATALOG dynamic entries", check_orb_labels_session_catalog_sync, False, False),
     ("Every dynamic session DOW-classified exactly once", check_dow_classification_complete, False, False),
+    (
+        "Every ORB_LABELS session present in session_guard._SESSION_ORDER",
+        check_session_order_covers_orb_labels,
+        False,
+        False,
+    ),
     ("No old fixed-clock session names in Python source", check_stale_session_names_in_code, False, False),
     ("sql_adapter VALID_* sets match outcome_builder grids", check_sql_adapter_validation_sync, False, False),
     ("No E0 rows in trading tables", check_no_e0_in_db, False, True),  # requires_db
