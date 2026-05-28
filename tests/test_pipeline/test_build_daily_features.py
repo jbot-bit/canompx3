@@ -197,6 +197,58 @@ class TestOrbRanges:
         assert result["low"] == 2348.0
         assert result["size"] == 7.0
 
+    def test_nyse_preopen_holiday_returns_none_despite_bars(self):
+        """NYSE_PREOPEN on an NYSE holiday returns all-None EVEN WITH bars in
+        the window — the holiday guard must fire BEFORE bar-filtering, so a
+        contaminated range from thin holiday Globex bars cannot leak in.
+
+        2024-07-04 (Thursday) is an NYSE cash holiday; NYSE_PREOPEN window is
+        13:00-13:05 UTC. CME Globex still trades, so bars exist — the guard
+        must override them.
+        """
+        bars = _make_bars(
+            timestamps=[_ts(2024, 7, 4, 13, m) for m in range(5)],
+            opens=[18000, 18010, 17990, 18005, 18020],
+            highs=[18050, 18030, 18010, 18030, 18060],
+            lows=[17980, 17990, 17970, 17990, 18010],
+            closes=[18010, 18000, 18005, 18020, 18040],
+        )
+        result = compute_orb_range(bars, date(2024, 7, 4), "NYSE_PREOPEN", 5)
+        assert result == {"high": None, "low": None, "size": None, "volume": None}
+
+    def test_holiday_guard_scoped_to_nyse_preopen_only(self):
+        """The holiday guard must NOT affect other sessions. On the same NYSE
+        holiday (2024-07-04), NYSE_OPEN (13:30-13:35 UTC) builds its ORB
+        normally from Globex bars — only NYSE_PREOPEN is suppressed.
+        """
+        bars = _make_bars(
+            timestamps=[_ts(2024, 7, 4, 13, 30 + m) for m in range(5)],
+            opens=[18000, 18010, 17990, 18005, 18020],
+            highs=[18050, 18030, 18010, 18030, 18060],
+            lows=[17980, 17990, 17970, 17990, 18010],
+            closes=[18010, 18000, 18005, 18020, 18040],
+        )
+        result = compute_orb_range(bars, date(2024, 7, 4), "NYSE_OPEN", 5)
+        assert result["high"] == 18060.0
+        assert result["low"] == 17970.0
+        assert result["size"] == 90.0
+
+    def test_nyse_preopen_normal_day_builds(self):
+        """On a normal NYSE trading day, NYSE_PREOPEN builds its ORB normally.
+        2024-07-05 (Friday) is a normal session; window 13:00-13:05 UTC (EDT).
+        """
+        bars = _make_bars(
+            timestamps=[_ts(2024, 7, 5, 13, m) for m in range(5)],
+            opens=[18000, 18010, 17990, 18005, 18020],
+            highs=[18050, 18030, 18010, 18030, 18060],
+            lows=[17980, 17990, 17970, 17990, 18010],
+            closes=[18010, 18000, 18005, 18020, 18040],
+        )
+        result = compute_orb_range(bars, date(2024, 7, 5), "NYSE_PREOPEN", 5)
+        assert result["high"] == 18060.0
+        assert result["low"] == 17970.0
+        assert result["size"] == 90.0
+
 
 # =============================================================================
 # MODULE 3: BREAK DETECTION
