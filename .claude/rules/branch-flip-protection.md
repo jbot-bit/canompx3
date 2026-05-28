@@ -56,9 +56,18 @@ If a future audit suggests "move to PreToolUse for race protection" — read thi
 
 ---
 
+## Companion: head-flip-guard
+
+`branch-flip-guard.py` watches branch *name* changes. It is blind to silent HEAD SHA rewrites that preserve the branch name — `git pull --rebase`, `git reset --hard`, `git commit --amend`, or a session hook silently amending. Those rewrites can invalidate any commit SHA already quoted in memory/HANDOFF/commit messages (reachable via reflog only, until GC).
+
+`.claude/hooks/head-flip-guard.py` (PostToolUse/Bash, **advisory-only — does NOT block**) reads `head_at_start` from the same `.claude.pid` lock file and emits `additionalContext` to Claude on the next turn if HEAD has moved while the branch name held. Legitimate rebase/amend operations are common; the goal is forcing re-resolution of SHAs before durable writes, not blocking the operator.
+
+Triggered by n=1 incident 2026-05-28 — see `feedback_silent_mid_session_pull_rebase_invalidates_sha_quotes_2026_05_28.md`.
+
 ## Related
 
 - `memory/feedback_shared_worktree_concurrent_commits.md` — original worktree mutex incident
 - `.claude/rules/parallel-session-isolation.md` — one-session-per-worktree rule
-- `.claude/hooks/session-start.py` — writes the lock file
+- `.claude/hooks/session-start.py` — writes the lock file (branch_at_start + head_at_start)
+- `.claude/hooks/head-flip-guard.py` — companion HEAD-SHA-rewrite advisory
 - `.githooks/pre-commit` — pre-commit enforcement (step 0c)

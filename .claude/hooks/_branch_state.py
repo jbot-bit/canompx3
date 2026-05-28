@@ -69,6 +69,45 @@ def current_branch() -> str | None:
         return None
 
 
+def current_head_sha() -> str | None:
+    """Return the current HEAD SHA, or None on failure.
+
+    Used by `head-flip-guard.py` to detect silent ref rewrites (pull --rebase,
+    reset --hard, commit --amend by a session hook) that preserve the branch
+    name but invalidate any commit SHA Claude quoted earlier in the session.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() or None
+    except Exception:
+        return None
+
+
+def head_at_start(git_dir_path: Path) -> str | None:
+    """Read `head_at_start` from `<git_dir>/.claude.pid`.
+
+    Companion to `branch_at_start`: the same lock file already carries the
+    head SHA at session start (written by `session-start.py:485`). Returns
+    None on any read/parse failure so callers can fail-open.
+    """
+    lock = git_dir_path / ".claude.pid"
+    if not lock.exists():
+        return None
+    try:
+        data = json.loads(lock.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    value = data.get("head_at_start", "")
+    return value or None
+
+
 def branch_at_start(git_dir_path: Path) -> str | None:
     """Read `branch_at_start` from `<git_dir>/.claude.pid`.
 

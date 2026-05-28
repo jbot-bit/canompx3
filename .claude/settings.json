@@ -152,6 +152,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/head-flip-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/judgment-review-nudge.py",
             "timeout": 5
           }

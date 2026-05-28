@@ -628,9 +628,18 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-28
-- **Commit:** e28e961b — chore(handoff): reconcile baton to post-rebase SHAs + Stage 3B SHIPPED
-- **Files changed:** 1 files
+- **Commit:** 8d5669a8 — feat(dashboard): canonical planned-launch surface — unambiguous SIGNAL/DEMO/LIVE + profile + copies
+- **Files changed:** 10 files
   - `HANDOFF.md`
+  - `START_BOT.bat`
+  - `docs/runtime/stages/2026-05-28-dashboard-planned-launch-surface.md`
+  - `scripts/run_live_session.py`
+  - `tests/test_trading_app/test_planned_launch.py`
+  - `tests/test_trading_app/test_planned_launch_integration.py`
+  - `trading_app/live/bot_dashboard.html`
+  - `trading_app/live/bot_dashboard.py`
+  - `trading_app/live/planned_launch.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
