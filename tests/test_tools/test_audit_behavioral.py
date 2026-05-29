@@ -336,6 +336,63 @@ def load_lane(con, instrument, session):
         violations = audit_behavioral.check_triple_join_guard()
         assert len(violations) == 0, f"Prose docstring incorrectly flagged. Violations: {violations}"
 
+    def test_ignores_docstring_with_sql_keyword_words_in_prose(self, tmp_path, monkeypatch):
+        """Module docstring narrating a JOIN must not flag, even when it also
+        contains the English words 'with' (matches \\bWITH\\b) and 'JOIN'.
+
+        Regression: 2026-05-29 research/powered_oos_graveyard_resweep.py module
+        docstring read '... re-judges each candidate with a TRADE-FRACTION
+        holdout ... orb_outcomes JOIN daily_features ONLY (RULE 9)'. The
+        verb+source heuristic matched ('with' -> WITH verb, 'JOIN' -> source)
+        and the docstring lacks the literal 'orb_minutes' token, so it was a
+        false positive that blocked an unrelated commit. The fix requires a
+        line-led SQL clause keyword (real SQL formats clauses on their own
+        lines; prose embeds the words mid-sentence).
+        """
+        _mkfile(
+            tmp_path / "research" / "prose_with_keywords.py",
+            '''\
+"""Powered-OOS re-judge of calendar-OOS-starved graveyard candidates.
+
+This script re-judges each candidate with a TRADE-FRACTION holdout and
+reports the canonical power tier.
+
+Canonical delegation:
+  - data layers -> orb_outcomes JOIN daily_features ONLY (RULE 9)
+"""
+
+
+def run():
+    pass
+''',
+        )
+        monkeypatch.setattr(audit_behavioral, "TRIPLE_JOIN_SCAN_DIRS", [tmp_path / "research"])
+        monkeypatch.setattr(audit_behavioral, "PROJECT_ROOT", tmp_path)
+        violations = audit_behavioral.check_triple_join_guard()
+        assert len(violations) == 0, f"Prose docstring with SQL-keyword words incorrectly flagged: {violations}"
+
+    def test_still_catches_real_sql_after_prose_hardening(self, tmp_path, monkeypatch):
+        """Pressure test (RULE 13): the prose-hardening must not weaken the real
+        triple-join trap. A genuine SQL block (line-led SELECT/FROM/JOIN) missing
+        orb_minutes must STILL be flagged."""
+        _mkfile(
+            tmp_path / "research" / "real_bad.py",
+            '''\
+query = """
+    SELECT o.trading_day, o.pnl_r
+    FROM orb_outcomes o
+    JOIN daily_features d
+      ON d.trading_day = o.trading_day
+     AND d.symbol = o.symbol
+"""
+''',
+        )
+        monkeypatch.setattr(audit_behavioral, "TRIPLE_JOIN_SCAN_DIRS", [tmp_path / "research"])
+        monkeypatch.setattr(audit_behavioral, "PROJECT_ROOT", tmp_path)
+        violations = audit_behavioral.check_triple_join_guard()
+        assert len(violations) > 0, "Real SQL JOIN without orb_minutes must still be caught"
+        assert "orb_minutes" in violations[0]
+
 
 # ── Check 6: Double-break look-ahead scanner ─────────────────────────
 

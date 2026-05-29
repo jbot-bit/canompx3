@@ -228,11 +228,28 @@ TRIPLE_QUOTE_PATTERN = re.compile(r'(?:"""(.*?)"""|\'\'\'(.*?)\'\'\')', re.DOTAL
 # and would false-positive the triple-join check. Require both groups to match.
 _SQL_VERB_PATTERN = re.compile(r"\b(?:SELECT|INSERT|UPDATE|DELETE|WITH)\b", re.IGNORECASE)
 _SQL_SOURCE_PATTERN = re.compile(r"\b(?:FROM|JOIN|USING)\b", re.IGNORECASE)
+# A real SQL clause keyword sits at the START of a line (after optional indent).
+# Prose embeds the same words mid-sentence ("re-judges each candidate WITH ...",
+# "orb_outcomes JOIN daily_features ONLY"). The verb+source pair alone is not enough:
+# `WITH` matches the English preposition "with" and `JOIN` matches prose describing a
+# join, so a docstring can satisfy both. Requiring a line-led clause discriminates real
+# SQL (which formats clauses on their own lines) from prose narration of a join.
+# Regression: 2026-05-29 research/powered_oos_graveyard_resweep.py module docstring
+# ("...with a TRADE-FRACTION holdout ... orb_outcomes JOIN daily_features ONLY") was a
+# false positive that blocked an unrelated commit.
+_SQL_LINE_LED_CLAUSE = re.compile(r"(?im)^\s*(?:SELECT|INSERT|UPDATE|DELETE|WITH|FROM|JOIN)\b")
 
 
 def _looks_like_sql(block: str) -> bool:
-    """Heuristic: real SQL has a verb AND a source clause. Docstrings usually have one."""
-    return bool(_SQL_VERB_PATTERN.search(block) and _SQL_SOURCE_PATTERN.search(block))
+    """Heuristic: real SQL has a verb AND a source clause AND a line-led clause keyword.
+
+    The line-led requirement separates real SQL (clauses formatted on their own lines)
+    from prose that merely mentions SQL keywords mid-sentence — `WITH` (preposition
+    "with") and `JOIN` (verb describing a join) both appear in ordinary English.
+    """
+    return bool(
+        _SQL_VERB_PATTERN.search(block) and _SQL_SOURCE_PATTERN.search(block) and _SQL_LINE_LED_CLAUSE.search(block)
+    )
 
 
 # Regex to detect JOIN daily_features
