@@ -227,6 +227,7 @@ def estimate_n_eff_onc(
     *,
     min_overlap: int = 30,
     max_clusters: int | None = None,
+    min_silhouette: float = 0.10,
     random_state: int = 0,
 ) -> dict:
     """Effective trial count via López de Prado's Optimal Number of Clusters.
@@ -244,8 +245,16 @@ def estimate_n_eff_onc(
          ρ=1, 1 when ρ=-1).
       3. For k in [2, K_max], KMeans on the distance rows; score each k by the
          mean silhouette (on the precomputed distance).
-      4. N̂ = argmax-silhouette k. Ties / degenerate silhouette → fall back to
-         the conservative raw column count.
+      4. N̂ = argmax-silhouette k — BUT ONLY if the winning silhouette clears
+         `min_silhouette`. If no k produces real structure (an uncorrelated
+         universe scores ≈0 at every k), silhouette-argmax would still pick
+         some k≥2 and report N̂ far below the true M, which LOWERS SR_0 and
+         LOOSENS the gate — the opposite of conservative. So below the floor we
+         defer to the closed-form `bailey_neff_correlation(rho_hat, M)`, which
+         correctly returns N̂≈M when ρ̂≈0. The two estimators backstop each
+         other: ONC for genuinely clustered universes, Bailey when clustering
+         finds nothing.
+      5. Ties / degenerate clustering → conservative raw column count.
 
     Args:
         returns_matrix: An (observations × M) array-like of per-period
@@ -256,6 +265,15 @@ def estimate_n_eff_onc(
             contribution avoided (see notes). Mirrors the 30-day floor used in
             research/mnq_pr51_dsr_effective_n_v2.py.
         max_clusters: Upper bound on k searched. Defaults to min(M-1, 50).
+        min_silhouette: Structure floor (default 0.10). If the best silhouette
+            across all k is below this, the clustering is treated as "no real
+            structure" and N̂ defers to the closed-form Bailey estimate rather
+            than a spurious low cluster count. 0.10 is the lower edge of the
+            conventional "weak but present" silhouette band (Kaufman & Rousseeuw
+            1990: <0.25 = no substantial structure); set deliberately LOW so ONC
+            still wins on any genuinely clustered universe and only yields to
+            Bailey on near-noise. Conservative either way — both branches
+            resolve toward larger N̂ (stricter gate) on uncorrelated input.
         random_state: KMeans seed (determinism — required; argless RNG is
             banned in this repo's reproducible paths).
 
@@ -263,16 +281,22 @@ def estimate_n_eff_onc(
         dict with:
           n_eff: int in [1, M] — the optimal cluster count (N̂).
           m: int — raw column count.
-          best_silhouette: float | None — silhouette at n_eff (None if
-            clustering was degenerate and the raw-count fallback was used).
-          method: "onc_silhouette" | "fallback_raw_count" — which path ran.
+          best_silhouette: float | None — silhouette at the argmax k (None if
+            clustering was degenerate and a fallback path was used). Reported
+            even when the score fell below `min_silhouette`, on the
+            `bailey_below_silhouette_floor` path, so the caller can see WHY
+            Bailey was chosen.
+          method: "onc_silhouette" | "bailey_below_silhouette_floor"
+            | "fallback_raw_count" — which path produced n_eff.
           rho_hat: float — off-diagonal mean correlation (for cross-check /
             feeding bailey_neff_correlation; NaN-safe mean, 0.0 if undefined).
 
     Conservative contract: any degenerate input (M < 2, all-NaN, no finite
     pairwise correlations, silhouette undefined) returns
-    `n_eff = max(1, M)` via the fallback path. Clustering can never report
-    MORE independent trials than columns — n_eff is clamped to [1, M].
+    `n_eff = max(1, M)` via the fallback path. A real-but-structureless
+    universe (best silhouette < `min_silhouette`) returns the Bailey
+    closed-form N̂ instead of a spurious cluster count. Clustering can never
+    report MORE independent trials than columns — n_eff is clamped to [1, M].
 
     Reference:
         López de Prado, M. (2018) Advances in Financial ML, Ch. 4 (clustering).
@@ -350,6 +374,19 @@ def estimate_n_eff_onc(
 
     if best_k is None:
         return _fallback(rho_hat)
+
+    # Structure floor: if the best partition is near-noise, clustering found no
+    # real structure. Defer to the conservative closed-form (Bailey→M as ρ̂→0)
+    # rather than report a spurious low cluster count that would loosen the gate.
+    if best_score < min_silhouette:
+        n_bailey = bailey_neff_correlation(rho_hat, m)
+        return {
+            "n_eff": int(min(m, max(1, round(n_bailey)))),
+            "m": m,
+            "best_silhouette": best_score,
+            "method": "bailey_below_silhouette_floor",
+            "rho_hat": rho_hat,
+        }
 
     return {
         "n_eff": int(min(m, max(1, best_k))),

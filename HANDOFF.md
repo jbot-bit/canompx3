@@ -657,11 +657,15 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-29
-- **Commit:** 3ef83391 — docs(nq-mini): close stage3 activation as not viable
-- **Files changed:** 3 files
+- **Commit:** 1ceba78e — [judgment] feat(dsr): ONC N_eff clustering + Criterion 5 Amendment 3.5 universe-lock drift check
+- **Files changed:** 7 files
   - `HANDOFF.md`
-  - `docs/audit/results/2026-05-29-nq-mini-stage3-not-viable-qty-divisibility-wall.md`
-  - `docs/runtime/stages/2026-05-29-nq-mini-stage2-wiring-closeout.md`
+  - `docs/institutional/hypothesis_registry_template.md`
+  - `docs/institutional/pre_registered_criteria.md`
+  - `pipeline/check_drift.py`
+  - `tests/test_tools/test_dsr_universe_lock_drift_check.py`
+  - `tests/test_trading_app/test_dsr.py`
+  - `trading_app/dsr.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

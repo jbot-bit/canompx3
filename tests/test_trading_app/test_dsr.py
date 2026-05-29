@@ -230,3 +230,40 @@ class TestONC:
         sr0_clustered = compute_sr0(out["n_eff"], var_sr=0.05)
         sr0_raw = compute_sr0(out["m"], var_sr=0.05)
         assert sr0_clustered < sr0_raw
+
+    def test_independent_universe_does_not_loosen_gate(self):
+        """Anti-conservative guard: a fully INDEPENDENT universe (ρ̂≈0) has true
+        N̂≈M. Silhouette-argmax alone would mislabel it as a low cluster count
+        (best silhouette ≈ noise), LOWERING SR_0 and LOOSENING the gate. Below
+        the silhouette floor we must defer to the Bailey closed-form, which
+        returns N̂≈M, so SR_0 is NOT lower than the raw-M floor.
+        """
+        rng = np.random.default_rng(42)
+        indep = rng.standard_normal((400, 8))
+        out = estimate_n_eff_onc(indep, min_overlap=30)
+        assert out["method"] == "bailey_below_silhouette_floor"
+        assert out["best_silhouette"] is not None and out["best_silhouette"] < 0.10
+        # ρ̂≈0 ⇒ Bailey N̂ ≈ M ⇒ no loosening vs raw count.
+        assert out["n_eff"] == out["m"] == 8
+        sr0_neff = compute_sr0(out["n_eff"], var_sr=0.05)
+        sr0_raw = compute_sr0(out["m"], var_sr=0.05)
+        assert sr0_neff >= sr0_raw  # never softer than the raw-M floor
+
+    def test_clustered_universe_still_uses_onc(self):
+        """The floor must be surgical: a genuinely clustered universe (high
+        silhouette) keeps the ONC cluster count and does NOT fall to Bailey.
+        """
+        mat = _block_correlated_matrix(400, blocks=[3, 3, 3], seed=1)
+        out = estimate_n_eff_onc(mat, min_overlap=30)
+        assert out["method"] == "onc_silhouette"
+        assert out["best_silhouette"] is not None and out["best_silhouette"] >= 0.10
+        assert out["n_eff"] == 3
+
+    def test_silhouette_floor_is_tunable(self):
+        """A floor set above the clean-cluster silhouette forces the Bailey
+        branch even on structured data — proves the threshold is load-bearing,
+        not cosmetic.
+        """
+        mat = _block_correlated_matrix(400, blocks=[3, 3, 3], seed=1)
+        out = estimate_n_eff_onc(mat, min_overlap=30, min_silhouette=0.999)
+        assert out["method"] == "bailey_below_silhouette_floor"
