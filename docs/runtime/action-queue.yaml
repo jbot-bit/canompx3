@@ -1,6 +1,44 @@
 schema_version: 1
-updated_at: 2026-05-29T00:00:00+10:00
+updated_at: 2026-05-30T00:00:00+10:00
 items:
+  - id: remote_control_task_reregister_2026_05_30
+    title: Re-register ClaudeRemoteControl_canompx3 scheduled task (host auto-start gone)
+    class: ops
+    status: closed
+    priority: P2
+    close_before_new_work: false
+    owner_hint: claude
+    last_verified_at: 2026-05-30
+    freshness_sla_days: 14
+    next_action: |
+      CLOSED wont_do (2026-05-30, operator-confirmed). This item was written
+      from the host-autostart frame and is OBSOLETE: re-registering the
+      server-mode host is the thing the operator explicitly REJECTED.
+
+      The `ClaudeRemoteControl_canompx3` task ran a SERVER-MODE dispatcher
+      (`claude remote-control --spawn worktree --capacity 32`). That host was
+      the INTERFERENCE — it grabbed the relay channel so plain `/remote-env`
+      spawned isolated worktrees + handed an `environment=…` URL to hunt
+      instead of the terminal's own session just appearing on the phone.
+      Operator: "it never used to do it this way… do it normally." On
+      2026-05-30 the host was killed and BOTH tasks unregistered (verified
+      gone). Per-terminal `/remote-env` is the desired flow; the unregistered
+      state is CORRECT, not a regression.
+
+      DO NOT re-introduce the server-mode auto-start as a disconnect fix.
+      If remote actually fails to connect, the real causes are Anthropic bugs
+      (#34255 silent relay drop, #41024 Windows CLOSE_WAIT zombie,
+      #30691/#31487 session not auto-listed → open the session URL/QR directly).
+    exit_criteria: |
+      Closed. No task registered (correct end state). Per-terminal `/remote-env`
+      is the operator's chosen flow.
+    blocked_by: []
+    decision_refs: []
+    evidence_refs:
+      - memory/project_remote_control_normal_remote_env_2026_05_30.md
+      - memory/project_remote_control_host_autostart_2026_05_29.md
+    notes_ref: memory/project_remote_control_normal_remote_env_2026_05_30.md
+
   - id: mgc_o30_long_pooled_base_then_conditional_overlay_2026_05_29
     title: Re-frame MGC — test POOLED O30 long base edge, then DOW/vol as conditional overlay (NOT standalone slices)
     class: research
