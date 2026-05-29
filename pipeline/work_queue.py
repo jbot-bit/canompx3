@@ -7,6 +7,7 @@ Local multi-terminal ownership lives in ``.session/work_queue_leases.json``.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -279,6 +280,70 @@ def top_baton_items(queue: WorkQueue, *, limit: int = 3) -> list[WorkQueueItem]:
     return sorted_items(candidates)[:limit]
 
 
+def _normalize_handoff_step(text: str) -> str:
+    text = text.replace("â€”", " ").replace("—", " ").replace("–", " ").replace("?", " ")
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _expected_handoff_steps(queue: WorkQueue) -> list[str]:
+    return [_normalize_handoff_step(f"{item.title} â€” {item.next_action}") for item in top_baton_items(queue)]
+
+
+def _extract_handoff_active_steps(text: str) -> list[str]:
+    lines = text.splitlines()
+    in_next_steps = False
+    steps: list[str] = []
+    current: list[str] = []
+
+    def flush_current() -> None:
+        if current:
+            steps.append(_normalize_handoff_step(" ".join(current)))
+            current.clear()
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            if in_next_steps:
+                flush_current()
+                break
+            in_next_steps = stripped.startswith("## Next Steps")
+            continue
+        if not in_next_steps or not stripped:
+            continue
+
+        item_match = re.match(r"^\d+\.\s+(.*)$", stripped)
+        if item_match:
+            flush_current()
+            current.append(item_match.group(1))
+            continue
+        if current:
+            current.append(stripped)
+
+    if in_next_steps:
+        flush_current()
+    return steps
+
+
+def handoff_active_steps_match(root: Path = PROJECT_ROOT, queue: WorkQueue | None = None) -> bool | None:
+    """Compare only the generated active queue section in HANDOFF.md.
+
+    Session prose is intentionally ignored. When there are no active queue
+    items, any existing HANDOFF prose is acceptable and should not create a
+    false mismatch warning.
+    """
+    handoff_path = root / "HANDOFF.md"
+    if not handoff_path.exists():
+        return None
+
+    resolved_queue = queue or load_queue(root)
+    expected_steps = _expected_handoff_steps(resolved_queue)
+    if not expected_steps:
+        return True
+
+    observed_steps = _extract_handoff_active_steps(handoff_path.read_text(encoding="utf-8", errors="replace"))
+    return observed_steps == expected_steps
+
+
 def close_first_open_items(queue: WorkQueue) -> list[WorkQueueItem]:
     items = [item for item in queue.items if item.is_open and item.close_before_new_work]
     return sorted_items(items)
@@ -296,13 +361,7 @@ def queue_snapshot(root: Path = PROJECT_ROOT, *, now: datetime | None = None) ->
     conflicts = lease_conflicts(root=root, candidate_item_ids=[item.id for item in top], session_id=None)
     open_count = len([item for item in queue.items if item.is_open])
 
-    handoff_path = root / "HANDOFF.md"
-    rendered = render_handoff_text(root) if handoff_path.exists() else None
-    matches = (
-        None
-        if rendered is None
-        else handoff_path.read_text(encoding="utf-8", errors="replace").strip() == rendered.strip()
-    )
+    matches = handoff_active_steps_match(root, queue)
 
     return WorkQueueSnapshot(
         exists=True,

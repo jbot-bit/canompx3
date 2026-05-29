@@ -79,6 +79,8 @@ class GitContext(StrictModel):
     dirty_count: int
     dirty_files: list[str] = Field(default_factory=list)
     in_linked_worktree: bool
+    hooks_path: str | None = None
+    hooks_path_expected: bool = False
 
 
 class InterpreterContext(StrictModel):
@@ -216,6 +218,23 @@ def git_status_details(root: Path) -> tuple[list[str], bool, str | None]:
         message = result.stderr.strip() or result.stdout.strip() or "git status failed"
         return [], False, message
     return [line for line in result.stdout.splitlines() if line.strip()], True, None
+
+
+def git_hooks_path(root: Path) -> tuple[str | None, bool]:
+    result = _run_git(root, "config", "--get", "core.hooksPath")
+    hooks_path = result.stdout.strip() if result and result.returncode == 0 else None
+    if not hooks_path:
+        return hooks_path, False
+
+    normalized = hooks_path.replace("\\", "/").rstrip("/")
+    if normalized == ".githooks":
+        return hooks_path, True
+
+    try:
+        resolved = (root / hooks_path).resolve()
+        return hooks_path, resolved == (root / ".githooks").resolve()
+    except OSError:
+        return hooks_path, False
 
 
 def _canonical_repo_root(root: Path) -> tuple[Path, Path | None]:
@@ -556,9 +575,11 @@ def _parse_stage_file(path: Path) -> ActiveStage | None:
 
 
 def _stage_file_is_closed(text: str, metadata: dict[object, object]) -> bool:
-    status = metadata.get("status")
-    if status is not None:
-        normalized = re.sub(r"[^a-z0-9]+", " ", str(status).lower()).strip()
+    for field in ("status", "mode"):
+        value = metadata.get(field)
+        if value is None:
+            continue
+        normalized = re.sub(r"[^a-z0-9]+", " ", str(value).lower()).strip()
         if normalized.split(" ", 1)[0] in {"closed", "complete", "completed", "done", "implemented"}:
             return True
 
@@ -671,6 +692,7 @@ def build_system_context(
     selected_db = (db_path or GOLD_DB_PATH).resolve()
     canonical_db = GOLD_DB_PATH.resolve()
     repo_dirty_files, status_available, status_reason = git_status_details(selected_root)
+    hooks_path, hooks_path_expected = git_hooks_path(selected_root)
     git = GitContext(
         selected_root=str(selected_root),
         canonical_root=str(canonical_root),
@@ -683,6 +705,8 @@ def build_system_context(
         dirty_count=len(repo_dirty_files),
         dirty_files=repo_dirty_files,
         in_linked_worktree=selected_root != canonical_root,
+        hooks_path=hooks_path,
+        hooks_path_expected=hooks_path_expected,
     )
 
     return SystemContext(
@@ -815,6 +839,18 @@ def evaluate_system_policy(snapshot: SystemContext, action: PolicyAction) -> Pol
                 detail=detail,
             )
         )
+
+    if not snapshot.git.hooks_path_expected:
+        issue = _issue(
+            "warning",
+            "precommit_hook_inactive",
+            "Git pre-commit guardrail is not active.",
+            detail=f"core.hooksPath={snapshot.git.hooks_path or '<unset>'}; expected .githooks",
+        )
+        if action == "session_start_mutating":
+            blockers.append(issue.model_copy(update={"level": "blocker"}))
+        else:
+            warnings.append(issue)
 
     if not snapshot.git.status_available:
         warnings.append(

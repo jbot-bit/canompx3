@@ -84,6 +84,7 @@ if _SCRIPTS_TOOLS_DIR not in sys.path:
 
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from pipeline.work_queue import (
+    handoff_active_steps_match,
     load_queue,
     top_baton_items,
 )
@@ -520,6 +521,7 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     handoff_path = root / "HANDOFF.md"
     queue_path = root / "docs" / "runtime" / "action-queue.yaml"
     queue_steps: list[str] = []
+    queue = None
     if queue_path.exists():
         try:
             queue = load_queue(root)
@@ -556,11 +558,10 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     lines = text.splitlines()
     blocker_keywords = {"failure", "broken", "missing", "error", "cannot", "blocked"}
     context = _parse_rolling_handoff(lines) or _parse_legacy_handoff(lines)
-    if queue_steps:
+    if queue_steps and queue is not None:
         parsed_steps = context.get("next_steps", [])
-        if parsed_steps and [_normalize_handoff_step(step) for step in parsed_steps] != [
-            _normalize_handoff_step(step) for step in queue_steps
-        ]:
+        active_steps_match = handoff_active_steps_match(root, queue)
+        if parsed_steps and active_steps_match is False:
             items.append(
                 PulseItem(
                     category="decaying",
@@ -1477,6 +1478,7 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
             if issue.code in {
                 "wrong_interpreter",
                 "handoff_queue_mismatch",
+                "precommit_hook_inactive",
                 "stale_queue_items",
                 "close_first_carryover",
                 "queue_item_conflict",
@@ -1859,6 +1861,85 @@ def collect_action_queue(canonical: Path, *, now: datetime | None = None) -> lis
         )
 
     return items
+
+
+def collect_debt_ledger(root: Path) -> list[PulseItem]:
+    """Surface open debt bullets as explicit pulse follow-up items."""
+    debt_path = root / "docs" / "runtime" / "debt-ledger.md"
+    if not debt_path.exists():
+        return []
+
+    try:
+        lines = debt_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+
+    items: list[PulseItem] = []
+    in_open_debt = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "## Open Debt":
+            in_open_debt = True
+            continue
+        if in_open_debt and stripped.startswith("## "):
+            break
+        if not in_open_debt or not line.startswith("- "):
+            continue
+        if stripped.startswith("- ~~"):
+            continue
+
+        text = stripped.removeprefix("- ").strip()
+        match = re.match(r"`([^`]+)`\s*(?:â€”|—|–|:|-)\s*(.*)", text)
+        debt_id = match.group(1) if match else None
+        description = match.group(2) if match else text
+        summary = f"{debt_id}: {description}" if debt_id else description
+        if len(summary) > 140:
+            summary = summary[:137] + "..."
+        items.append(
+            PulseItem(
+                category="unactioned",
+                severity="low",
+                source="debt_ledger",
+                summary=summary,
+                detail="docs/runtime/debt-ledger.md",
+            )
+        )
+
+    return items
+
+
+def collect_followup_coverage(canonical: Path, items: list[PulseItem]) -> list[PulseItem]:
+    """Flag actionable pulse findings when the canonical queue has no open work."""
+    queue_path = canonical / "docs" / "runtime" / "action-queue.yaml"
+    if not queue_path.exists():
+        return []
+
+    try:
+        queue = load_queue(canonical)
+    except Exception:
+        return []
+    if any(item.is_open for item in queue.items):
+        return []
+
+    actionable = [
+        item
+        for item in items
+        if item.source != "followup_coverage"
+        and (item.category == "broken" or (item.category == "decaying" and item.severity == "high"))
+    ]
+    if not actionable:
+        return []
+
+    return [
+        PulseItem(
+            category="unactioned",
+            severity="high",
+            source="followup_coverage",
+            summary=(f"Action queue has 0 open items but pulse found {len(actionable)} broken/high-decay finding(s)"),
+            detail=", ".join(f"{item.source}:{item.summary}" for item in actionable[:5]),
+            action="Add or intentionally park queue coverage before treating follow-up as handled.",
+        )
+    ]
 
 
 def collect_ralph_deferred(root: Path) -> list[PulseItem]:
@@ -2388,6 +2469,7 @@ def build_pulse(
     conflict_items = [] if fast else collect_worktree_conflicts(canonical)
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
+    debt_items = collect_debt_ledger(root)
     ralph_items = collect_ralph_deferred(root)
     session_delta = collect_session_delta(root, canonical, tool_name=tool_name)
     upcoming = collect_upcoming_sessions(db_path)
@@ -2430,8 +2512,10 @@ def build_pulse(
         + worktree_items
         + git_items
         + action_items
+        + debt_items
         + ralph_items
     )
+    all_items += collect_followup_coverage(canonical, all_items)
 
     # Attach skill invocation suggestions
     _attach_skill_suggestions(all_items)
