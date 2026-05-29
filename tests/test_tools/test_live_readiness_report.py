@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import duckdb
 import pytest
@@ -81,6 +82,17 @@ def _install_happy_path(
         live_readiness_report,
         "_load_validated_strategy_ids",
         lambda _db_path: validated_ids or ["SID_A"],
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "get_profile",
+        lambda _profile_id: SimpleNamespace(
+            profile_id="topstep_50k_mnq_auto",
+            firm="topstep",
+            account_size=50_000,
+            copies=1,
+            daily_loss_dollars=450.0,
+        ),
     )
     monkeypatch.setattr(
         live_readiness_report,
@@ -722,6 +734,35 @@ def test_strict_zero_warn_blocks_when_live_stage_pending(tmp_path: Path, monkeyp
     assert report["live_stage_acceptance"]["stages"][0]["green"] is False
     assert report["strict_zero_warn"]["green"] is False
     assert any("live stage" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+
+
+def test_strict_zero_warn_blocks_multi_copy_without_shadow_loss_protection(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(monkeypatch, allocation_path)
+    monkeypatch.setattr(
+        live_readiness_report,
+        "get_profile",
+        lambda _profile_id: SimpleNamespace(
+            profile_id="topstep_50k_mnq_auto",
+            firm="topstep",
+            account_size=50_000,
+            copies=2,
+            daily_loss_dollars=450.0,
+        ),
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["profile_launch"]["copies"] == 2
+    assert report["profile_launch"]["shadow_copy_loss_protection"] is False
+    assert report["strict_zero_warn"]["green"] is False
+    assert any("copies>1" in blocker for blocker in report["strict_zero_warn"]["blockers"])
 
 
 def test_main_strict_zero_warn_exits_nonzero_when_not_green(monkeypatch, capsys) -> None:

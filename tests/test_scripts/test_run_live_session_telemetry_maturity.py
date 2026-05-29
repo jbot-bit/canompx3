@@ -24,7 +24,12 @@ from trading_app.live import session_orchestrator
 from trading_app.live.telemetry_maturity import MIN_TELEMETRY_TRADING_DAYS
 
 
-def _write_n_distinct_days(signals_dir: Path, n: int, instrument: str = "MNQ") -> None:
+def _write_n_distinct_days(
+    signals_dir: Path,
+    n: int,
+    instrument: str = "MNQ",
+    profile_id: str | None = None,
+) -> None:
     """Synthesize n distinct trading_day SESSION_START records for instrument."""
     signals_dir.mkdir(parents=True, exist_ok=True)
     for i in range(n):
@@ -36,6 +41,8 @@ def _write_n_distinct_days(signals_dir: Path, n: int, instrument: str = "MNQ") -
             "contract": f"CON.F.US.{instrument}.M26",
             "mode": "signal_only",
         }
+        if profile_id is not None:
+            rec["profile_id"] = profile_id
         (signals_dir / f"live_signals_{day}.jsonl").write_text(json.dumps(rec) + "\n", encoding="utf-8")
 
 
@@ -117,8 +124,8 @@ def test_unrecognized_instrument_defaults_to_mnq(synthetic_signals_dir):
 # The 30-day live-uptime floor was never canonical doctrine. Below-floor
 # verdicts are advisory WARN for demo / Express-Funded prop live; only
 # real-capital live (is_express_funded=False, unknown profile, or no
-# profile) preserves the original FAIL. See telemetry_maturity.py module
-# docstring "DOCTRINE NOTE" for the full rationale.
+# profile) preserves the original FAIL. Live promotion now also requires the
+# profile-scoped maturity floor before routing orders.
 
 
 def test_below_floor_demo_returns_warn(synthetic_signals_dir):
@@ -131,15 +138,18 @@ def test_below_floor_demo_returns_warn(synthetic_signals_dir):
     assert "29/30" in result.message
 
 
-def test_below_floor_live_xfa_profile_returns_warn(synthetic_signals_dir):
-    """--live + Express-Funded prop profile (is_express_funded=True) is advisory WARN, not FAIL."""
-    _write_n_distinct_days(synthetic_signals_dir, n=MIN_TELEMETRY_TRADING_DAYS - 1)
+def test_below_floor_live_xfa_profile_returns_failed(synthetic_signals_dir):
+    """--live + Express-Funded prop profile still blocks below the live-readiness floor."""
+    _write_n_distinct_days(
+        synthetic_signals_dir,
+        n=MIN_TELEMETRY_TRADING_DAYS - 1,
+        profile_id="topstep_50k_mnq_auto",
+    )
     # topstep_50k_mnq_auto is the active deployment profile; per
     # prop_profiles.AccountProfile default at line 107, is_express_funded=True.
     result = _check_telemetry_maturity(_ctx(signal_only=False, demo=False, profile_id="topstep_50k_mnq_auto"))
-    assert result.passed is True, "Express-Funded prop must not block on advisory gate"
-    assert result.message.startswith("WARN:"), "must emit WARN status for dashboard parser"
-    assert "Express-Funded prop" in result.message
+    assert result.passed is False, "live profile must block until telemetry maturity is green"
+    assert result.message.startswith("FAILED:")
     assert "29/30" in result.message
 
 

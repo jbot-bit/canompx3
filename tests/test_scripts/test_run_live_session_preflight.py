@@ -246,8 +246,11 @@ def test_preflight_checks_is_an_ordered_list():
         "_check_contracts",
         "_check_notifications",
         "_check_trade_journal",
+        "_check_repo_drift_for_live",
         "_check_telemetry_maturity",
+        "_check_live_readiness_report",
         "_check_copy_trading_accounts",
+        "_check_shadow_copy_loss_protection",
     ]
 
 
@@ -262,7 +265,7 @@ def test_no_hardcoded_checks_total_constant():
 # ---------- A.6.5: Copy-trading account-resolution check ----------
 
 
-def _make_copy_trading_ctx(profile_id, requested_account_id, all_accounts=None):
+def _make_copy_trading_ctx(profile_id, requested_account_id, all_accounts=None, requested_copies=0):
     """Build a PreflightContext + components stub for the copy-trading check.
 
     `all_accounts` is the list the stubbed contracts_class.resolve_all_account_ids()
@@ -291,6 +294,7 @@ def _make_copy_trading_ctx(profile_id, requested_account_id, all_accounts=None):
         components=components,
         profile_id=profile_id,
         requested_account_id=requested_account_id,
+        requested_copies=requested_copies,
     )
 
 
@@ -358,6 +362,25 @@ def test_copy_trading_check_passes_with_none_account_id(monkeypatch):
     assert "2 accounts" in result.message
 
 
+def test_copy_trading_check_honors_requested_single_copy(monkeypatch):
+    """--copies 1 overrides profile.copies for the first live pilot."""
+    fake_profile = SimpleNamespace(copies=2)
+    monkeypatch.setattr(
+        "trading_app.prop_profiles.ACCOUNT_PROFILES",
+        {"multi_copy_profile": fake_profile},
+    )
+    ctx = _make_copy_trading_ctx(
+        profile_id="multi_copy_profile",
+        requested_account_id=None,
+        all_accounts=[(21944866, "PA-XFA-001"), (21944867, "PA-XFA-002")],
+        requested_copies=1,
+    )
+    result = rls._check_copy_trading_accounts(ctx)
+    assert result.passed is True
+    assert "SKIPPED" in result.message
+    assert "copies=1" in result.message
+
+
 def test_copy_trading_check_skipped_when_signal_only(monkeypatch):
     """copies=2, signal_only=True → SKIPPED (no broker account-resolution call).
 
@@ -409,6 +432,53 @@ def test_copy_trading_check_fails_when_auth_failed():
         pp.ACCOUNT_PROFILES = original  # type: ignore[misc]
     assert result.passed is False
     assert "auth failed" in result.message
+
+
+def test_shadow_copy_loss_protection_blocks_live_multi_copy(monkeypatch):
+    fake_profile = SimpleNamespace(copies=2)
+    monkeypatch.setattr(
+        "trading_app.prop_profiles.ACCOUNT_PROFILES",
+        {"multi_copy_profile": fake_profile},
+    )
+    ctx = _make_copy_trading_ctx(profile_id="multi_copy_profile", requested_account_id=None)
+    ctx.demo = False
+    result = rls._check_shadow_copy_loss_protection(ctx)
+    assert result.passed is False
+    assert "SHADOW-MLL" in result.message
+    assert "copies=2" in result.message
+
+
+def test_shadow_copy_loss_protection_allows_live_single_copy_override(monkeypatch):
+    fake_profile = SimpleNamespace(copies=2)
+    monkeypatch.setattr(
+        "trading_app.prop_profiles.ACCOUNT_PROFILES",
+        {"multi_copy_profile": fake_profile},
+    )
+    ctx = _make_copy_trading_ctx(
+        profile_id="multi_copy_profile",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = False
+    result = rls._check_shadow_copy_loss_protection(ctx)
+    assert result.passed is True
+    assert "copies=1" in result.message
+
+
+def test_repo_drift_gate_blocks_dirty_live_repo(monkeypatch):
+    monkeypatch.setattr(
+        rls.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="## main...origin/main\n M scripts/run_live_session.py\n",
+            stderr="",
+        ),
+    )
+    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
+    result = rls._check_repo_drift_for_live(ctx)
+    assert result.passed is False
+    assert "repo dirty" in result.message
 
 
 def test_dashboard_auto_launch_disabled_for_dashboard_origin(monkeypatch):

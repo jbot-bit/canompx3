@@ -70,6 +70,7 @@ from trading_app.live.telemetry_maturity import (  # noqa: E402
     evaluate_telemetry_maturity,
 )
 from trading_app.prop_profiles import (  # noqa: E402
+    get_profile,
     get_profile_lane_definitions,
     legacy_lane_allocation_path,
     resolve_profile_id,
@@ -401,6 +402,25 @@ def _evaluate_live_stage_acceptance() -> dict[str, Any]:
     }
 
 
+def _load_profile_launch_summary(profile_id: str) -> dict[str, Any]:
+    profile = get_profile(profile_id)
+    copies = int(profile.copies)
+    daily_loss_dollars = profile.daily_loss_dollars
+    return {
+        "profile_id": profile.profile_id,
+        "firm": profile.firm,
+        "account_size": profile.account_size,
+        "copies": copies,
+        "daily_loss_dollars": daily_loss_dollars,
+        "shadow_copy_loss_protection": copies <= 1,
+        "shadow_copy_loss_protection_detail": (
+            "single-account pilot"
+            if copies <= 1
+            else "primary software daily-loss/HWM belt only; shadows rely on broker/account-side controls"
+        ),
+    }
+
+
 def _build_strict_zero_warn_summary(
     *,
     deployment_summary: dict[str, Any],
@@ -410,6 +430,7 @@ def _build_strict_zero_warn_summary(
     active_lanes: list[dict[str, Any]],
     telemetry_maturity: dict[str, Any],
     live_stage_acceptance: dict[str, Any],
+    profile_launch: dict[str, Any],
 ) -> dict[str, Any]:
     blockers: list[str] = []
     c11 = criterion11 or {}
@@ -482,6 +503,12 @@ def _build_strict_zero_warn_summary(
         if stage.get("green") is not True:
             blockers.append(f"Live stage not green: {stage.get('path')}")
 
+    if int(profile_launch.get("copies") or 0) > 1 and profile_launch.get("shadow_copy_loss_protection") is not True:
+        blockers.append(
+            "Profile copies>1 without per-shadow software loss protection: "
+            f"copies={profile_launch.get('copies')}"
+        )
+
     return {
         "green": not blockers,
         "blockers": blockers,
@@ -502,6 +529,7 @@ def build_live_readiness_report(
 
     blocked_reason_by_strategy = lifecycle.get("blocked_reason_by_strategy", {})
     strategy_states = lifecycle.get("strategy_states", {})
+    profile_launch = _load_profile_launch_summary(resolved_profile_id)
     allocator_summary = _load_allocator_summary(
         resolved_profile_id,
         allocation_path,
@@ -547,6 +575,7 @@ def build_live_readiness_report(
         active_lanes=active_lanes,
         telemetry_maturity=telemetry_maturity,
         live_stage_acceptance=live_stage_acceptance,
+        profile_launch=profile_launch,
     )
 
     return {
@@ -566,6 +595,7 @@ def build_live_readiness_report(
         "allocator_summary": allocator_summary,
         "telemetry_maturity": telemetry_maturity,
         "live_stage_acceptance": live_stage_acceptance,
+        "profile_launch": profile_launch,
         "strict_zero_warn": strict_zero_warn,
         "conditional_overlays": lifecycle.get("conditional_overlays"),
     }
@@ -578,6 +608,7 @@ def _render_text(report: dict[str, Any]) -> str:
     allocator = report["allocator_summary"] or {}
     telemetry = report.get("telemetry_maturity") or {}
     live_stage_acceptance = report.get("live_stage_acceptance") or {}
+    profile_launch = report.get("profile_launch") or {}
     strict_zero_warn = report.get("strict_zero_warn") or {}
 
     lines = [
@@ -609,6 +640,12 @@ def _render_text(report: dict[str, Any]) -> str:
             f"lanes={len(allocator.get('active_lanes', []))} "
             f"paused={len(allocator.get('paused_lanes', []))} "
             f"stale={len(allocator.get('stale_lanes', []))}"
+        ),
+        (
+            "Profile launch: "
+            f"copies={profile_launch.get('copies')} "
+            f"shadow_loss_protection={profile_launch.get('shadow_copy_loss_protection')} "
+            f"detail={profile_launch.get('shadow_copy_loss_protection_detail')}"
         ),
         (
             "Strict zero-warn: "
@@ -672,6 +709,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
     allocator = report["allocator_summary"] or {}
     telemetry = report.get("telemetry_maturity") or {}
     live_stage_acceptance = report.get("live_stage_acceptance") or {}
+    profile_launch = report.get("profile_launch") or {}
     strict_zero_warn = report.get("strict_zero_warn") or {}
 
     lines = [
@@ -709,6 +747,12 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"- Active lanes: `{len(allocator.get('active_lanes', []))}`",
         f"- Paused lanes: `{len(allocator.get('paused_lanes', []))}`",
         f"- Stale lanes: `{len(allocator.get('stale_lanes', []))}`",
+        "",
+        "## Profile Launch",
+        "",
+        f"- Copies: `{profile_launch.get('copies')}`",
+        f"- Shadow loss protection: `{profile_launch.get('shadow_copy_loss_protection')}`",
+        f"- Detail: `{profile_launch.get('shadow_copy_loss_protection_detail')}`",
         "",
         "## Strict zero-warn",
         "",

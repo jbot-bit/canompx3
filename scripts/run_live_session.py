@@ -28,6 +28,7 @@ import asyncio
 import io
 import logging
 import os
+import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -205,6 +206,7 @@ class PreflightContext:
     profile_id: str | None = None
     requested_account_id: int | None = None
     signal_only: bool = False
+    requested_copies: int = 0
 
 
 @dataclass
@@ -375,6 +377,39 @@ def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, f"FAILED: {e}")
 
 
+def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
+    """Repo drift gate for live mode"""
+    if ctx.signal_only:
+        return CheckResult(True, "SKIPPED (signal-only)")
+    if ctx.demo:
+        return CheckResult(True, "SKIPPED (demo)")
+
+    root = Path(__file__).resolve().parents[1]
+    try:
+        result = subprocess.run(
+            ["git", "status", "--short", "--branch"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return CheckResult(False, f"FAILED: cannot verify git state ({exc})")
+    if result.returncode != 0:
+        detail = result.stderr.strip() or str(result.returncode)
+        return CheckResult(False, f"FAILED: git status failed ({detail})")
+
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    branch = lines[0] if lines else "## unknown"
+    changes = lines[1:]
+    if "behind" in branch.lower():
+        return CheckResult(False, f"FAILED: repo behind origin ({branch})")
+    if changes:
+        return CheckResult(False, f"FAILED: repo dirty ({len(changes)} path(s)); clean or isolate live launch branch")
+    return CheckResult(True, f"OK ({branch})")
+
+
 def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
     """Telemetry maturity (signal-log distinct trading_days vs floor).
 
@@ -409,7 +444,7 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
 
         signals_dir = SessionOrchestrator.SIGNALS_DIR
         target_instrument = ctx.instrument if ctx.instrument in ACTIVE_ORB_INSTRUMENTS else "MNQ"
-        report = evaluate_telemetry_maturity(signals_dir, instrument=target_instrument)
+        report = evaluate_telemetry_maturity(signals_dir, instrument=target_instrument, profile_id=ctx.profile_id)
 
         n = report.n_unique_trading_days
         floor = report.min_required
@@ -446,8 +481,15 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
                 f"{target_instrument} trading_days; run --signal-only until {floor})",
             )
 
-        # Demo OR Express-Funded prop live below-floor → advisory WARN.
-        mode_label = "demo" if ctx.demo else "Express-Funded prop"
+        # Demo below-floor stays advisory; live below-floor blocks.
+        if not ctx.demo:
+            return CheckResult(
+                False,
+                f"FAILED: UNVERIFIED_INSUFFICIENT_TELEMETRY ({n}/{floor} distinct "
+                f"{target_instrument} trading_days for profile={ctx.profile_id}; "
+                f"run --signal-only until {floor})",
+            )
+        mode_label = "demo"
         return CheckResult(
             True,
             f"WARN: telemetry below floor ({n}/{floor} distinct {target_instrument} "
@@ -455,6 +497,35 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
         )
     except Exception as e:
         return CheckResult(False, f"FAILED: {e}")
+
+
+def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
+    """Strict live-readiness report"""
+    if ctx.signal_only:
+        return CheckResult(True, "SKIPPED (signal-only)")
+    if ctx.profile_id is None:
+        if ctx.demo:
+            return CheckResult(True, "SKIPPED (no profile)")
+        return CheckResult(False, "FAILED: live launch requires --profile for strict readiness")
+
+    try:
+        from scripts.tools.live_readiness_report import build_live_readiness_report
+
+        report = build_live_readiness_report(profile_id=ctx.profile_id)
+        strict = report.get("strict_zero_warn") or {}
+        blockers = list(strict.get("blockers") or [])
+        if strict.get("green") is True:
+            return CheckResult(True, "OK (strict_zero_warn green)")
+        msg = "; ".join(str(blocker) for blocker in blockers[:3])
+        if len(blockers) > 3:
+            msg += f"; +{len(blockers) - 3} more"
+        if ctx.demo:
+            return CheckResult(True, f"WARN: live readiness not green for demo ({msg})")
+        return CheckResult(False, f"FAILED: live readiness not green ({msg})")
+    except Exception as e:
+        if ctx.demo:
+            return CheckResult(True, f"WARN: live readiness report unavailable in demo ({e})")
+        return CheckResult(False, f"FAILED: live readiness report unavailable ({e})")
 
 
 def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
@@ -473,8 +544,9 @@ def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
         prof = ACCOUNT_PROFILES.get(ctx.profile_id)
         if prof is None:
             return CheckResult(False, f"FAILED: profile {ctx.profile_id!r} not in ACCOUNT_PROFILES")
-        if prof.copies <= 1:
-            return CheckResult(True, f"SKIPPED (profile.copies={prof.copies})")
+        n_copies = ctx.requested_copies if ctx.requested_copies > 0 else prof.copies
+        if n_copies <= 1:
+            return CheckResult(True, f"SKIPPED (copies={n_copies})")
         if ctx.signal_only:
             return CheckResult(True, "SKIPPED (signal-only — no account resolution needed)")
         if ctx.components is None:
@@ -488,11 +560,38 @@ def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
         # Dry-run the exact selection helper that runs at live-start (line 688).
         _select_primary_and_shadow_accounts(
             all_accounts=all_accounts,
-            n_copies=prof.copies,
+            n_copies=n_copies,
             requested_account_id=ctx.requested_account_id,
         )
         n = len(all_accounts)
-        return CheckResult(True, f"OK (copies={prof.copies}, {n} accounts discovered)")
+        return CheckResult(True, f"OK (copies={n_copies}, {n} accounts discovered)")
+    except Exception as e:
+        return CheckResult(False, f"FAILED: {e}")
+
+
+def _check_shadow_copy_loss_protection(ctx: PreflightContext) -> CheckResult:
+    """Shadow-copy loss protection"""
+    if ctx.signal_only:
+        return CheckResult(True, "SKIPPED (signal-only)")
+    if ctx.profile_id is None:
+        return CheckResult(True, "SKIPPED (no profile)")
+
+    try:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        prof = ACCOUNT_PROFILES.get(ctx.profile_id)
+        if prof is None:
+            return CheckResult(False, f"FAILED: profile {ctx.profile_id!r} not in ACCOUNT_PROFILES")
+        n_copies = ctx.requested_copies if ctx.requested_copies > 0 else prof.copies
+        if n_copies <= 1:
+            return CheckResult(True, f"OK (single-account pilot, copies={n_copies})")
+        if ctx.demo:
+            return CheckResult(True, f"WARN: multi-copy demo only (copies={n_copies}); live requires copies=1")
+        return CheckResult(
+            False,
+            f"FAILED: SHADOW-MLL blocker - live copies={n_copies} but software daily-loss/HWM "
+            "protection is primary-account only. Use --copies 1 or implement per-shadow loss belts.",
+        )
     except Exception as e:
         return CheckResult(False, f"FAILED: {e}")
 
@@ -510,8 +609,11 @@ PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_contracts,
     _check_notifications,
     _check_trade_journal,
+    _check_repo_drift_for_live,
     _check_telemetry_maturity,
+    _check_live_readiness_report,
     _check_copy_trading_accounts,
+    _check_shadow_copy_loss_protection,
 ]
 
 
@@ -528,6 +630,7 @@ def _run_preflight(
     profile_id: str | None = None,
     requested_account_id: int | None = None,
     signal_only: bool = False,
+    requested_copies: int = 0,
 ) -> bool:
     """Pre-flight validation. Returns True if all checks pass.
 
@@ -549,6 +652,7 @@ def _run_preflight(
         profile_id=profile_id,
         requested_account_id=requested_account_id,
         signal_only=signal_only,
+        requested_copies=requested_copies,
     )
 
     checks_total = len(PREFLIGHT_CHECKS)
@@ -856,6 +960,7 @@ def main() -> None:
                     profile_id=args.profile,
                     requested_account_id=args.account_id,
                     signal_only=args.signal_only,
+                    requested_copies=args.copies,
                 )
                 if not ok:
                     all_ok = False
@@ -869,6 +974,7 @@ def main() -> None:
                 profile_id=args.profile,
                 requested_account_id=args.account_id,
                 signal_only=args.signal_only,
+                requested_copies=args.copies,
             )
             sys.exit(0 if ok else 1)
 
@@ -999,6 +1105,13 @@ def main() -> None:
 
         prof = get_profile(args.profile)
         n_copies = prof.copies
+
+    if not demo and not signal_only and n_copies > 1:
+        print(
+            "ERROR: live multi-copy launch blocked by SHADOW-MLL. "
+            "Use --copies 1 for the first live pilot or implement per-shadow loss belts."
+        )
+        sys.exit(1)
 
     if n_copies > 1 and not signal_only:
         from trading_app.live.broker_factory import create_broker_components, get_broker_name
