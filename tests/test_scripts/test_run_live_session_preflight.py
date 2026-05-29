@@ -67,6 +67,33 @@ def stub_daily_features(monkeypatch):
 
 
 @pytest.fixture
+def stub_capital_state_ok(monkeypatch):
+    """Make a profiled routing session fully valid for the full-preflight smoke
+    tests, now that _check_survival_report / _check_sr_state fail-closed without
+    a profile (baf99cfe H2 fix). The smoke tests launch with
+    profile_id='topstep_50k_mnq_auto' to satisfy the new profile-required gate;
+    this fixture supplies the two collaborators that profiled run then needs:
+
+    - read_lifecycle_state → C11 gate_ok / C12 valid (the gates under fix).
+    - ACCOUNT_PROFILES['topstep_50k_mnq_auto'].copies=1 so the unrelated
+      copy-trading / shadow-MLL checks SKIP. The real profile is copies=2, which
+      would (correctly) trip _check_shadow_copy_loss_protection — out of scope
+      for these count-derivation smoke tests, so we pin a single-copy stub.
+    """
+    monkeypatch.setattr(
+        "trading_app.lifecycle_state.read_lifecycle_state",
+        lambda profile_id=None: {
+            "criterion11": {"gate_ok": True, "operational_pass_probability": 0.85},
+            "criterion12": {"available": True, "valid": True, "counts": {"ALARM": 0, "NO_DATA": 0}},
+        },
+    )
+    monkeypatch.setattr(
+        "trading_app.prop_profiles.ACCOUNT_PROFILES",
+        {"topstep_50k_mnq_auto": SimpleNamespace(copies=1)},
+    )
+
+
+@pytest.fixture
 def stub_telemetry_mature(monkeypatch, tmp_path):
     """Synthesize >=30 distinct MNQ trading_days so _check_telemetry_maturity passes.
 
@@ -98,7 +125,7 @@ def stub_telemetry_mature(monkeypatch, tmp_path):
 
 
 def test_checks_total_equals_len_checks(
-    monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature
+    monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature, stub_capital_state_ok
 ):
     """Inject an extra check; the [i/N] header MUST reflect the new count.
 
@@ -129,7 +156,7 @@ def test_checks_total_equals_len_checks(
 
     monkeypatch.setattr(tj, "TradeJournal", lambda *a, **kw: SimpleNamespace(is_healthy=True))
 
-    rls._run_preflight("MNQ", "topstep", demo=True, portfolio=_build_portfolio())
+    rls._run_preflight("MNQ", "topstep", demo=True, portfolio=_build_portfolio(), profile_id="topstep_50k_mnq_auto")
     out = capsys.readouterr().out
     assert f"[1/{new_total}]" in out, f"first header must read [1/{new_total}] with {new_total} checks:\n{out}"
     assert f"[{new_total}/{new_total}]" in out
@@ -137,7 +164,7 @@ def test_checks_total_equals_len_checks(
 
 
 def test_known_failing_check_counted_toward_total(
-    monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature
+    monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature, stub_capital_state_ok
 ):
     """Inject a fail-always check; total = baseline+1, passed = baseline, return False.
 
@@ -162,7 +189,9 @@ def test_known_failing_check_counted_toward_total(
 
     monkeypatch.setattr(tj, "TradeJournal", lambda *a, **kw: SimpleNamespace(is_healthy=True))
 
-    result = rls._run_preflight("MNQ", "topstep", demo=True, portfolio=_build_portfolio())
+    result = rls._run_preflight(
+        "MNQ", "topstep", demo=True, portfolio=_build_portfolio(), profile_id="topstep_50k_mnq_auto"
+    )
     out = capsys.readouterr().out
     assert f"Preflight: {baseline}/{baseline + 1} passed" in out
     assert "FIX FAILURES" in out
@@ -172,7 +201,9 @@ def test_known_failing_check_counted_toward_total(
 # ---------- Behavioral regression: refactor preserves observable shape ----------
 
 
-def test_all_pass_smoke(monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature):
+def test_all_pass_smoke(
+    monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature, stub_capital_state_ok
+):
     """All baseline checks pass with valid mocks; final stdout contains the
     'All clear' summary and bool=True. Total derives from len(PREFLIGHT_CHECKS)."""
     n = len(rls.PREFLIGHT_CHECKS)
@@ -189,7 +220,9 @@ def test_all_pass_smoke(monkeypatch, capsys, all_pass_components, stub_daily_fea
 
     monkeypatch.setattr(tj, "TradeJournal", lambda *a, **kw: SimpleNamespace(is_healthy=True))
 
-    result = rls._run_preflight("MNQ", "topstep", demo=True, portfolio=_build_portfolio())
+    result = rls._run_preflight(
+        "MNQ", "topstep", demo=True, portfolio=_build_portfolio(), profile_id="topstep_50k_mnq_auto"
+    )
     out = capsys.readouterr().out
     assert f"Preflight: {n}/{n} passed" in out
     assert "All clear" in out
@@ -297,6 +330,39 @@ def test_capital_state_checks_skip_signal_only(monkeypatch):
 
     assert rls._check_survival_report(ctx).passed is True
     assert rls._check_sr_state(ctx).passed is True
+
+
+def test_capital_state_checks_fail_closed_when_routing_without_profile(monkeypatch):
+    """baf99cfe H2 defect regression: a --demo/--live session with no --profile
+    routes orders (signal_only=False) but C11/C12 lifecycle state is profile-keyed.
+
+    Pre-fix both gates SKIPPED (passed=True) with "no profile - raw-baseline path",
+    letting an order-routing session pass with zero survival/SR evidence. They
+    MUST now FAIL-CLOSED. read_lifecycle_state must never be reached (there is no
+    profile to key on) — patch it to raise so any read is a test failure.
+    """
+
+    def _raise(*_args, **_kwargs):
+        raise AssertionError("must not read lifecycle state when profile_id is None")
+
+    monkeypatch.setattr("trading_app.lifecycle_state.read_lifecycle_state", _raise)
+    ctx = rls.PreflightContext(
+        instrument="MNQ",
+        broker_name="topstep",
+        demo=True,  # order routing active (signal_only defaults False)
+        portfolio=_build_portfolio(),
+        profile_id=None,
+    )
+
+    survival = rls._check_survival_report(ctx)
+    sr_state = rls._check_sr_state(ctx)
+
+    assert survival.passed is False, "C11 must fail-closed when routing without a profile"
+    assert "--profile" in survival.message
+    assert "Criterion 11" in survival.message
+    assert sr_state.passed is False, "C12 must fail-closed when routing without a profile"
+    assert "--profile" in sr_state.message
+    assert "Criterion 12" in sr_state.message
 
 
 # ---------- Contract on the canonical helpers ----------

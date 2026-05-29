@@ -266,7 +266,18 @@ def _check_survival_report(ctx: PreflightContext) -> CheckResult:
     if ctx.signal_only:
         return CheckResult(True, "SKIPPED (signal-only accumulates evidence; no capital at risk)")
     if ctx.profile_id is None:
-        return CheckResult(True, "SKIPPED (no profile - raw-baseline path)")
+        # FAIL-CLOSED: a --demo/--live session here routes orders
+        # (signal_only is False), but C11 lifecycle state is profile-keyed —
+        # with no profile there is no survival evidence to validate. Skipping
+        # would let an order-routing session pass with zero evidence. Launch
+        # with --profile so the capital gate has something to check. (Closes
+        # baf99cfe H2 audit defect; sanctioned launches always pass --profile.)
+        return CheckResult(
+            False,
+            "FAILED: order-routing session has no --profile; Criterion 11 "
+            "survival evidence is profile-keyed and cannot be validated. "
+            "Launch with --profile or use --signal-only.",
+        )
     try:
         from trading_app.lifecycle_state import read_lifecycle_state
 
@@ -287,7 +298,15 @@ def _check_sr_state(ctx: PreflightContext) -> CheckResult:
     if ctx.signal_only:
         return CheckResult(True, "SKIPPED (signal-only accumulates SR stream; no capital at risk)")
     if ctx.profile_id is None:
-        return CheckResult(True, "SKIPPED (no profile - raw-baseline path)")
+        # FAIL-CLOSED: see _check_survival_report — an order-routing session
+        # with no --profile has no profile-keyed C12 SR state to validate, so
+        # the gate must block rather than silently pass. (baf99cfe H2 defect.)
+        return CheckResult(
+            False,
+            "FAILED: order-routing session has no --profile; Criterion 12 SR "
+            "state is profile-keyed and cannot be validated. Launch with "
+            "--profile or use --signal-only.",
+        )
     try:
         from trading_app.lifecycle_state import read_lifecycle_state
 
