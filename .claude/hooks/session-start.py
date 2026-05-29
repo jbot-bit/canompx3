@@ -618,6 +618,173 @@ def _session_lock_lines() -> tuple[list[str], bool]:
     )
 
 
+# A sibling worktree counts as ACTIVELY HOT if it has uncommitted changes AND a
+# tracked file modified within this many seconds. mtime — not PID liveness — is
+# the signal: PIDs go dead across Windows process trees constantly (the existing
+# PID lock under-reports for exactly this reason), but a file touched two minutes
+# ago in a dirty tree is an unambiguous live editor. Stale dirty worktrees
+# abandoned hours/days ago fall outside the window and never trip the block.
+_ACTIVE_SIBLING_WINDOW_SECS = 15 * 60
+
+
+def _most_recent_tracked_mtime(wt_path: str, dirty_rel_paths: list[str]) -> float | None:
+    """Return the newest mtime (epoch secs) among a worktree's dirty TRACKED files.
+
+    Only the paths git reports as modified/added are stat'd — untracked churn
+    (logs, .venv, generated artifacts) is excluded by the caller so background
+    file writes can't masquerade as a live editor. Returns None if nothing
+    could be stat'd (all paths vanished / unreadable).
+    """
+    newest: float | None = None
+    for rel in dirty_rel_paths:
+        full = os.path.join(wt_path, rel)
+        try:
+            m = os.stat(full).st_mtime
+        except OSError:
+            continue  # file vanished mid-scan (rename/delete) — skip, don't fail
+        if newest is None or m > newest:
+            newest = m
+    return newest
+
+
+def _dirty_tracked_paths(wt_path: str) -> list[str]:
+    """Relative paths of TRACKED files with uncommitted changes in a worktree.
+
+    Uses `--untracked-files=no` so brand-new untracked files (the background-
+    writer false-positive class) are ignored — only edits to files git already
+    knows about count as a human/agent actively working.
+    """
+    rc, out = _git(["-C", wt_path, "status", "--porcelain", "--untracked-files=no"], timeout=3)
+    if rc != 0 or not out:
+        return []
+    paths: list[str] = []
+    for line in out.splitlines():
+        # Porcelain v1: 2 status chars, a space, then the path (or "orig -> new").
+        if len(line) < 4:
+            continue
+        rel = line[3:]
+        if " -> " in rel:  # rename: take the destination
+            rel = rel.split(" -> ", 1)[1]
+        rel = rel.strip().strip('"')
+        if rel:
+            paths.append(rel)
+    return paths
+
+
+def _active_sibling_lines(now_epoch: float | None = None) -> tuple[list[str], bool]:
+    """Hard-block when another worktree of this repo is ACTIVELY HOT.
+
+    The PID lock (`_session_lock_lines`) guards two sessions in the SAME tree but
+    relies on PID liveness, which is unreliable on Windows. This complements it
+    with a mtime signal across ALL worktrees: if a sibling has uncommitted
+    changes to a tracked file touched within `_ACTIVE_SIBLING_WINDOW_SECS`, a
+    live session is almost certainly working there right now — starting a second
+    session risks the index-corruption / lost-stash class this repo has hit
+    repeatedly (`feedback_multi_terminal_shared_file_thrash_2026_05_21.md`).
+
+    Returns (lines, should_block). Hard-block (True) is reserved for the
+    SAME-worktree case — two sessions in one tree is the corruption risk.
+    A DIFFERENT hot worktree is the SANCTIONED parallel pattern
+    (`scripts/tools/new_session.sh`), so it WARNS but never refuses.
+
+    Override: set CLAUDE_ALLOW_CONCURRENT=1 to skip the block entirely.
+
+    Fail-open on every error path — a guard that can't read state must never
+    wedge session start.
+    """
+    if os.environ.get("CLAUDE_ALLOW_CONCURRENT") == "1":
+        return [], False
+
+    rc, out = _git(["worktree", "list", "--porcelain"])
+    if rc != 0 or not out:
+        return [], False
+
+    rc_pwd, current_path = _git(["rev-parse", "--show-toplevel"])
+    if rc_pwd != 0 or not current_path.strip():
+        return [], False
+    current_path = current_path.strip()
+
+    # Parse worktree paths (porcelain blocks separated by blank lines).
+    wt_paths: list[str] = []
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            wt_paths.append(line[len("worktree ") :].strip())
+
+    if now_epoch is None:
+        now_epoch = time.time()
+
+    hot_self: list[tuple[str, float]] = []
+    hot_siblings: list[tuple[str, float]] = []
+    for wt in wt_paths:
+        if not wt:
+            continue
+        # Normalise both sides for the self/sibling comparison: git may report
+        # forward slashes on Windows while show-toplevel agrees, but be defensive.
+        is_self = os.path.normcase(os.path.normpath(wt)) == os.path.normcase(
+            os.path.normpath(current_path)
+        )
+        dirty = _dirty_tracked_paths(wt)
+        if not dirty:
+            continue
+        newest = _most_recent_tracked_mtime(wt, dirty)
+        if newest is None:
+            continue
+        age = now_epoch - newest
+        # Reject garbage / clock-skew: a file "modified in the future" or absurdly
+        # old age is not a trustworthy active signal — don't block on it.
+        if age < -60 or age > _ACTIVE_SIBLING_WINDOW_SECS:
+            continue
+        if is_self:
+            hot_self.append((wt, age))
+        else:
+            hot_siblings.append((wt, age))
+
+    # SAME worktree freshly hot but our PID lock didn't catch it (dead-PID
+    # reclaim, pre-field lock, crashed session). This IS the corruption case.
+    if hot_self:
+        wt, age = hot_self[0]
+        mins = int(age // 60)
+        return (
+            [
+                "",
+                "  ====================================================================",
+                f"  BLOCKED: this worktree was edited < {max(mins, 1)} min ago by another session.",
+                "  --------------------------------------------------------------------",
+                f"  Worktree:  {wt}",
+                "  Tracked files here changed minutes ago but no live PID lock holds",
+                "  them — a crashed/parallel session in THIS tree. Two sessions in one",
+                "  worktree corrupt .git/index (feedback_shared_worktree_concurrent_commits.md).",
+                "",
+                "  Resolutions (pick one):",
+                "    1. Return to the other terminal working this tree and continue there.",
+                "    2. If it's truly gone, commit/stash its WIP, then restart this session.",
+                "    3. Work in your own tree:  scripts/tools/new_session.sh",
+                "    4. Override (you're certain it's safe):  CLAUDE_ALLOW_CONCURRENT=1",
+                "  ====================================================================",
+                "",
+            ],
+            True,
+        )
+
+    if hot_siblings:
+        lines = [
+            "",
+            "  --------------------------------------------------------------------",
+            f"  NOTE: {len(hot_siblings)} other worktree(s) edited in the last "
+            f"{_ACTIVE_SIBLING_WINDOW_SECS // 60} min — a live parallel session:",
+        ]
+        for wt, age in sorted(hot_siblings, key=lambda t: t[1])[:4]:
+            mins = int(age // 60)
+            label = "just now" if mins == 0 else f"{mins} min ago"
+            lines.append(f"    - {wt}  (edited {label})")
+        lines.append("  Parallel worktrees are fine; just don't open a 2nd session in any ONE")
+        lines.append("  of them. Coordinate shared-state commits per multi-terminal-shared-file-hygiene.md.")
+        lines.append("  --------------------------------------------------------------------")
+        return lines, False
+
+    return [], False
+
+
 def _action_queue_ready_lines() -> list[str]:
     """Surface action-queue items with status:ready as a 1-line nudge.
 
@@ -1047,7 +1214,16 @@ def main() -> None:
         if lease_block:
             print("\n".join(lease_lines), file=sys.stderr)
             sys.exit(2)
+        # mtime-based active-worktree gate — catches the live sessions the PID
+        # lock misses (dead-PID reclaim, crashed session). Hard-blocks only the
+        # SAME-tree case; a hot SIBLING tree warns (sanctioned parallel pattern).
+        active_lines, active_block = _active_sibling_lines()
+        if active_block:
+            print("\n".join(active_lines), file=sys.stderr)
+            sys.exit(2)
         lines = task_route_lines or _superpower_lines("session-start") or _legacy_startup_lines()
+        if active_lines:  # non-blocking hot-sibling warning — surface it
+            lines.extend(active_lines)
         if block_lines:  # warning lines (e.g., lock-write failure) — surface them
             lines.extend(block_lines)
         if lease_lines:
