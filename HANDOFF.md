@@ -657,10 +657,10 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-29
-- **Commit:** f235fb79 — [judgment] fix(prereg): loader-conformance + staleness fixes on NYSE_PREOPEN O30 overlay v1
+- **Commit:** f9a0b24e — [judgment] doctrine(criterion-5): LOCK DSR reference universe — research validation without calendar-OOS wait
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-05-29-mnq-nyse-preopen-o30-size-adjacent-overlay-v1.yaml`
+  - `docs/institutional/pre_registered_criteria.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
