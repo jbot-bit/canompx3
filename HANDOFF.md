@@ -287,8 +287,8 @@ restore them via `git checkout -- docs/runtime/stages/`.
 >>>>>>> theirs
 
 - **Tool:** Codex (Windows app / PowerShell). On `main`; started from dirty tree with pre-existing HANDOFF/ralph-loop edits, staged `trading_app/eligibility/builder.py`, and untracked audit/stage/telemetry files. Did not revert or overwrite sibling-tool work.
-- **Done:** fixed two real `scripts/tools/session_preflight.py` startup crashes found while following AGENTS startup rules: (1) Windows cp1252 stdout could not print Unicode handoff/recent-commit text; (2) probing `.venv-wsl/bin/python` from Windows could raise `OSError` and abort preflight. Added focused regressions in `tests/test_tools/test_session_preflight.py`.
-- **Verification:** RED reproduced both failures first. GREEN: `python -m pytest tests/test_tools/test_session_preflight.py -q` => 21 passed; `ruff check scripts/tools/session_preflight.py tests/test_tools/test_session_preflight.py` => pass; `python -m py_compile scripts/tools/session_preflight.py` => pass; `git diff --check -- scripts/tools/session_preflight.py tests/test_tools/test_session_preflight.py` => pass; `python scripts/tools/session_preflight.py` now reaches normal warning report instead of crashing.
+- **Done:** fixed three real Windows startup/queue crashes found while following AGENTS startup rules: (1) `scripts/tools/session_preflight.py` could not print Unicode handoff/recent-commit text under cp1252; (2) probing `.venv-wsl/bin/python` from Windows could raise `OSError` and abort preflight; (3) `scripts/tools/work_queue.py render-handoff` had the same cp1252 Unicode crash and needed the same CLI stdout/stderr guard. Added focused regressions in `tests/test_tools/test_session_preflight.py` and `tests/test_tools/test_work_queue_cli.py`.
+- **Verification:** RED reproduced failures first. GREEN: `python -m pytest tests/test_tools/test_session_preflight.py -q` => 21 passed; `python -m pytest tests/test_tools/test_work_queue_cli.py::TestRenderHandoffWriteFootgun::test_render_handoff_reconfigures_cp1252_stdout_before_printing_unicode -q` => pass; `ruff check scripts/tools/session_preflight.py tests/test_tools/test_session_preflight.py` => pass; `python -m py_compile scripts/tools/session_preflight.py` => pass; `git diff --check -- scripts/tools/session_preflight.py tests/test_tools/test_session_preflight.py` => pass; `python scripts/tools/session_preflight.py` and `python scripts/tools/work_queue.py render-handoff` now reach normal output instead of crashing.
 - **Not done:** no commit, push, DB mutation, live/profile/lane change, or staged builder/ralph-loop cleanup. Preflight still reports existing warnings: HANDOFF/action-queue mismatch, dirty tree, and active stage files.
 
 ### NEXT SESSION
@@ -949,11 +949,10 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-29
-- **Commit:** 8fa031d6 — [judgment] fix(dsr): silhouette floor on estimate_n_eff_onc — defer to Bailey on structureless universes
-- **Files changed:** 3 files
+- **Commit:** 8f62274b — [mechanical] docs(eligibility): @research-source + @revalidated-for on VALIDATION_FRESHNESS_DAYS
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_dsr.py`
-  - `trading_app/dsr.py`
+  - `trading_app/eligibility/builder.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
