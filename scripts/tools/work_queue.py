@@ -12,6 +12,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+
+def _reconfigure_stdio_for_unicode() -> None:
+    """Keep Windows cp1252 consoles from crashing on queue Unicode text."""
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, TypeError, ValueError):
+            continue
+
+
 from pipeline.work_queue import (
     claim_item,
     close_first_open_items,
@@ -219,6 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    _reconfigure_stdio_for_unicode()
     args = build_parser().parse_args()
     return args.func(args)
 

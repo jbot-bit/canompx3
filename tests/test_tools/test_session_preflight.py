@@ -1,5 +1,6 @@
 """Tests for scripts.tools.session_preflight."""
 
+import io
 import subprocess
 import sys
 from pathlib import Path
@@ -320,6 +321,55 @@ class TestPrintReport:
         out = capsys.readouterr().out
         assert exit_code == 2
         assert "wrong interpreter" in out.lower()
+
+    def test_main_reconfigures_cp1252_stdout_before_printing_unicode_handoff(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "- **Tool:** Codex\n"
+            "- **Date:** 2026-05-29 -> unicode check\n"
+            "- **Summary:** Session handoff contains arrow → stays printable\n",
+        )
+        stdout_bytes = io.BytesIO()
+        cp1252_stdout = io.TextIOWrapper(stdout_bytes, encoding="cp1252", errors="strict")
+
+        with (
+            patch.object(sys, "stdout", cp1252_stdout),
+            patch.object(session_preflight, "recent_commits", return_value=["abc123 unicode → commit"]),
+            patch.object(session_preflight, "branch_name", return_value="main"),
+            patch.object(session_preflight, "head_sha", return_value="abc123"),
+            patch.object(session_preflight, "_evaluate_preflight_policy", return_value=([], [])),
+            patch("pipeline.system_brief.build_system_brief", return_value=None),
+        ):
+            exit_code = session_preflight.main(["--root", str(tmp_path), "--context", "generic"])
+            sys.stdout.flush()
+
+        assert exit_code == 0
+        assert "unicode check" in stdout_bytes.getvalue().decode("utf-8")
+
+    def test_print_report_treats_inaccessible_wsl_env_probe_as_missing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "- **Tool:** Codex\n")
+        real_exists = Path.exists
+
+        def exists_or_raise(path: Path) -> bool:
+            if path.as_posix().endswith("/.venv-wsl/bin/python"):
+                raise OSError("inaccessible WSL symlink")
+            return real_exists(path)
+
+        with (
+            patch.object(Path, "exists", exists_or_raise),
+            patch.object(session_preflight, "recent_commits", return_value=["abc123 test"]),
+            patch.object(session_preflight, "branch_name", return_value="main"),
+            patch.object(session_preflight, "head_sha", return_value="abc123"),
+            patch.object(session_preflight, "_evaluate_preflight_policy", return_value=([], [])),
+            patch("pipeline.system_brief.build_system_brief", return_value=None),
+        ):
+            exit_code = session_preflight.print_report(tmp_path, context="generic")
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert ".venv-wsl=no" in out
 
 
 class TestCliBootstrap:

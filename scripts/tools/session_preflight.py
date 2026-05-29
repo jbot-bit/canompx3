@@ -14,12 +14,19 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _path_exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
 def _preferred_repo_python() -> Path | None:
     if os.name == "nt":
         candidate = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
     else:
         candidate = PROJECT_ROOT / ".venv-wsl" / "bin" / "python"
-    return candidate if candidate.exists() else None
+    return candidate if _path_exists(candidate) else None
 
 
 def _preferred_repo_prefix(expected_python: Path) -> Path:
@@ -54,6 +61,20 @@ def _ensure_repo_python() -> None:
 _ensure_repo_python()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+
+def _reconfigure_stdio_for_unicode() -> None:
+    """Keep Windows cp1252 consoles from crashing on repo Unicode text."""
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, TypeError, ValueError):
+            continue
+
 
 from pipeline.system_context import (
     ACTIVE_SESSION_DIR,
@@ -369,8 +390,8 @@ def print_report(
     except Exception:
         brief = None
 
-    windows_env = (root / ".venv" / "Scripts" / "python.exe").exists()
-    wsl_env = (root / ".venv-wsl" / "bin" / "python").exists()
+    windows_env = _path_exists(root / ".venv" / "Scripts" / "python.exe")
+    wsl_env = _path_exists(root / ".venv-wsl" / "bin" / "python")
     print(f"Env: .venv={'yes' if windows_env else 'no'} | .venv-wsl={'yes' if wsl_env else 'no'}")
     print(f"Interpreter: {Path(sys.executable).resolve()}")
     bootstrap_from = os.environ.get("CANOMPX3_BOOTSTRAPPED_FROM")
@@ -448,6 +469,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _reconfigure_stdio_for_unicode()
     parser = build_parser()
     args = parser.parse_args(argv)
     root = Path(args.root).resolve() if args.root else DEFAULT_ROOT.resolve()

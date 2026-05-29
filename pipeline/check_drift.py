@@ -35,10 +35,29 @@ RESEARCH_DIR = PROJECT_ROOT / "research"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from pipeline import _drift_cache
 from pipeline.db_connect import open_read_only_with_retry
 
 # Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
 GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
+
+# Per-check content-hash cache (proof-of-honesty, narrow first cut).
+# CHECK_DEPS maps a check label → the exact list of input files the check reads.
+# A label present here is cache-eligible: its PASS is keyed on the content hash
+# of these deps. A label ABSENT here is never cached (opt-in default-uncacheable).
+# Honesty: the dep list must be COMPLETE — every file the check reads. Under-
+# declaration is caught by check_drift_cache_meta_recheck (cold re-run parity).
+# Only ONE check is wired for now; expansion is gated by an adversarial audit.
+CHECK_DEPS: dict[str, list[str]] = {
+    "ENTRY_MODELS sync": [
+        "trading_app/config.py",
+        "trading_app/ai/sql_adapter.py",
+    ],
+}
+
+# Records labels that returned a cached HIT during the current run, so the meta
+# cold-recheck can re-run exactly those checks and assert verdict parity.
+_CACHE_HITS_THIS_RUN: list[str] = []
 
 ACTIVE_DB_PATH_SCAN_DIRS = [
     RESEARCH_DIR,
@@ -5235,6 +5254,53 @@ def check_drift_shared_db_connection() -> list[str]:
         if "con" not in sig.parameters:
             violations.append(
                 f"  {check_fn.__name__}: requires_db=True but missing con= parameter — cannot use shared DB connection"
+            )
+
+    return violations
+
+
+def check_drift_cache_meta_recheck() -> list[str]:
+    """Meta cold-recheck: every check that returned a CACHED HIT this run is
+    re-executed cold (bypassing the cache) and its verdict must match the cached
+    PASS. A mismatch means the cached PASS was stale — i.e. the check's declared
+    CHECK_DEPS are incomplete (an input changed that the key did not hash).
+
+    This is the honesty backstop for the cache. With one cached check it is a
+    deterministic full recheck; when many checks are cached later, this becomes a
+    random sample. Fail-closed: if a cached-hit label cannot be re-run (no entry
+    in CHECKS, or it requires_db), that is itself a violation — we never silently
+    trust a cached PASS we cannot reproduce.
+
+    Runs LAST (registered at the tail of CHECKS) so all cache hits are recorded.
+    """
+    violations = []
+    if not _CACHE_HITS_THIS_RUN:
+        return violations
+
+    # label → (fn, requires_db) from the canonical CHECKS table.
+    by_label = {label: (fn, requires_db) for label, fn, _adv, requires_db in CHECKS}
+
+    for label in _CACHE_HITS_THIS_RUN:
+        entry = by_label.get(label)
+        if entry is None:
+            violations.append(f"  cached-hit label not found in CHECKS, cannot verify: {label!r}")
+            continue
+        fn, requires_db = entry
+        if requires_db:
+            violations.append(
+                f"  cached requires_db check {label!r} cannot be cold-rechecked here "
+                f"(DB-content inputs are not hashed) — must not be cache-eligible"
+            )
+            continue
+        try:
+            cold = fn()
+        except Exception as exc:  # noqa: BLE001 — record, never swallow
+            violations.append(f"  cold recheck of {label!r} raised {type(exc).__name__}: {exc}")
+            continue
+        if cold:
+            violations.append(
+                f"  STALE CACHE: {label!r} returned cached PASS but cold re-run found "
+                f"{len(cold)} violation(s) — CHECK_DEPS for this label is incomplete"
             )
 
     return violations
@@ -14918,7 +14984,22 @@ CHECKS = [
         False,  # blocking — class has failed CI 5+ times; further regression silently red-CIs main
         False,
     ),
+    # MUST stay LAST — re-runs cached-hit checks cold to verify cache honesty.
+    (
+        "Drift cache meta cold-recheck (cached PASSes reproduce on cold re-run)",
+        check_drift_cache_meta_recheck,
+        False,  # blocking — a stale cache is an integrity failure, not advisory
+        False,
+    ),
 ]  # end CHECKS
+
+# Enforce (not merely document) that the meta cold-recheck runs LAST. If a future
+# edit appends a check after it, every cache hit recorded AFTER the meta-check
+# would go unverified — a silent honesty hole. Fail at import rather than ship it.
+assert CHECKS[-1][1] is check_drift_cache_meta_recheck, (
+    "check_drift_cache_meta_recheck MUST be the final entry in CHECKS so every "
+    "cache hit is recorded before it runs. Move it back to the tail."
+)
 
 
 # Checks measured >0.3s by scripts/tools/profile_check_drift.py (2026-04-19).
@@ -15067,8 +15148,22 @@ def main():
                     continue
                 v = [f"  EXCEPTION: {type(e).__name__}: {e}"]
         else:
-            with suppress_ctx:
-                v = check_fn()
+            # Content-hash cache: only labels with a declared dep set in
+            # CHECK_DEPS are eligible. A cache hit returns a PASS (empty
+            # violations) without re-running. Any miss / disabled cache / error
+            # falls through to the real check (fail-closed). Never used for
+            # requires_db checks — DB-content inputs are not hashed here.
+            deps = CHECK_DEPS.get(label)
+            cache_key = _drift_cache.cache_key(label, deps) if deps else None
+            if deps is not None and _drift_cache.read_pass(label, cache_key):
+                _CACHE_HITS_THIS_RUN.append(label)
+                v = []
+            else:
+                with suppress_ctx:
+                    v = check_fn()
+                if deps is not None:
+                    # Only PASS is persisted; write_pass no-ops on FAIL.
+                    _drift_cache.write_pass(label, cache_key, v)
 
         if is_advisory:
             advisory_count += 1

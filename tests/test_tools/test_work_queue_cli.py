@@ -11,6 +11,7 @@ of session memory. `--force` is now required to confirm the destruction.
 from __future__ import annotations
 
 import importlib.util
+import io
 import sys
 from pathlib import Path
 
@@ -106,3 +107,23 @@ class TestRenderHandoffWriteFootgun:
         assert rc == 0, "--write --force must succeed (escape hatch preserved)"
         assert handoff.read_text(encoding="utf-8") != original, "HANDOFF.md must be rewritten with --force"
         assert "First thing" in handoff.read_text(encoding="utf-8"), "rewritten HANDOFF must contain queue render"
+
+    def test_render_handoff_reconfigures_cp1252_stdout_before_printing_unicode(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _seed_queue(tmp_path)
+        stdout_bytes = io.BytesIO()
+        cp1252_stdout = io.TextIOWrapper(stdout_bytes, encoding="cp1252", errors="strict")
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "argv", ["work_queue.py", "render-handoff", "--summary", "fresh → current"])
+        monkeypatch.setattr(sys, "stdout", cp1252_stdout)
+
+        cli = _load_cli_module()
+        rc = cli.main()
+        sys.stdout.flush()
+
+        assert rc == 0
+        assert "Cross-Tool Session Baton" in stdout_bytes.getvalue().decode("utf-8")

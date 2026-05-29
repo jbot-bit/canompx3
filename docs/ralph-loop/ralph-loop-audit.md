@@ -3,40 +3,53 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 210
+## Last iteration: 211
 
-## RALPH AUDIT — Iteration 210 (COMPLETED)
-## Date: 2026-05-24
-## Infrastructure Gates: 163 drift checks PASS; 782 tests PASS (1 flaky in full-suite order — pre-existing, passes in isolation); ruff PASS
-## Scope: pipeline/check_drift.py + pipeline/check_drift_crg_helpers.py — Pyright type-error audit
+## RALPH AUDIT — Iteration 211 (COMPLETED)
+## Date: 2026-05-29
+## Infrastructure Gates: 168 drift checks PASS; 66 eligibility tests PASS; ruff PASS
+## Scope: trading_app/eligibility/builder.py — first full scan (high centrality, 6 importers, unscanned)
 
 ---
 
 ## Full-File Audit Results
 
-### pipeline/check_drift.py + pipeline/check_drift_crg_helpers.py — AUDIT-ONLY (no new findings)
+### trading_app/eligibility/builder.py — SCANNED
 
-The Pyright errors described in the task (reportOptionalSubscript at lines 4024/4032/4040/4044/5071/5075/5306/6310; "object is not iterable" at lines 9045/9270) are **already fixed** as of iter 208 commit `b3d1d6dd`.
+File is a well-designed thin adapter over canonical filter self-description (2026-04-07 refactor).
+All filter logic delegates to `trading_app.config.ALL_FILTERS` — no re-encoded logic.
+Fail-closed discipline throughout: synthetic DATA_MISSING atoms on describe() exceptions,
+contract-violation records on bad enum strings, broad-except at adapter boundaries with explicit
+`# noqa: BLE001` and justification.
 
-`python -m pyright pipeline/check_drift.py` → **0 errors, 0 warnings**.
-`python -m pyright trading_app/derived_state.py` → **0 errors, 0 warnings**.
+**Finding FIXED (annotation_debt, LOW):**
+`VALIDATION_FRESHNESS_DAYS = 180` at line 58 had no `@research-source` annotation — a
+bare numeric constant that governs the STALE_VALIDATION gate in live eligibility checks.
+Fixed: added `@research-source` + `@revalidated-for` comment block documenting the 180-day
+value as an operational governance heuristic (not a literature-derived statistical constant)
+with provenance to the initial commit `fc89dbf0`.
 
-No new findings in scope. Drift 163 PASS. Tests pass (1 flaky pre-existing ordering failure in `TestQuietModeOutputSanitization::test_quiet_mode_lines_are_sanitized` — passes alone in 105s, fails in full-suite ordering — unrelated to this scope).
-
-**A6-GAP4 CLOSED** — iter 209 commit `f0606b65` added explicit `orb_minutes` key to `build_profile_fingerprint` per-lane dict without requiring `DailyLaneSpec` dataclass change (used `parse_strategy_id`). Deferred-findings table updated.
+**ACCEPTABLE findings (not fixed):**
+- INTRA_SESSION FAIL conditions silently excluded from `_derive_overall_status` `has_pre_session_fail` flag:
+  ACCEPTABLE (intentional design — intra-session conditions resolve during session, not pre-session;
+  guarded by pattern 1 of the ACCEPTABLE rules: "intentional per-session heuristic").
+- Broad `except Exception` in `_walk_filter_atoms`, `_build_calendar_condition`,
+  `_build_atr_velocity_condition`: ACCEPTABLE (all carry `# noqa: BLE001` + documented adapter-boundary
+  justification; all re-surface as visible DATA_MISSING conditions, not swallowed).
 
 ---
 
-## Seven Sins Scan — iteration 210
+## Seven Sins Scan — iteration 211
 
-- Sin 1 (Silent failure): `.fetchone() or (0,)` and `.fetchone() or (None,)` patterns in check_drift.py are correct None-guards. CLEAN.
-- Sin 2 (Canonical violation): `get_surprising_connections` / `find_large_functions` return `list[dict] | object` — Pyright can't narrow `object` out of a union. `assert isinstance(result, list)` suffices at runtime; Pyright 1.1.408 reports 0 errors. CLEAN.
-- Sin 3-7: No capital-gate, spec, or research-provenance code in scope. N/A.
+- Sin 1 (Silent failure): `_walk_filter_atoms` catches broad Exception but emits synthetic DATA_MISSING atom — fail-closed. CLEAN.
+- Sin 2 (Canonical violation): `ACTIVE_ORB_INSTRUMENTS` imported from `pipeline.asset_configs` (not hardcoded). `ENTRY_MODELS` + `ALL_FILTERS` from `trading_app.config`. `ATR_VELOCITY_OVERLAY` canonical delegation. CLEAN.
+- Sin 3 (Fail-open): `_derive_overall_status` defaults to `OverallStatus.ELIGIBLE` only when no FAILs, no DATA_MISSING, no PENDING. CLEAN.
+- Sin 4-7: No capital gate, research stat inline (fixed), spec or holdout code in scope. CLEAN.
 
 **Ralph-specific extensions scan:**
 - Async safety: No async code in scope. CLEAN.
-- State persistence gap: check_drift.py is stateless compute. CLEAN.
-- Contract drift: No signature changes. CLEAN.
+- State persistence gap: Module is stateless compute. CLEAN.
+- Contract drift: `_atom_to_condition` validates all enum strings explicitly — fail-closed on typos. CLEAN.
 
 ## Files Fully Scanned
 
@@ -46,9 +59,10 @@ No new findings in scope. Drift 163 PASS. Tests pass (1 flaky pre-existing order
 - trading_app/derived_state.py (iter 209)
 - pipeline/check_drift.py (iter 210 — Pyright audit; 0 errors confirmed)
 - pipeline/check_drift_crg_helpers.py (iter 210 — Pyright audit; 0 errors confirmed)
+- trading_app/eligibility/builder.py (iter 211 — full scan; 1 annotation finding fixed)
 
 ## Next Iteration Targets
 
-Priority 0 — Open deferred HIGH/CRITICAL: NONE (A6-GAP4 closed iter 209).
-Priority 1 — Unscanned critical/high files: Check import_centrality.json for top unscanned critical/high files.
-Priority 2 — Stale re-audits: Check for critical/high files modified since last scan.
+Priority 0 — Open deferred HIGH/CRITICAL: NONE.
+Priority 1 — Unscanned critical/high files: `pipeline/paths.py` (220 importers, critical) — last modified 2026-05-08, audited iter 207 with only 1 finding; may be stale. Also `trading_app/opportunity_awareness.py` (5 importers, high) modified 2026-05-22, never scanned. Prefer `pipeline/paths.py` (higher centrality).
+Priority 2 — Stale re-audits: `trading_app/live/session_orchestrator.py` (last audited iter 182, 8+ importers, critical).

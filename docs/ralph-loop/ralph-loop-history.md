@@ -2343,3 +2343,16 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file (strategy_fitness.py), 0 callers affected
 - Verification: PASS — 31/31 test_strategy_fitness.py; 160 drift checks
 - Commit: ed781e95
+
+---
+
+## Iteration 211 — 2026-05-29
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/eligibility/builder.py:58
+- Finding: VALIDATION_FRESHNESS_DAYS = 180 unannotated — bare numeric governance threshold with no @research-source annotation on the live STALE_VALIDATION eligibility gate
+- Doctrine cited: integrity-guardian.md § 8 (Research Finding Staleness — never inline research stats without @research-source)
+- Action: Added @research-source + @revalidated-for comment block documenting 180-day value as operational governance heuristic (not literature-derived) with provenance to initial commit fc89dbf0
+- Blast radius: 1 file (builder.py), annotation-only
+- Verification: PASS — 66/66 test_eligibility_builder.py; 168 drift checks PASS; ruff PASS
+- Commit: 8d5f3b00

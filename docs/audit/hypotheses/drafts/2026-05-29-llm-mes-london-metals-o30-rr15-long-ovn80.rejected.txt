@@ -1,0 +1,87 @@
+# REJECTED LLM DRAFT — fatal static checks failed.
+# This file is NOT a valid hypothesis. Do not rename to .yaml.
+# Failure summary:
+#   [SCHEMA_LOAD_FAILED] <root>: Hypothesis file C:\Users\joshd\AppData\Local\Temp\claude\tmp0pp5ak_m.yaml metadata.theory_grant is REQUIRED (Amendment 3.3, 2026-05-17). Must be an explicit bool: true (theory-grounded, theory_citation required on every hypothesis) or false (no-theory Pathway-B, strict Chordia t>=3.79). No default permitted.
+#
+metadata:
+  name: "mes-london-metals-ovnrng80-confirmatory"
+  purpose: "Confirmatory test of MES LONDON_METALS O30 RR1.5 LONG conditional on overnight_range_pct>=80; cash-session-open continuation family extension to S&P/MES book."
+  date_locked: "2026-05-13T10:00:00+10:00"
+  data_horizon_years_clean: 5.5
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  research_question_type: "standalone_edge"
+
+scratch_policy:
+  policy: "realized-eod"
+  justification: "Capital-decision-relevant; per feedback_chordia_unlock_deployment_gate_audit_checklist.md C13."
+
+oos_power_floor:
+  required_tier: "DIRECTIONAL_ONLY"
+  source: "research.oos_power.oos_ttest_power"
+  rule: |
+    Binary OOS kill criteria (OOS ExpR < 0, dir_match, sign flip) apply only
+    when OOS t-test power >= 0.50. Current OOS N=36 ExpR=+0.2006 t=0.99 is
+    underpowered (power tier likely STATISTICALLY_USELESS or DIRECTIONAL_ONLY).
+    If power < 0.50 at audit time, verdict is UNVERIFIED_INSUFFICIENT_POWER
+    and deployment is gated on continued OOS accrual until DIRECTIONAL_ONLY
+    tier is reached.
+
+hypotheses:
+  - id: 1
+    name: "MES LONDON_METALS O30 E2 CB1 RR1.5 LONG ovn>=80"
+    economic_basis: |
+      Wide overnight range proxies institutional positioning pressure ahead
+      of the London metals / European equity cash-session open. When ovn
+      range is in the upper quintile, cash-open participants tend to extend
+      the prevailing direction rather than fade it (intraday momentum
+      continuation). Unfiltered MES LONDON_METALS LONG is negative
+      (ExpR=-0.041, t=-1.95); the edge is conditional on the ovn>=80 gate
+      (FULL N=603, ExpR=+0.2155, t=4.588). Threshold-monotone across the
+      70/80/85/90 band rules out a knife-edge pick. Same conditional has
+      already been theory-granted on NYSE_OPEN and TOKYO_OPEN siblings of
+      this family on MNQ — extending to MES provides S&P-vs-NQ asset
+      diversification for a 100% MNQ book.
+    filter:
+      type: OVNRNG_PCT
+      column: overnight_range_pct
+      thresholds: [80]
+    sensitivity_test:
+      axes:
+        - "overnight_range_pct>=70"
+        - "overnight_range_pct>=90"
+    scope:
+      instruments: [MES]
+      sessions: [LONDON_METALS]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [30]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on K=5 family (Chordia strict t>=3.79)"
+      - "WFE < 0.50"
+      - "2026 OOS ExpR < 0 (gated by oos_power_floor; UNVERIFIED if power<0.50)"
+      - "Any era N>=50 ExpR < -0.05"
+      - "Per-year ExpR stability: >2 of 7 years negative, OR any single year contributes >50% of cumulative R"
+      - "Forward-OOS power floor: deployment blocked until OOS power tier reaches DIRECTIONAL_ONLY (current N=36, t=0.99, underpowered)"
+      - "Cross-asset rho: daily return series correlation vs each of {MNQ COMEX_SETTLE OVNRNG_100, MNQ TOKYO_OPEN COST_LT08, MNQ US_DATA_1000 VWAP_MID_O15, MNQ NYSE_OPEN COST_LT12} must be < 0.70 (Carver Ch.11 diversification gate)"
+      - "Look-ahead audit: no break_dir / close-direction / break-bar continuation feature in the realized pipeline (RULE 6.3 / E2 postmortem 2026-04-21)"
+
+prior_art:
+  family_health: "MIXED"
+  siblings_killed: 0
+  siblings_blocked_by_graveyard: 0
+  notes:
+    - "Same ovn-range cash-open continuation family theory-granted on MNQ NYSE_OPEN and MNQ TOKYO_OPEN siblings."
+    - "Lineage: H1 from 2026-04-15 T0-T8 non-volume horizon sweep (7P/1F CONDITIONAL, bootstrap p=0.001); prior verdict was 'pre-reg shadow, accumulate OOS'."
+    - "OOS has grown N=11 -> N=36 since shadow verdict; t=0.99 still below confirmatory threshold."
+    - "2025 per-year ExpR=-0.067 (negative); 2023 t=0.83 (weak). Per-year stability is the principal residual risk."
+    - "Adjacency shows MES CME_PRECLOSE OVNRNG_10 N=44 ExpR=+0.4185 as a related (different session/threshold) ovn-conditional MES edge — confirms family is not hostile on MES."
+  reopen_argument: |
+    Not re-litigating a NO-GO. This is a confirmatory promotion of a prior
+    shadow pre-reg whose OOS accrual has reached N=36 (from N=11).
+
+total_hypothesis_count: 1
+total_expected_trials: 1

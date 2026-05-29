@@ -1,7 +1,7 @@
 {
-  "total_iterations": 200,
-  "last_updated": "2026-05-24",
-  "consecutive_low_only": 4,
+  "total_iterations": 201,
+  "last_updated": "2026-05-29",
+  "consecutive_low_only": 5,
   "last_high_finding_iter": 206,
   "findings_by_type": {
     "canonical_violation": {
@@ -29,10 +29,10 @@
       "fix_rate": 1.0
     },
     "annotation_debt": {
-      "found": 6,
-      "fixed": 5,
+      "found": 7,
+      "fixed": 6,
       "deferred": 1,
-      "fix_rate": 0.83
+      "fix_rate": 0.86
     },
     "stale_metadata": {
       "found": 5,
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 53,
-    "LOW": 124
+    "LOW": 125
   },
   "classifications": {
     "judgment": 88,
-    "mechanical": 77,
+    "mechanical": 78,
     "audit-only": 35
   },
   "files_audited": {
@@ -1221,6 +1221,11 @@
       "audit_count": 1,
       "last_iter": 210,
       "findings": 0
+    },
+    "trading_app/eligibility/builder.py": {
+      "audit_count": 1,
+      "last_iter": 211,
+      "findings": 1
     }
   },
   "iterations": [
@@ -3423,6 +3428,17 @@
       "severity": "LOW",
       "verdict": "NOTED",
       "commit": "NONE"
+    },
+    {
+      "iter": 211,
+      "date": "2026-05-29",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/eligibility/builder.py:58",
+      "finding_type": "annotation_debt",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "8d5f3b00"
     }
   ]
 }

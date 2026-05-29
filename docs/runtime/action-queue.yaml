@@ -1,6 +1,92 @@
 schema_version: 1
-updated_at: 2026-05-12T00:00:00+10:00
+updated_at: 2026-05-29T00:00:00+10:00
 items:
+  - id: mgc_o30_long_pooled_base_then_conditional_overlay_2026_05_29
+    title: Re-frame MGC — test POOLED O30 long base edge, then DOW/vol as conditional overlay (NOT standalone slices)
+    class: research
+    status: closed
+    override_note: |
+      DONE 2026-05-29. Q1 run; disposition = DEAD_FOR_ORB. The pooled MGC O30
+      long base is FLAT: pooled-across-sessions best is RR2.0 t=1.41 (N=4281,
+      STATISTICALLY_USELESS); best per-session base is NYSE_OPEN RR2.0 t=1.46
+      (N=499) — none clears Chordia-strict 3.79 or the 0.50 power floor. The
+      per-year breakdown exposed the mechanism: MGC O30 long was NEGATIVE in
+      2022 (t=-1.69) and 2023 (t=-2.32), only turning positive in 2025
+      (t=+3.68) — an era-dependent 2024+ gold bull-run artifact (Criterion 9 /
+      RULE 12), NOT a structural drift edge. Pooling DISSOLVED the slice signal,
+      confirming the 6 CPCV winners were the lucky-DOW tail of each session, not
+      one fragmented effect. Overlay Pass-1/Pass-2: all 6 conditions BH-pass on
+      Pass-1 lift, but 0/6 reach powered+confirmed residual edge (every on-cell
+      is DIRECTIONAL_ONLY, t 2.12-2.64, power 0.56-0.74) — reproducing the CPCV
+      audit's CONDITIONAL verdict from the base-up direction. Flip rate 40%
+      (heterogeneity acknowledged). Path forward = SR-monitor signal-only shadow
+      (Criterion 12), NOT a calendar wait, NOT thinner DOW slicing. Q2
+      (Harvey-Liu haircut) NOT triggered — base is flat, nothing to haircut.
+      Runner `research/mgc_o30_long_pooled_base.py`; result
+      `docs/audit/results/2026-05-29-mgc-o30-long-pooled-base-and-overlay.md`;
+      tests `tests/test_research/test_mgc_o30_long_pooled_base.py` (19/19).
+      Read-only canonical; no DB writes; no threshold relaxation.
+    priority: P1
+    close_before_new_work: false
+    owner_hint: claude
+    last_verified_at: 2026-05-29
+    freshness_sla_days: 14
+    next_action: |
+      FRAMING CORRECTION to the 2026-05-29 MGC CPCV audit. That audit
+      answered a low-information question: it tested 6 pre-selected cells,
+      EACH a single (session x day_of_week) slice (#1 Tue/US_DATA_830,
+      #2 Thu/NYSE_OPEN, #4 Fri/SINGAPORE), at N~100, then applied per-cell
+      Chordia-strict t>=3.79 while carrying K=1992 — a near-impossible bar.
+      Verdict "0 VALID / 6 CONDITIONAL" is partly an artifact of (a) CPCV
+      degenerating to a single path on a fixed-outcome backtest, and (b)
+      fragmenting one possible structural effect into underpowered DOW slices.
+
+      The hidden signal in the aggregation: ALL 6 winners are `long` AND
+      `O30`. That may be ONE MGC O30 long drift effect read through 6 thin
+      windows — not 6 weak cells.
+
+      Q1 (HIGHEST EV — do this first): compute MGC O30 long ExpR/t on the
+      FULL pooled sample (all DOW, per session and pooled across sessions,
+      canonical triple-join, pnl_r already net of 5.74 friction). N goes
+      ~100 -> 1000+. Then test each DOW/vol condition as a CONDITIONAL
+      OVERLAY on that base via RULE 2 Pass-1 (unfiltered base) / Pass-2
+      (filtered) — NOT as standalone K=1 strategies. Question: is there a
+      base edge the slicing hid, and does DOW add edge ON TOP of it, or is
+      DOW just a proxy for which sessions trade on which days (US_DATA only
+      on data days; NFP=Fri)?
+
+      Q2 (refinement, only if Q1 surfaces something): treat the survivors as
+      the pre-registered family, apply BH-FDR at K=family (6 or DOW-family),
+      and handle short OOS via Harvey-Liu Sharpe HAIRCUT (discount multiplier)
+      rather than the binary power veto. Grounded in
+      harvey_liu_2015_backtesting.md (already in literature/).
+
+      NO FORCING, NO RESCUE: Q1 can kill MGC O30 long harder than the CPCV
+      audit did. That is the point — it is the fair fight the standalone-slice
+      framing never gave it.
+    exit_criteria: |
+      A result MD reporting: (1) pooled MGC O30 long base ExpR/t/N per session
+      and pooled; (2) each DOW/vol condition as Pass-1/Pass-2 overlay lift with
+      per-cell p and BH-FDR at K=family; (3) a clear disposition —
+        - pooled base positive+powered -> standalone diversifier candidate
+          (gold, uncorrelated to all-MNQ book) -> route to prereg/validation;
+        - only conditional adds edge -> overlay/portfolio role, never standalone;
+        - pooled flat -> MGC O30 long DEAD for ORB, stop slicing, SR-monitor
+          shadow (Criterion 12) is the only honest path.
+      Read-only canonical layers; no DB writes; no threshold relaxation.
+    blocked_by: []
+    decision_refs:
+      - .claude/rules/backtesting-methodology.md
+      - docs/institutional/literature/harvey_liu_2015_backtesting.md
+      - docs/institutional/pre_registered_criteria.md
+    evidence_refs:
+      - docs/audit/results/2026-05-29-mgc-cpcv-audit.md
+      - docs/audit/hypotheses/drafts/2026-05-29-mgc-cpcv-methodology-audit-PASS1.md
+      - research/mgc_cpcv_audit.py
+      - research/powered_mgc_wide_scan.py
+      - research/oos_power.py
+    notes_ref: docs/audit/results/2026-05-29-mgc-cpcv-audit.md
+
   - id: research_catalog_verdict_vocabulary_doctrine_2026_05_12
     title: Promote verdict-token vocabulary into a doctrine file (RESEARCH_RULES.md § Verdict tokens)
     class: docs
@@ -470,22 +556,30 @@ items:
   - id: track_d_mnq_comex_settle_gate0_runner_design
     title: Track D MNQ COMEX_SETTLE Gate 0 runner design
     class: research
-    status: blocked
+    status: closed
     priority: P3
     close_before_new_work: false
     owner_hint: codex-or-claude
-    last_verified_at: 2026-05-25
+    last_verified_at: 2026-05-29
     freshness_sla_days: 7
-    next_action: Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
-    exit_criteria: The branch has an executable runner/table design or is explicitly deferred with a measured reason.
+    next_action: |
+      Closed 2026-05-29: executable table/runner contract exists at
+      `docs/plans/2026-05-29-track-d-gate0-runner-table-contract.md`.
+      Implementation remains a separate future item and must start with
+      manifest build + full metadata-cost estimate, not data download.
+    exit_criteria: |
+      Closed. The branch has an executable runner/table design grounded in
+      current repo state, current `gold.db` counts, and Databento metadata-only
+      availability/cost probes.
     blocked_by: []
     decision_refs:
       - docs/runtime/decision-ledger.md
     evidence_refs:
       - docs/plans/archive/2026-04/2026-04-23-microstructure-gate0-design.md
+      - docs/plans/2026-05-29-track-d-gate0-runner-table-contract.md
       - docs/audit/hypotheses/2026-04-23-mnq-comex-settle-gate0-microstructure-v1.yaml
-    notes_ref: docs/plans/archive/2026-04/2026-04-23-microstructure-gate0-design.md
-    override_note: "Re-verified 2026-05-25 during Codex autonomous-route pass: DESIGN_ONLY prereg remains under K=4 and 2026 holdout; local read-only query measured 1,658 IS MNQ COMEX_SETTLE O5 E2 RR1.5 candidate windows and minute-resolution entry/break timestamps. Item remains blocked on Databento MBP-1/TBBO availability/cost confirmation and implementation approval."
+    notes_ref: docs/plans/2026-05-29-track-d-gate0-runner-table-contract.md
+    override_note: "Closed 2026-05-29 by Codex design pass: read-only DB measurement found 1,741 total windows (1,658 IS / 83 OOS) for exact MNQ COMEX_SETTLE O5 E2 RR1.5 CB1; Databento metadata reports TBBO and MBP-1 availability across the required date range; 5-window metadata-only cost probe totaled $0.002799630165 for TBBO and $0.007555380464 for MBP-1. No data download, schema mutation, live routing, or validated_setups mutation."
 
   - id: mes_event_tail_slippage_realism
     title: MES event-tail slippage realism debt
