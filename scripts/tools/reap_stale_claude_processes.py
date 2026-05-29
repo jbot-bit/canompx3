@@ -144,12 +144,19 @@ def decide(
     session_start: datetime | None,
     self_pid: int,
     self_ancestry: frozenset[int],
+    reap_duplicates: bool = False,
 ) -> list[ReapDecision]:
     """Pure decision function — no OS calls. Unit-tested directly.
 
     A process is killed only when ALL safety gates pass and exactly one
     staleness rule fires. The order of checks is fail-closed: any exclusion
     short-circuits to ``kill=False`` before staleness is even considered.
+
+    ``reap_duplicates`` gates the aggressive, lock-independent Rule (c). It is
+    OFF by default because "newest pair" is not provably "the current session's
+    pair" when the session lock is stale — auto/session-start use stays
+    conservative (orphans + lock-proven-stale only); operators opt in for the
+    aggressive duplicate sweep.
     """
     pids_alive = {p.pid for p in procs}
     decisions: list[ReapDecision] = []
@@ -193,7 +200,58 @@ def decide(
         else:
             decisions.append(ReapDecision(p, False, "started after session — current session's own — keep"))
 
+    # Rule (c) — duplicate-generation reaping (lock-independent hardening).
+    # A correctly-running MCP server is at most one stub→base PID pair (see
+    # memory/feedback_venv_stub_base_interpreter_pid_pairs_not_a_bug_2026_05_27.md).
+    # When a server signature has MORE than one pair alive, earlier generations
+    # are leftovers from prior sessions that a stale session lock cannot date.
+    # Keep the newest EXPECTED_PAIR processes per signature; mark the rest kill.
+    # This runs only on processes Rule (b) left as keep — exclusions already won.
+    # Opt-in: see ``reap_duplicates`` docstring (avoids killing a live-connected
+    # sibling MCP server when the session lock is stale).
+    if reap_duplicates:
+        _apply_duplicate_generation_rule(decisions)
     return decisions
+
+
+# A single logical MCP/LSP server presents as a stub→base interpreter PID pair.
+EXPECTED_PAIR = 2
+
+
+def _apply_duplicate_generation_rule(decisions: list[ReapDecision]) -> None:
+    """Mutate ``decisions`` in place: among still-kept project processes, keep
+    the newest ``EXPECTED_PAIR`` per server signature, mark older ones kill.
+
+    Processes with an unknown start time are conservatively kept (cannot rank).
+    """
+    # Each entry: (epoch_start, decision_index). epoch captured here so the
+    # sort key carries a known float, not an Optional member access.
+    by_sig: dict[str, list[tuple[float, int]]] = {}
+    for i, d in enumerate(decisions):
+        if d.kill or d.proc.started is None:
+            continue
+        sig = _server_signature(d.proc.cmdline)
+        if sig is None:
+            continue
+        by_sig.setdefault(sig, []).append((d.proc.started.timestamp(), i))
+
+    for sig, entries in by_sig.items():
+        if len(entries) <= EXPECTED_PAIR:
+            continue
+        # Newest first; keep the first EXPECTED_PAIR, reap the rest.
+        entries.sort(reverse=True)
+        for _epoch, stale_i in entries[EXPECTED_PAIR:]:
+            p = decisions[stale_i].proc
+            decisions[stale_i] = ReapDecision(p, True, f"duplicate generation of '{sig}' (newer pair alive)")
+
+
+def _server_signature(cmdline: str) -> str | None:
+    """The PROJECT_PROCESS signature this cmdline matches, for grouping pairs."""
+    low = cmdline.lower()
+    for sig in PROJECT_PROCESS_SIGNATURES:
+        if sig.lower() in low:
+            return sig
+    return None
 
 
 def _enumerate_processes() -> list[ProcInfo]:  # pragma: no cover - OS boundary
@@ -322,6 +380,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Reap provably-stale Claude/MCP/hook processes (fail-open).")
     parser.add_argument("--apply", action="store_true", help="Actually kill candidates (default: dry-run).")
     parser.add_argument("--quiet", action="store_true", help="Only print the summary line.")
+    parser.add_argument(
+        "--reap-duplicates",
+        action="store_true",
+        help=(
+            "Also reap older duplicate MCP/LSP generations (keep newest pair per server). "
+            "OFF by default — may kill a live-connected sibling when the session lock is stale; "
+            "use for a manual deep clean, not session-start auto-reaping."
+        ),
+    )
     args = parser.parse_args(argv)
 
     lock_path = PROJECT_ROOT / ".git" / ".claude.pid"
@@ -330,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
     self_pid = os.getpid()
     ancestry = _self_ancestry(self_pid, procs)
 
-    decisions = decide(procs, session_start, self_pid, ancestry)
+    decisions = decide(procs, session_start, self_pid, ancestry, reap_duplicates=args.reap_duplicates)
     candidates = [d for d in decisions if d.kill]
 
     if not args.quiet:

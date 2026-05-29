@@ -21,8 +21,10 @@ BEFORE = SESSION_START - timedelta(hours=2)
 AFTER = SESSION_START + timedelta(minutes=10)
 
 
-def _decisions_by_pid(procs, session_start: datetime | None = SESSION_START, self_pid=999, ancestry=frozenset()):
-    return {d.proc.pid: d for d in decide(procs, session_start, self_pid, ancestry)}
+def _decisions_by_pid(
+    procs, session_start: datetime | None = SESSION_START, self_pid=999, ancestry=frozenset(), reap_duplicates=False
+):
+    return {d.proc.pid: d for d in decide(procs, session_start, self_pid, ancestry, reap_duplicates=reap_duplicates)}
 
 
 def test_orphan_fork_worker_is_killed():
@@ -129,6 +131,57 @@ def test_read_session_start_corrupt_returns_none(tmp_path):
     lock = tmp_path / ".claude.pid"
     lock.write_text("not json {{{", encoding="utf-8")
     assert read_session_start(lock) is None
+
+
+def test_duplicate_generation_keeps_newest_pair_reaps_older():
+    # 3 generations (6 procs) of the same MCP server, all postdating the session
+    # (so Rule b keeps them) — Rule c must keep the newest pair, reap the 4 older.
+    g1 = AFTER + timedelta(minutes=1)  # oldest
+    g2 = AFTER + timedelta(minutes=2)
+    g3 = AFTER + timedelta(minutes=3)  # newest
+    procs = []
+    for pid, start in [(11, g1), (12, g1), (13, g2), (14, g2), (15, g3), (16, g3)]:
+        procs.append(ProcInfo(pid=pid, ppid=1, cmdline="python scripts/tools/repo_state_mcp_server.py", started=start))
+    d = _decisions_by_pid(procs, reap_duplicates=True)
+    # Newest pair kept
+    assert d[15].kill is False and d[16].kill is False
+    # Older two generations reaped as duplicates
+    for pid in (11, 12, 13, 14):
+        assert d[pid].kill is True, f"pid {pid} should be reaped"
+        assert "duplicate generation" in d[pid].reason
+
+
+def test_duplicate_generation_off_by_default():
+    # Same 3 generations, but without the opt-in flag → nothing reaped as duplicate.
+    g1, g2, g3 = AFTER + timedelta(minutes=1), AFTER + timedelta(minutes=2), AFTER + timedelta(minutes=3)
+    procs = [
+        ProcInfo(pid=pid, ppid=1, cmdline="python scripts/tools/repo_state_mcp_server.py", started=start)
+        for pid, start in [(11, g1), (12, g1), (13, g2), (14, g2), (15, g3), (16, g3)]
+    ]
+    d = _decisions_by_pid(procs)  # reap_duplicates defaults False
+    assert all(not d[pid].kill for pid in (11, 12, 13, 14, 15, 16))
+
+
+def test_single_pair_never_reaped_as_duplicate():
+    procs = [
+        ProcInfo(pid=21, ppid=1, cmdline="python scripts/tools/strategy_lab_mcp_server.py", started=AFTER),
+        ProcInfo(pid=22, ppid=1, cmdline="python scripts/tools/strategy_lab_mcp_server.py", started=AFTER),
+    ]
+    d = _decisions_by_pid(procs)
+    assert d[21].kill is False and d[22].kill is False
+
+
+def test_duplicate_rule_never_overrides_capital_path_exclusion():
+    # Even with many generations, a capital-path proc stays excluded (Gate 1 wins).
+    procs = [
+        ProcInfo(pid=31, ppid=1, cmdline="python -m trading_app.live.webhook_server --live", started=AFTER),
+        ProcInfo(pid=32, ppid=1, cmdline="python -m trading_app.live.webhook_server --live", started=AFTER),
+        ProcInfo(pid=33, ppid=1, cmdline="python -m trading_app.live.webhook_server --live", started=AFTER),
+    ]
+    d = _decisions_by_pid(procs, reap_duplicates=True)
+    for pid in (31, 32, 33):
+        assert d[pid].kill is False
+        assert "capital-path" in d[pid].reason
 
 
 def test_read_session_start_recovers_from_unescaped_windows_path(tmp_path):
