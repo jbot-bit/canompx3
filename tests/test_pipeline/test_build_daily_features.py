@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import pipeline.build_daily_features as daily_features_mod
 from pipeline.build_daily_features import (
     BRISBANE_TZ,
     ORB_LABELS,
@@ -1013,6 +1014,23 @@ class TestBuildIntegration:
 
         ok, failures = verify_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5))
         assert ok, f"Verification failed: {failures}"
+
+    def test_build_rolls_back_on_verification_failure(self, feature_db, monkeypatch):
+        """Verification failure should roll back the staged write set."""
+
+        def _fail_verify(*_args, **_kwargs):
+            return False, ["synthetic verification failure"]
+
+        monkeypatch.setattr(daily_features_mod, "verify_daily_features", _fail_verify)
+
+        with pytest.raises(RuntimeError, match="Integrity verification FAILED"):
+            build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, False)
+
+        count = feature_db.execute("""
+            SELECT COUNT(*) FROM daily_features
+            WHERE symbol = 'MGC' AND trading_day = '2024-01-05' AND orb_minutes = 5
+        """).fetchone()[0]
+        assert count == 0
 
     def test_idempotent(self, feature_db):
         """Running build twice produces same result."""

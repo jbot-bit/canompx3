@@ -6,11 +6,12 @@ Staged build (each stage is gated):
   1. Trading day assignment (09:00 Brisbane boundary)
   2. ORB ranges (one per dynamic session in ORB_LABELS, configurable duration)
   3. Break detection (first 1m close outside ORB)
-  4. Session stats (dynamic-window high-low for session range features)
+  4. Session stats (fixed Brisbane-window high-low approximations)
   5. RSI (Wilder's 14-period on 5m closes)
   6. Overnight/pre-session stats, market profile, ATR velocity, compression, GARCH, rel volume
 
-Idempotent: DELETE existing daily_features rows for the date range, then INSERT.
+Idempotent: upsert daily_features rows for the date range by
+(symbol, trading_day, orb_minutes).
 
 Usage:
     python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --end 2024-01-31
@@ -1288,6 +1289,7 @@ def build_daily_features(
     """
     Build daily_features for all trading days in [start_date, end_date].
 
+    Non-dry writes are enriched and transactionally verified before commit.
     Returns number of rows written.
     """
     import numpy as np
@@ -1751,13 +1753,6 @@ def build_daily_features(
                 )
             """)
 
-        con.execute("COMMIT")
-
-        if existing_count > 0:
-            logger.info(f"  Updated {existing_count:,} existing daily_features rows")
-        if insert_count > 0:
-            logger.info(f"  Inserted {insert_count:,} new daily_features rows")
-
         # Post-pass enrichment: populate pit_range_atr from exchange_statistics
         # for the freshly-written slice. PitRangeFilter is fail-closed at
         # eligibility time, so a missing upstream stats row drops that day
@@ -1765,7 +1760,19 @@ def build_daily_features(
         from pipeline.backfill_pit_range_atr import enrich_date_range
 
         populated = enrich_date_range(con, symbol, start_date, end_date)
+        ok, failures = verify_daily_features(con, symbol, start_date, end_date, orb_minutes)
+        if not ok:
+            failure_text = "; ".join(failures)
+            raise RuntimeError(f"Integrity verification FAILED for orb_minutes={orb_minutes}: {failure_text}")
+
+        con.execute("COMMIT")
+
+        if existing_count > 0:
+            logger.info(f"  Updated {existing_count:,} existing daily_features rows")
+        if insert_count > 0:
+            logger.info(f"  Inserted {insert_count:,} new daily_features rows")
         logger.info(f"  pit_range_atr: {populated:,} rows populated in written slice")
+        logger.info(f"  Integrity checks: PASSED [OK] (orb_minutes={orb_minutes})")
 
         return len(rows)
 
@@ -1946,26 +1953,13 @@ def main():
 
         # Build
         logger.info("Building daily features...")
-        row_count = build_daily_features(con, symbol, start_date, end_date, args.orb_minutes, args.dry_run)
+        try:
+            row_count = build_daily_features(con, symbol, start_date, end_date, args.orb_minutes, args.dry_run)
+        except Exception:
+            sys.exit(1)
 
-        # Verify (skip for dry run)
         if not args.dry_run and row_count > 0:
-            scope = f"orb_minutes={args.orb_minutes}" if args.orb_minutes else "all apertures"
-            logger.info(f"Verifying integrity ({scope})...")
-            ok, failures = verify_daily_features(con, symbol, start_date, end_date, args.orb_minutes)
-
-            if not ok:
-                logger.error("FATAL: Integrity verification FAILED:")
-                for f in failures:
-                    logger.info(f"  - {f}")
-                sys.exit(1)
-
-            logger.info("  No duplicates: PASSED [OK]")
-            logger.info("  Bar counts: PASSED [OK]")
-            logger.info("  ORB sizes: PASSED [OK]")
-            logger.info("  Break directions: PASSED [OK]")
-            logger.info("  Outcomes: PASSED [OK]")
-            logger.info("ALL INTEGRITY CHECKS PASSED [OK]")
+            logger.info(f"Integrity scope: orb_minutes={args.orb_minutes} (verified before commit)")
         elif args.dry_run:
             logger.info("Integrity check skipped (dry run)")
 
