@@ -655,12 +655,13 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 - **Stage NOT closed:** `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` remains open. Criteria 1-4 met with positive test coverage; criteria 5-6 show no regression vs baseline; criterion 7 (operator hits `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirms non-blocked status + `logs/live/live_signals_2026-05-18.jsonl` appears within 30s) requires a live dashboard run.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Unknown
 - **Date:** 2026-05-29
-- **Commit:** f235fb79 — [judgment] fix(prereg): loader-conformance + staleness fixes on NYSE_PREOPEN O30 overlay v1
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-05-29-mnq-nyse-preopen-o30-size-adjacent-overlay-v1.yaml`
+- **Commit:** 18b002f8 — Add project improvement review report tool
+- **Files changed:** 3 files
+  - `docs/runtime/project_reviews/2026-05-28-project-improvement-review.md`
+  - `scripts/tools/project_improvement_review.py`
+  - `tests/test_tools/test_project_improvement_review.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
