@@ -4595,7 +4595,14 @@ async function fetchSessions() {
       minutes_away: s.minutes_away,
     }));
     renderTimeline(tlData, data.next?.name || "");
-    if (!data.next) { setText("next-session", "No upcoming"); setText("next-session-detail", ""); }
+    // market_open comes from the canonical market_calendar (not the local
+    // weekday): when the CME is closed (weekend gap / holiday), the resolved
+    // session times are not actionable, so say so instead of showing a
+    // misleading countdown to a session that will not fire.
+    if (data.market_open === false) {
+      setText("next-session", "Market closed");
+      setText("next-session-detail", data.next ? `next: ${data.next.name} when open` : "weekend / holiday");
+    } else if (!data.next) { setText("next-session", "No upcoming"); setText("next-session-detail", ""); }
     else {
       const next = data.next;
       setText("next-session", `${next.name} · ${String(next.hour).padStart(2, "0")}:${String(next.minute).padStart(2, "0")}`);

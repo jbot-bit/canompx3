@@ -2279,12 +2279,21 @@ async def api_equity():
 
 @app.get("/api/sessions")
 async def api_sessions():
-    """Server-side DST-correct session schedule with next-session computation."""
+    """Server-side DST-correct session schedule with next-session computation.
+
+    Market-state truth comes from pipeline.market_calendar (the same source the
+    orchestrator uses), NOT the Brisbane weekday: the machine is "Saturday"
+    locally during the entire Friday US session when the CME market is open, so
+    a Brisbane-date check would mislabel an open market as closed. ``market_open``
+    is surfaced so the dashboard can render closed-on-weekend / holiday correctly.
+    """
     try:
         from pipeline.dst import SESSION_CATALOG
+        from pipeline.market_calendar import is_market_open_at
 
         now_bris = datetime.now(ZoneInfo("Australia/Brisbane"))
         today = now_bris.date()  # Use Brisbane date — not system local (matters at NYSE_OPEN midnight crossing)
+        market_open = is_market_open_at(datetime.now(ZoneInfo("UTC")))
         sessions = []
         for name, info in sorted(SESSION_CATALOG.items()):
             resolver = info.get("resolver")
@@ -2312,9 +2321,9 @@ async def api_sessions():
         sessions.sort(key=lambda s: s["minutes_away"])
         # Find the next upcoming session
         next_session = next((s for s in sessions if s["status"] == "UPCOMING"), None)
-        return {"sessions": sessions, "next": next_session}
+        return {"sessions": sessions, "next": next_session, "market_open": market_open}
     except Exception as e:
-        return {"sessions": [], "next": None, "error": str(e)}
+        return {"sessions": [], "next": None, "market_open": None, "error": str(e)}
 
 
 @app.get("/api/alerts")
