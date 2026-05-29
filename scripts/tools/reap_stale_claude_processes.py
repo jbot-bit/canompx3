@@ -123,8 +123,8 @@ def read_session_start(lock_path: Path) -> datetime | None:
         # path (e.g. "C:\\Users\\...") which is invalid JSON — the iso_started
         # field itself is well-formed (digits, ':', '-', '+', '.', 'T') and
         # never contains a backslash, so recover it by regex rather than failing
-        # closed on every Windows session. (Lock-writer bug flagged separately;
-        # see docs/runtime/stages/2026-05-29-stale-process-reaper.md.)
+        # closed on every Windows session. (Root cause: session-start.py writes
+        # the lock with an unescaped Windows worktree path; tracked separately.)
         m = re.search(r'"iso_started"\s*:\s*"([^"\\]+)"', raw)
         if m:
             iso = m.group(1)
