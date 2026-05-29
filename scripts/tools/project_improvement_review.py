@@ -88,9 +88,13 @@ EVIDENCE_RE = re.compile(
     re.IGNORECASE,
 )
 OOS_TUNING_RE = re.compile(
-    r"\b(tune|optimi[sz]e|rescue|adjust|sweep)\b.{0,80}\b(OOS|out[- ]of[- ]sample|holdout)\b"
-    r"|\b(OOS|out[- ]of[- ]sample|holdout)\b.{0,80}\b(tune|optimi[sz]e|rescue|adjust|sweep)\b",
+    r"\b(tune|optimi[sz]e|rescue|adjust)\b.{0,80}\b(OOS|out[- ]of[- ]sample|holdout)\b"
+    r"|\b(OOS|out[- ]of[- ]sample|holdout)\b.{0,80}\b(tune|optimi[sz]e|rescue|adjust)\b",
     re.IGNORECASE | re.DOTALL,
+)
+OOS_DECISION_CONTEXT_RE = re.compile(
+    r"\b(threshold|filter|session|entry_model|parameter|lane|profile|select|choose|promot|deploy|go[- ]live|validated|strategy)\b",
+    re.IGNORECASE,
 )
 NO_GO_REOPEN_RE = re.compile(
     r"\b(NO[- ]GO|NOGO|graveyard|dead)\b.{0,120}\b(reopen|revive|retry)\b", re.IGNORECASE | re.DOTALL
@@ -154,6 +158,7 @@ DB_CONNECT_ALLOWLIST_EXACT = {
 }
 
 PROTECTED_MUTATION_ALLOWLIST = {
+    "scripts/tools/live_readiness_report.py",
     "trading_app/live/planned_launch.py",
 }
 
@@ -439,11 +444,45 @@ def _nearby_has_evidence(text: str, start: int, end: int) -> bool:
 
 def _nearby_is_prohibition(text: str, start: int, end: int) -> bool:
     window = text[max(0, start - 120) : min(len(text), end + 120)].lower()
-    return any(token in window for token in ("never ", "must not", "do not", "banned", "forbid", "blocked"))
+    return any(
+        token in window
+        for token in (
+            "never ",
+            "must not",
+            "do not",
+            "does not",
+            "not ",
+            "no ",
+            "without ",
+            "banned",
+            "forbid",
+            "blocked",
+            "unchanged threshold",
+            "thresholds are read-only",
+        )
+    )
+
+
+def _oos_tuning_match(text: str) -> re.Match[str] | None:
+    """Return the first high-signal OOS tuning risk.
+
+    Audit docs often say "no OOS tuning" or "did not rescue"; those are safety
+    assertions, not evidence of contamination. Treat "rescue" as high-risk only
+    when the nearby text also references a concrete decision surface.
+    """
+    for match in OOS_TUNING_RE.finditer(text):
+        if _nearby_is_prohibition(text, match.start(), match.end()):
+            continue
+        window = text[max(0, match.start() - 180) : min(len(text), match.end() + 180)]
+        matched_text = match.group(0).lower()
+        if "rescue" in matched_text and not OOS_DECISION_CONTEXT_RE.search(window):
+            continue
+        return match
+    return None
 
 
 def _is_reviewer_own_surface(path: str) -> bool:
-    return path in {
+    return path.startswith("docs/runtime/project_reviews/") or path in {
         "scripts/tools/project_improvement_review.py",
         "tests/test_tools/test_project_improvement_review.py",
     }
@@ -504,26 +543,20 @@ def _scan_research_integrity(path: str, text: str) -> list[Finding]:
     is_research_surface = path.startswith(
         ("research/", "docs/audit/", "docs/institutional/", "chatgpt_bundle/")
     ) or path.endswith(("RESEARCH_RULES.md", "STRATEGY_BLUEPRINT.md"))
-    if OOS_TUNING_RE.search(text):
-        match = OOS_TUNING_RE.search(text)
-        if match and _nearby_is_prohibition(text, match.start(), match.end()):
-            match = None
-        if not match:
-            pass
-        else:
-            findings.append(
-                _finding(
-                    "Research integrity",
-                    "BLOCKER",
-                    "MEDIUM",
-                    path,
-                    _snippet(text, match),
-                    "Static pattern risk: OOS/holdout language appears near tuning or rescue language.",
-                    "Refactor into a pre-registered hypothesis draft with explicit K accounting before any result inspection.",
-                    "Run `uv run python pipeline/check_drift.py --fast` and targeted research tests.",
-                    "Stop if OOS influenced a threshold, filter, session, or lane-selection decision.",
-                )
+    if match := _oos_tuning_match(text):
+        findings.append(
+            _finding(
+                "Research integrity",
+                "BLOCKER",
+                "MEDIUM",
+                path,
+                _snippet(text, match),
+                "Static pattern risk: OOS/holdout language appears near tuning or rescue language.",
+                "Refactor into a pre-registered hypothesis draft with explicit K accounting before any result inspection.",
+                "Run `uv run python pipeline/check_drift.py --fast` and targeted research tests.",
+                "Stop if OOS influenced a threshold, filter, session, or lane-selection decision.",
             )
+        )
     if NO_GO_REOPEN_RE.search(text):
         findings.append(
             _finding(
@@ -688,14 +721,21 @@ def _scan_protected_mutation(path: str, text: str) -> list[Finding]:
         return []
     if path in PROTECTED_MUTATION_ALLOWLIST:
         return []
+    if path.startswith(("docs/", "chatgpt_bundle/", "tests/")):
+        return []
     if not path.endswith((".py", ".yaml", ".yml", ".json")):
         return []
     hits: list[str] = []
     for token in PROTECTED_MUTATION_HINTS:
         for match in re.finditer(re.escape(token), text, re.IGNORECASE):
             window = text[max(0, match.start() - 180) : min(len(text), match.end() + 180)]
+            if _nearby_is_prohibition(text, match.start(), match.end()):
+                continue
             if re.search(
-                r"\b(write|dump|apply|mutate|deploy|sync|upsert|delete|go_live|go-live)\b", window, re.IGNORECASE
+                r"\b(write|dump|apply|mutate|deploy|sync|upsert|delete|go_live|go-live)\b"
+                r"|\b(write|dump|apply|sync|upsert|delete)_",
+                window,
+                re.IGNORECASE,
             ):
                 hits.append(token)
                 break

@@ -136,6 +136,75 @@ def test_e2_policy_annotation_suppresses_lookahead_fixture(tmp_path, monkeypatch
     assert not any("break-bar-derived predictor" in item.evidence_snippet for item in report.findings)
 
 
+def test_flags_oos_tuning_against_decision_surface(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "docs/audit/results/oos_tuning.md",
+        "We will tune the threshold against OOS to rescue this strategy for promotion.",
+    )
+    _clean_git(monkeypatch, changed=("docs/audit/results/oos_tuning.md",))
+
+    report = review.review(_config(tmp_path))
+
+    assert any(
+        item.evidence_path == "docs/audit/results/oos_tuning.md" and item.severity == "BLOCKER"
+        for item in report.findings
+    )
+
+
+def test_oos_no_tuning_policy_language_is_not_a_blocker(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "docs/audit/hypotheses/drafts/mgc_cpcv.md",
+        (
+            "No 2026 holdout tuning: CPCV does NOT tune against holdout data. "
+            "No post-hoc threshold changes. Thresholds are read-only constants. "
+            "K=1992 is carried forward as the honest selection budget."
+        ),
+    )
+    _clean_git(monkeypatch, changed=("docs/audit/hypotheses/drafts/mgc_cpcv.md",))
+
+    report = review.review(_config(tmp_path))
+
+    assert not any(
+        item.evidence_path == "docs/audit/hypotheses/drafts/mgc_cpcv.md"
+        and item.category == "Research integrity"
+        and item.severity == "BLOCKER"
+        for item in report.findings
+    )
+
+
+def test_powered_oos_resweep_title_is_not_tuning_by_itself(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "research/powered_oos_resweep.py",
+        (
+            "# Powered-OOS graveyard re-sweep\n"
+            "OOS_FRACTION = 0.30\n"
+            "print('does NOT rescue any candidate to deployable status')\n"
+        ),
+    )
+    _clean_git(monkeypatch, changed=("research/powered_oos_resweep.py",))
+
+    report = review.review(_config(tmp_path))
+
+    assert not any(
+        item.evidence_path == "research/powered_oos_resweep.py"
+        and item.category == "Research integrity"
+        and item.severity == "BLOCKER"
+        for item in report.findings
+    )
+
+
+def test_generated_project_review_report_is_not_rescanned(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "docs/runtime/project_reviews/report.md",
+        "Historical report text: tune the threshold against OOS to rescue this strategy for promotion.",
+    )
+    _clean_git(monkeypatch, changed=("docs/runtime/project_reviews/report.md",))
+
+    report = review.review(_config(tmp_path))
+
+    assert not any(item.evidence_path == "docs/runtime/project_reviews/report.md" for item in report.findings)
+
+
 def test_live_safe_doc_without_evidence_is_flagged(tmp_path, monkeypatch) -> None:
     _write(tmp_path / "docs/runtime/live.md", "This lane is LIVE_SAFE and ready to deploy.")
     _clean_git(monkeypatch, changed=("docs/runtime/live.md",))
@@ -180,6 +249,56 @@ def test_protected_surface_mentions_need_nearby_mutation_language(tmp_path, monk
         item.evidence_path == "trading_app/live_reader.py" and item.category == "Git/worktree hygiene"
         for item in report.findings
     )
+
+
+def test_protected_surface_mutation_is_flagged_in_code(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "scripts/tools/mutate_live.py",
+        "from trading_app import prop_profiles\n\ndef run():\n    write_live_config(prop_profiles.ACCOUNT_PROFILES)\n",
+    )
+    _clean_git(monkeypatch, changed=("scripts/tools/mutate_live.py",))
+
+    report = review.review(_config(tmp_path))
+
+    assert any(
+        item.evidence_path == "scripts/tools/mutate_live.py" and item.category == "Git/worktree hygiene"
+        for item in report.findings
+    )
+
+
+def test_report_only_docs_and_live_readiness_are_not_protected_mutation_findings(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "docs/runtime/action-queue.yaml",
+        "next_action: Do not mutate docs/runtime/lane_allocation.json; emit report-only proposal.\n",
+    )
+    _write(
+        tmp_path / "scripts/tools/live_readiness_report.py",
+        "from trading_app import prop_profiles\nout_path.write_text('profile report')\n",
+    )
+    _clean_git(
+        monkeypatch,
+        changed=("docs/runtime/action-queue.yaml", "scripts/tools/live_readiness_report.py"),
+    )
+
+    report = review.review(_config(tmp_path))
+
+    assert not any(
+        item.evidence_path in {"docs/runtime/action-queue.yaml", "scripts/tools/live_readiness_report.py"}
+        and item.category == "Git/worktree hygiene"
+        for item in report.findings
+    )
+
+
+def test_protected_mutation_scan_ignores_test_fixtures(tmp_path, monkeypatch) -> None:
+    _write(
+        tmp_path / "tests/test_tools/test_live_readiness_report.py",
+        "fixture = 'write docs/runtime/lane_allocation.json in a fake profile test'\n",
+    )
+    _clean_git(monkeypatch, changed=("tests/test_tools/test_live_readiness_report.py",))
+
+    report = review.review(_config(tmp_path))
+
+    assert not any(item.evidence_path == "tests/test_tools/test_live_readiness_report.py" for item in report.findings)
 
 
 def test_known_canonical_db_writer_paths_are_not_reported_as_reader_risks(tmp_path, monkeypatch) -> None:
