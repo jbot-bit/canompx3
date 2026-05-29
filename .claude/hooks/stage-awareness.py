@@ -22,12 +22,30 @@ v2 changes (from v1):
 """
 
 import json
+import re
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
 STAGES_DIR = Path("docs/runtime/stages")
+RESOURCES_INDEX = Path("resources/INDEX.md")
+
+# Research/design intent → remind to ground in the local corpus FIRST. The cue
+# is one line pointing at resources/INDEX.md (the cheap navigation manifest);
+# from there the canonical citation source is docs/institutional/literature/.
+# Fires independently of stage state. Fail-open like everything in this hook.
+GROUNDING_INTENT = re.compile(
+    r"\b(research|hypothesi|investigat|backtest|does .{1,30} work|is .{1,20} real|"
+    r"edge|literature|cite|citation|grounding|deflated|sharpe|fdr|overfit|"
+    r"design|propose|methodology|chordia|carver|lopez|harvey)\b",
+    re.IGNORECASE,
+)
+GROUNDING_CUE = (
+    "GROUNDING: check `resources/INDEX.md` for a local source before citing "
+    "training memory; cite from `docs/institutional/literature/` (page-cited) "
+    "via the research-catalog MCP, or say UNSUPPORTED."
+)
 
 # Rotating directives for "stage: none" — prevents habituation.
 # Picked by minute % len(NONE_DIRECTIVES) so they vary across interactions.
@@ -98,11 +116,33 @@ def check_stale(content):
         return False
 
 
+def _emit_grounding_cue(event):
+    """Print the local-grounding reminder on research/design intent. Fail-open.
+
+    Cheap: one regex over the prompt + one line out. No file reads, no index
+    rebuild (the indexer/hook handles freshness elsewhere). Only fires when the
+    INDEX.md it points at actually exists, so the cue never dangles.
+    """
+    try:
+        prompt = event.get("prompt", "") if isinstance(event, dict) else ""
+        if not isinstance(prompt, str) or not prompt.strip():
+            return
+        if not GROUNDING_INTENT.search(prompt):
+            return
+        if not RESOURCES_INDEX.exists():
+            return
+        print(GROUNDING_CUE, file=sys.stderr)
+    except Exception:
+        return
+
+
 def main():
     try:
-        json.load(sys.stdin)
+        event = json.load(sys.stdin)
     except (json.JSONDecodeError, Exception):
         sys.exit(0)
+
+    _emit_grounding_cue(event)
 
     # ── Collect all stage files (stages/ first, legacy STAGE_STATE.md last) ──
     stage_files = []

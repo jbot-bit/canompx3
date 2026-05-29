@@ -1,4 +1,5 @@
 {
+  "defaultShell": "bash",
   "env": {
     "VIRTUAL_ENV": ".venv",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70"
@@ -34,7 +35,7 @@
     ]
   },
   "attribution": {
-    "commit": "Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "commit": "Co-Authored-By: Claude <noreply@anthropic.com>",
     "pr": "Generated with [Claude Code](https://claude.com/claude-code)"
   },
   "sandbox": {
@@ -132,6 +133,16 @@
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/judgment-review-soft-block.py",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/shell-canon-guard.py",
+            "timeout": 3
           }
         ]
       }
