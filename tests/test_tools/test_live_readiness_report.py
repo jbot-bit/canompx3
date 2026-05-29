@@ -90,6 +90,7 @@ def _install_happy_path(
             profile_id="topstep_50k_mnq_auto",
             firm="topstep",
             account_size=50_000,
+            is_express_funded=True,
             copies=1,
             daily_loss_dollars=450.0,
         ),
@@ -506,7 +507,7 @@ def test_falls_back_to_profile_config_when_allocator_profile_mismatched(tmp_path
     assert "WRONG_PROFILE_LANE" not in wrong_ids
 
 
-def test_strict_zero_warn_blocks_when_telemetry_below_floor(tmp_path: Path, monkeypatch) -> None:
+def test_strict_zero_warn_warns_when_funded_telemetry_below_floor(tmp_path: Path, monkeypatch) -> None:
     allocation_path = tmp_path / "lane_allocation.json"
     _install_happy_path(
         monkeypatch,
@@ -529,11 +530,56 @@ def test_strict_zero_warn_blocks_when_telemetry_below_floor(tmp_path: Path, monk
     )
 
     assert report["telemetry_maturity"]["verdict"] == "UNVERIFIED_INSUFFICIENT_TELEMETRY"
-    assert report["strict_zero_warn"]["green"] is False
-    assert any("telemetry" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+    assert report["profile_launch"]["is_express_funded"] is True
+    assert report["strict_zero_warn"]["green"] is True
+    assert not any("telemetry" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+    assert any("telemetry" in warning.lower() for warning in report["strict_zero_warn"]["warnings"])
     markdown = live_readiness_report._render_markdown(report)
     assert "Strict zero-warn" in markdown
     assert "Telemetry" in markdown
+    assert "Strict warnings" in markdown
+
+
+def test_strict_zero_warn_blocks_when_real_capital_telemetry_below_floor(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        telemetry={
+            "verdict": "UNVERIFIED_INSUFFICIENT_TELEMETRY",
+            "instrument": "MNQ",
+            "profile_id": "self_funded_tradovate",
+            "scope": "profile",
+            "profile_scoped": True,
+            "n_unique_trading_days": 8,
+            "min_required": 30,
+            "trading_days": ["2026-05-01", "2026-05-02"],
+            "signal_files_scanned": 2,
+            "records_scanned": 12,
+            "records_qualifying": 8,
+        },
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "get_profile",
+        lambda _profile_id: SimpleNamespace(
+            profile_id="self_funded_tradovate",
+            firm="self_funded",
+            account_size=30_000,
+            is_express_funded=False,
+            copies=1,
+            daily_loss_dollars=450.0,
+        ),
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["profile_launch"]["is_express_funded"] is False
+    assert report["strict_zero_warn"]["green"] is False
+    assert any("telemetry" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
 
 
 def test_strict_zero_warn_blocks_mature_instrument_global_telemetry(
@@ -554,6 +600,18 @@ def test_strict_zero_warn_blocks_mature_instrument_global_telemetry(
             "records_scanned": 120,
             "records_qualifying": 30,
         },
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "get_profile",
+        lambda _profile_id: SimpleNamespace(
+            profile_id="self_funded_tradovate",
+            firm="self_funded",
+            account_size=30_000,
+            is_express_funded=False,
+            copies=1,
+            daily_loss_dollars=450.0,
+        ),
     )
 
     report = live_readiness_report.build_live_readiness_report(
@@ -749,6 +807,7 @@ def test_strict_zero_warn_blocks_multi_copy_without_shadow_loss_protection(
             profile_id="topstep_50k_mnq_auto",
             firm="topstep",
             account_size=50_000,
+            is_express_funded=True,
             copies=2,
             daily_loss_dollars=450.0,
         ),

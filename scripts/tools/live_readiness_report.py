@@ -410,6 +410,7 @@ def _load_profile_launch_summary(profile_id: str) -> dict[str, Any]:
         "profile_id": profile.profile_id,
         "firm": profile.firm,
         "account_size": profile.account_size,
+        "is_express_funded": bool(profile.is_express_funded),
         "copies": copies,
         "daily_loss_dollars": daily_loss_dollars,
         "shadow_copy_loss_protection": copies <= 1,
@@ -433,8 +434,10 @@ def _build_strict_zero_warn_summary(
     profile_launch: dict[str, Any],
 ) -> dict[str, Any]:
     blockers: list[str] = []
+    warnings: list[str] = []
     c11 = criterion11 or {}
     c12 = criterion12 or {}
+    telemetry_is_advisory = bool(profile_launch.get("is_express_funded"))
 
     if c11.get("gate_ok") is not True:
         blockers.append("Criterion 11 gate not OK")
@@ -486,18 +489,26 @@ def _build_strict_zero_warn_summary(
         blockers.append(f"Criterion 12 alarm not on active lane ({uncovered_alarms})")
 
     if str(telemetry_maturity.get("verdict") or "") != VERDICT_MATURE:
-        blockers.append(
+        telemetry_line = (
             "Telemetry not mature: "
             f"{telemetry_maturity.get('verdict')} "
             f"({telemetry_maturity.get('n_unique_trading_days')}/{telemetry_maturity.get('min_required')} trading days)"
         )
+        if telemetry_is_advisory:
+            warnings.append(telemetry_line + " (advisory for express/funded profile)")
+        else:
+            blockers.append(telemetry_line)
 
     if telemetry_maturity.get("profile_scoped") is not True:
-        blockers.append(
+        telemetry_scope_line = (
             "Telemetry not profile-scoped: "
             f"profile={telemetry_maturity.get('profile_id')} "
             f"scope={telemetry_maturity.get('scope')}"
         )
+        if telemetry_is_advisory:
+            warnings.append(telemetry_scope_line + " (advisory for express/funded profile)")
+        else:
+            blockers.append(telemetry_scope_line)
 
     for stage in live_stage_acceptance.get("stages", []):
         if stage.get("green") is not True:
@@ -512,6 +523,7 @@ def _build_strict_zero_warn_summary(
     return {
         "green": not blockers,
         "blockers": blockers,
+        "warnings": warnings,
     }
 
 
@@ -651,6 +663,7 @@ def _render_text(report: dict[str, Any]) -> str:
             "Strict zero-warn: "
             f"green={bool(strict_zero_warn.get('green'))} "
             f"blockers={len(strict_zero_warn.get('blockers', []))}"
+            f" warnings={len(strict_zero_warn.get('warnings', []))}"
         ),
         (
             "Telemetry: "
@@ -673,6 +686,11 @@ def _render_text(report: dict[str, Any]) -> str:
         lines.extend(["Strict blockers:"])
         for blocker in strict_zero_warn["blockers"]:
             lines.append(f"  - {blocker}")
+
+    if strict_zero_warn.get("warnings"):
+        lines.extend(["Strict warnings:"])
+        for warning in strict_zero_warn["warnings"]:
+            lines.append(f"  - {warning}")
 
     lines.extend(
         [
@@ -758,6 +776,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Green: `{bool(strict_zero_warn.get('green'))}`",
         f"- Blockers: `{len(strict_zero_warn.get('blockers', []))}`",
+        f"- Warnings: `{len(strict_zero_warn.get('warnings', []))}`",
         "",
         "## Telemetry",
         "",
@@ -782,6 +801,11 @@ def _render_markdown(report: dict[str, Any]) -> str:
         lines.extend(["", "## Strict blockers", ""])
         for blocker in strict_zero_warn["blockers"]:
             lines.append(f"- `{blocker}`")
+
+    if strict_zero_warn.get("warnings"):
+        lines.extend(["", "## Strict warnings", ""])
+        for warning in strict_zero_warn["warnings"]:
+            lines.append(f"- `{warning}`")
 
     lines.extend(
         [

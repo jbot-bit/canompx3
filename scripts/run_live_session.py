@@ -481,15 +481,7 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
                 f"{target_instrument} trading_days; run --signal-only until {floor})",
             )
 
-        # Demo below-floor stays advisory; live below-floor blocks.
-        if not ctx.demo:
-            return CheckResult(
-                False,
-                f"FAILED: UNVERIFIED_INSUFFICIENT_TELEMETRY ({n}/{floor} distinct "
-                f"{target_instrument} trading_days for profile={ctx.profile_id}; "
-                f"run --signal-only until {floor})",
-            )
-        mode_label = "demo"
+        mode_label = "demo" if ctx.demo else f"funded profile={ctx.profile_id}"
         return CheckResult(
             True,
             f"WARN: telemetry below floor ({n}/{floor} distinct {target_instrument} "

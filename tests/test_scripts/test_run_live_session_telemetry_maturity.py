@@ -124,8 +124,7 @@ def test_unrecognized_instrument_defaults_to_mnq(synthetic_signals_dir):
 # The 30-day live-uptime floor was never canonical doctrine. Below-floor
 # verdicts are advisory WARN for demo / Express-Funded prop live; only
 # real-capital live (is_express_funded=False, unknown profile, or no
-# profile) preserves the original FAIL. Live promotion now also requires the
-# profile-scoped maturity floor before routing orders.
+# profile) preserves the original FAIL.
 
 
 def test_below_floor_demo_returns_warn(synthetic_signals_dir):
@@ -138,8 +137,8 @@ def test_below_floor_demo_returns_warn(synthetic_signals_dir):
     assert "29/30" in result.message
 
 
-def test_below_floor_live_xfa_profile_returns_failed(synthetic_signals_dir):
-    """--live + Express-Funded prop profile still blocks below the live-readiness floor."""
+def test_below_floor_live_xfa_profile_returns_warn(synthetic_signals_dir):
+    """--live + Express-Funded prop profile treats telemetry as advisory."""
     _write_n_distinct_days(
         synthetic_signals_dir,
         n=MIN_TELEMETRY_TRADING_DAYS - 1,
@@ -148,8 +147,9 @@ def test_below_floor_live_xfa_profile_returns_failed(synthetic_signals_dir):
     # topstep_50k_mnq_auto is the active deployment profile; per
     # prop_profiles.AccountProfile default at line 107, is_express_funded=True.
     result = _check_telemetry_maturity(_ctx(signal_only=False, demo=False, profile_id="topstep_50k_mnq_auto"))
-    assert result.passed is False, "live profile must block until telemetry maturity is green"
-    assert result.message.startswith("FAILED:")
+    assert result.passed is True, "funded/prop live profile must not block on advisory telemetry"
+    assert result.message.startswith("WARN:")
+    assert "funded profile=topstep_50k_mnq_auto" in result.message
     assert "29/30" in result.message
 
 

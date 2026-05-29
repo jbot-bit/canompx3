@@ -30,7 +30,8 @@ Live remains blocked if any command fails, or if the operator cannot confirm bro
 - Dirty or behind repo state for live mode.
 - Active lane count does not match the intended allocator book.
 - Any active stale, paused, blocked, or SR `ALARM` lane.
-- Telemetry maturity below the profile-scoped floor.
+- Telemetry maturity below the profile-scoped floor for real-capital/self-funded live.
+- For explicit Express/Funded prop profiles (`is_express_funded=True`, including Topstep XFA), below-floor telemetry is an advisory warning, not a launch blocker.
 - Live stage acceptance not green.
 - Journal DB unavailable.
 - Broker auth/session check unavailable.
