@@ -6,6 +6,11 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session
+- **Tool:** Codex
+- **Date:** 2026-05-30
+- **Summary:** Cherry-picked `ff209e48` (`Harden live capital evidence gates`) from Codex worktree branch `codex/find-project-gaps` onto main. Kept current `HANDOFF.md` history and recorded the detailed stage evidence in `docs/runtime/stages/2026-05-23-live-capital-evidence-gate.md`. Code changes harden `project_pulse` execution-evidence/capital-cockpit gates and `run_live_session.py` Criterion 11/12 preflight blocking. No DB, allocator, profile, broker, or runtime-state mutation.
+
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-29

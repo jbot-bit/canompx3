@@ -223,9 +223,80 @@ def test_auth_fail_cascades(monkeypatch, capsys, stub_daily_features, stub_telem
     assert "FAILED: auth failed" in out
     # Trade journal is independent of components and still runs OK.
     n = len(rls.PREFLIGHT_CHECKS)
-    assert f"[6/{n}] Trade journal health" in out
+    assert f"[8/{n}] Trade journal health" in out
     # Final return reflects failures (auth, contracts, notifications).
     assert result is False
+
+
+def test_survival_report_check_blocks_capital_profile(monkeypatch):
+    """Criterion 11 must fail closed for profile demo/live paths."""
+    mock_lifecycle = {
+        "criterion11": {
+            "gate_ok": False,
+            "gate_msg": "BLOCKED: no Criterion 11 survival report",
+        },
+        "criterion12": {"available": True, "valid": True, "counts": {}},
+    }
+    monkeypatch.setattr(
+        "trading_app.lifecycle_state.read_lifecycle_state",
+        lambda profile_id=None: mock_lifecycle,
+    )
+    ctx = rls.PreflightContext(
+        instrument="MNQ",
+        broker_name="topstep",
+        demo=True,
+        portfolio=_build_portfolio(),
+        profile_id="topstep_50k_mnq_auto",
+    )
+
+    result = rls._check_survival_report(ctx)
+
+    assert result.passed is False
+    assert "Criterion 11" in result.message
+
+
+def test_sr_state_check_blocks_missing_state(monkeypatch):
+    """Criterion 12 missing state must fail closed for profile demo/live paths."""
+    mock_lifecycle = {
+        "criterion11": {"gate_ok": True, "operational_pass_probability": 0.8},
+        "criterion12": {"available": False, "valid": False, "reason": "missing", "counts": {}},
+    }
+    monkeypatch.setattr(
+        "trading_app.lifecycle_state.read_lifecycle_state",
+        lambda profile_id=None: mock_lifecycle,
+    )
+    ctx = rls.PreflightContext(
+        instrument="MNQ",
+        broker_name="topstep",
+        demo=True,
+        portfolio=_build_portfolio(),
+        profile_id="topstep_50k_mnq_auto",
+    )
+
+    result = rls._check_sr_state(ctx)
+
+    assert result.passed is False
+    assert "Criterion 12 SR state missing" in result.message
+
+
+def test_capital_state_checks_skip_signal_only(monkeypatch):
+    """Signal-only stays open because it is the path that accumulates evidence."""
+
+    def _raise(*_args, **_kwargs):
+        raise AssertionError("signal-only should not read lifecycle state")
+
+    monkeypatch.setattr("trading_app.lifecycle_state.read_lifecycle_state", _raise)
+    ctx = rls.PreflightContext(
+        instrument="MNQ",
+        broker_name="topstep",
+        demo=True,
+        portfolio=_build_portfolio(),
+        profile_id="topstep_50k_mnq_auto",
+        signal_only=True,
+    )
+
+    assert rls._check_survival_report(ctx).passed is True
+    assert rls._check_sr_state(ctx).passed is True
 
 
 # ---------- Contract on the canonical helpers ----------
@@ -242,6 +313,8 @@ def test_preflight_checks_is_an_ordered_list():
     assert names == [
         "_check_auth",
         "_check_portfolio",
+        "_check_survival_report",
+        "_check_sr_state",
         "_check_daily_features",
         "_check_contracts",
         "_check_notifications",
