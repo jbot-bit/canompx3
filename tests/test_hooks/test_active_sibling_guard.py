@@ -72,6 +72,7 @@ def _patch_mtimes(monkeypatch: pytest.MonkeyPatch, mod: ModuleType, mtimes: dict
     `mtimes` keys are full paths (worktree + os.sep + rel). Missing keys raise
     OSError to simulate a file that vanished mid-scan.
     """
+
     def _fake_stat(path, *a, **k):  # type: ignore[no-untyped-def]
         key = str(path).replace("\\", "/")
         if key in mtimes:
@@ -99,9 +100,7 @@ def test_no_siblings_no_block(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_stale_dirty_sibling_does_not_block_or_warn(monkeypatch: pytest.MonkeyPatch) -> None:
     """Sibling dirty but last edited 6h ago — abandoned, not active."""
-    mod = _load_hook(
-        monkeypatch, worktrees=[SELF, SIB], current=SELF, dirty={SIB: ["HANDOFF.md"]}
-    )
+    mod = _load_hook(monkeypatch, worktrees=[SELF, SIB], current=SELF, dirty={SIB: ["HANDOFF.md"]})
     _patch_mtimes(monkeypatch, mod, {_f(SIB, "HANDOFF.md"): NOW - 6 * 3600})
     lines, block = mod._active_sibling_lines(now_epoch=NOW)
     assert block is False
@@ -110,9 +109,7 @@ def test_stale_dirty_sibling_does_not_block_or_warn(monkeypatch: pytest.MonkeyPa
 
 def test_active_sibling_warns_but_does_not_block(monkeypatch: pytest.MonkeyPatch) -> None:
     """A DIFFERENT hot worktree is the sanctioned parallel pattern: warn, allow."""
-    mod = _load_hook(
-        monkeypatch, worktrees=[SELF, SIB], current=SELF, dirty={SIB: ["a.py"]}
-    )
+    mod = _load_hook(monkeypatch, worktrees=[SELF, SIB], current=SELF, dirty={SIB: ["a.py"]})
     _patch_mtimes(monkeypatch, mod, {_f(SIB, "a.py"): NOW - 120})  # 2 min ago
     lines, block = mod._active_sibling_lines(now_epoch=NOW)
     assert block is False
@@ -122,9 +119,7 @@ def test_active_sibling_warns_but_does_not_block(monkeypatch: pytest.MonkeyPatch
 
 def test_active_SAME_worktree_hard_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
     """THIS tree edited 2 min ago with no live PID lock = corruption risk -> BLOCK."""
-    mod = _load_hook(
-        monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["live.py"]}
-    )
+    mod = _load_hook(monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["live.py"]})
     _patch_mtimes(monkeypatch, mod, {_f(SELF, "live.py"): NOW - 120})
     lines, block = mod._active_sibling_lines(now_epoch=NOW)
     assert block is True
@@ -133,9 +128,7 @@ def test_active_SAME_worktree_hard_blocks(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_override_env_skips_block(monkeypatch: pytest.MonkeyPatch) -> None:
-    mod = _load_hook(
-        monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["live.py"]}
-    )
+    mod = _load_hook(monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["live.py"]})
     _patch_mtimes(monkeypatch, mod, {_f(SELF, "live.py"): NOW - 120})
     monkeypatch.setenv("CLAUDE_ALLOW_CONCURRENT", "1")
     lines, block = mod._active_sibling_lines(now_epoch=NOW)
@@ -145,9 +138,7 @@ def test_override_env_skips_block(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_future_mtime_clock_skew_does_not_block(monkeypatch: pytest.MonkeyPatch) -> None:
     """A file 'modified in the future' is garbage — never block on it."""
-    mod = _load_hook(
-        monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["live.py"]}
-    )
+    mod = _load_hook(monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["live.py"]})
     _patch_mtimes(monkeypatch, mod, {_f(SELF, "live.py"): NOW + 5 * 3600})
     lines, block = mod._active_sibling_lines(now_epoch=NOW)
     assert block is False
@@ -156,9 +147,7 @@ def test_future_mtime_clock_skew_does_not_block(monkeypatch: pytest.MonkeyPatch)
 
 def test_vanished_file_mid_scan_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
     """Dirty path reported by git but file gone when stat'd (rename/delete) -> skip."""
-    mod = _load_hook(
-        monkeypatch, worktrees=[SELF, SIB], current=SELF, dirty={SIB: ["gone.py"]}
-    )
+    mod = _load_hook(monkeypatch, worktrees=[SELF, SIB], current=SELF, dirty={SIB: ["gone.py"]})
     _patch_mtimes(monkeypatch, mod, {})  # every stat raises OSError
     lines, block = mod._active_sibling_lines(now_epoch=NOW)
     assert block is False
@@ -195,9 +184,7 @@ def test_self_path_normalised_not_treated_as_sibling(monkeypatch: pytest.MonkeyP
 
 def test_boundary_just_inside_window_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
     """Edited just under 15 min ago -> still active -> block (same tree)."""
-    mod = _load_hook(
-        monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["x.py"]}
-    )
+    mod = _load_hook(monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["x.py"]})
     _patch_mtimes(monkeypatch, mod, {_f(SELF, "x.py"): NOW - (15 * 60 - 5)})
     _, block = mod._active_sibling_lines(now_epoch=NOW)
     assert block is True
@@ -205,9 +192,7 @@ def test_boundary_just_inside_window_blocks(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_boundary_just_outside_window_passes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Edited just over 15 min ago -> stale -> pass."""
-    mod = _load_hook(
-        monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["x.py"]}
-    )
+    mod = _load_hook(monkeypatch, worktrees=[SELF], current=SELF, dirty={SELF: ["x.py"]})
     _patch_mtimes(monkeypatch, mod, {_f(SELF, "x.py"): NOW - (15 * 60 + 5)})
     lines, block = mod._active_sibling_lines(now_epoch=NOW)
     assert block is False

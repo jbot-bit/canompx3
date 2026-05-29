@@ -516,8 +516,7 @@ def _build_strict_zero_warn_summary(
 
     if int(profile_launch.get("copies") or 0) > 1 and profile_launch.get("shadow_copy_loss_protection") is not True:
         blockers.append(
-            "Profile copies>1 without per-shadow software loss protection: "
-            f"copies={profile_launch.get('copies')}"
+            f"Profile copies>1 without per-shadow software loss protection: copies={profile_launch.get('copies')}"
         )
 
     return {
