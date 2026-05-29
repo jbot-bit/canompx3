@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import duckdb
 import pytest
 
 from pipeline.system_context import PolicyDecision, PolicyIssue
@@ -1187,16 +1188,175 @@ class TestDeploymentState:
         with (
             patch.dict("sys.modules", {"trading_app.prop_profiles": mock_profile_module}),
             patch("duckdb.connect") as mock_connect,
+            patch.object(project_pulse, "deployable_validated_relation", return_value="vs"),
             patch.object(Path, "exists", return_value=True),
         ):
             mock_con = MagicMock()
-            mock_con.execute.return_value.fetchall.return_value = [("A",), ("B",), ("C",)]
+            validated_result = MagicMock()
+            validated_result.fetchall.return_value = [("A",), ("B",), ("C",)]
+            paper_result = MagicMock()
+            paper_result.fetchall.return_value = [
+                ("A", 3, "2026-01-01", "2026-01-03", 0.1, 0.3),
+                ("B", 2, "2026-01-02", "2026-01-04", 0.2, 0.4),
+            ]
+            mock_con.execute.side_effect = [validated_result, paper_result]
             mock_connect.return_value = mock_con
-            summary, items = collect_deployment_state(db_path)
+            summary, items = collect_deployment_state(db_path, live_journal_path=None)
 
         assert summary is not None
         assert summary["validated_not_deployed"] == ["C"]
+        assert summary["execution_evidence"]["missing_execution_strategy_ids"] == []
         assert any(i.source == "deployment" and i.category == "ready" for i in items)
+
+    def test_missing_execution_rows_are_broken(self) -> None:
+        db_path = Path("unused.db")
+        mock_profile_module = MagicMock()
+        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
+        mock_profile_module.get_profile_lane_definitions.return_value = [
+            {"strategy_id": "HAS_ROWS"},
+            {"strategy_id": "MISSING_ROWS"},
+        ]
+        with (
+            patch.dict("sys.modules", {"trading_app.prop_profiles": mock_profile_module}),
+            patch("duckdb.connect") as mock_connect,
+            patch.object(project_pulse, "deployable_validated_relation", return_value="vs"),
+            patch.object(Path, "exists", return_value=True),
+        ):
+            mock_con = MagicMock()
+            validated_result = MagicMock()
+            validated_result.fetchall.return_value = [("HAS_ROWS",), ("MISSING_ROWS",)]
+            paper_result = MagicMock()
+            paper_result.fetchall.return_value = [
+                ("HAS_ROWS", 1, "2026-05-20", "2026-05-20", 0.4, 0.4),
+            ]
+            mock_con.execute.side_effect = [validated_result, paper_result]
+            mock_connect.return_value = mock_con
+
+            summary, items = collect_deployment_state(db_path, live_journal_path=None)
+
+        assert summary is not None
+        assert summary["execution_evidence"]["missing_execution_strategy_ids"] == ["MISSING_ROWS"]
+        execution_items = [i for i in items if i.source == "execution"]
+        assert len(execution_items) == 1
+        assert execution_items[0].category == "broken"
+        assert execution_items[0].severity == "high"
+        assert "MISSING_ROWS" in (execution_items[0].detail or "")
+
+    def test_live_journal_rows_count_as_execution_evidence(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "gold.db"
+        journal_path = tmp_path / "live_journal.db"
+        with duckdb.connect(str(db_path)) as con:
+            con.execute(
+                """
+                CREATE TABLE paper_trades (
+                    strategy_id VARCHAR,
+                    trading_day DATE,
+                    pnl_r DOUBLE
+                )
+                """
+            )
+        with duckdb.connect(str(journal_path)) as con:
+            con.execute(
+                """
+                CREATE TABLE live_trades (
+                    strategy_id VARCHAR,
+                    trading_day DATE,
+                    actual_r DOUBLE
+                )
+                """
+            )
+            con.execute("INSERT INTO live_trades VALUES ('LIVE_ONLY', DATE '2026-05-21', 0.2)")
+
+        with duckdb.connect(str(db_path), read_only=True) as con:
+            evidence = project_pulse._collect_execution_evidence(
+                con,
+                profile_id="topstep_50k_mnq_auto",
+                deployed_ids=["LIVE_ONLY"],
+                live_journal_path=journal_path,
+                today=datetime(2026, 5, 23).date(),
+            )
+
+        assert evidence["missing_execution_strategy_ids"] == []
+        assert evidence["live_journal_status"] == "ok"
+        assert evidence["per_lane"][0]["paper_trade_count"] == 0
+        assert evidence["per_lane"][0]["live_trade_count"] == 1
+        assert evidence["per_lane"][0]["execution_count"] == 1
+
+    def test_execution_staleness_uses_combined_latest_day(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "gold.db"
+        journal_path = tmp_path / "live_journal.db"
+        with duckdb.connect(str(db_path)) as con:
+            con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
+            con.execute("INSERT INTO paper_trades VALUES ('MIXED', DATE '2026-05-23', 0.1)")
+        with duckdb.connect(str(journal_path)) as con:
+            con.execute("CREATE TABLE live_trades (strategy_id VARCHAR, trading_day DATE, actual_r DOUBLE)")
+            con.execute("INSERT INTO live_trades VALUES ('MIXED', DATE '2026-05-01', -0.1)")
+
+        with duckdb.connect(str(db_path), read_only=True) as con:
+            evidence = project_pulse._collect_execution_evidence(
+                con,
+                profile_id="topstep_50k_mnq_auto",
+                deployed_ids=["MIXED"],
+                live_journal_path=journal_path,
+                today=datetime(2026, 5, 23).date(),
+            )
+
+        assert evidence["per_lane"][0]["last_day"] == "2026-05-23"
+        assert evidence["per_lane"][0]["last_day_age_days"] == 0
+        assert evidence["stale_execution_strategy_ids"] == []
+
+    def test_unknown_capital_packet_boundary_cannot_promote(self) -> None:
+        report = PulseReport(
+            generated_at="2026-05-23T00:00:00+00:00",
+            cache_hit=False,
+            git_head="HEAD",
+            git_branch="main",
+            capital_packet_summary={
+                "available": True,
+                "valid": True,
+                "capital_boundary": "UNKNOWN_BOUNDARY",
+                "would_add": ["A"],
+                "would_remove": [],
+            },
+        )
+
+        recommendation = project_pulse._compute_capital_recommendation(report)
+
+        assert recommendation.startswith("NO_CHANGE:")
+        assert "not recognized deployment authority" in recommendation
+
+    def test_broken_capital_evidence_takes_precedence_over_pause_status(self) -> None:
+        report = PulseReport(
+            generated_at="2026-05-23T00:00:00+00:00",
+            cache_hit=False,
+            git_head="HEAD",
+            git_branch="main",
+            items=[
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="criterion11",
+                    summary="survival report missing",
+                )
+            ],
+            pause_summary={"paused_count": 2},
+        )
+
+        recommendation = project_pulse._compute_capital_recommendation(report)
+
+        assert recommendation.startswith("NO_CHANGE:")
+        assert "survival report missing" in recommendation
+
+    def test_unreadable_capital_packet_is_broken(self, tmp_path: Path) -> None:
+        packet = tmp_path / "docs" / "runtime" / "fast_lane_capital_packet.json"
+        packet.parent.mkdir(parents=True)
+        packet.write_text("{not-json", encoding="utf-8")
+
+        summary, items = project_pulse.collect_capital_packet(tmp_path)
+
+        assert summary is not None
+        assert summary["valid"] is False
+        assert any(i.source == "capital_packet" and i.category == "broken" for i in items)
 
 
 class TestControlSummaries:
@@ -1296,9 +1456,36 @@ class TestControlSummaries:
             summary, items = collect_sr_state(Path("/tmp/repo/gold.db"))
 
         assert summary is None
-        assert any(i.source == "sr_monitor" and i.category == "decaying" for i in items)
+        assert any(i.source == "sr_monitor" and i.category == "broken" and i.severity == "high" for i in items)
         assert any("mismatched/legacy" in i.summary for i in items)
         assert any("refresh_control_state.py" in str(i.action) for i in items if i.source == "sr_monitor")
+
+    def test_sr_state_missing_is_high_broken(self) -> None:
+        mock_lifecycle = MagicMock()
+        mock_lifecycle.read_lifecycle_state.return_value = {
+            "criterion11": {"gate_ok": True, "report_age_days": 0},
+            "criterion12": {
+                "profile_id": "topstep_50k_mnq_auto",
+                "available": False,
+                "valid": False,
+                "reason": "missing",
+                "counts": {},
+                "stream_counts": {},
+                "status_by_strategy": {},
+                "alarm_strategy_ids": [],
+                "no_data_strategy_ids": [],
+            },
+            "strategy_states": {},
+            "pauses": {"paused_count": 0, "paused_strategy_ids": []},
+        }
+        with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
+            summary, items = collect_sr_state(Path("/tmp/repo/gold.db"))
+
+        assert summary is None
+        assert any(
+            i.source == "sr_monitor" and i.category == "broken" and i.severity == "high" and "missing" in i.summary
+            for i in items
+        )
 
     def test_pause_state_reports_paused(self) -> None:
         mock_lifecycle = MagicMock()

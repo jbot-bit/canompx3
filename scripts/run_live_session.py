@@ -240,6 +240,51 @@ def _check_portfolio(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, f"FAILED: {e}")
 
 
+def _check_survival_report(ctx: PreflightContext) -> CheckResult:
+    """Criterion 11 survival evidence"""
+    if ctx.signal_only:
+        return CheckResult(True, "SKIPPED (signal-only accumulates evidence; no capital at risk)")
+    if ctx.profile_id is None:
+        return CheckResult(True, "SKIPPED (no profile - raw-baseline path)")
+    try:
+        from trading_app.lifecycle_state import read_lifecycle_state
+
+        lifecycle = read_lifecycle_state(profile_id=ctx.profile_id)
+        criterion11 = lifecycle.get("criterion11", {})
+        if criterion11.get("gate_ok"):
+            op = criterion11.get("operational_pass_probability")
+            op_text = f"{float(op):.1%}" if isinstance(op, int | float) else "unknown"
+            return CheckResult(True, f"OK (operational pass {op_text})")
+        msg = criterion11.get("gate_msg") or criterion11.get("reason") or "Criterion 11 survival state invalid"
+        return CheckResult(False, f"FAILED: {msg}")
+    except Exception as e:
+        return CheckResult(False, f"FAILED: {e}")
+
+
+def _check_sr_state(ctx: PreflightContext) -> CheckResult:
+    """Criterion 12 SR state"""
+    if ctx.signal_only:
+        return CheckResult(True, "SKIPPED (signal-only accumulates SR stream; no capital at risk)")
+    if ctx.profile_id is None:
+        return CheckResult(True, "SKIPPED (no profile - raw-baseline path)")
+    try:
+        from trading_app.lifecycle_state import read_lifecycle_state
+
+        lifecycle = read_lifecycle_state(profile_id=ctx.profile_id)
+        criterion12 = lifecycle.get("criterion12", {})
+        if not criterion12.get("available"):
+            return CheckResult(False, "FAILED: Criterion 12 SR state missing; refresh control state")
+        if not criterion12.get("valid"):
+            reason = criterion12.get("reason") or "invalid SR state"
+            return CheckResult(False, f"FAILED: Criterion 12 SR state {reason}; refresh control state")
+        counts = criterion12.get("counts", {})
+        alarm_count = counts.get("ALARM", 0) if isinstance(counts, dict) else 0
+        no_data_count = counts.get("NO_DATA", 0) if isinstance(counts, dict) else 0
+        return CheckResult(True, f"OK (alarm={alarm_count}, no_data={no_data_count})")
+    except Exception as e:
+        return CheckResult(False, f"FAILED: {e}")
+
+
 def _check_daily_features(ctx: PreflightContext) -> CheckResult:
     """Daily features freshness"""
     # R2-M5: use Brisbane trading day, not date.today() (Windows system time).
@@ -487,6 +532,8 @@ def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
 PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_auth,
     _check_portfolio,
+    _check_survival_report,
+    _check_sr_state,
     _check_daily_features,
     _check_contracts,
     _check_notifications,

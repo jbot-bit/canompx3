@@ -25,7 +25,7 @@ import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -82,7 +82,7 @@ _SCRIPTS_TOOLS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_TOOLS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_TOOLS_DIR)
 
-from pipeline.paths import GOLD_DB_PATH
+from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from pipeline.work_queue import (
     load_queue,
     top_baton_items,
@@ -141,6 +141,9 @@ class PulseReport:
     survival_summary: dict | None = None
     sr_summary: dict | None = None
     pause_summary: dict | None = None
+    execution_summary: dict | None = None
+    capital_packet_summary: dict | None = None
+    capital_recommendation: str | None = None
     # Trading day context
     upcoming_sessions: list[dict] = field(default_factory=list)
     # Single recommendation
@@ -827,7 +830,172 @@ def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
     return summary, items
 
 
-def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
+EXECUTION_STALE_AFTER_DAYS = 7
+REPORT_ONLY_CAPITAL_BOUNDARY = "REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY"
+AUTHORIZED_PROMOTE_CAPITAL_BOUNDARIES: frozenset[str] = frozenset()
+
+
+def _parse_day(value: object) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def _collect_execution_evidence(
+    con,
+    *,
+    profile_id: str,
+    deployed_ids: list[str],
+    live_journal_path: Path | None = None,
+    today: date | None = None,
+) -> dict:
+    """Read deployed-lane execution attribution from paper_trades and live journal."""
+    effective_today = today or date.today()
+
+    def _set_last_day_age(row: dict) -> None:
+        parsed_last_day = _parse_day(row["last_day"])
+        row["last_day_age_days"] = (effective_today - parsed_last_day).days if parsed_last_day else None
+
+    per_lane = {
+        strategy_id: {
+            "strategy_id": strategy_id,
+            "paper_trade_count": 0,
+            "live_trade_count": 0,
+            "execution_count": 0,
+            "first_day": None,
+            "last_day": None,
+            "last_day_age_days": None,
+            "paper_avg_r": None,
+            "paper_sum_r": None,
+            "live_avg_r": None,
+            "live_sum_r": None,
+        }
+        for strategy_id in deployed_ids
+    }
+    live_journal_status = "not_checked"
+
+    if deployed_ids:
+        placeholders = ", ".join("?" for _ in deployed_ids)
+        rows = con.execute(
+            f"""
+            SELECT
+                strategy_id,
+                COUNT(*) AS n,
+                MIN(trading_day) AS first_day,
+                MAX(trading_day) AS last_day,
+                AVG(pnl_r) AS avg_r,
+                SUM(pnl_r) AS sum_r
+            FROM paper_trades
+            WHERE strategy_id IN ({placeholders})
+            GROUP BY strategy_id
+            """,
+            deployed_ids,
+        ).fetchall()
+        for strategy_id, n, first_day, last_day, avg_r, sum_r in rows:
+            sid = str(strategy_id)
+            row = per_lane[sid]
+            row["paper_trade_count"] = int(n or 0)
+            row["execution_count"] = int(row["execution_count"]) + int(n or 0)
+            row["first_day"] = str(first_day) if first_day is not None else None
+            row["last_day"] = str(last_day) if last_day is not None else None
+            _set_last_day_age(row)
+            row["paper_avg_r"] = round(float(avg_r), 6) if avg_r is not None else None
+            row["paper_sum_r"] = round(float(sum_r), 6) if sum_r is not None else None
+
+        if live_journal_path is not None:
+            live_journal_status = "missing_file"
+            if live_journal_path.exists():
+                try:
+                    import duckdb
+
+                    live_con = duckdb.connect(str(live_journal_path), read_only=True)
+                    try:
+                        has_live_trades = bool(
+                            live_con.execute(
+                                """
+                                SELECT COUNT(*)
+                                FROM information_schema.tables
+                                WHERE table_schema = 'main' AND table_name = 'live_trades'
+                                """
+                            ).fetchone()[0]
+                        )
+                        if has_live_trades:
+                            live_rows = live_con.execute(
+                                f"""
+                                SELECT
+                                    strategy_id,
+                                    COUNT(*) AS n,
+                                    MIN(trading_day) AS first_day,
+                                    MAX(trading_day) AS last_day,
+                                    AVG(actual_r) AS avg_r,
+                                    SUM(actual_r) AS sum_r
+                                FROM live_trades
+                                WHERE strategy_id IN ({placeholders})
+                                GROUP BY strategy_id
+                                """,
+                                deployed_ids,
+                            ).fetchall()
+                            live_journal_status = "ok"
+                            for strategy_id, n, first_day, last_day, avg_r, sum_r in live_rows:
+                                sid = str(strategy_id)
+                                row = per_lane[sid]
+                                first_day_text = str(first_day) if first_day is not None else None
+                                last_day_text = str(last_day) if last_day is not None else None
+                                row["live_trade_count"] = int(n or 0)
+                                row["execution_count"] = int(row["execution_count"]) + int(n or 0)
+                                row["first_day"] = min(
+                                    [x for x in [row["first_day"], first_day_text] if x is not None],
+                                    default=None,
+                                )
+                                row["last_day"] = max(
+                                    [x for x in [row["last_day"], last_day_text] if x is not None],
+                                    default=None,
+                                )
+                                _set_last_day_age(row)
+                                row["live_avg_r"] = round(float(avg_r), 6) if avg_r is not None else None
+                                row["live_sum_r"] = round(float(sum_r), 6) if sum_r is not None else None
+                        else:
+                            live_journal_status = "missing_table"
+                    finally:
+                        live_con.close()
+                except Exception as exc:  # noqa: BLE001 - report journal evidence degradation, keep paper check
+                    live_journal_status = f"unreadable:{type(exc).__name__}: {exc}"
+
+    missing_ids = [sid for sid, row in per_lane.items() if int(row["execution_count"]) == 0]
+    stale_ids = [
+        sid
+        for sid, row in per_lane.items()
+        if int(row["execution_count"]) > 0
+        and row["last_day_age_days"] is not None
+        and int(row["last_day_age_days"]) > EXECUTION_STALE_AFTER_DAYS
+    ]
+    return {
+        "profile_id": profile_id,
+        "source_tables": ["paper_trades", "live_journal.live_trades"],
+        "live_journal_path": str(live_journal_path) if live_journal_path is not None else None,
+        "live_journal_status": live_journal_status,
+        "deployed_count": len(deployed_ids),
+        "covered_count": len(deployed_ids) - len(missing_ids),
+        "missing_count": len(missing_ids),
+        "missing_execution_strategy_ids": missing_ids,
+        "stale_after_days": EXECUTION_STALE_AFTER_DAYS,
+        "stale_execution_strategy_ids": stale_ids,
+        "per_lane": [per_lane[sid] for sid in deployed_ids],
+    }
+
+
+def collect_deployment_state(
+    db_path: Path,
+    *,
+    live_journal_path: Path | None = LIVE_JOURNAL_DB_PATH,
+) -> tuple[dict | None, list[PulseItem]]:
     """Summarize deployed-live vs validated-active truth."""
     summary: dict | None = None
     items: list[PulseItem] = []
@@ -842,6 +1010,7 @@ def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem
         profile_id = resolve_profile_id()
         deployed_lanes = get_profile_lane_definitions(profile_id)
         deployed_ids = [str(lane["strategy_id"]) for lane in deployed_lanes]
+        execution_evidence = None
 
         con = duckdb.connect(str(db_path), read_only=True)
         try:
@@ -854,6 +1023,23 @@ def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem
                 """
             ).fetchall()
             validated_ids = [str(r[0]) for r in validated_rows]
+            try:
+                execution_evidence = _collect_execution_evidence(
+                    con,
+                    profile_id=profile_id,
+                    deployed_ids=deployed_ids,
+                    live_journal_path=live_journal_path,
+                )
+            except Exception as exc:  # noqa: BLE001 - missing attribution source is a capital blocker
+                items.append(
+                    PulseItem(
+                        category="broken",
+                        severity="high",
+                        source="execution",
+                        summary=f"{profile_id}: execution evidence unavailable from paper_trades",
+                        detail=f"{type(exc).__name__}: {exc}",
+                    )
+                )
         finally:
             con.close()
 
@@ -869,6 +1055,7 @@ def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem
             "deployed_not_validated": deployed_not_validated,
             "validated_not_deployed": validated_not_deployed,
             "deployed_strategy_ids": deployed_ids,
+            "execution_evidence": execution_evidence,
         }
 
         if not deployed_ids:
@@ -903,6 +1090,43 @@ def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem
                     action="/trade-book",
                 )
             )
+        if execution_evidence:
+            missing_ids = execution_evidence.get("missing_execution_strategy_ids", [])
+            stale_ids = execution_evidence.get("stale_execution_strategy_ids", [])
+            live_status = str(execution_evidence.get("live_journal_status") or "")
+            if live_status.startswith("unreadable:"):
+                items.append(
+                    PulseItem(
+                        category="broken",
+                        severity="high",
+                        source="execution",
+                        summary=f"{profile_id}: live journal execution evidence unavailable",
+                        detail=live_status,
+                        action="scripts/tools/stop_live.ps1",
+                    )
+                )
+            if missing_ids:
+                items.append(
+                    PulseItem(
+                        category="broken",
+                        severity="high",
+                        source="execution",
+                        summary=f"{profile_id}: {len(missing_ids)} deployed lane(s) have zero execution rows",
+                        detail="\n".join(str(x) for x in missing_ids[:10]),
+                        action=f"python -m trading_app.paper_trade_logger --profile {profile_id} --sync --dry-run",
+                    )
+                )
+            if stale_ids:
+                items.append(
+                    PulseItem(
+                        category="decaying",
+                        severity="medium",
+                        source="execution",
+                        summary=(f"{profile_id}: {len(stale_ids)} deployed lane(s) have stale execution attribution"),
+                        detail="\n".join(str(x) for x in stale_ids[:10]),
+                        action=f"python -m trading_app.paper_trade_logger --profile {profile_id} --sync --dry-run",
+                    )
+                )
     except Exception as e:
         if _is_db_locked(e):
             items.append(
@@ -987,8 +1211,8 @@ def _collect_control_items_from_lifecycle(
         if not sr_summary.get("available"):
             items.append(
                 PulseItem(
-                    category="decaying",
-                    severity="low",
+                    category="broken",
+                    severity="high",
                     source="sr_monitor",
                     summary="Criterion 12 SR state missing — refresh control state",
                     action=(f"python scripts/tools/refresh_control_state.py --profile {sr_summary.get('profile_id')}"),
@@ -1000,8 +1224,8 @@ def _collect_control_items_from_lifecycle(
             is_stale = isinstance(reason, str) and reason.startswith("stale")
             items.append(
                 PulseItem(
-                    category="decaying",
-                    severity="low" if is_stale else "medium",
+                    category="broken",
+                    severity="high",
                     source="sr_monitor",
                     summary=(
                         "Criterion 12 SR state is stale — refresh control state"
@@ -1112,6 +1336,63 @@ def collect_pause_state() -> tuple[dict | None, list[PulseItem]]:
     """Compatibility wrapper for tests/consumers expecting the pause-only collector."""
     _survival, _sr, summary, items = collect_lifecycle_control(GOLD_DB_PATH)
     return summary, [i for i in items if i.source == "pauses" or i.source == "lifecycle"]
+
+
+def collect_capital_packet(root: Path) -> tuple[dict | None, list[PulseItem]]:
+    """Read the existing report-only Fast Lane capital packet summary."""
+    items: list[PulseItem] = []
+    path = root / "docs" / "runtime" / "fast_lane_capital_packet.json"
+    if not path.exists():
+        return None, items
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        summary = {
+            "path": str(path.relative_to(root)),
+            "available": True,
+            "valid": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="high",
+                source="capital_packet",
+                summary="Fast Lane capital packet unreadable",
+                detail=summary["error"],
+            )
+        )
+        return summary, items
+    diff = payload.get("rebalance_dry_run_diff", {})
+    valid = True
+    error = None
+    if not isinstance(diff, dict):
+        valid = False
+        error = "rebalance_dry_run_diff is not an object"
+        diff = {}
+    summary = {
+        "path": str(path.relative_to(root)),
+        "available": True,
+        "valid": valid,
+        "error": error,
+        "capital_boundary": payload.get("capital_boundary"),
+        "generated_at": payload.get("generated_at"),
+        "would_add": [str(x) for x in diff.get("would_add", [])],
+        "would_remove": [str(x) for x in diff.get("would_remove", [])],
+        "would_keep": [str(x) for x in diff.get("would_keep", [])],
+        "blocked_change_reason": diff.get("blocked_change_reason"),
+    }
+    if not valid:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="high",
+                source="capital_packet",
+                summary="Fast Lane capital packet schema invalid",
+                detail=error,
+            )
+        )
+    return summary, items
 
 
 def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple[dict | None, list[PulseItem]]:
@@ -1826,6 +2107,36 @@ def _compute_recommendation(report: PulseReport) -> str:
     return "All clear — start new work or /orient --full for deep check"
 
 
+def _compute_capital_recommendation(report: PulseReport) -> str:
+    """Return the capital cockpit recommendation token plus concise reason."""
+    blocked = [
+        item
+        for item in report.broken
+        if item.source in {"execution", "criterion11", "sr_monitor", "lifecycle", "deployment"}
+    ]
+    if blocked:
+        return f"NO_CHANGE: capital evidence blocked - {blocked[0].summary}"
+
+    if report.pause_summary and report.pause_summary.get("paused_count", 0):
+        return f"PAUSE: {report.pause_summary.get('paused_count')} lane(s) already paused"
+
+    packet = report.capital_packet_summary or {}
+    if packet and not packet.get("valid", True):
+        return f"NO_CHANGE: capital packet invalid - {packet.get('error') or 'schema/read failure'}"
+
+    would_add = packet.get("would_add", []) if isinstance(packet, dict) else []
+    would_remove = packet.get("would_remove", []) if isinstance(packet, dict) else []
+    if would_add or would_remove:
+        boundary = str(packet.get("capital_boundary") or "")
+        if boundary == REPORT_ONLY_CAPITAL_BOUNDARY:
+            return f"SHADOW: packet has add={len(would_add)} remove={len(would_remove)} but boundary is {boundary}"
+        if boundary in AUTHORIZED_PROMOTE_CAPITAL_BOUNDARIES:
+            return f"PROMOTE: packet proposes add={len(would_add)} remove={len(would_remove)} and gates are clear"
+        return f"NO_CHANGE: capital packet boundary {boundary or '<missing>'} is not recognized deployment authority"
+
+    return "NO_CHANGE: no capital add/remove and evidence gates are clear"
+
+
 def _update_time_since_green(root: Path, is_green: bool) -> str | None:
     """Track and return how long since the system was fully clean."""
     cache_path = root / CACHE_FILE
@@ -2068,7 +2379,9 @@ def build_pulse(
         fitness_summary, fitness_items = collect_fitness_fast(db_path)
 
     deployment_summary, deployment_items = collect_deployment_state(db_path)
+    execution_summary = deployment_summary.get("execution_evidence") if isinstance(deployment_summary, dict) else None
     survival_summary, sr_summary, pause_summary, lifecycle_items = collect_lifecycle_control(db_path)
+    capital_packet_summary, capital_packet_items = collect_capital_packet(root)
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical, fast=fast)
     claim_items = collect_session_claims(root)
@@ -2110,6 +2423,7 @@ def build_pulse(
         + fitness_items
         + deployment_items
         + lifecycle_items
+        + capital_packet_items
         + claim_items
         + conflict_items
         + handoff_items
@@ -2143,6 +2457,8 @@ def build_pulse(
         survival_summary=survival_summary,
         sr_summary=sr_summary,
         pause_summary=pause_summary,
+        execution_summary=execution_summary,
+        capital_packet_summary=capital_packet_summary,
         upcoming_sessions=upcoming,
         time_since_green=time_since_green,
         session_delta=session_delta,
@@ -2158,6 +2474,7 @@ def build_pulse(
 
     # Compute single recommendation after full report is assembled
     report.recommendation = _compute_recommendation(report)
+    report.capital_recommendation = _compute_capital_recommendation(report)
 
     return report
 
@@ -2252,6 +2569,17 @@ def format_text(report: PulseReport) -> str:
             f"active validated {ds.get('validated_active_count', '?')} | "
             f"validated-only {len(ds.get('validated_not_deployed', []))}"
         )
+        if report.execution_summary:
+            es = report.execution_summary
+            lines.append(
+                "  "
+                f"Execution evidence {es.get('covered_count', 0)}/{es.get('deployed_count', 0)} lanes | "
+                f"missing {es.get('missing_count', 0)} | stale {len(es.get('stale_execution_strategy_ids', []))}"
+            )
+            lines.append(f"  Execution sources: paper_trades + live_journal ({es.get('live_journal_status')})")
+            missing = es.get("missing_execution_strategy_ids", [])
+            if missing:
+                lines.append(f"  Missing execution: {', '.join(str(x) for x in missing[:3])}")
         if report.survival_summary:
             ss = report.survival_summary
             op = ss.get("operational_pass_probability")
@@ -2277,9 +2605,21 @@ def format_text(report: PulseReport) -> str:
             )
             if sr.get("reviewed_watch_count"):
                 lines.append(f"  C12 reviewed WATCH alarms: {sr.get('reviewed_watch_count')}")
+        else:
+            lines.append("  C12 SR BLOCK missing/invalid")
         if report.pause_summary:
             ps = report.pause_summary
             lines.append(f"  Paused lanes: {ps.get('paused_count', 0)}")
+        if report.capital_packet_summary:
+            cps = report.capital_packet_summary
+            lines.append(
+                "  "
+                f"Capital packet {cps.get('generated_at') or '?'} | "
+                f"add {len(cps.get('would_add', []))} | remove {len(cps.get('would_remove', []))} | "
+                f"boundary {cps.get('capital_boundary') or '?'}"
+            )
+        if report.capital_recommendation:
+            lines.append(f"  Capital recommendation: {report.capital_recommendation}")
         lines.append("")
 
     # Cap display items per category to keep output scannable
@@ -2344,6 +2684,9 @@ def format_json(report: PulseReport) -> str:
         "survival_summary": report.survival_summary,
         "sr_summary": report.sr_summary,
         "pause_summary": report.pause_summary,
+        "execution_summary": report.execution_summary,
+        "capital_packet_summary": report.capital_packet_summary,
+        "capital_recommendation": report.capital_recommendation,
         "work_capsule_summary": report.work_capsule_summary,
         "system_brief_summary": report.system_brief_summary,
         "history_debt_summary": report.history_debt_summary,
@@ -2420,6 +2763,17 @@ def format_markdown(report: PulseReport) -> str:
             f"active_validated={ds.get('validated_active_count')} | "
             f"validated_only={len(ds.get('validated_not_deployed', []))}"
         )
+        if report.execution_summary:
+            es = report.execution_summary
+            lines.append(
+                f"- **Execution evidence**: {es.get('covered_count', 0)}/{es.get('deployed_count', 0)} lanes | "
+                f"missing={es.get('missing_count', 0)} | "
+                f"stale={len(es.get('stale_execution_strategy_ids', []))}"
+            )
+            lines.append(f"- **Execution sources**: `paper_trades` + `live_journal` ({es.get('live_journal_status')})")
+            missing = es.get("missing_execution_strategy_ids", [])
+            if missing:
+                lines.append(f"- **Missing execution IDs**: {', '.join(f'`{x}`' for x in missing[:5])}")
         if report.survival_summary:
             ss = report.survival_summary
             op = ss.get("operational_pass_probability")
@@ -2438,8 +2792,19 @@ def format_markdown(report: PulseReport) -> str:
             )
             if sr.get("reviewed_watch_count"):
                 lines.append(f"- **C12 reviewed WATCH alarms**: {sr.get('reviewed_watch_count')}")
+        else:
+            lines.append("- **Criterion 12 SR**: BLOCK missing/invalid")
         if report.pause_summary:
             lines.append(f"- **Paused lanes**: {report.pause_summary.get('paused_count', 0)}")
+        if report.capital_packet_summary:
+            cps = report.capital_packet_summary
+            lines.append(
+                f"- **Capital packet**: generated={cps.get('generated_at')} | "
+                f"add={len(cps.get('would_add', []))} | remove={len(cps.get('would_remove', []))} | "
+                f"boundary={cps.get('capital_boundary')}"
+            )
+        if report.capital_recommendation:
+            lines.append(f"- **Capital recommendation**: {report.capital_recommendation}")
         lines.append("")
 
     for cat in CATEGORIES:
