@@ -179,8 +179,9 @@ PROFILE_REGISTRY: dict[str, AIProfile] = {
         use_case="structured intent extraction for embedded repo queries",
         model=CLAUDE_STRUCTURED_MODEL,
         api_key_env="ANTHROPIC_API_KEY",
+        reasoning_effort="low",
         required_env=("ANTHROPIC_API_KEY",),
-        notes="Canonical structured-output pass for QueryAgent.",
+        notes="Canonical structured-output pass for QueryAgent. effort=low is the documented sweet spot for cheap, simple classify-to-template extraction.",
     ),
     "claude_reasoning": AIProfile(
         profile_id="claude_reasoning",
@@ -191,7 +192,7 @@ PROFILE_REGISTRY: dict[str, AIProfile] = {
         reasoning_enabled=True,
         reasoning_effort="high",
         required_env=("ANTHROPIC_API_KEY",),
-        notes="Canonical reasoning pass for QueryAgent.",
+        notes="Canonical reasoning pass for QueryAgent. effort=high is the deliberate default (== omitting effort); xhigh/max risk overthinking on this bounded ~50-row interpretation task. Left as a future measured A/B, not a guess.",
     ),
     "deepseek_planning": AIProfile(
         profile_id="deepseek_planning",

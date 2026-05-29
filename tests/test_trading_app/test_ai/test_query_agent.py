@@ -176,7 +176,7 @@ class TestQueryAgentIntentExtraction:
         assert grounding_block["cache_control"] == {"type": "ephemeral"}
 
     def test_extract_intent_passes_no_temperature(self, mock_agent):
-        """`temperature` is removed from Opus 4.7; Sonnet 4.6 is forward-compatible.
+        """`temperature` is removed from Opus 4.8; Sonnet 4.6 is forward-compatible.
 
         We never pass temperature — structured outputs give us determinism via
         schema validation rather than sampling knobs.
@@ -186,6 +186,18 @@ class TestQueryAgentIntentExtraction:
 
         call_kwargs = mock_agent.client.messages.parse.call_args.kwargs
         assert "temperature" not in call_kwargs
+
+    def test_extract_intent_passes_low_effort(self, mock_agent):
+        """Pass 1 sets output_config effort=low (cheap classify-to-template).
+
+        Level is sourced from the canonical profile registry, not hardcoded in
+        query_agent — this asserts the wired-through value.
+        """
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(template="table_counts")
+        mock_agent._extract_intent("how many rows?")
+
+        call_kwargs = mock_agent.client.messages.parse.call_args.kwargs
+        assert call_kwargs["output_config"] == {"effort": "low"}
 
     def test_extract_intent_invalid_template_returns_none(self, mock_agent):
         """If Claude returns a template not in QueryTemplate enum, fail-soft None."""
@@ -266,6 +278,7 @@ class TestSDKSurfaceGuards:
             ],
             messages=[{"role": "user", "content": "sentinel-question"}],
             output_format=QueryIntentSchema,
+            output_config={"effort": "low"},
         )
 
         sig = inspect.signature(Messages.parse)
@@ -302,6 +315,7 @@ class TestSDKSurfaceGuards:
             max_tokens=2000,
             thinking=thinking_param,
             messages=[{"role": "user", "content": "sentinel-interpret"}],
+            output_config={"effort": "high"},
         )
 
         sig = inspect.signature(Messages.create)
@@ -333,7 +347,7 @@ class TestQueryAgentInterpretation:
         return mock_response
 
     def test_interpret_uses_reasoning_model(self, mock_agent):
-        """Pass 2 pins to Opus 4.7 (CLAUDE_REASONING_MODEL)."""
+        """Pass 2 pins to Opus 4.8 (CLAUDE_REASONING_MODEL)."""
         from trading_app.ai.claude_client import CLAUDE_REASONING_MODEL
 
         mock_agent.client.messages.create.return_value = self._mock_create_response("The data shows 3 CORE strategies.")
@@ -353,13 +367,26 @@ class TestQueryAgentInterpretation:
         assert call_kwargs.get("thinking") == {"type": "adaptive"}
 
     def test_interpret_passes_no_temperature(self, mock_agent):
-        """Opus 4.7 rejects `temperature`."""
+        """Opus 4.8 rejects `temperature`."""
         mock_agent.client.messages.create.return_value = self._mock_create_response("...")
         df = pd.DataFrame({"x": [1, 2, 3]})
         mock_agent._interpret_results("q", df)
 
         call_kwargs = mock_agent.client.messages.create.call_args.kwargs
         assert "temperature" not in call_kwargs
+
+    def test_interpret_passes_effort_output_config(self, mock_agent):
+        """Pass 2 sets output_config effort=high (the documented default).
+
+        Behaviorally == omitting effort, but keeps the call registry-driven and
+        self-documenting. Level is sourced from the canonical profile registry.
+        """
+        mock_agent.client.messages.create.return_value = self._mock_create_response("...")
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        mock_agent._interpret_results("q", df)
+
+        call_kwargs = mock_agent.client.messages.create.call_args.kwargs
+        assert call_kwargs["output_config"] == {"effort": "high"}
 
     def test_interpret_extracts_text_from_content_blocks(self, mock_agent):
         """With adaptive thinking, content may be [ThinkingBlock, ..., TextBlock].

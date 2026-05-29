@@ -36,6 +36,7 @@ STALE_MODEL_IDS = (
         "claude-sonnet-4-5-20250929",  # Sonnet 4.5
         "claude-opus-4-20250514",  # Opus 4.0
         "claude-opus-4-1-20250805",  # Opus 4.1
+        "claude-opus-4-7",  # Opus 4.7 — superseded by Opus 4.8
     }
 )
 
@@ -77,8 +78,8 @@ class TestModelConstants:
 
         assert CLAUDE_STRUCTURED_MODEL == "claude-sonnet-4-6"
 
-    def test_reasoning_model_is_opus_47(self):
-        """Pin to Opus 4.7 for interpretation / coaching / research reasoning.
+    def test_reasoning_model_is_opus_48(self):
+        """Pin to Opus 4.8 for interpretation / coaching / research reasoning.
 
         Rationale: strongest reasoning model, adaptive thinking, 1M context at
         standard pricing (no long-context premium). Required for research-grade
@@ -86,7 +87,7 @@ class TestModelConstants:
         """
         from trading_app.ai.claude_client import CLAUDE_REASONING_MODEL
 
-        assert CLAUDE_REASONING_MODEL == "claude-opus-4-7"
+        assert CLAUDE_REASONING_MODEL == "claude-opus-4-8"
 
 
 class TestGetClient:

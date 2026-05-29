@@ -12,7 +12,7 @@ Model strategy (see docs/runtime/stages/claude-api-modernization.md):
   - CLAUDE_STRUCTURED_MODEL (Sonnet 4.6) — deterministic structured-output
     extraction (Pass 1 query intent, digest JSON schemas). Cheaper; keeps
     temperature semantics available via adaptive thinking.
-  - CLAUDE_REASONING_MODEL (Opus 4.7) — interpretation, coaching, research
+  - CLAUDE_REASONING_MODEL (Opus 4.8) — interpretation, coaching, research
     reasoning. Adaptive thinking; 1M context at standard pricing.
 """
 
@@ -22,7 +22,7 @@ import os
 from typing import Any
 
 CLAUDE_STRUCTURED_MODEL = "claude-sonnet-4-6"
-CLAUDE_REASONING_MODEL = "claude-opus-4-7"
+CLAUDE_REASONING_MODEL = "claude-opus-4-8"
 
 
 def _load_anthropic():

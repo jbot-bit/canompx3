@@ -3,14 +3,18 @@ Main AI query interface. Two-pass design:
 
   User question -> Pass 1: Sonnet 4.6 extracts QueryIntent via messages.parse()
                 -> SQL adapter executes safely
-                -> Pass 2: Opus 4.7 interprets results with adaptive thinking
+                -> Pass 2: Opus 4.8 interprets results with adaptive thinking
                 -> Returns explanation + data + warnings
 
 Stage 3 of claude-api-modernization:
-  - Model pins come from canonical `claude_client` (Sonnet 4.6 / Opus 4.7)
+  - Model pins come from canonical `claude_client` (Sonnet 4.6 / Opus 4.8)
   - Pass 1 uses `messages.parse(output_format=QueryIntentSchema)` — no more
     manual JSON / markdown-fence recovery hacks
   - Pass 2 uses adaptive thinking + content-block filtering
+  - Per-pass `output_config={"effort": ...}` is sourced from the canonical
+    profile registry (`get_profile()`): Pass 1 = "low" (cheap classify-to-
+    template extraction), Pass 2 = "high" (the documented default; == omitting
+    effort). query_agent never hardcodes the level.
   - `cache_control={"type": "ephemeral"}` on grounding prompt (~10× cheaper
     for repeat calls within the 5-minute cache window)
   - API-key check delegated to canonical `get_client()`
@@ -31,6 +35,7 @@ from trading_app.ai.claude_client import (
 )
 from trading_app.ai.corpus import get_db_stats, get_schema_definitions, load_corpus
 from trading_app.ai.grounding import build_grounding_prompt, build_interpretation_prompt
+from trading_app.ai.provider_registry import get_profile
 from trading_app.ai.sql_adapter import (
     QueryIntent,
     QueryTemplate,
@@ -168,6 +173,11 @@ class QueryAgent:
         """
         system_prompt = build_grounding_prompt(self.corpus, self.schema_summary)
 
+        # Effort sourced from the canonical profile registry (single source) —
+        # "low" is the documented sweet spot for cheap classify-to-template
+        # extraction. output_config is accepted at top level on parse() (verified
+        # against the pinned SDK signature); only cache_control is parse-strict.
+        effort = get_profile("claude_structured").reasoning_effort
         response = self.client.messages.parse(
             model=CLAUDE_STRUCTURED_MODEL,
             max_tokens=500,
@@ -180,6 +190,7 @@ class QueryAgent:
             ],
             messages=[{"role": "user", "content": question}],
             output_format=QueryIntentSchema,
+            output_config={"effort": effort},
         )
 
         schema: QueryIntentSchema = response.parsed_output
@@ -198,11 +209,15 @@ class QueryAgent:
         )
 
     def _interpret_results(self, question: str, df: pd.DataFrame) -> str:
-        """Pass 2: reasoning interpretation via Opus 4.7 + adaptive thinking.
+        """Pass 2: reasoning interpretation via Opus 4.8 + adaptive thinking.
 
         Adaptive thinking replaces the removed `budget_tokens` parameter. The
         response `content` list may include a `ThinkingBlock` before the text
         block, so we filter explicitly rather than index `content[0]`.
+
+        Effort is sourced from the canonical profile registry; "high" is the
+        documented default (behaviorally == omitting effort) and keeps this
+        bounded ~50-row interpretation off the xhigh/max overthinking path.
         """
         if df.empty:
             return "No results found for this query."
@@ -213,11 +228,13 @@ class QueryAgent:
 
         prompt = build_interpretation_prompt(self.corpus, question, data_summary)
 
+        effort = get_profile("claude_reasoning").reasoning_effort
         response = self.client.messages.create(
             model=CLAUDE_REASONING_MODEL,
             max_tokens=2000,
             thinking={"type": "adaptive"},
             messages=[{"role": "user", "content": prompt}],
+            output_config={"effort": effort},
         )
 
         return _extract_text_block(response)
