@@ -6,6 +6,11 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Current Codex Follow-up
+- **Tool:** Codex
+- **Date:** 2026-05-30
+- **Summary:** Track D Gate 0 MBP-1 validation runner is implemented on branch `codex/track-d-gate0-mbp1` and PR #322 (`https://github.com/jbot-bit/canompx3/pull/322`). Branch was rebased onto current `origin/main` (`806ed562`) before push. Verification passed after rebase: targeted Track D tests `13 passed`, manifest dry-run `1,742 total / 1,658 IS / 84 OOS` over `2019-05-06` to `2026-05-28`, MBP-1 metadata dry-run projected `$31.17`, and ruff format check passed. No DBN pull, no MBO, no recurring/live data purchase, no live state, no `validated_setups`, no allocation, and no `paper_trades` mutation.
+
 ## This Session
 - **Tool:** Codex
 - **Date:** 2026-05-30
