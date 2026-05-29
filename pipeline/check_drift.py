@@ -1512,8 +1512,10 @@ def check_mcp_servers_handshake() -> list[str]:
                 cwd=str(PROJECT_ROOT),
             )
         except subprocess.TimeoutExpired:
-            print(f"  ADVISORY: MCP server '{name}' did not answer initialize within 30s "
-                  f"(timeout — transient or hung; re-run /mcp to confirm).")
+            print(
+                f"  ADVISORY: MCP server '{name}' did not answer initialize within 30s "
+                f"(timeout — transient or hung; re-run /mcp to confirm)."
+            )
             continue
         except Exception as exc:  # noqa: BLE001 - drift boundary, fail-open on infra
             print(f"  ADVISORY: MCP server '{name}' probe could not spawn: {exc}")

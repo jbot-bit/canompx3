@@ -322,3 +322,43 @@ def test_lane_status_bad_profile(client):
     else:
         assert body["paused"] == []
         assert body["paused_count"] == 0
+
+
+# ---------- /api/sessions market_open contract (2026-05-30 TZ fix) ----------
+#
+# Root cause: the endpoint (and START_BOT.bat) keyed off the Brisbane weekday,
+# which reads "Saturday" during the entire Friday US session while the CME
+# market is open. The fix surfaces market_open from the canonical
+# pipeline.market_calendar.is_market_open_at so display agrees with market truth
+# rather than the local weekday. These tests lock that contract.
+
+
+def test_sessions_market_open_true_when_market_open(client, monkeypatch):
+    """market_open=True → endpoint surfaces it and still computes next session."""
+    monkeypatch.setattr(
+        "pipeline.market_calendar.is_market_open_at",
+        lambda _utc_now: True,
+    )
+    resp = client.get("/api/sessions")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("error") is None
+    assert body["market_open"] is True
+    assert "sessions" in body
+
+
+def test_sessions_market_open_false_on_weekend_gap(client, monkeypatch):
+    """market_open=False (genuine weekend/holiday closure) must be surfaced so
+    the frontend shows 'Market closed' instead of a misleading countdown.
+
+    This is the regression guard for the Saturday-Brisbane / Friday-ET defect:
+    the value must come from is_market_open_at, NOT the Brisbane weekday."""
+    monkeypatch.setattr(
+        "pipeline.market_calendar.is_market_open_at",
+        lambda _utc_now: False,
+    )
+    resp = client.get("/api/sessions")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("error") is None
+    assert body["market_open"] is False

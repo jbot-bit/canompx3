@@ -22,15 +22,17 @@ echo [Repo] This shortcut runs the Windows checkout above.
 echo [Repo] WSL/Codex branch pushes do not change this app until merged or pulled here.
 echo.
 
-:: Weekend guard — don't start on Saturday (7) or Sunday (1)
-for /f "tokens=1" %%d in ('powershell -command "(Get-Date).DayOfWeek.value__"') do set DOW=%%d
-if "%DOW%"=="0" (
-    echo [WARNING] It's SUNDAY. Markets are closed.
-    echo Press any key to start anyway, or Ctrl+C to cancel.
-    pause
-)
-if "%DOW%"=="6" (
-    echo [WARNING] It's SATURDAY. Markets are closed.
+:: Market-closed guard — canonical truth, NOT the local weekday.
+:: The machine runs Brisbane time (UTC+10), so it is "Saturday" locally during
+:: the entire Friday US session when the CME market is actually OPEN. A naive
+:: (Get-Date).DayOfWeek check warned "markets closed" mid-session. Delegate to
+:: pipeline.market_calendar.is_market_open_at (the same source the orchestrator
+:: uses) so the warning fires ONLY when the market is genuinely closed.
+::   prints OPEN / CLOSED; fail-open (prints OPEN) on any error so the guard
+::   never blocks a launch it cannot evaluate.
+for /f "tokens=1" %%s in ('.venv\Scripts\python.exe -c "from datetime import datetime; from zoneinfo import ZoneInfo; from pipeline.market_calendar import is_market_open_at; print('OPEN' if is_market_open_at(datetime.now(ZoneInfo('UTC'))) else 'CLOSED')" 2^>nul') do set MKT=%%s
+if "%MKT%"=="CLOSED" (
+    echo [WARNING] CME market is currently CLOSED ^(weekend gap / holiday^).
     echo Press any key to start anyway, or Ctrl+C to cancel.
     pause
 )

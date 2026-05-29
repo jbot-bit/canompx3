@@ -117,6 +117,18 @@ class TestBuildSystemContext:
             ),
         )
         _mkfile(
+            tmp_path / "docs" / "runtime" / "stages" / "mode-closed-stage.md",
+            "\n".join(
+                [
+                    "---",
+                    "task: Mode closed stage",
+                    "mode: CLOSED",
+                    "---",
+                    "# Stage",
+                ]
+            ),
+        )
+        _mkfile(
             tmp_path / "docs" / "runtime" / "stages" / "active-stage.md",
             "\n".join(
                 [
@@ -274,6 +286,7 @@ class TestEvaluateSystemPolicy:
             patch.object(system_context, "branch_name", return_value="main"),
             patch.object(system_context, "head_sha", return_value="abc123"),
             patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "git_hooks_path", return_value=(".githooks", True)),
             patch.object(system_context, "list_claims", return_value=[claim]),
             patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
             patch.object(
@@ -292,6 +305,42 @@ class TestEvaluateSystemPolicy:
 
         assert decision.allowed is True
         assert not any(issue.code == "parallel_mutating_claim" for issue in decision.blockers)
+
+    def test_mutating_session_blocks_when_precommit_hook_inactive(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
+
+        with (
+            patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "git_hooks_path", return_value=(".git/hooks", False)),
+            patch.object(system_context, "list_claims", return_value=[]),
+            patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
+        ):
+            snapshot = build_system_context(tmp_path, context_name="generic")
+            decision = evaluate_system_policy(snapshot, "session_start_mutating")
+
+        assert decision.allowed is False
+        assert any(issue.code == "precommit_hook_inactive" for issue in decision.blockers)
+
+    def test_orientation_warns_when_precommit_hook_inactive(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
+
+        with (
+            patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "git_hooks_path", return_value=(None, False)),
+            patch.object(system_context, "list_claims", return_value=[]),
+            patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
+        ):
+            snapshot = build_system_context(tmp_path, context_name="generic")
+            decision = evaluate_system_policy(snapshot, "orientation")
+
+        assert decision.allowed is True
+        assert any(issue.code == "precommit_hook_inactive" for issue in decision.warnings)
 
     def test_orientation_warns_when_handoff_drifted_from_queue(self, tmp_path: Path) -> None:
         _mkfile(tmp_path / "HANDOFF.md", "# stale\n")

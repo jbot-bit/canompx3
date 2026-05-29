@@ -83,6 +83,39 @@ class TestRenderHandoff:
         assert snapshot.handoff_matches_rendered is False
         assert snapshot.stale_count == 1
 
+    def test_snapshot_ignores_session_prose_when_queue_has_no_active_items(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: done",
+                    "    title: Closed thing",
+                    "    class: docs",
+                    "    status: closed",
+                    "    priority: P3",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: None",
+                    "    exit_criteria: Closed",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n\n## This Session\n- keep prose\n")
+
+        snapshot = work_queue.queue_snapshot(tmp_path, now=_TEST_NOW)
+
+        assert snapshot.handoff_matches_rendered is True
+
 
 class TestClaiming:
     def test_claim_requires_override_when_close_first_remains(self, tmp_path: Path) -> None:

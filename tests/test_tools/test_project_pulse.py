@@ -28,8 +28,10 @@ from scripts.tools.project_pulse import (
     _write_expensive_cache,
     build_pulse,
     collect_action_queue,
+    collect_debt_ledger,
     collect_deployment_state,
     collect_drift,
+    collect_followup_coverage,
     collect_git_state,
     collect_handoff,
     collect_lifecycle_control,
@@ -790,6 +792,111 @@ class TestCollectActionQueue:
         items = collect_action_queue(tmp_path)
         assert len(items) == 1
         assert len(items[0].summary) <= 100
+
+
+class TestCollectDebtLedger:
+    def test_surfaces_open_debt_and_skips_struck_entries(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "debt-ledger.md",
+            "\n".join(
+                [
+                    "# Debt Ledger",
+                    "",
+                    "## Open Debt",
+                    "",
+                    "- ~~`closed-item`~~ **CLOSED.** ignore this",
+                    "- `open-item` â€” Fix this class of workflow gap.",
+                    "   - nested explanatory bullet is not a separate debt item",
+                    "- plain open debt without id",
+                    "",
+                    "## Closed Debt",
+                    "- `old` â€” ignore this too",
+                ]
+            ),
+        )
+
+        items = collect_debt_ledger(tmp_path)
+
+        assert [item.source for item in items] == ["debt_ledger", "debt_ledger"]
+        assert "open-item" in items[0].summary
+        assert "plain open debt" in items[1].summary
+        assert not any("closed-item" in item.summary for item in items)
+
+
+class TestCollectFollowupCoverage:
+    def test_flags_actionable_items_when_queue_has_no_open_work(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: done",
+                    "    title: Closed thing",
+                    "    class: docs",
+                    "    status: closed",
+                    "    priority: P3",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: None",
+                    "    exit_criteria: Closed",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+        pulse_items = [
+            PulseItem(category="broken", severity="high", source="live", summary="locked live journal"),
+            PulseItem(category="decaying", severity="low", source="handoff", summary="old note"),
+        ]
+
+        items = collect_followup_coverage(tmp_path, pulse_items)
+
+        assert len(items) == 1
+        assert items[0].source == "followup_coverage"
+        assert items[0].category == "unactioned"
+        assert "0 open items" in items[0].summary
+
+    def test_does_not_flag_when_queue_has_open_work(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: first",
+                    "    title: First thing",
+                    "    class: research",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: Do first",
+                    "    exit_criteria: Finish first",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        items = collect_followup_coverage(
+            tmp_path,
+            [PulseItem(category="broken", severity="high", source="live", summary="locked live journal")],
+        )
+
+        assert items == []
 
 
 class TestCollectSystemIdentity:
