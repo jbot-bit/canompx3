@@ -12,9 +12,17 @@
 - **Summary:** Implemented follow-up automation gap hardening on `codex/followup-automation-gaps`: activated `.githooks`, made `system_context` detect inactive pre-commit hooks and closed `mode: CLOSED` stages correctly, changed queue/handoff drift to compare only active queue steps, and made `project_pulse` surface debt-ledger items plus a high-severity `followup_coverage` item when broken/high-decay pulse findings exist while the action queue has zero open work. Targeted tests pass (112/112), ruff changed-file check passes, drift passes (170 OK / 21 advisory). Live pulse still reports the pre-existing live-journal lock on PID 25544 and now correctly reports the empty-queue coverage gap.
 
 ## Last Session
-- **Tool:** Claude Code
-- **Date:** 2026-05-29
-- **Summary:** Committed MGC O30 pooled-base research (now `55dc312d` on origin; was `f1cc6435` pre-rebase, VERDICT DEAD_FOR_ORB) and fixed an `audit_behavioral.py` triple-join false positive that was blocking the commit (`07975a78`; `_looks_like_sql()` now requires a line-led SQL clause; +2 regression tests). gold.db write-lock race resolved (dry-run `drifted=0` proved data canonical). **PUSHED — `origin/main` is now at `df36ed98` (verified 2026-05-29); history was rebased after the prior baton, so `f1cc6435` is dangling/reflog-only — use `55dc312d`. The "ahead of origin, not pushed" note is resolved.** Detail → `memory/feedback_behavioral_audit_with_join_prose_false_positive_2026_05_29.md`.
+- **Tool:** Unknown
+- **Date:** 2026-05-30
+- **Commit:** db8eeaad — fix(workflow): surface follow-up automation gaps
+- **Files changed:** 7 files
+  - `HANDOFF.md`
+  - `pipeline/system_context.py`
+  - `pipeline/work_queue.py`
+  - `scripts/tools/project_pulse.py`
+  - `tests/test_pipeline/test_system_context.py`
+  - `tests/test_pipeline/test_work_queue.py`
+  - `tests/test_tools/test_project_pulse.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
