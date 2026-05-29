@@ -159,3 +159,58 @@ def test_cache_dir_none_disables_cache(isolated_cache, monkeypatch):
     key = _drift_cache.cache_key(LABEL, deps)
     _drift_cache.write_pass(LABEL, key, [])
     assert _drift_cache.read_pass(LABEL, key) is False
+
+
+def _run_real_dispatch(label, monkeypatch, cache_dir):
+    """Replay the runner's exact cache-dispatch decision (check_drift.py:15156-15166)
+    against the REAL _drift_cache functions, the REAL CHECK_DEPS entry, and the
+    REAL registered check_fn — only the cache dir is isolated to tmp. Returns the
+    verdict list `v` and records hits in the real _CACHE_HITS_THIS_RUN, exactly as
+    main() does. This is the integration seam the unit tests above stub out."""
+    import pipeline.check_drift as cd
+
+    monkeypatch.setattr(_drift_cache, "_cache_dir", lambda: cache_dir)
+    by_label = {entry[0]: entry[1] for entry in cd.CHECKS}
+    check_fn = by_label[label]
+
+    deps = cd.CHECK_DEPS.get(label)
+    cache_key = _drift_cache.cache_key(label, deps) if deps else None
+    if deps is not None and _drift_cache.read_pass(label, cache_key):
+        cd._CACHE_HITS_THIS_RUN.append(label)
+        v = []
+    else:
+        v = check_fn()
+        if deps is not None:
+            _drift_cache.write_pass(label, cache_key, v)
+    return v
+
+
+def test_runner_dispatch_real_hit_then_meta_recheck_passes(monkeypatch, tmp_path):
+    """Integration (audit finding 2026-05-29): drive the REAL runner dispatch so a
+    genuine cache HIT populates _CACHE_HITS_THIS_RUN, then prove the real
+    meta cold-recheck re-runs the real check_entry_models_sync cold and confirms
+    parity. The unit tests above patch _CACHE_HITS_THIS_RUN directly; this test
+    never does — it earns the hit through the actual read_pass path against the
+    live repo files declared in CHECK_DEPS, with only the cache dir on tmp."""
+    import pipeline.check_drift as cd
+
+    label = "ENTRY_MODELS sync"
+    cache_dir = tmp_path / "drift-cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(cd, "_CACHE_HITS_THIS_RUN", [])
+
+    # Run 1: cold (empty cache) → real check runs, real PASS persisted, no hit.
+    v1 = _run_real_dispatch(label, monkeypatch, cache_dir)
+    assert v1 == [], "live repo must currently PASS ENTRY_MODELS sync (precondition)"
+    assert cd._CACHE_HITS_THIS_RUN == [], "first run is a MISS, not a hit"
+
+    # Run 2: deps unchanged → real read_pass HIT → _CACHE_HITS_THIS_RUN populated.
+    v2 = _run_real_dispatch(label, monkeypatch, cache_dir)
+    assert v2 == []
+    assert cd._CACHE_HITS_THIS_RUN.count(label) == 1, "unchanged deps must produce a real cache hit"
+    assert len(cd._CACHE_HITS_THIS_RUN) == 1, "exactly one label should be recorded"
+
+    # The meta cold-recheck now re-runs the REAL check cold and must agree (PASS).
+    assert cd.check_drift_cache_meta_recheck() == [], (
+        "cold re-run of the real ENTRY_MODELS sync must reproduce the cached PASS"
+    )

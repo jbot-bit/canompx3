@@ -35,3 +35,21 @@ miss → real run. Honesty preserved by construction; fail-closed on every error
 ## Adversarial-audit gate
 check_drift.py is a truth-layer verification path → evidence-auditor independent pass owed
 AFTER this stage, BEFORE any expansion to more checks. Meta cold-recheck lands in THIS stage.
+
+### Audit verdict (2026-05-29, independent evidence-auditor context)
+CONDITIONAL — zero critical issues. All 5 core promises execution-verified with citations:
+fail-closed on every error path; FAIL never cached; stale-dep detection works AND the
+`ENTRY_MODELS sync` dep set is complete (ENTRY_MODELS is a literal in config.py; sql_adapter.py
+derives `VALID_ENTRY_MODELS = set(ENTRY_MODELS)`); meta cold-recheck runs last (import-time
+assert), bypasses cache, fails closed on requires_db hits; CHECKS 4-tuple shape unchanged.
+
+Single gap closed in-stage: the unit tests patched `_CACHE_HITS_THIS_RUN` directly, leaving the
+real runner-dispatch→hit→meta-recheck path uncovered. Added
+`test_runner_dispatch_real_hit_then_meta_recheck_passes` — earns a genuine cache hit through the
+real `read_pass` path (only the cache dir isolated to tmp) and asserts the real meta-recheck
+reproduces the PASS cold. 9/9 cache tests pass; full drift 169/0 with Check 190 (meta
+cold-recheck) PASSED live.
+
+Latent note for future expansion (NOT a bug today): if a refactor decouples
+`VALID_ENTRY_MODELS` from `config.ENTRY_MODELS` into a third file, CHECK_DEPS would be
+under-declared until the meta cold-recheck catches it on the next run.
