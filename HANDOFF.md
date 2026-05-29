@@ -949,10 +949,10 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-29
-- **Commit:** 8f62274b — [mechanical] docs(eligibility): @research-source + @revalidated-for on VALIDATION_FRESHNESS_DAYS
+- **Commit:** 212111d4 — harden reap_stale_claude_processes: opt-in --reap-duplicates sweep
 - **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `trading_app/eligibility/builder.py`
+  - `scripts/tools/reap_stale_claude_processes.py`
+  - `tests/test_tools/test_reap_stale_claude_processes.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
