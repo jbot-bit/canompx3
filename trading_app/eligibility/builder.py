@@ -55,6 +55,13 @@ from trading_app.eligibility.types import (
 )
 
 # Freshness threshold for STALE_VALIDATION status (days).
+# @research-source: operator governance heuristic — 180 days (~6 months) operationalises the
+# project revalidation cadence (strategy filters should be re-checked against live data at
+# least every 2 full quarters). No single literature extract defines this constant; value was
+# set at initial eligibility-context build (commit fc89dbf0). Re-evaluate if the project
+# adopts a shorter or longer revalidation cadence in pre_registered_criteria.md.
+# @revalidated-for: all instruments, all sessions (applies globally to every filter atom that
+# carries a last_revalidated date)
 VALIDATION_FRESHNESS_DAYS = 180
 
 # Path to calendar cascade rules file (for RULES_NOT_LOADED detection).
