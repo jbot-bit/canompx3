@@ -1130,6 +1130,18 @@ A `theory_grant: true` prereg MAY cite a parent-mechanism extract as theory_gran
 
 **Honest limitation (recorded, not hidden):** at the locked conservative universe (e.g. MNQ full canonical `V[SR] ≈ 0.0576`, N̂ = 33), `SR_0 ≈ 0.49` per-trade, which the strongest thin-overlay candidates (~0.10 per-trade) do NOT clear. This is the conservative floor working as designed, not a defect — but it means DSR-as-gate is strict and will leave many thin edges `ONC_PENDING`. ONC clustering (López de Prado Eq. 9) typically estimates true independent-trial count well below the raw cell count, which would lower SR_0 toward what real edges can clear. ONC is queued as a follow-up **audit upgrade**, not a blocker: research validation proceeds today under the conservative declared-K heuristic.
 
-**Mechanized enforcement (follow-up stage, not this commit):** a drift check asserting any prereg claiming DSR-clearance pins its `V[SR]` reference universe to the locked definition (pre-2026, family-scoped, failures-included) is queued. Until it lands, this amendment is doctrine-enforced by review.
+**Declared schema (binding, 2026-05-29):** a prereg claims DSR-clearance by carrying a `criterion_5` block (top-level or under `metadata`). When present, the block MUST declare the four locked dimensions:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `reference_family` | non-empty string | names the pre-declared prereg family/run the V[SR] universe spans |
+| `pre_2026_only` | explicit bool `true` | universe restricted to `trading_day < HOLDOUT_SACRED_FROM` |
+| `failures_and_siblings_included` | explicit bool `true` | all tested sibling cells + failures included; no winner-filter, no global dump |
+| `effective_trials` | positive int | N̂ |
+| `effective_trials_derivation` | `declared_K_conservative` \| `onc_clustered` | how N̂ was derived |
+
+`onc_clustered` uses `trading_app.dsr.estimate_n_eff_onc` (López de Prado Optimal Number of Clusters) — the canonical ONC helper now exists, so a prereg may derive N̂ by clustering rather than the conservative declared-K floor. A prereg with NO `criterion_5` block leaves DSR informational / `ONC_PENDING` (the corpus default) and is out of scope.
+
+**Mechanized enforcement (SHIPPED 2026-05-29):** drift check `check_dsr_universe_lock_declared` (`pipeline/check_drift.py`) BLOCKS any prereg whose `criterion_5` block is present-but-incomplete (missing field, wrong type, false attestation, or a derivation label outside the allowed set). The check is declaration-discipline only — it does NOT recompute `V[SR]` (that is the runner's job via the canonical helper); recompute-and-compare is a future hardening. Drafts directory excluded.
 
 **Cross-reference:** Doctrine question note `docs/audit/doctrine-questions/2026-05-23-protocol-a-theory-grant-attachment-class.md`. Trigger result MD `docs/audit/results/2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1.md`. Affected audit-log entries at `docs/runtime/chordia_audit_log.yaml` lines 229 (NYSE_OPEN RR1.0), 257 (NYSE_OPEN RR1.5), 709 (TOKYO_OPEN).

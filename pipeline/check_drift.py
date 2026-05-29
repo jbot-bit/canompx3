@@ -3680,6 +3680,125 @@ def check_amendment_3_4_provisional_gate(
     return violations
 
 
+# Allowed derivation labels for criterion_5.effective_trials_derivation.
+# declared_K_conservative — N̂ = the prereg's declared K (Amendment 3.5 default,
+#   strict: larger K -> higher SR_0 -> stricter gate).
+# onc_clustered — N̂ from trading_app.dsr.estimate_n_eff_onc (López de Prado
+#   Optimal Number of Clusters). Permitted now that the canonical helper exists.
+_ALLOWED_DSR_TRIALS_DERIVATION = {"declared_K_conservative", "onc_clustered"}
+
+
+def check_dsr_universe_lock_declared(
+    hypotheses_dir: Path | None = None,
+) -> list[str]:
+    """Criterion 5 / Amendment 3.5: any prereg claiming DSR-clearance MUST
+    pin its V[SR] reference universe via a complete ``criterion_5`` block.
+
+    Authority: ``docs/institutional/pre_registered_criteria.md`` Amendment 3.5
+    (2026-05-29, binding). The amendment locked the DSR reference universe
+    (pre-2026, family-scoped, all sibling trials + failures, no winner-filter)
+    after the same candidate scored DSR 0.000 vs 0.982 purely by universe
+    choice. Before this check, the lock was enforced by review only.
+
+    Trigger (grounded — see stage file): the presence of a top-level or
+    metadata ``criterion_5`` mapping IS the trigger. The status-taxonomy
+    string ``DSR_FIXED_UNIV_CLEAR`` lives only in the doctrine file and is
+    never written into a prereg YAML, so keying on it would make this check
+    dead-on-arrival (a registered check that can never fire is worse than no
+    check — integrity-guardian § 3/§ 7). A prereg that does NOT carry a
+    ``criterion_5`` block leaves DSR informational / ONC_PENDING (the current
+    default for the entire corpus) and is out of scope — the check stays
+    dormant until someone actually asserts DSR-clearance, which is exactly the
+    moment the universe must be pinned.
+
+    When a ``criterion_5`` block IS present, it MUST declare the four locked
+    dimensions Amendment 3.5 names:
+        reference_family            — non-empty string naming the pre-declared
+                                      prereg family/run the V[SR] universe spans
+        pre_2026_only               — explicit bool true (trading_day < HOLDOUT_SACRED_FROM)
+        failures_and_siblings_included — explicit bool true (no winner-filter, no global dump)
+        effective_trials            — positive int (N̂)
+        effective_trials_derivation — one of _ALLOWED_DSR_TRIALS_DERIVATION
+
+    Any missing / wrong-typed / false-attestation field -> BLOCK.
+
+    Drafts directory (``docs/audit/hypotheses/drafts/``) is excluded — drafts
+    are author-owned and not yet committed prereg state (same convention as
+    the Chordia and Amendment-3.4 checks).
+
+    Test seam: ``hypotheses_dir`` lets injection tests pass a tempdir without
+    monkeypatching ``PROJECT_ROOT``.
+    """
+    import yaml
+
+    hyp_dir = hypotheses_dir if hypotheses_dir is not None else (PROJECT_ROOT / "docs" / "audit" / "hypotheses")
+    if not hyp_dir.exists():
+        return []
+
+    template_hint = "docs/institutional/hypothesis_registry_template.md § criterion_5"
+    violations: list[str] = []
+
+    # glob("*.yaml") on the directory itself does NOT descend into drafts/,
+    # so drafts are excluded by construction (same as the sibling checks).
+    for path in sorted(hyp_dir.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            violations.append(f"  {path.name}: failed to read/parse prereg ({type(exc).__name__}: {exc})")
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        # Trigger: criterion_5 may sit top-level or under metadata.
+        block = data.get("criterion_5")
+        if block is None:
+            meta = data.get("metadata")
+            if isinstance(meta, dict):
+                block = meta.get("criterion_5")
+        if block is None:
+            continue  # not claiming DSR-clearance — dormant, out of scope
+
+        if not isinstance(block, dict):
+            violations.append(
+                f"  {path.name}: criterion_5 must be a mapping declaring the locked "
+                f"V[SR] universe, got {type(block).__name__}. See {template_hint}."
+            )
+            continue
+
+        fam = block.get("reference_family")
+        if not isinstance(fam, str) or not fam.strip():
+            violations.append(
+                f"  {path.name}: criterion_5.reference_family must be a non-empty string "
+                f"naming the pre-declared prereg family/run the V[SR] universe spans "
+                f"(Amendment 3.5). See {template_hint}."
+            )
+
+        for attest in ("pre_2026_only", "failures_and_siblings_included"):
+            val = block.get(attest)
+            if val is not True:  # explicit-bool true; rejects missing, None, "true", 1, False
+                violations.append(
+                    f"  {path.name}: criterion_5.{attest} must be an explicit bool true "
+                    f"(Amendment 3.5 locks the universe to pre-2026, all siblings + failures, "
+                    f"no winner-filter; got {val!r}). See {template_hint}."
+                )
+
+        n_eff = block.get("effective_trials")
+        if not isinstance(n_eff, int) or isinstance(n_eff, bool) or n_eff < 1:
+            violations.append(
+                f"  {path.name}: criterion_5.effective_trials must be a positive int (N̂), "
+                f"got {n_eff!r}. See {template_hint}."
+            )
+
+        deriv = block.get("effective_trials_derivation")
+        if deriv not in _ALLOWED_DSR_TRIALS_DERIVATION:
+            violations.append(
+                f"  {path.name}: criterion_5.effective_trials_derivation must be one of "
+                f"{sorted(_ALLOWED_DSR_TRIALS_DERIVATION)}, got {deriv!r}. See {template_hint}."
+            )
+
+    return violations
+
+
 def check_verdict_vocabulary_md_matches_code(
     md_path: Path | None = None,
 ) -> list[str]:
@@ -14146,6 +14265,12 @@ CHECKS = [
     (
         "Chordia result MD threshold matches prereg chordia_threshold_basis (theory_citation field-presence trap)",
         check_chordia_result_threshold_matches_prereg,
+        False,
+        False,
+    ),
+    (
+        "DSR reference-universe lock declared (Criterion 5 Amendment 3.5: criterion_5 block complete when claiming DSR-clearance)",
+        check_dsr_universe_lock_declared,
         False,
         False,
     ),

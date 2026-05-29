@@ -342,6 +342,32 @@ hypotheses:
 
 ---
 
+## Optional: `criterion_5` block (REQUIRED only when claiming DSR-clearance)
+
+Omit this block entirely unless the prereg asserts the Deflated Sharpe Ratio
+gate is cleared. Leaving DSR informational / `ONC_PENDING` (the default) needs
+no block. When you DO claim DSR-clearance, Amendment 3.5 requires the V[SR]
+reference universe to be pinned — declare all five fields or the drift check
+`check_dsr_universe_lock_declared` BLOCKS the commit:
+
+```yaml
+criterion_5:                              # may sit top-level or under metadata
+  reference_family: "<prereg family/run name the V[SR] universe spans>"
+  pre_2026_only: true                     # trading_day < HOLDOUT_SACRED_FROM
+  failures_and_siblings_included: true    # no winner-filter, no global dump
+  effective_trials: 27                    # N̂ (positive int)
+  effective_trials_derivation: declared_K_conservative   # or: onc_clustered
+```
+
+- `declared_K_conservative` — N̂ = the prereg's declared K (strict: larger K
+  raises SR_0, stricter gate). The Amendment 3.5 default.
+- `onc_clustered` — N̂ from `trading_app.dsr.estimate_n_eff_onc` (López de
+  Prado Optimal Number of Clusters). Permitted now the canonical helper exists.
+
+Authority: `pre_registered_criteria.md` Amendment 3.5 § Declared schema.
+
+---
+
 ## Related files
 
 - `README.md` — master index

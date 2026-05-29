@@ -657,10 +657,11 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-29
-- **Commit:** f9a0b24e — [judgment] doctrine(criterion-5): LOCK DSR reference universe — research validation without calendar-OOS wait
-- **Files changed:** 2 files
+- **Commit:** 3ef83391 — docs(nq-mini): close stage3 activation as not viable
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/institutional/pre_registered_criteria.md`
+  - `docs/audit/results/2026-05-29-nq-mini-stage3-not-viable-qty-divisibility-wall.md`
+  - `docs/runtime/stages/2026-05-29-nq-mini-stage2-wiring-closeout.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
