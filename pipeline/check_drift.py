@@ -1436,6 +1436,129 @@ def check_cryptography_pin_holds() -> list[str]:
     return violations
 
 
+def check_mcp_servers_handshake() -> list[str]:
+    """Hybrid guard: every fastmcp-based project MCP server must answer `initialize`.
+
+    Why a handshake and not an import check: on 2026-05-30 the `gold-db` MCP
+    server failed to connect for ~5 days while `import fastmcp` AND
+    `_build_server()` both SUCCEEDED. The crash was in `mcp.run()`'s lifespan
+    manager — fastmcp 2.14's Docket subsystem imported a `burner-redis` wheel
+    that had extracted CORRUPT (no `__init__.py`, no RECORD), so
+    `getattr(burner_redis, "BurnerRedis")` raised AttributeError only at startup.
+    Import-level checks miss this entire class; only exercising the run/initialize
+    path catches it. Same disease as the cryptography<47 pin — sidecar deps
+    (`fastmcp`, `authlib`, `beartype`, `pydocket`, `burner-redis`) live OUTSIDE
+    uv.lock, so nothing else watches them.
+
+    Hybrid severity (operator-chosen 2026-05-30):
+      - FAIL-CLOSED (append) when the captured error is a clear dep-rot signal:
+        ModuleNotFoundError / AttributeError / "no RECORD" / ImportError. These
+        are deterministic and actionable (reinstall the named dep under
+        constraints.txt).
+      - ADVISORY (print, non-blocking) for ambiguous/transient failures: spawn
+        timeout, missing interpreter, non-zero exit with no recognized signal.
+        A flaky subprocess must never block an unrelated commit.
+
+    Fail-open on its own infrastructure faults (no .mcp.json, json parse error,
+    no fastmcp servers declared) — never blocks a session it cannot probe, per
+    the cryptography-pin / hook conventions.
+
+    Detail: memory/feedback_mcp_venv_sidecar_rot_beartype_authlib_2026_05_30.md
+    """
+    import json
+    import subprocess
+
+    violations: list[str] = []
+
+    mcp_json = PROJECT_ROOT / ".mcp.json"
+    if not mcp_json.exists():
+        return violations
+    try:
+        servers = json.loads(mcp_json.read_text(encoding="utf-8")).get("mcpServers", {})
+    except Exception:
+        return violations  # fail-open: cannot read config
+
+    # Only probe servers whose command launches a project python entrypoint
+    # (these are the fastmcp / StdioToolServer ones we own). Skip uvx/npx
+    # third-party servers (code-review-graph, playwright) — not our dep surface.
+    init_req = (
+        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
+        '{"protocolVersion":"2024-11-05","capabilities":{},'
+        '"clientInfo":{"name":"drift-probe","version":"1"}}}\n'
+    )
+    DEP_ROT = ("ModuleNotFoundError", "AttributeError", "no RECORD", "ImportError")
+
+    for name, spec in sorted(servers.items()):
+        if spec.get("type", "stdio") != "stdio":
+            continue
+        cmd = spec.get("command", "")
+        args = spec.get("args", [])
+        # heuristic: a python interpreter running a *.py entrypoint under the repo
+        entry = next((a for a in args if str(a).endswith(".py")), None)
+        is_python = "python" in str(cmd).lower()
+        if not (is_python and entry):
+            continue
+        entry_path = PROJECT_ROOT / entry
+        if not entry_path.exists():
+            continue  # fail-open: stale config entry, not a dep-rot signal
+
+        try:
+            proc = subprocess.run(
+                [cmd, *args],
+                input=init_req,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=str(PROJECT_ROOT),
+            )
+        except subprocess.TimeoutExpired:
+            print(f"  ADVISORY: MCP server '{name}' did not answer initialize within 30s "
+                  f"(timeout — transient or hung; re-run /mcp to confirm).")
+            continue
+        except Exception as exc:  # noqa: BLE001 - drift boundary, fail-open on infra
+            print(f"  ADVISORY: MCP server '{name}' probe could not spawn: {exc}")
+            continue
+
+        # Success = stdout carries a JSON-RPC result for our id
+        ok = False
+        for line in proc.stdout.splitlines():
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                msg = json.loads(line)
+            except Exception:
+                continue
+            if msg.get("id") == 1 and "result" in msg:
+                ok = True
+                break
+        if ok:
+            continue
+
+        # Failed handshake — classify the captured stderr tail.
+        err_tail = ""
+        for ln in reversed(proc.stderr.splitlines()):
+            ln = ln.strip()
+            if ln and "python-dotenv could not parse" not in ln:
+                err_tail = ln
+                break
+        if any(sig in proc.stderr for sig in DEP_ROT):
+            violations.append(
+                f"  MCP server '{name}' failed `initialize` — dep-rot signal: {err_tail or '(see stderr)'}. "
+                f"Reinstall the named sidecar dep under constraints: "
+                f"`.venv/Scripts/python.exe -m pip install -c constraints.txt <dep>` "
+                f"(corrupt wheel? rm the dir + .dist-info in site-packages first, then reinstall). "
+                f"Detail: memory/feedback_mcp_venv_sidecar_rot_beartype_authlib_2026_05_30.md"
+            )
+        else:
+            print(
+                f"  ADVISORY: MCP server '{name}' failed `initialize` (exit {proc.returncode}, no "
+                f"recognized dep-rot signal): {err_tail or '(no stderr)'}. Run /mcp to confirm."
+            )
+
+    return violations
+
+
 def check_garch_dependency_importable() -> list[str]:
     """Fail-closed if `arch` is not importable.
 
@@ -14207,6 +14330,7 @@ CHECKS = [
     ("Nested subpackage isolation", check_nested_isolation, False, False),
     ("All imports resolve", check_all_imports_resolve, False, False),
     ("Cryptography pin holds (FastMCP/Authlib compat)", check_cryptography_pin_holds, False, False),
+    ("MCP servers answer initialize (sidecar dep-rot guard)", check_mcp_servers_handshake, False, False),
     ("GARCH dependency importable (`arch` package present)", check_garch_dependency_importable, False, False),
     ("Nested production table write guard", check_nested_production_writes, False, False),
     (
