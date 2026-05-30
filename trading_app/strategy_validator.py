@@ -78,7 +78,13 @@ from trading_app.edge_families import build_edge_families_for_instrument
 #   fire AFTER the legacy validator's FDR and walkforward phases, so it
 #   cannot be a pre-flight gate. Stage 4.0b will implement the banded rule
 #   as a post-validation check.
-from trading_app.holdout_policy import HOLDOUT_GRANDFATHER_CUTOFF, HOLDOUT_SACRED_FROM
+from trading_app.holdout_policy import (
+    EARLY_HOLDOUT_BOUNDARY,
+    HOLDOUT_GRANDFATHER_CUTOFF,
+    HOLDOUT_SACRED_FROM,
+    STANDARD_MODE_LABEL,
+    is_ehr_mode,
+)
 from trading_app.hypothesis_loader import (
     HypothesisLoaderError,
     enforce_minbtl_bound,
@@ -1320,6 +1326,71 @@ def _validation_pathway_for_row(row_dict: dict, testing_mode: str) -> str | None
     return None
 
 
+# Single source of truth for the EHR non-deployable status/ceiling literal.
+# Both validated_setups.status and validated_setups.verdict_ceiling carry this
+# value on an EHR survivor. Defined once here so the helper writes it and the
+# INSERT-site status branch consumes the helper's flag — no scattered string
+# comparison (plan invariant #5, Stage-3 acceptance #11).
+RESEARCH_PROVISIONAL_STATUS = "RESEARCH_PROVISIONAL"
+
+
+def _derive_ehr_promotion_fields(row_dict: dict) -> dict[str, object]:
+    """Single source of truth for the EHR promotion-time field set.
+
+    EARLY_HOLDOUT_REDISCOVERY (EHR) PASS 2 Stage 3. Reads the experimental
+    row's ``validation_mode`` (written by Stage 4 discovery) and derives the
+    five validated_setups columns that distinguish an EHR survivor from a
+    STANDARD (Mode A) one. Plan invariants 4 + 5:
+
+    - **#4 (identifiable end-to-end):** ``validation_mode`` propagates verbatim
+      from the experimental row; ``None``/missing defaults to
+      ``STANDARD_MODE_LABEL`` for pre-Stage-2 grandfathered rows.
+    - **#5 (research-provisional only, never deployable):** when the row is EHR
+      (``is_ehr_mode`` True), ``verdict_ceiling`` is ``RESEARCH_PROVISIONAL``
+      and the caller hard-caps ``status`` to the same — which the
+      ``WHERE LOWER(status) = 'active'`` ACTIVE_VALIDATED_VIEW predicate then
+      excludes from every deployable surface by construction.
+
+    Encapsulated here (not inlined at the INSERT) so Stage 6 drift checks can
+    assert it as the canonical anchor — no scattered string comparisons against
+    ``'EARLY_HOLDOUT_REDISCOVERY'`` / ``'RESEARCH_PROVISIONAL'``.
+
+    Returns a dict with keys: ``validation_mode``, ``verdict_ceiling``,
+    ``pseudo_oos_window_start``, ``pseudo_oos_window_end``,
+    ``cumulative_search_count``. STANDARD rows get ``verdict_ceiling`` /
+    ``pseudo_oos_window_*`` = ``None`` (NULL); EHR rows get the canonical
+    boundary dates from ``trading_app.holdout_policy``.
+    """
+    raw_mode = row_dict.get("validation_mode")
+    # NULL/missing → STANDARD (pre-Stage-2 grandfathered rows). Delegated to the
+    # canonical label, never the bare string literal.
+    validation_mode = raw_mode if raw_mode else STANDARD_MODE_LABEL
+
+    if is_ehr_mode(validation_mode):
+        return {
+            "validation_mode": validation_mode,
+            "verdict_ceiling": RESEARCH_PROVISIONAL_STATUS,
+            # is_research_provisional is the status-decision flag consumed by the
+            # INSERT site — the caller never compares verdict_ceiling strings.
+            "is_research_provisional": True,
+            # The PSEUDO_OOS window is the canonical
+            # EARLY_HOLDOUT_BOUNDARY..HOLDOUT_SACRED_FROM span. Both are `date`
+            # constants from trading_app.holdout_policy (matching the DATE
+            # columns) — never inline date(2025,1,1)/(2026,1,1).
+            "pseudo_oos_window_start": EARLY_HOLDOUT_BOUNDARY,
+            "pseudo_oos_window_end": HOLDOUT_SACRED_FROM,
+            "cumulative_search_count": row_dict.get("cumulative_search_count"),
+        }
+    return {
+        "validation_mode": STANDARD_MODE_LABEL,
+        "verdict_ceiling": None,
+        "is_research_provisional": False,
+        "pseudo_oos_window_start": None,
+        "pseudo_oos_window_end": None,
+        "cumulative_search_count": row_dict.get("cumulative_search_count"),
+    }
+
+
 def run_validation(
     db_path: Path | None = None,
     instrument: str = "MGC",
@@ -1880,6 +1951,19 @@ def run_validation(
 
                     shelf_lifecycle = validated_shelf_lifecycle(rd["instrument"])
 
+                    # EHR PASS 2 Stage 3 — derive promotion-time mode fields from
+                    # the canonical helper (single source of truth, plan inv. 4+5).
+                    ehr_fields = _derive_ehr_promotion_fields(rd)
+                    # Plan invariant #5: EHR survivors are NEVER deployable. Hard-cap
+                    # status to RESEARCH_PROVISIONAL so the WHERE LOWER(status)='active'
+                    # ACTIVE_VALIDATED_VIEW predicate excludes them from every
+                    # deployable surface by construction. STANDARD rows keep the
+                    # existing active/retired lifecycle logic unchanged.
+                    if ehr_fields["is_research_provisional"]:
+                        row_status = RESEARCH_PROVISIONAL_STATUS
+                    else:
+                        row_status = "active" if rd["instrument"] in ACTIVE_ORB_INSTRUMENTS else "retired"
+
                     con.execute(
                         """INSERT OR REPLACE INTO validated_setups
                            (strategy_id, promoted_from, instrument, orb_label,
@@ -1903,8 +1987,11 @@ def run_validation(
                             sharpe_haircut, skewness, kurtosis_excess,
                             oos_exp_r, noise_risk,
                             era_dependent, max_year_pct,
-                            p_value, n_trials_at_discovery, fst_hurdle)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            p_value, n_trials_at_discovery, fst_hurdle,
+                            validation_mode, verdict_ceiling,
+                            pseudo_oos_window_start, pseudo_oos_window_end,
+                            cumulative_search_count)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid,
                             sid,
@@ -1928,7 +2015,7 @@ def run_validation(
                             rd.get("trades_per_year"),
                             rd.get("sharpe_ann"),
                             yearly,
-                            "active" if rd["instrument"] in ACTIVE_ORB_INSTRUMENTS else "retired",
+                            row_status,
                             rd.get("median_risk_dollars"),
                             rd.get("avg_risk_dollars"),
                             rd.get("avg_win_dollars"),
@@ -1961,6 +2048,11 @@ def run_validation(
                             rd.get("p_value"),
                             rd.get("n_trials_at_discovery"),
                             rd.get("fst_hurdle"),
+                            ehr_fields["validation_mode"],
+                            ehr_fields["verdict_ceiling"],
+                            ehr_fields["pseudo_oos_window_start"],
+                            ehr_fields["pseudo_oos_window_end"],
+                            ehr_fields["cumulative_search_count"],
                         ],
                     )
                     con.execute(

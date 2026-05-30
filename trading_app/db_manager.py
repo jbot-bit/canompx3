@@ -28,6 +28,25 @@ from pipeline.db_contracts import (
 )
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.deployability_state import DEPLOYMENT_READINESS_EVALUATIONS_SCHEMA
+from trading_app.holdout_policy import EHR_MODE_LABEL, STANDARD_MODE_LABEL
+
+# Defense-in-depth: the EHR Stage 2 migration writes the SQL literal
+# 'STANDARD' as the DEFAULT for validated_setups.validation_mode (SQL DEFAULTs
+# cannot reference a Python constant). This assert pins the literal to the
+# canonical source so any rename of STANDARD_MODE_LABEL surfaces at import time
+# rather than producing a silent schema/policy divergence. Acceptance #8 of
+# docs/runtime/stages/ehr-stage-2-validated-setups-schema.md.
+assert STANDARD_MODE_LABEL == "STANDARD", (
+    "trading_app.holdout_policy.STANDARD_MODE_LABEL drifted from the SQL "
+    "DEFAULT literal 'STANDARD' baked into validated_setups.validation_mode. "
+    "Either revert the constant, or write a follow-up migration that updates "
+    "the column DEFAULT and backfills existing rows."
+)
+assert EHR_MODE_LABEL == "EARLY_HOLDOUT_REDISCOVERY", (
+    "trading_app.holdout_policy.EHR_MODE_LABEL drifted from the canonical "
+    "literal used by EHR Stage 4 discovery writes and Stage 5 allocator "
+    "guards. See PASS 2 plan invariants 4-5."
+)
 
 
 def compute_trade_day_hash(days: list) -> str:
@@ -622,6 +641,55 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         for col, typedef in [("validation_pathway", "VARCHAR"), ("c8_oos_status", "VARCHAR")]:
             for table in ["experimental_strategies", "validated_setups"]:
                 con.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typedef}")
+
+        # Migration: EARLY_HOLDOUT_REDISCOVERY (EHR) probe-mode schema (2026-05-17,
+        # PASS 2 Stage 2). Five additive columns on validated_setups so EHR
+        # survivors written by future Stage 4 discovery can be distinguished
+        # from STANDARD (Mode A) rows at the data layer. Plan invariants 4 + 5:
+        # EHR rows must be identifiable so Stage 5 allocator can block them
+        # from lanes[] and Stage 6 drift checks can guard cross-mode contamination.
+        # - validation_mode TEXT DEFAULT 'STANDARD' — see module-level assert
+        #   pinning the literal to trading_app.holdout_policy.STANDARD_MODE_LABEL.
+        # - pseudo_oos_window_start / pseudo_oos_window_end DATE — EHR rows
+        #   only; the EARLY_HOLDOUT_BOUNDARY..HOLDOUT_SACRED_FROM window used
+        #   as PSEUDO_OOS_ROBUSTNESS evidence. NULL on STANDARD rows.
+        # - verdict_ceiling TEXT — hard ceiling on verdict; 'RESEARCH_PROVISIONAL'
+        #   on EHR rows (enforced by Stage 3 validator). NULL on STANDARD.
+        # - cumulative_search_count INTEGER — total trials across prior Mode A
+        #   discovery + this EHR run summed at discovery-date, per
+        #   Bailey-Lopez de Prado 2014 disclosure.
+        # @research-source: trading_app/holdout_policy.py EARLY_HOLDOUT_BOUNDARY
+        # @entry-models: ALL (mode is orthogonal to entry rules)
+        for col, typedef in [
+            ("validation_mode", "TEXT DEFAULT 'STANDARD'"),
+            ("pseudo_oos_window_start", "DATE"),
+            ("pseudo_oos_window_end", "DATE"),
+            ("verdict_ceiling", "TEXT"),
+            ("cumulative_search_count", "INTEGER"),
+        ]:
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
+
+        # Migration: EHR discovery-emitted columns on experimental_strategies
+        # (2026-05-17, PASS 2 Stage 3). Only the TWO columns that Stage 4
+        # discovery writes are mirrored here; the validator propagates them
+        # verbatim through the experimental→validated promotion. Without this
+        # mirror the EHR label would be lost the moment Stage 4 inserts an
+        # experimental row (plan invariant 4 — EHR rows identifiable end-to-end).
+        # - validation_mode TEXT DEFAULT 'STANDARD' — same SQL literal default as
+        #   the validated_setups column (module-level assert pins it to
+        #   trading_app.holdout_policy.STANDARD_MODE_LABEL).
+        # - cumulative_search_count INTEGER — Bailey-Lopez de Prado 2014
+        #   disclosure, computed by Stage 4 at discovery-date.
+        # The other three Stage-2 columns (verdict_ceiling, pseudo_oos_window_*)
+        # are validator-emitted at promotion-time, NOT discovery-emitted, so they
+        # deliberately stay on validated_setups only.
+        # @research-source: trading_app/holdout_policy.py EARLY_HOLDOUT_BOUNDARY
+        # @entry-models: ALL (mode is orthogonal to entry rules)
+        for col, typedef in [
+            ("validation_mode", "TEXT DEFAULT 'STANDARD'"),
+            ("cumulative_search_count", "INTEGER"),
+        ]:
+            con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.
