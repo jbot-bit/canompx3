@@ -14,26 +14,14 @@
 - **✅ Drift CLEAN — RETRACTION of an earlier false claim (Claude, 2026-05-30, execution-verified):** an earlier version of this note (commit `82721bcc`) claimed `check_active_native_trade_windows_match_provenance` was FAILING on lane `MNQ_COMEX_SETTLE_...OVNRNG_100`. **That was wrong** — I wrote it from a stale memory note without executing, violating Rule 11 (never trust metadata). Direct call returns `VIOLATIONS: 0`; full `check_drift.py --skip-crg-advisory` = **NO DRIFT DETECTED, 170 passed, 0 failed** (incl. Check 191 cold-recheck PASSED). The COMEX_SETTLE lane IS present in canonical `lane_allocation.json` (one of the 3 active lanes). `backfill_validated_trade_windows.py` (live write) = `inspected=848 drifted=0 updated=0`. Trade-window provenance is canonical. No action owed.
 
 ## Last Session
-- **Tool:** Unknown
+- **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** 992a3262 — docs(runtime): preserve rescued WIP artifacts
-- **Files changed:** 16 files
-  - `HANDOFF.md`
-  - `docs/runtime/rescued/2026-05-31-3de6-webhook-wip/RESCUE-MANIFEST.md`
-  - `docs/runtime/rescued/2026-05-31-3de6-webhook-wip/webhook-wip.patch`
-  - `docs/runtime/rescued/2026-05-31-ehr-live-session-wip/RESCUE-MANIFEST.md`
-  - `docs/runtime/rescued/2026-05-31-ehr-live-session-wip/ehr-live-session-wip.patch`
-  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/RESCUE-MANIFEST.md`
-  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/2026-05-30-orb-edge-inventory-prereg.md`
-  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/cells.csv`
-  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/edge_inventory.csv`
-  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/family_summary.csv`
-  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/metadata.json`
-  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/report.md`
-  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/rebuild_orb_edge_inventory_2026_05_30.py`
-  - `docs/runtime/rescued/2026-05-31-peer-codex-followup-wip/RESCUE-MANIFEST.md`
-  - `docs/runtime/rescued/2026-05-31-peer-codex-followup-wip/peer-codex-followup-wip.patch`
-  - ... and 1 more
+- **Commit:** 534b6c1e — feat(loader): validate oos_power_floor.holdout_method=trade_fraction (Stage 2)
+- **Files changed:** 4 files
+  - `docs/prompts/prereg-writer-prompt.md`
+  - `docs/runtime/stages/2026-05-31-powered-oos-stage2-loader-wiring.md`
+  - `tests/test_trading_app/test_hypothesis_loader.py`
+  - `trading_app/hypothesis_loader.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
