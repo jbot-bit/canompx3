@@ -2,10 +2,18 @@
 
 Reads the semi-structured markdown iteration log and produces
 docs/ralph-loop/ralph-ledger.json with aggregated stats.
+
+v2 additions:
+- files_audited entries now include file_hash (sha256[:16]) and git_sha so
+  the ralph-loop agent can skip files unchanged since the last clean scan.
+- known_acceptable_patterns: dedup cache of (file, pattern_type) pairs that
+  were previously marked ACCEPTABLE, so the agent skips re-investigating them.
 """
 
+import hashlib
 import json
 import re
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -227,8 +235,38 @@ def compute_classifications(iterations: list[dict]) -> dict:
     return dict(sorted(counts.items(), key=lambda kv: -kv[1]))
 
 
-def compute_files_audited(iterations: list[dict]) -> dict:
-    """Build per-file audit stats."""
+def _file_hash(path: Path) -> str:
+    """SHA-256[:16] of file content, empty string if file missing."""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    except OSError:
+        return ""
+
+
+def _git_sha(rel_path: str, root: Path) -> str:
+    """HEAD commit SHA that last touched this file (short 8-char), empty on error."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%h", "--", rel_path],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+def compute_files_audited(iterations: list[dict], project_root: Path) -> dict:
+    """Build per-file audit stats, enriched with content hash and git SHA.
+
+    The ralph-loop agent reads these two fields at Step 0 to detect whether
+    a file has changed since its last scan:
+    - file_hash: sha256[:16] of current file content
+    - git_sha: short SHA of last commit touching the file
+    If both match the stored values, the agent can skip re-scanning (CACHE HIT).
+    """
     files: dict[str, dict] = {}
     for it in iterations:
         for f in it["files"]:
@@ -238,6 +276,13 @@ def compute_files_audited(iterations: list[dict]) -> dict:
             files[f]["last_iter"] = max(files[f]["last_iter"], it["iter"])
             if it["verdict"] in ("FIXED", "ACCEPT", "PENDING"):
                 files[f]["findings"] += 1
+
+    # Enrich with current file hash + git SHA for cache-skip logic
+    for rel_path, stats in files.items():
+        full_path = project_root / rel_path
+        stats["file_hash"] = _file_hash(full_path)
+        stats["git_sha"] = _git_sha(rel_path, project_root)
+
     # Sort by audit_count descending
     return dict(sorted(files.items(), key=lambda kv: -kv[1]["audit_count"]))
 
@@ -270,8 +315,36 @@ def compute_consecutive_low(iterations: list[dict]) -> tuple[int, int]:
     return consecutive, last_high_iter
 
 
-def build_ledger(text: str) -> dict:
+def compute_known_acceptable_patterns(iterations: list[dict]) -> list[dict]:
+    """Build dedup cache of (file, pattern_description) pairs marked ACCEPTABLE.
+
+    The ralph-loop agent reads this at Step 1e to skip re-investigating
+    patterns already assessed and logged as won't-fix. Prevents wasting
+    turns re-discovering the same ACCEPTABLE broad-except or heuristic.
+    """
+    seen: set[tuple[str, str]] = set()
+    patterns: list[dict] = []
+    for it in iterations:
+        if it["verdict"] == "ACCEPT" and it["finding_type"] != "other":
+            for f in it["files"]:
+                key = (f, it["finding_type"])
+                if key not in seen:
+                    seen.add(key)
+                    patterns.append(
+                        {
+                            "file": f,
+                            "finding_type": it["finding_type"],
+                            "iter": it["iter"],
+                            "note": it["target"],
+                        }
+                    )
+    return patterns
+
+
+def build_ledger(text: str, project_root: Path | None = None) -> dict:
     """Build the full ledger structure."""
+    if project_root is None:
+        project_root = PROJECT_ROOT
     iterations = parse_iterations(text)
 
     consecutive_low, last_high_iter = compute_consecutive_low(iterations)
@@ -284,7 +357,8 @@ def build_ledger(text: str) -> dict:
         "findings_by_type": compute_findings_by_type(iterations),
         "findings_by_severity": compute_findings_by_severity(iterations),
         "classifications": compute_classifications(iterations),
-        "files_audited": compute_files_audited(iterations),
+        "files_audited": compute_files_audited(iterations, project_root),
+        "known_acceptable_patterns": compute_known_acceptable_patterns(iterations),
         "iterations": [
             {
                 "iter": it["iter"],

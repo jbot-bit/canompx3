@@ -122,6 +122,60 @@ Read `docs/ralph-loop/import_centrality.json`. Check the `generated` date:
 - If >14 days old → regenerate: `python scripts/tools/ralph_build_centrality.py`
 - Use the `tiers` field to prioritize targets: critical > high > medium > low
 
+### Hash-Skip Cache (NEW — eliminates re-scanning unchanged clean files)
+
+The ledger's `files_audited` entries now carry `file_hash` (sha256[:16]) and `git_sha`.
+After picking the auto-target (P0-P4), run this BEFORE reading the file:
+
+```bash
+python -c "
+import hashlib, json
+from pathlib import Path
+root = Path('C:/Users/joshd/canompx3')
+target = '<TARGET_FILE>'
+ledger = json.loads((root / 'docs/ralph-loop/ralph-ledger.json').read_text())
+entry = ledger.get('files_audited', {}).get(target, {})
+stored = entry.get('file_hash', '')
+current = hashlib.sha256((root / target).read_bytes()).hexdigest()[:16] if (root / target).exists() else ''
+findings = entry.get('findings', -1)
+print('CACHE_HIT' if stored and stored == current and findings == 0 else 'SCAN_NEEDED')
+print(f'stored={stored} current={current} findings={findings}')
+"
+```
+
+**If output is `CACHE_HIT`** (hash matches AND `findings == 0` from last scan):
+- Skip this file entirely. Do NOT read it. Do NOT scan it.
+- Log: `CACHE HIT — <file> unchanged since iter N (hash <hash>). Picking next target.`
+- Fall through to the next priority in the P0-P4 queue.
+
+**If output is `SCAN_NEEDED`** (hash changed OR has prior findings OR never scanned):
+- Proceed with full scan as normal.
+
+**Why `findings == 0` gate:** if the last scan found issues (even if fixed), re-audit on next
+staleness trigger to confirm the fix didn't introduce anything new. Only skip truly clean files.
+
+### Known Acceptable Patterns Dedup
+
+The ledger also has `known_acceptable_patterns` — a list of `{file, finding_type, iter}` entries
+previously marked ACCEPTABLE. Before reporting any finding, check:
+
+```bash
+python -c "
+import json
+from pathlib import Path
+ledger = json.loads(Path('docs/ralph-loop/ralph-ledger.json').read_text())
+patterns = ledger.get('known_acceptable_patterns', [])
+target_file = '<TARGET_FILE>'
+file_patterns = [p['finding_type'] for p in patterns if p['file'] == target_file]
+print('KNOWN_ACCEPTABLE:', file_patterns)
+"
+```
+
+If a finding's `finding_type` is in the `KNOWN_ACCEPTABLE` list for that file:
+- Do NOT re-investigate it. Do NOT re-report it.
+- Note it as `(previously ACCEPTABLE, skipped)` in the audit section.
+- This saves 3-8 turns per file that has multiple known-acceptable broad-except patterns.
+
 ### Auto-Targeting (runs after every SCOPE-less invocation)
 If SCOPE is provided in the task prompt, use it directly. Otherwise, auto-select:
 
