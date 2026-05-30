@@ -1,14 +1,14 @@
 {
-  "total_iterations": 202,
-  "last_updated": "2026-05-30",
-  "consecutive_low_only": 0,
-  "last_high_finding_iter": 212,
+  "total_iterations": 204,
+  "last_updated": "2026-05-31",
+  "consecutive_low_only": 1,
+  "last_high_finding_iter": 213,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 66,
-      "fixed": 53,
+      "found": 67,
+      "fixed": 54,
       "deferred": 4,
-      "fix_rate": 0.8
+      "fix_rate": 0.81
     },
     "silent_failure": {
       "found": 46,
@@ -53,10 +53,10 @@
       "fix_rate": 1.0
     },
     "falsy_zero": {
-      "found": 3,
+      "found": 4,
       "fixed": 3,
-      "deferred": 0,
-      "fix_rate": 1.0
+      "deferred": 1,
+      "fix_rate": 0.75
     },
     "test_gap": {
       "found": 2,
@@ -128,21 +128,21 @@
   "findings_by_severity": {
     "CRITICAL": 9,
     "HIGH": 14,
-    "MEDIUM": 54,
-    "LOW": 125
+    "MEDIUM": 55,
+    "LOW": 126
   },
   "classifications": {
-    "judgment": 88,
+    "judgment": 89,
     "mechanical": 79,
-    "audit-only": 35
+    "audit-only": 36
   },
   "files_audited": {
     "trading_app/live/session_orchestrator.py": {
-      "audit_count": 8,
-      "last_iter": 182,
-      "findings": 4,
-      "file_hash": "749ef91b901e4485",
-      "git_sha": "ea0d4fec"
+      "audit_count": 10,
+      "last_iter": 214,
+      "findings": 5,
+      "file_hash": "49c6e2adad6db1f7",
+      "git_sha": "a877fc89"
     },
     "execution_engine.py": {
       "audit_count": 6,
@@ -183,8 +183,8 @@
       "audit_count": 5,
       "last_iter": 202,
       "findings": 4,
-      "file_hash": "838762afa139a373",
-      "git_sha": "ea0d4fec"
+      "file_hash": "329698e411951efb",
+      "git_sha": "c20716b6"
     },
     "trading_app/lane_allocator.py": {
       "audit_count": 5,
@@ -246,8 +246,8 @@
       "audit_count": 4,
       "last_iter": 210,
       "findings": 3,
-      "file_hash": "fe1e82ea2c3c42ba",
-      "git_sha": "7fefb27e"
+      "file_hash": "fbfdba133f8cb0f1",
+      "git_sha": "661f686f"
     },
     "webhook_server.py": {
       "audit_count": 3,
@@ -302,8 +302,8 @@
       "audit_count": 3,
       "last_iter": 207,
       "findings": 1,
-      "file_hash": "43061637cd65475e",
-      "git_sha": "4bb15372"
+      "file_hash": "d255cbc9d7e6471e",
+      "git_sha": "c20716b6"
     },
     "trading_app/pre_session_check.py": {
       "audit_count": 3,
@@ -975,7 +975,7 @@
       "last_iter": 88,
       "findings": 1,
       "file_hash": "855cf8857ad726d9",
-      "git_sha": "6fe428a7"
+      "git_sha": "1cc7f4a1"
     },
     "scripts/tools/generate_promotion_candidates.py": {
       "audit_count": 1,
@@ -1261,8 +1261,8 @@
       "audit_count": 1,
       "last_iter": 124,
       "findings": 1,
-      "file_hash": "1efede81c487a413",
-      "git_sha": "ea0d4fec"
+      "file_hash": "41e2795f5f314819",
+      "git_sha": "1cc7f4a1"
     },
     "trading_app/live/bar_aggregator.py": {
       "audit_count": 1,
@@ -1590,15 +1590,15 @@
       "audit_count": 1,
       "last_iter": 190,
       "findings": 1,
-      "file_hash": "6d36eabe35290002",
-      "git_sha": "00ace138"
+      "file_hash": "caeff28e56efd668",
+      "git_sha": "c20716b6"
     },
     "trading_app/deployability.py": {
       "audit_count": 1,
       "last_iter": 193,
       "findings": 1,
       "file_hash": "00fd8f6c15d7c465",
-      "git_sha": "00ace138"
+      "git_sha": "950c375d"
     },
     "trading_app/lane_correlation.py": {
       "audit_count": 1,
@@ -1668,14 +1668,14 @@
       "last_iter": 212,
       "findings": 1,
       "file_hash": "be1b9f9ed1c1b719",
-      "git_sha": "25bc0e70"
+      "git_sha": "fa42337a"
     },
     "trading_app/allocation_promotion.py": {
       "audit_count": 1,
       "last_iter": 212,
       "findings": 1,
       "file_hash": "a145435c9243cfcb",
-      "git_sha": "25bc0e70"
+      "git_sha": "fa42337a"
     }
   },
   "known_acceptable_patterns": [
@@ -4130,6 +4130,28 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "NONE (pre-commit step 2b blocked by persistent gold.db lock from stale MCP processes \u2014 same known class as MEMORY.md feedback_mcp_venv_sidecar_rot_beartype_authlib_2026_05_30)"
+    },
+    {
+      "iter": 213,
+      "date": "2026-05-31",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:3826-3850",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "a877fc89"
+    },
+    {
+      "iter": 214,
+      "date": "2026-05-31",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/live/session_orchestrator.py (stale re-audit \u2014 hash changed since iter 182)",
+      "finding_type": "falsy_zero",
+      "severity": "LOW",
+      "verdict": "NOTED",
+      "commit": "NONE"
     }
   ]
 }

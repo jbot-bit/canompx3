@@ -15,14 +15,10 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-05-30
-- **Commit:** 1e9b26f4 — feat(tools): stale-stage reaper audit — safe archival of provably-done stage files
-- **Files changed:** 5 files
-  - `docs/runtime/stages/2026-05-27-paper-trade-sync-automation.md`
-  - `docs/runtime/stages/2026-05-30-stale-stage-reaper-audit.md`
-  - `docs/runtime/stages/archive/2026-05-27-paper-trade-sync-automation.md`
-  - `scripts/tools/stage_reaper_audit.py`
-  - `tests/test_tools/test_stage_reaper_audit.py`
+- **Date:** 2026-05-31
+- **Commit:** a877fc89 — [judgment] fix: Ralph Loop iter 213 — broker-factory bypass in reconnect contract re-resolution (SO-213-01, SO-213-02)
+- **Files changed:** 1 files
+  - `trading_app/live/session_orchestrator.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

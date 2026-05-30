@@ -5,6 +5,36 @@
 
 ---
 
+## Iteration 214 — 2026-05-31
+- Phase: audit-only
+- Classification: N/A (no code change)
+- Target: trading_app/live/session_orchestrator.py (stale re-audit — hash changed since iter 182)
+- Cluster: 0 findings requiring fix; 1 ACCEPTABLE (LOW)
+- Finding: Full re-scan after 3 commits (NQ-mini wiring ea0d4fec, lifecycle/readiness/effective_copies 1cc7f4a1, broker-factory reconnect fix a877fc89). `_close_min_et or 0` at lines 1362/3701 is a falsy-zero pattern but produces correct results in all cases (None→0, 0→0, N→N). ACCEPTABLE per pattern 3 (no correctness impact).
+- Doctrine cited: integrity-guardian.md § 5 (TRACE verified — `_close_min_et` set from int(parts[1]) or None; or-0 fallback is always the correct None-substitution value)
+- Action: audit-only; no code change warranted
+- Blast radius: 0 files changed
+- Verification gate: fast (baseline)
+- Verification: PASS — 152 drift checks, 247 pytest (test_session_orchestrator.py), ruff PASS
+- Commit: NONE
+
+---
+
+## Iteration 213 — 2026-05-31
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:3826-3850
+- Cluster: 2 findings (SO-213-01 MEDIUM canonical_violation, SO-213-02 LOW silent_failure)
+- Finding: Reconnect contract re-resolution hardcoded ProjectXContracts (bypassing broker factory); _contract_cache.clear() raised AttributeError on TradovateContracts silently swallowed. On Rithmic/Tradovate reconnect, wrong broker class used for front-month resolution.
+- Doctrine cited: institutional-rigor.md § 10 (broker factory is canonical for all broker-specific classes)
+- Action: Stored contracts_cls as self._contracts_cls at __init__ line 326; replaced hardcoded import+instantiation with self._contracts_cls(auth, demo); removed redundant .clear() call.
+- Blast radius: 1 file (session_orchestrator.py); no caller interface change
+- Verification gate: fast
+- Verification: PASS — 254 pytest, 152 drift checks, ruff PASS, behavioral audit 7/7 PASS
+- Commit: a877fc89
+
+---
+
 ## Iteration 210 — 2026-05-24
 - Phase: audit-only
 - Classification: N/A (no code change)
