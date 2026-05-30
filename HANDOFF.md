@@ -16,12 +16,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** b4fcf5b6 — [mechanical] chore: Ralph Loop iter 216 bookkeeping — audit.md, history.md, ledger rebuild
+- **Commit:** 62201a28 — [mechanical] fix: Ralph Loop iter 217 — audit-only pipeline/system_brief.py + trading_app/portfolio.py (audit-only)
 - **Files changed:** 4 files
+  - `HANDOFF.md`
   - `docs/ralph-loop/ralph-ledger.json`
   - `docs/ralph-loop/ralph-loop-audit.md`
   - `docs/ralph-loop/ralph-loop-history.md`
-  - `docs/ralph-loop/ralph-loop-plan.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
