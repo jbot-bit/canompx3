@@ -1,6 +1,6 @@
-# HANDOFF.md — Cross-Tool Session Baton
+# HANDOFF.md - Cross-Tool Session Baton
 
-**Rule:** If you made decisions, changed files, or left work half-done — update the baton.
+**Rule:** If you made decisions, changed files, or left work half-done - update the baton.
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
@@ -9,12 +9,31 @@
 ## This Session
 - **Tool:** Codex
 - **Date:** 2026-05-30
-- **Summary:** Fixed live-readiness automation honesty gaps. Linked worktrees now read canonical runtime artifacts from `C:\Users\joshd\canompx3`; live readiness reports scheduler health for `CanonMPX_DailyRefresh` and `CanonMPX_TopstepTelemetry_SignalOnly`; `project_pulse` surfaces strict live-readiness blockers alongside the existing capital/execution surfaces; Topstep funded demo defaults to one MNQ copy until per-shadow loss belts exist. Verification passed drift, integrity, behavioral audit, ruff, and focused tests; full single-process pytest remains unstable in this Windows shell and was OS-killed after the real Python 3.11 collection bug and instance-lock collision were fixed.
+- **Summary:** Merged `origin/main` into `codex/plugin-routing-grounding` and resolved the HANDOFF-only conflict. Main's live-readiness automation summary remains current; this branch adds cross-tool plugin/data routing, automatic 2P targeted grounding, `/resource` and `/lit` local-corpus grounding, research/fetch source separation, PDF/OCR/literature coverage checks, and matching Claude/Codex prompt hooks.
 
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-05-30
-- **Summary:** Implemented follow-up automation gap hardening on `codex/followup-automation-gaps`: activated `.githooks`, made `system_context` detect inactive pre-commit hooks and closed `mode: CLOSED` stages correctly, changed queue/handoff drift to compare only active queue steps, and made `project_pulse` surface debt-ledger items plus a high-severity `followup_coverage` item when broken/high-decay pulse findings exist while the action queue has zero open work. Targeted tests passed (112/112), ruff changed-file check passed, and drift passed.
+- **Commit:** codex/plugin-routing-grounding - chore(codex): route plugins and grounding automatically
+- **Files changed:** 18 files
+  - `.claude/hooks/plugin-router.py`
+  - `.claude/hooks/targeted-grounding-router.py`
+  - `.claude/rules/auto-skill-routing.md`
+  - `.claude/rules/plugin-routing.md`
+  - `.claude/rules/targeted-grounding.md`
+  - `.claude/settings.json`
+  - `.codex/COMMANDS.md`
+  - `.codex/INTEGRATIONS.md`
+  - `.codex/PLUGIN_ROUTING.md`
+  - `.codex/STARTUP.md`
+  - `.codex/TARGETED_GROUNDING.md`
+  - `.codex/WORKFLOWS.md`
+  - `.codex/hooks/session_start.py`
+  - `.codex/hooks/user_prompt_submit_grounding.py`
+  - `HANDOFF.md`
+  - `scripts/tools/check_literature_coverage.py`
+  - `scripts/tools/check_pdf_tooling.py`
+  - `tests/test_hooks/test_targeted_grounding_router.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

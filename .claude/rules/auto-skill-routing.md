@@ -14,6 +14,18 @@
 > `check_intent_router_routing_parity` in `pipeline/check_drift.py`.
 
 The user does not type `/skill` commands. Route by intent.
+The user also should not need to remember tool/plugin names or to request a
+second-pass check. For check/improve/implement/fix/review/plan-style prompts,
+`.claude/hooks/targeted-grounding-router.py` injects a compact cue to do a
+targeted truth check and second-pass critique before acting. Details:
+`.claude/rules/targeted-grounding.md`.
+`/resource` and `/lit` are explicit local-literature grounding triggers: run
+`python scripts/tools/check_pdf_tooling.py` and
+`python scripts/tools/check_literature_coverage.py`, open `resources/INDEX.md`,
+and use mapped `docs/institutional/literature/` extracts only when covered.
+Missing extract means read the resource directly if it exists on this PC. Raw
+PDFs are local-PC assets, not guaranteed remote state; if absent, say so and do
+not imply raw-PDF verification. Do not skim/guess PDF content.
 
 For non-trivial repo work, scope first with:
 `python scripts/tools/context_resolver.py --task "<user request>" --format markdown`

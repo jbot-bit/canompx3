@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_payload() -> dict[str, object]:
-    raw = sys.stdin.read().strip()
+    raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace").strip()
     if not raw:
         return {}
     try:

@@ -35,6 +35,11 @@ When the task matches, prefer these repo-local skills:
 
 Codex should route from intent, not from exact wording.
 
+- The user has asked for automatic targeted grounding because they will not
+  reliably remember tool names, plugin names, or second-pass review rituals.
+  For check/improve/implement/fix/review/plan-style prompts, follow
+  `.codex/TARGETED_GROUNDING.md`: compact truth check first, then second-pass
+  for gaps, silence, bias, errors, and simpler improvements.
 - If the user asks fuzzily for a review, hardening pass, deployment check,
   readiness check, verification, or cleanup of a specific risk, map the ask to
   the nearest valid workflow instead of waiting for the exact skill or command
@@ -75,6 +80,9 @@ Use Codex plugins as helpers, not project authority. `CLAUDE.md`, `.claude/`,
 `RESEARCH_RULES.md`, `TRADING_RULES.md`, `HANDOFF.md`, and `docs/plans/`
 remain canonical.
 
+- Detailed plugin/data routing lives in `.codex/PLUGIN_ROUTING.md`. That file
+  is the decision table for enabled plugins, explicit-only plugins, and
+  data/AI plugin boundaries.
 - `Superpowers`: useful for process discipline. Prefer
   `superpowers:systematic-debugging` for bugs, `superpowers:dispatching-parallel-agents`
   for independent parallel investigations, `superpowers:requesting-code-review`
@@ -87,9 +95,13 @@ remain canonical.
 - `CodeRabbit`: useful as an extra external-style review lens on PRs. Treat its
   output as claims to verify, not authority.
 - `OpenAI Developer Docs`: use for current OpenAI/Codex/API behavior.
-- `CB Insights`, `Stripe`, `Gmail`, and `Google Calendar`: not core canompx3
-  development tools. Use only when a task explicitly needs company-market
-  research, payments, or personal/admin context.
+- `Datadog`, `MarcoPolo`, `Supabase`, `Spreadsheets`, and `Presentations`: useful
+  only with a named data/artifact contract. Do not let them replace `gold-db`,
+  `repo-state`, `research-catalog`, or `strategy-lab`.
+- `CircleCI`, `Gmail`, `Google Calendar`, `Circleback`, `Documents`,
+  `PostHog`, `Hugging Face`, `agent-sdk-dev`, `skill-creator`, and
+  `plugin-dev`: explicit-only for canompx3 unless the prompt directly asks for
+  their domain.
 
 ## Design / Implementation Routing
 

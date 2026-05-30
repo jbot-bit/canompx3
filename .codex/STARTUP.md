@@ -75,6 +75,8 @@ Do not auto-load all of `.codex/` every session.
 
 Repo-local WSL hooks in `.codex/hooks/` keep startup thin by injecting route
 and grounding hints only when the session or prompt actually needs them.
+The targeted grounding behavior for check/improve/implement/fix/review/plan
+prompts is documented in `.codex/TARGETED_GROUNDING.md`.
 
 Normal Codex launcher sessions now include the read-only `repo-state` and
 `research-catalog` MCPs by default. Use `repo-state` for route discovery,
