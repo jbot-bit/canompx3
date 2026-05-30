@@ -3,7 +3,53 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 221
+## Last iteration: 222
+
+## RALPH AUDIT — Iteration 222 (COMPLETED)
+## Date: 2026-05-31
+## Infrastructure Gates: 152 drift checks PASS (fast + skip-crg-advisory); ruff PASS; 41/41 tests PASS
+## Scope: trading_app/live_config.py — stale re-audit (last iter 119, findings=3 stale in ledger)
+
+---
+
+## Full-File Audit Results
+
+### trading_app/live_config.py — SCANNED (stale re-audit, iter 119 confirmed clean)
+
+**Seven Sins Scan — iteration 222:**
+- S1 (Silent failure): `return None, None` at line 314 in `_jk_fallback_rr` — legitimate "no match" signal, caller checks it. `return None` at line 465 — same pattern, caller at line 783 checks and appends WARN note. CLEAN.
+- S2 (Fail-open): `_check_noise_floor` returns `False` on NULL noise_risk (fail-closed, line 529). `_check_dollar_gate` returns `False` on missing `median_risk_points` (fail-closed, line 549) and on exception (line 563-564). CLEAN.
+- S3 (Canonical violation): `"MGC"` in `INSTRUMENT_ATR_GATE` (line 134) — per-instrument regime heuristic, not a canonical list. ACCEPTABLE rule 1. `instrument: str = "MGC"` at line 569 — deprecated function, no live callers. ACCEPTABLE rule 2. `default="MGC"` at line 939 CLI — deprecated tool, guarded by `choices=get_active_instruments()`. ACCEPTABLE rule 2. All other instrument references use `get_active_instruments()` or caller-supplied values. `GOLD_DB_PATH` from `pipeline.paths`. CLEAN.
+- S4 (Impact unawareness): 41 tests all PASS. No behavior changes this iteration. CLEAN.
+- S5 (Evidence over assertion): All patterns verified by grep + execution. CLEAN.
+- S6 (Spec compliance): No spec violations. CLEAN.
+- S7 (Metadata trust): `LIVE_MIN_EXPECTANCY_R`, `HOT_MIN_STABILITY`, `HOT_LOOKBACK_WINDOWS`, `LIVE_MIN_EXPECTANCY_DOLLARS_MULT`, `INSTRUMENT_ATR_GATE` all carry `@research-source` annotations. CLEAN.
+
+**Domain-specific checks:**
+- ORB window timing: No `break_ts`, `orb_end`, or hardcoded times. CLEAN.
+- Session hardcoding: No session literals — specs use string family IDs only (e.g. `"CME_PRECLOSE"`), not used in DST-sensitive resolution. CLEAN.
+- E0 fill-on-touch: `close_outside`/`closed_outside` absent. CLEAN.
+- Holdout date: No `date(2026` literals. CLEAN.
+- DST contamination: No fixed clock times. CLEAN.
+- DB path: `GOLD_DB_PATH` from `pipeline.paths` (line 30, 609). CLEAN.
+- Cost inline: `get_cost_spec` from `pipeline.cost_model` (lines 551-556). CLEAN.
+- Research stat inline: All numeric calibration values carry `@research-source`. CLEAN.
+
+**Ralph-specific extensions scan:**
+- Async safety: No async code. CLEAN.
+- State persistence gap: No stateful objects. CLEAN.
+- Contract drift: Public API unchanged. CLEAN.
+- Look-ahead bias: No feature computation; this is a portfolio builder reading pre-validated data. CLEAN.
+
+**ACCEPTABLE findings (4 patterns, same as iter 119):**
+1. `"MGC"` key in `INSTRUMENT_ATR_GATE` dict (line 134): per-instrument regime heuristic — ACCEPTABLE rule 1.
+2. `instrument: str = "MGC"` default in deprecated `build_live_portfolio()` (line 569): dormant deprecated function, no live callers — ACCEPTABLE rule 2.
+3. `default="MGC"` in CLI argparse (line 939): deprecated CLI tool, guarded by `choices=get_active_instruments()` — ACCEPTABLE rule 2.
+4. `except Exception as exc` in `_exp_dollars` display helper (line 992): logged, CLI display only, no capital path — ACCEPTABLE rules 1+3.
+
+**Verdict: CLEAN — no actionable findings. Stale ledger `findings=3` entry was pre-iter-119 state.**
+
+---
 
 ## RALPH AUDIT — Iteration 221 (COMPLETED)
 ## Date: 2026-05-31
