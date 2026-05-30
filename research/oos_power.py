@@ -273,10 +273,114 @@ def one_sample_tstat(mean: float, std: float, n: int) -> tuple[float, float]:
     return float(t), p_one
 
 
+def t0_correlation(feat_sig, filter_sig) -> float:
+    """Absolute Pearson correlation between two binary signal arrays (RULE 7 / T0).
+
+    Canonical tautology helper (backtesting-methodology.md §7): before claiming a
+    new feature is additive to a deployed filter, compute |corr(new_fire,
+    deployed_fire)|; > 0.70 flags TAUTOLOGY. Returns 0.0 when either signal has
+    no variance (a constant filter cannot be tautologous) or the correlation is
+    undefined.
+
+    Mirrors the implementation in
+    ``research/comprehensive_deployed_lane_scan.py::t0_correlation``. Promoted to
+    this import-safe home because that scan module reassigns ``sys.stdout`` at
+    import time (UTF-8 re-wrap), which detaches the stream of any long-lived
+    caller (e.g. ``pipeline.check_drift``) that lazily imports it mid-run. The
+    canary suite + drift gate import T0 from here to stay side-effect-free.
+    """
+    feat = np.asarray(feat_sig, dtype=float)
+    filt = np.asarray(filter_sig, dtype=float)
+    if filt.sum() == 0 or (1 - filt).sum() == 0:
+        return 0.0  # no variance in filter (e.g. all-ones) -> not tautologous
+    try:
+        c = np.corrcoef(feat, filt)[0, 1]
+        return 0.0 if np.isnan(c) else float(abs(c))
+    except Exception:
+        return 0.0
+
+
+def moving_block_bootstrap_p(
+    pnl_on: np.ndarray,
+    B: int = 10_000,
+    block: int = 5,
+    seed: int = 20260418,
+    tail: str = "upper",
+) -> float:
+    """Moving-block bootstrap p-value for H0: E[pnl] = 0.
+
+    Canonical centered moving-block null. The DATA is centered (mean
+    subtracted) so H0 holds under the bootstrap distribution; block resampling
+    preserves the short-range autocorrelation structure of per-trade pnl_r that
+    an i.i.d. shuffle would destroy. This is the no-predictive-power sampling
+    distribution of Aronson 2007 Ch 5 (Monte Carlo Permutation / Masters
+    method) realised as a block bootstrap.
+
+    Methodology grounding (extracts in ``docs/institutional/literature/``):
+        - Aronson 2007 Ch 5 (``aronson_2007_ebta_data_snooping.md``) — MCP /
+          permutation null for a rule with no predictive power.
+        - Lahiri 2003; Politis & Romano 1994 — moving-block bootstrap for
+          dependent data (the canonical block-resampling reference).
+
+    History: this function was previously inlined into
+    ``research/vwap_comprehensive_family_scan.py`` with a docstring noting it
+    belonged in ``research/oos_power.py`` "pending merge to main". That scan
+    module runs an OOS one-shot lock (``sys.exit(1)``) at IMPORT time, so the
+    function was not importable by other callers. Promoting it here gives it an
+    import-safe canonical home; downstream scans should delegate to this
+    implementation rather than re-inlining it (institutional-rigor.md §4).
+
+    Parameters
+    ----------
+    pnl_on
+        Per-trade pnl_r of the ON (filter-fires / signal-on) subset.
+    B
+        Number of bootstrap resamples. Default 10,000 — do NOT hand-roll a
+        smaller budget; an under-sampled null gives a noisy one-sided p.
+    block
+        Block length (consecutive trades resampled together). Default 5.
+    seed
+        RNG seed for reproducibility. A seed is always required so verdicts
+        are stable across runs.
+    tail
+        ``"upper"`` (default) tests E[pnl] > 0; ``"lower"`` tests E[pnl] < 0;
+        any other value (e.g. ``"two-sided"``) tests |E[pnl]| > |observed|.
+
+    Returns
+    -------
+    float
+        The bootstrap p-value, ``(count + 1) / (B + 1)`` per Phipson & Smyth
+        2010 (never zero). ``float("nan")`` if ``len(pnl_on) < 2*block``
+        (too few observations to form blocks).
+    """
+    n = len(pnl_on)
+    if n < block * 2:
+        return float("nan")
+    rng = np.random.default_rng(seed)
+    pnl = np.asarray(pnl_on, dtype=float)
+    observed_mean = float(pnl.mean())
+    centered_data = pnl - observed_mean
+    n_blocks = int(np.ceil(n / block))
+    boot_means = np.empty(B, dtype=float)
+    for b in range(B):
+        starts = rng.integers(low=0, high=n - block + 1, size=n_blocks)
+        sampled = np.concatenate([centered_data[s : s + block] for s in starts])[:n]
+        boot_means[b] = sampled.mean()
+    if tail == "upper":
+        count = int(np.sum(boot_means >= observed_mean))
+    elif tail == "lower":
+        count = int(np.sum(boot_means <= observed_mean))
+    else:
+        count = int(np.sum(np.abs(boot_means) >= abs(observed_mean)))
+    return (count + 1) / (B + 1)
+
+
 __all__ = [
     "one_sample_n_for_power",
     "one_sample_power",
     "one_sample_tstat",
+    "t0_correlation",
+    "moving_block_bootstrap_p",
     "oos_ttest_power",
     "power_verdict",
     "format_power_report",
