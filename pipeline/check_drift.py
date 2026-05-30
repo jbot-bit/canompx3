@@ -7214,6 +7214,87 @@ def check_daily_loss_dollars_below_mll() -> list[str]:
     return violations
 
 
+def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
+    """Marker guard for the self-funded sizing doctrine.
+
+    HARD DOCTRINE (.claude/rules/self-funded-sizing-doctrine.md, operator
+    2026-05-31): prop-firm contract caps (``PropFirmAccount.max_contracts_*``)
+    apply ONLY to prop-firm survival / rule-compliance sims. They must NEVER
+    bound ``self_funded`` (personal-capital) book-building or earning capacity.
+    Personal-capital sizing is risk-first (drawdown tolerance -> vol-targeting /
+    Kelly -> broker margin -> liquidity). The system was born on prop firms, so
+    the tier contract cap is wired into the book-builder
+    (``trading_app/prop_portfolio.py``: ``contract_budget = tier.max_contracts_micro``)
+    with no firm branch -- a latent leak that would silently throttle real
+    personal-capital earnings to a prop-firm-shaped ceiling.
+
+    This is the MARKER layer (the cheap, immediate floor -- not the structural
+    fix). It asserts:
+      (a) the doctrine rule file exists (cannot be silently deleted while this
+          check claims to enforce it), and
+      (b) every ``self_funded`` entry in ``ACCOUNT_TIERS`` is covered by the
+          ``@margin-guard-not-earnings-cap`` marker comment in
+          ``trading_app/prop_profiles.py`` -- so a new ``self_funded`` tier added
+          without the marker fails loud at review.
+
+    The structural book-builder firm-branch (prop -> tier cap;
+    self_funded -> risk/margin-derived budget) is a separate
+    adversarial-audit-gated follow-up; this marker does NOT yet prove it.
+
+    @canonical-source: .claude/rules/self-funded-sizing-doctrine.md,
+    trading_app/prop_profiles.py
+    """
+    violations: list[str] = []
+
+    doctrine = PROJECT_ROOT / ".claude" / "rules" / "self-funded-sizing-doctrine.md"
+    if not doctrine.exists():
+        violations.append(
+            "  .claude/rules/self-funded-sizing-doctrine.md is MISSING. The "
+            "self-funded sizing doctrine (prop caps never bound personal-capital "
+            "earnings) must exist while check_prop_caps_do_not_leak_into_self_funded "
+            "claims to enforce it."
+        )
+
+    profiles_src = PROJECT_ROOT / "trading_app" / "prop_profiles.py"
+    try:
+        lines = profiles_src.read_text(encoding="utf-8").splitlines()
+    except OSError as e:
+        return violations + [f"  cannot read trading_app/prop_profiles.py: {e}"]
+
+    marker = "@margin-guard-not-earnings-cap"
+    marker_line = next((i for i, ln in enumerate(lines) if marker in ln), None)
+    self_funded_tier_lines = [i for i, ln in enumerate(lines) if '("self_funded",' in ln and "PropFirmAccount(" in ln]
+
+    if not self_funded_tier_lines:
+        # Layout changed (tiers renamed/moved). Fail loud rather than silently pass.
+        violations.append(
+            "  could not locate any ('self_funded', ...) ACCOUNT_TIERS entries in "
+            "prop_profiles.py — layout changed; update "
+            "check_prop_caps_do_not_leak_into_self_funded to match."
+        )
+        return violations
+
+    if marker_line is None:
+        violations.append(
+            f"  {marker!r} marker comment is ABSENT from prop_profiles.py but "
+            f"{len(self_funded_tier_lines)} ('self_funded', ...) tier(s) exist. Every "
+            "self_funded contract cap must be explicitly labelled a margin/sanity "
+            "guard (not an earnings ceiling) per the doctrine."
+        )
+        return violations
+
+    # The marker must precede the FIRST self_funded tier and there must be no
+    # self_funded tier above it (the marker introduces the whole block).
+    first_tier = min(self_funded_tier_lines)
+    if marker_line > first_tier:
+        violations.append(
+            f"  {marker!r} marker appears at line {marker_line + 1}, AFTER the first "
+            f"('self_funded', ...) tier at line {first_tier + 1}. The marker must "
+            "introduce the self_funded tier block so every cap is covered."
+        )
+    return violations
+
+
 def check_validated_setups_writer_allowlist() -> list[str]:
     """Only canonical validator/maintenance paths may mutate validated_setups."""
     violations: list[str] = []
@@ -14899,6 +14980,12 @@ CHECKS = [
         "Profile daily_loss_dollars must be below the broker MLL (tier.max_dd)",
         check_daily_loss_dollars_below_mll,
         False,
+        False,
+    ),
+    (
+        "Prop contract caps must not leak into self_funded sizing (margin-guard marker present)",
+        check_prop_caps_do_not_leak_into_self_funded,
+        False,  # blocking — a prop cap silently bounding personal-capital earnings is a silent failure
         False,
     ),
     ("Shared profile fingerprint helper is canonical", check_shared_profile_fingerprint_canonical, False, False),

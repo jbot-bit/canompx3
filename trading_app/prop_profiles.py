@@ -419,6 +419,14 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     # Daily loss limit: 5% of account across all tiers
     # Max contracts: 1 MNQ per $2,500, 1 NQ per $25,000
     # PropFirmAccount(firm, account_size, max_dd, max_mini, max_micro, daily_loss_limit)
+    #
+    # @margin-guard-not-earnings-cap
+    # HARD DOCTRINE (.claude/rules/self-funded-sizing-doctrine.md): the
+    # max_contracts_mini/_micro values below are a BROKER / MARGIN / SANITY guard,
+    # NOT a prop-style earnings ceiling. Personal-capital sizing is risk-first
+    # (drawdown tolerance -> vol-targeting/Kelly -> broker margin -> liquidity), and
+    # NO prop-firm contract cap may bound self_funded earning capacity. Enforced by
+    # check_prop_caps_do_not_leak_into_self_funded in pipeline/check_drift.py.
     ("self_funded", 2_500): PropFirmAccount("self_funded", 2_500, 375, 0, 1, 125),
     ("self_funded", 5_000): PropFirmAccount("self_funded", 5_000, 750, 0, 2, 250),
     ("self_funded", 10_000): PropFirmAccount("self_funded", 10_000, 1_500, 0, 4, 500),
