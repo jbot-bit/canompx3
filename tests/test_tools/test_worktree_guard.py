@@ -266,3 +266,37 @@ def test_lease_path_isolation_across_worktrees(tmp_path: Path):
     pb = wg.lease_path(b)
     assert pa is not None and pb is not None
     assert pa != pb
+
+
+def test_write_lease_is_atomic_torn_read_safe(repo: Path) -> None:
+    """_write_lease must use atomic os.replace so a concurrent reader never
+    sees partial JSON (CRITICAL fix, adversarial audit 2026-05-30)."""
+    ls = wg.lease_path(repo)
+    assert ls is not None
+
+    # Write a valid lease via the public API.
+    wg.acquire(repo, session_id="test-session")
+    assert ls.exists()
+
+    # Verify the tmp file is gone after write (atomic replace completed).
+    tmp = ls.with_suffix(".json.tmp")
+    assert not tmp.exists(), "tmp file must be cleaned up by os.replace"
+
+    # Content must be valid JSON (not truncated).
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    assert "session_id" in data
+    assert data["schema"] >= 3  # schema 3+ includes ppid_create_time on Windows
+
+
+def test_schema3_ppid_create_time_written_on_windows(repo: Path) -> None:
+    """On Windows, ppid_create_time must be stored in the lease (schema 3 fix)."""
+    if os.name != "nt":
+        pytest.skip("Windows-only — PID reuse detection via GetProcessTimes")
+
+    wg.acquire(repo, session_id="test-win-session")
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    assert "ppid_create_time" in data, "ppid_create_time must be stored on Windows"
+    assert isinstance(data["ppid_create_time"], int)
+    assert data["ppid_create_time"] > 0
