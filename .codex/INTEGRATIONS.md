@@ -70,8 +70,16 @@ Project-scoped Codex MCP declarations also exist in `.codex/config.toml`:
 - Current default model: `gpt-5.5`
 - Project trust is already set for this repo
 - `codex mcp list` now includes `openaiDeveloperDocs`
-- Enabled curated plugin in the current local config: `GitHub`
-- Disabled curated plugins in the current local config: `gmail`, `google-calendar`, `build-web-apps`
+- Plugin routing policy: `.codex/PLUGIN_ROUTING.md`
+- Enabled project-useful plugins in the current local config include GitHub,
+  Browser, Chrome, Playwright, Superpowers, CodeRabbit, Codex Security, semgrep,
+  OpenAI Developers, Build Web Apps, Plugin Eval, hookify, Slack, Datadog,
+  MarcoPolo, Supabase, Spreadsheets, Presentations, Gmail, Google Calendar,
+  Circleback, CircleCI, skill/plugin tooling, and claude-md-management.
+- Currently disabled in the local config: Documents, PostHog, Hugging Face.
+- Several enabled plugins are explicit-only for canompx3. See
+  `.codex/PLUGIN_ROUTING.md`; enabled does not mean canonical, default, or
+  trusted for trading truth.
 
 ## Current Codex CLI Capabilities Confirmed Locally
 
@@ -115,5 +123,8 @@ Current intended split:
 - default read-only trading-data truth: `gold-db`
 - explicit structural code navigation: `code-review-graph`
 - explicit official-doc lookup: `openaiDeveloperDocs`
+- explicit runtime telemetry, if instrumented: Datadog
+- explicit external-source exploration, not canonical replacement: MarcoPolo
+- explicit Postgres/Supabase app work, not market-data truth: Supabase
 
 Do not mutate Claude integration surfaces unless the user explicitly asks.

@@ -4,6 +4,14 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 
 ## High-Value Commands
 
+- `/resource` or `/lit`: local grounding truth. Run
+  `python scripts/tools/check_pdf_tooling.py` and
+  `python scripts/tools/check_literature_coverage.py`, read
+  `resources/INDEX.md`, then use the mapped `docs/institutional/literature/`
+  extract only when covered. Missing extract means read the resource directly.
+  Raw PDFs are local-PC assets, not guaranteed remote state. If the file is not
+  present locally, say so and do not imply raw-PDF verification. Do not skim or
+  guess PDF content.
 - `discover/SKILL.md`: discovery front door for new edge ideas and hypothesis triage
 - Natural-language discovery requests route through
   `docs/institutional/research_pipeline_contract.md` and `discover/SKILL.md`;

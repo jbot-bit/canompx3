@@ -9,20 +9,29 @@
 ## This Session
 - **Tool:** Codex
 - **Date:** 2026-05-30
-- **Summary:** Implemented follow-up automation gap hardening on `codex/followup-automation-gaps`: activated `.githooks`, made `system_context` detect inactive pre-commit hooks and closed `mode: CLOSED` stages correctly, changed queue/handoff drift to compare only active queue steps, and made `project_pulse` surface debt-ledger items plus a high-severity `followup_coverage` item when broken/high-decay pulse findings exist while the action queue has zero open work. Targeted tests pass (112/112), ruff changed-file check passes, drift passes (170 OK / 21 advisory). Live pulse still reports the pre-existing live-journal lock on PID 25544 and now correctly reports the empty-queue coverage gap.
+- **Summary:** Added cross-tool plugin/data routing and automatic targeted-grounding behavior for the current Codex/Claude plugin set. New shared contract `.codex/PLUGIN_ROUTING.md` defines when GitHub, Browser/Playwright, Datadog, MarcoPolo, Supabase, Spreadsheets, Presentations, Slack, etc. are suitable and reiterates that repo truth remains code/DB/MCP/docs/GitHub/runtime artifacts. Codex prompt hook now auto-injects routing hints for Datadog/observability, MarcoPolo/external data, Supabase/Postgres, artifact plugins, personal-context plugins, CircleCI, and check/improve/implement/fix/review/plan prompts. Claude side now has `.claude/rules/plugin-routing.md`, `.claude/hooks/plugin-router.py`, `.claude/rules/targeted-grounding.md`, and `.claude/hooks/targeted-grounding-router.py` wired into `.claude/settings.json` so Claude gets the same compact prompt-time routing cues. `2P` now means second pass and triggers the same targeted-grounding route, alongside semantic equivalents like double check, fresh eyes, sanity check, red-team, critique, stress-test, take a look, is this good, what am I missing, poke holes, blind spots, sense check, will this work, flaws, gotchas, and risks. `/resource` and `/lit` now mean local grounding truth: run `python scripts/tools/check_pdf_tooling.py` and `python scripts/tools/check_literature_coverage.py`, open `resources/INDEX.md`, prefer mapped `docs/institutional/literature/` extracts only when covered, read raw resources directly only when present on the local PC, do not answer from memory/feel, and do not skim/guess PDF content. `resources/` raw PDFs are documented as local-PC assets, not guaranteed remote/CI state. Research/fetch prompts now inject source-separation guidance: official/primary sources first; user comments/issues/forums are unofficial cautionary signals unless corroborated. Added `tests/test_hooks/test_targeted_grounding_router.py` to keep Claude/Codex second-pass/resource/source-separation semantics covered. `.claude/rules/plugin-routing.md` also includes Claude plugin-alignment notes: infer missing capabilities from intent, check existing Claude tools first, and propose the smallest plugin/install only when a named task needs it. Hook JSON parsing hardened for Windows BOM-prefixed stdin. Verified with `py_compile`, `.claude/settings.json` JSON validation, hook simulations, and `git diff --check`.
 
 ## Last Session
 - **Tool:** Unknown
 - **Date:** 2026-05-30
-- **Commit:** db8eeaad — fix(workflow): surface follow-up automation gaps
-- **Files changed:** 7 files
+- **Commit:** codex/plugin-routing-grounding — chore(codex): route plugins and grounding automatically
+- **Files changed:** 18 files
+  - `.claude/hooks/plugin-router.py`
+  - `.claude/hooks/targeted-grounding-router.py`
+  - `.claude/rules/auto-skill-routing.md`
+  - `.claude/rules/plugin-routing.md`
+  - `.claude/rules/targeted-grounding.md`
+  - `.claude/settings.json`
+  - `.codex/COMMANDS.md`
+  - `.codex/INTEGRATIONS.md`
+  - `.codex/PLUGIN_ROUTING.md`
+  - `.codex/STARTUP.md`
+  - `.codex/TARGETED_GROUNDING.md`
+  - `.codex/WORKFLOWS.md`
+  - `.codex/hooks/session_start.py`
+  - `.codex/hooks/user_prompt_submit_grounding.py`
   - `HANDOFF.md`
-  - `pipeline/system_context.py`
-  - `pipeline/work_queue.py`
-  - `scripts/tools/project_pulse.py`
-  - `tests/test_pipeline/test_system_context.py`
-  - `tests/test_pipeline/test_work_queue.py`
-  - `tests/test_tools/test_project_pulse.py`
+  - ... and 3 more
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
