@@ -201,6 +201,18 @@ def test_default_signals_dir_uses_canonical_runtime_root() -> None:
     assert live_readiness_report.DEFAULT_SIGNALS_DIR == LIVE_SIGNALS_DIR
 
 
+def test_repo_python_bootstrap_is_cli_only_import_safe() -> None:
+    """Importing this module from live preflight must not re-exec with the
+    caller's argv. Only the CLI entrypoint should bootstrap the interpreter."""
+    src = (Path(__file__).resolve().parents[2] / "scripts/tools/live_readiness_report.py").read_text(
+        encoding="utf-8"
+    )
+    import_section = src.split('if __name__ == "__main__":', maxsplit=1)[0]
+
+    assert "\n_ensure_repo_python()\n" not in import_section
+    assert "def main() -> None:\n    _ensure_repo_python()" in src
+
+
 def test_running_task_with_fresh_log_is_not_failed() -> None:
     task = {
         "available": True,
