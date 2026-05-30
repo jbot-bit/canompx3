@@ -112,6 +112,17 @@ mechanism:
       ref: "Howard §5.3.1-5.3.2 (Table 5 'Select.' column)"
       def: "of the events the stop FIRED on, the fraction that were eventual losers"
       howard_es_value: "peaks at 69% (boundary +/-16 ticks), below his ~75% breakeven"
+    year_stability:
+      ref: "Howard §5.1 (extract lines 36-42: April-2025 outlier drove the pooled mean) + RULE 12 outlier distortion"
+      def: >
+        Per-year EV-delta (best-tighter vs baseline) at the POOLED-selected
+        multiplier — NOT re-optimized per year (that would be in-sample
+        optimization). Flag: CONSISTENT (all powered years agree in sign),
+        SIGN_INCONSISTENT (years disagree -> a regime/outlier drives the pool),
+        THIN (<2 years with N>=30). ANNOTATION ONLY — surfaced in the verdict
+        notes; does NOT flip the gate (the gate stays direct pooled EV).
+        Directional only: no per-year significance test (H0 is K=0; a per-year t
+        would inflate the trial count).
   why_descriptive_not_predictive:
     rule: .claude/rules/backtesting-methodology.md RULE 6.3
     statement: >

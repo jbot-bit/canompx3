@@ -102,6 +102,11 @@ class StratumReport:
     grid_mean_pnl_r: dict[float, float] = field(default_factory=dict)
     grid_stop_selectivity: dict[float, float] = field(default_factory=dict)
     grid_winner_damage: dict[float, float] = field(default_factory=dict)
+    # Per-year EV-delta (best-tighter vs baseline) at the POOLED-selected
+    # multiplier — outlier/regime honesty check (Howard §5.1 + RULE 12). Maps
+    # year -> {"n": int, "ev_delta": float}. ANNOTATION ONLY; never gates.
+    year_ev_delta: dict[int, dict] = field(default_factory=dict)
+    year_stability: str | None = None  # CONSISTENT | SIGN_INCONSISTENT | THIN
     # Existing 0.75 prop re-sim readout (memo correction #2).
     mean_pnl_r_is_baseline: float | None = None  # multiplier 1.0
     mean_pnl_r_is_075: float | None = None
@@ -166,6 +171,62 @@ def _winner_damage(baseline: list[dict], adjusted: list[dict]) -> float | None:
         return None
     killed = sum(1 for b, a in winners if a.get("pnl_r") != b.get("pnl_r"))
     return killed / len(winners)
+
+
+# Per-year N floor below which a year is too thin to inform the stability flag
+# (RULE 3.2: N<30 -> very low power, directional-only). Reported but excluded.
+YEAR_STABILITY_MIN_N: int = 30
+
+
+def _year_ev_delta(
+    is_trades: list[dict],
+    pooled_m: float,
+    cost_spec,
+) -> dict[int, dict]:
+    """Per-year EV-delta (tighter-stop@pooled_m mean pnl_r minus baseline) — the
+    Howard §5.1 / RULE 12 outlier honesty check.
+
+    Evaluated at the SINGLE pooled-selected multiplier (NOT re-optimized per
+    year — that would be in-sample optimization). Directional only: no per-year
+    significance test (H0 is K=0; a per-year t would inflate the trial count).
+    Returns {year: {"n": int, "ev_delta": float}}. Empty if trading_day absent.
+    """
+    by_year: dict[int, list[dict]] = {}
+    for o in is_trades:
+        td = o.get("trading_day")
+        yr = getattr(td, "year", None)
+        if yr is None:
+            continue
+        by_year.setdefault(yr, []).append(o)
+    out: dict[int, dict] = {}
+    for yr, rows in by_year.items():
+        base = _avg_pnl_r(rows)
+        adj = _avg_pnl_r(apply_tight_stop(rows, pooled_m, cost_spec))
+        if base is None or adj is None:
+            continue
+        out[yr] = {"n": len(rows), "ev_delta": adj - base}
+    return out
+
+
+def _year_stability_flag(year_ev_delta: dict[int, dict]) -> str | None:
+    """Classify per-year EV-delta consistency among years with N >= floor.
+
+    CONSISTENT       — all powered years agree in sign (or all ~0).
+    SIGN_INCONSISTENT — powered years disagree (a regime/outlier drives the pool).
+    THIN             — fewer than 2 powered years; can't assess.
+    None             — no year data.
+    """
+    if not year_ev_delta:
+        return None
+    powered = [v["ev_delta"] for v in year_ev_delta.values()
+               if v["n"] >= YEAR_STABILITY_MIN_N]
+    if len(powered) < 2:
+        return "THIN"
+    signs = {(1 if d > 1e-9 else -1 if d < -1e-9 else 0) for d in powered}
+    nonzero = signs - {0}
+    if len(nonzero) > 1:
+        return "SIGN_INCONSISTENT"
+    return "CONSISTENT"
 
 
 def _median_mfe_mae(outcomes: list[dict]) -> float | None:
@@ -260,7 +321,7 @@ def _analyze_stratum(
         # OOS power tier for the IS effect (RULE 3.3): cohen_d = |t_IS| / sqrt(N_IS).
         rep.oos_power_tier = _oos_power_tier(is_trades, len(oos_trades))
 
-    _assign_verdict(rep)
+    _assign_verdict(rep, is_trades, cost_spec)
     return rep
 
 
@@ -278,7 +339,7 @@ def _oos_power_tier(is_trades: list[dict], n_oos: int) -> str | None:
     return power_verdict(one_sample_power(cohen_d, n_oos))
 
 
-def _assign_verdict(rep: StratumReport) -> None:
+def _assign_verdict(rep: StratumReport, is_trades: list[dict], cost_spec) -> None:
     """Assign the price-stop-family gating verdict.
 
     PRIMARY gate = direct realized-EV evidence from the canonical
@@ -295,6 +356,11 @@ def _assign_verdict(rep: StratumReport) -> None:
     draft ANDed a symmetry band into the gate AND compared a mislabeled
     population profit-factor against a hardcoded 75%; both removed — the verdict
     is the direct measured EV, the rest is descriptive.
+
+    A per-year EV-delta breakdown (Howard §5.1 / RULE 12 outlier check) is
+    computed at the pooled-selected multiplier and ANNOTATED on the verdict — it
+    flags when one regime/year drives the pooled result, but it does NOT flip the
+    verdict (that would be a second decision rule; the gate stays direct EV).
     """
     if rep.n_is < MIN_N_FOR_VERDICT:
         rep.verdict = "INSUFFICIENT_N"
@@ -312,6 +378,11 @@ def _assign_verdict(rep: StratumReport) -> None:
     best_tighter_ev = tighter_ev[best_tighter_m]
     any_tighter_improves = best_tighter_ev > baseline
 
+    # Per-year breakdown at the pooled-selected multiplier (annotation only).
+    rep.year_ev_delta = _year_ev_delta(is_trades, best_tighter_m, cost_spec)
+    rep.year_stability = _year_stability_flag(rep.year_ev_delta)
+    yr_str = f"year-stability={rep.year_stability}" if rep.year_stability else ""
+
     # Measured mechanism descriptors (reported, not gating, no thresholds).
     ratio = rep.median_mfe_mae_ratio
     ratio_str = f"{ratio:.3f}" if ratio is not None else "n/a"
@@ -327,16 +398,23 @@ def _assign_verdict(rep: StratumReport) -> None:
             f"EV={best_tighter_ev:+.4f} <= baseline {baseline:+.4f}). Price-stop "
             f"family (H1/H3) value-destroying. Measured mechanism: median "
             f"MFE/MAE={ratio_str}, winner-damage@0.75={dmg_str}, "
-            f"stop-selectivity@0.75={sel_str}. H2 (entry switch) / H4 (time exit) "
-            f"UNAFFECTED."
+            f"stop-selectivity@0.75={sel_str}; {yr_str}. H2 (entry switch) / H4 "
+            f"(time exit) UNAFFECTED."
         )
     else:
         rep.verdict = "PROCEED_H1_H3"
+        # SIGN_INCONSISTENT means the pooled "improves" may be one regime/outlier
+        # year — surface it loudly without flipping the gate.
+        caveat = ""
+        if rep.year_stability == "SIGN_INCONSISTENT":
+            caveat = (" CAVEAT: per-year EV-delta sign is INCONSISTENT across "
+                      "powered years — pooled headroom may be regime-driven "
+                      "(Howard §5.1); H1/H3 drafting must verify year-stability.")
         rep.notes = (
             f"tighter stop m={best_tighter_m} improves EV ({best_tighter_ev:+.4f} "
             f"> baseline {baseline:+.4f}); H1/H3 LIVE. Measured mechanism: median "
             f"MFE/MAE={ratio_str}, winner-damage@0.75={dmg_str}, "
-            f"stop-selectivity@0.75={sel_str}."
+            f"stop-selectivity@0.75={sel_str}; {yr_str}.{caveat}"
         )
 
 
@@ -387,6 +465,13 @@ def _print_report(reports: list[StratumReport]) -> None:
         if r.grid_stop_selectivity:
             grid = "  ".join(f"{m}:{v:.1%}" for m, v in sorted(r.grid_stop_selectivity.items()))
             print(f"    stop-selectivity by multiplier (Howard §5.3.2): {grid}")
+        if r.year_ev_delta:
+            yr = "  ".join(
+                f"{y}:{d['ev_delta']:+.4f}(n={d['n']})"
+                for y, d in sorted(r.year_ev_delta.items())
+            )
+            print(f"    per-year EV-delta @best-m (Howard §5.1 outlier check): {yr}")
+            print(f"    year-stability: {r.year_stability}")
         print(f"    VERDICT: {r.verdict}")
         print(f"    {r.notes}\n")
 
@@ -398,7 +483,7 @@ def _write_csv(reports: list[StratumReport], path: str) -> None:
         "median_mfe_mae_ratio",
         "mean_pnl_r_is_baseline", "mean_pnl_r_is_075", "ev_delta_075_vs_baseline_is",
         "mean_pnl_r_oos_baseline", "mean_pnl_r_oos_075", "ev_delta_075_vs_baseline_oos",
-        "oos_power_tier", "verdict", "notes",
+        "oos_power_tier", "year_stability", "verdict", "notes",
     ]
     # One column per tighter multiplier for EV / winner-damage / stop-selectivity.
     tighter = [m for m in STOP_MULTIPLIER_GRID if m < 1.0]
