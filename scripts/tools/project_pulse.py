@@ -124,6 +124,34 @@ class PulseItem:
 
 
 @dataclass
+class NextAction:
+    kind: str  # queue / command / reconcile
+    label: str
+    command: str | None = None
+    queue_id: str | None = None
+    source: str | None = None
+
+
+@dataclass
+class DebtEntry:
+    debt_id: str | None
+    text: str
+    line_no: int
+    has_owner: bool
+    has_status: bool
+    has_parking_decision: bool
+
+
+@dataclass
+class PlanEntry:
+    path: Path
+    title: str
+    owner: str
+    status: str
+    last_reviewed: str
+
+
+@dataclass
 class PulseReport:
     generated_at: str
     cache_hit: bool
@@ -158,6 +186,7 @@ class PulseReport:
     history_debt_summary: dict | None = None
     startup_latency_ms: int | None = None
     orientation_cost_budget: dict | None = None
+    next_actions: list[NextAction] = field(default_factory=list)
 
     @property
     def broken(self) -> list[PulseItem]:
@@ -1974,6 +2003,261 @@ def collect_debt_ledger(root: Path) -> list[PulseItem]:
     return items
 
 
+def _normalize_coverage_text(text: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(text or "").lower()).strip()
+
+
+def _coverage_tokens(text: str) -> list[str]:
+    stop = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "this",
+        "that",
+        "from",
+        "into",
+        "item",
+        "work",
+        "fix",
+        "run",
+        "check",
+    }
+    tokens = [token for token in _normalize_coverage_text(text).split() if len(token) >= 4 and token not in stop]
+    deduped: list[str] = []
+    for token in tokens:
+        if token not in deduped:
+            deduped.append(token)
+    return deduped[:8]
+
+
+def _queue_coverage_blobs(root: Path) -> list[str]:
+    queue_path = root / "docs" / "runtime" / "action-queue.yaml"
+    if not queue_path.exists():
+        return []
+    try:
+        queue = load_queue(root)
+    except Exception:
+        return []
+
+    blobs: list[str] = []
+    for item in queue.items:
+        if item.status in {"closed", "superseded"}:
+            continue
+        parts = [
+            item.id,
+            item.title,
+            item.status,
+            item.next_action,
+            item.exit_criteria,
+            item.notes_ref or "",
+            item.override_note or "",
+            " ".join(item.decision_refs),
+            " ".join(item.evidence_refs),
+        ]
+        blobs.append(_normalize_coverage_text(" ".join(parts)))
+    return blobs
+
+
+def _is_covered_by_queue(root: Path, *needles: str) -> bool:
+    blobs = _queue_coverage_blobs(root)
+    if not blobs:
+        return False
+
+    normalized_needles = [_normalize_coverage_text(needle) for needle in needles if _normalize_coverage_text(needle)]
+    for blob in blobs:
+        if any(needle and needle in blob for needle in normalized_needles):
+            return True
+        for needle in needles:
+            tokens = _coverage_tokens(needle)
+            if len(tokens) >= 2 and sum(1 for token in tokens if token in blob) >= min(3, len(tokens)):
+                return True
+    return False
+
+
+def _parse_debt_entries(root: Path) -> list[DebtEntry]:
+    debt_path = root / "docs" / "runtime" / "debt-ledger.md"
+    if not debt_path.exists():
+        return []
+    try:
+        lines = debt_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+
+    entries: list[DebtEntry] = []
+    in_open_debt = False
+    for line_no, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if stripped == "## Open Debt":
+            in_open_debt = True
+            continue
+        if in_open_debt and stripped.startswith("## "):
+            break
+        if not in_open_debt or not line.startswith("- "):
+            continue
+        if stripped.startswith("- ~~"):
+            continue
+
+        text = stripped.removeprefix("- ").strip()
+        id_match = re.match(r"`([^`]+)`", text)
+        debt_id = id_match.group(1) if id_match else None
+        description = text[id_match.end() :].lstrip(" :-") if id_match else text
+        lowered = text.lower()
+        entries.append(
+            DebtEntry(
+                debt_id=debt_id,
+                text=description or text,
+                line_no=line_no,
+                has_owner=bool(re.search(r"\bowner\s*[:=]", lowered)),
+                has_status=bool(re.search(r"\bstatus\s*[:=]", lowered)),
+                has_parking_decision=any(
+                    token in lowered for token in ("parking_lot", "parking lot", "parked", "wont_do")
+                ),
+            )
+        )
+    return entries
+
+
+def collect_debt_reconciliation(root: Path) -> list[PulseItem]:
+    """Flag open debt that lacks queue coverage or an explicit parking decision."""
+    items: list[PulseItem] = []
+    for entry in _parse_debt_entries(root):
+        debt_key = entry.debt_id or entry.text
+        covered = _is_covered_by_queue(root, debt_key, entry.text)
+        has_complete_metadata = entry.has_owner and entry.has_status
+        intentionally_parked = entry.has_parking_decision and has_complete_metadata
+        if covered or intentionally_parked:
+            continue
+
+        missing = []
+        if not covered:
+            missing.append("queue item")
+        if not entry.has_owner:
+            missing.append("owner")
+        if not entry.has_status:
+            missing.append("status")
+        if not entry.has_parking_decision:
+            missing.append("parking decision")
+        items.append(
+            PulseItem(
+                category="unactioned",
+                severity="medium",
+                source="debt_reconciliation",
+                summary=f"Open debt lacks follow-up coverage: {debt_key}",
+                detail=f"docs/runtime/debt-ledger.md:{entry.line_no}; missing={', '.join(missing)}",
+                action="Add an action-queue item or mark owner/status/parking_lot in docs/runtime/debt-ledger.md.",
+            )
+        )
+    return items
+
+
+def collect_queue_reconciliation(canonical: Path, items: list[PulseItem]) -> list[PulseItem]:
+    """Report actionable pulse findings that are not represented in action-queue.yaml."""
+    missing: list[PulseItem] = []
+    ignored_sources = {
+        "action_queue",
+        "queue_reconciliation",
+        "followup_coverage",
+        "debt_ledger",
+        "debt_reconciliation",
+        "plan_reconciliation",
+        "git",
+        "worktree",
+        "worktrees",
+        "session_delta",
+    }
+    for item in items:
+        if item.source in ignored_sources:
+            continue
+        actionable = item.category in {"broken", "decaying", "unactioned"}
+        if not actionable:
+            continue
+        if _is_covered_by_queue(canonical, item.source, item.summary, item.detail or ""):
+            continue
+        missing.append(
+            PulseItem(
+                category="unactioned",
+                severity="high" if item.category == "broken" else "medium",
+                source="queue_reconciliation",
+                summary=f"Pulse finding has no queue coverage: {item.summary}",
+                detail=f"source={item.source}; severity={item.severity}",
+                action="Add or intentionally park an action-queue.yaml item for this pulse finding.",
+            )
+        )
+    return missing
+
+
+def _parse_plan_frontmatter(path: Path) -> dict[str, str]:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    if not text.startswith("---\n"):
+        return {}
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return {}
+    data: dict[str, str] = {}
+    for raw_line in text[4:end].splitlines():
+        if ":" not in raw_line:
+            continue
+        key, value = raw_line.split(":", 1)
+        data[key.strip()] = value.strip().strip('"')
+    return data
+
+
+def _plan_title(path: Path) -> str:
+    try:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("# "):
+                return line.removeprefix("# ").strip()
+    except OSError:
+        pass
+    return path.stem
+
+
+def _active_plan_entries(root: Path) -> list[PlanEntry]:
+    active_root = root / "docs" / "plans" / "active"
+    if not active_root.exists():
+        return []
+    entries: list[PlanEntry] = []
+    for path in sorted(active_root.rglob("*.md")):
+        meta = _parse_plan_frontmatter(path)
+        if meta.get("status") != "active":
+            continue
+        entries.append(
+            PlanEntry(
+                path=path.relative_to(root),
+                title=_plan_title(path),
+                owner=meta.get("owner", ""),
+                status=meta.get("status", ""),
+                last_reviewed=meta.get("last_reviewed", ""),
+            )
+        )
+    return entries
+
+
+def collect_plan_reconciliation(root: Path) -> list[PulseItem]:
+    """Flag active design plans that have not been routed into the queue."""
+    items: list[PulseItem] = []
+    for entry in _active_plan_entries(root):
+        rel = entry.path.as_posix()
+        if _is_covered_by_queue(root, rel, entry.title):
+            continue
+        owner = entry.owner or "unowned"
+        items.append(
+            PulseItem(
+                category="unactioned",
+                severity="medium",
+                source="plan_reconciliation",
+                summary=f"Active plan has no queue coverage: {entry.title}",
+                detail=f"{rel}; owner={owner}; last_reviewed={entry.last_reviewed or 'missing'}",
+                action="Add a queue item referencing this docs/plans/active file, or archive/park the plan.",
+            )
+        )
+    return items
+
+
 def collect_followup_coverage(canonical: Path, items: list[PulseItem]) -> list[PulseItem]:
     """Flag actionable pulse findings when the canonical queue has no open work."""
     queue_path = canonical / "docs" / "runtime" / "action-queue.yaml"
@@ -2335,6 +2619,56 @@ def _attach_skill_suggestions(items: list[PulseItem]) -> None:
                 item.action = template.replace(" {inst}", "")
 
 
+def _queue_id_from_summary(summary: str) -> str | None:
+    match = re.match(r"^([A-Za-z0-9_.-]+):", summary)
+    return match.group(1) if match else None
+
+
+def _build_next_actions(items: list[PulseItem], *, limit: int = 5) -> list[NextAction]:
+    """Return compact operator actions backed by queue IDs or exact commands."""
+    actions: list[NextAction] = []
+    seen: set[str] = set()
+    priority = {"broken": 0, "decaying": 1, "unactioned": 2, "ready": 3, "paused": 4}
+    severity = {"high": 0, "medium": 1, "low": 2}
+
+    for item in sorted(
+        items, key=lambda i: (priority.get(i.category, 9), severity.get(i.severity, 9), i.source, i.summary)
+    ):
+        if item.source == "action_queue":
+            queue_id = _queue_id_from_summary(item.summary)
+            if not queue_id:
+                continue
+            key = f"queue:{queue_id}"
+            if key in seen:
+                continue
+            seen.add(key)
+            actions.append(
+                NextAction(
+                    kind="queue",
+                    label=item.summary,
+                    queue_id=queue_id,
+                    command=f".\\.venv\\Scripts\\python.exe scripts\\tools\\work_queue.py claim --item {queue_id} --tool codex",
+                    source=item.source,
+                )
+            )
+        elif item.action:
+            key = f"action:{item.action}:{item.summary}"
+            if key in seen:
+                continue
+            seen.add(key)
+            actions.append(
+                NextAction(
+                    kind="command" if item.action.startswith(("python", ".\\", "uv ")) else "reconcile",
+                    label=item.summary,
+                    command=item.action,
+                    source=item.source,
+                )
+            )
+        if len(actions) >= limit:
+            break
+    return actions
+
+
 # ---------------------------------------------------------------------------
 # Cache — only caches expensive collectors (drift + tests) keyed on HEAD.
 # Cheap collectors (<500ms total) always run fresh.
@@ -2537,6 +2871,8 @@ def build_pulse(
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
     debt_items = collect_debt_ledger(root)
+    debt_reconciliation_items = collect_debt_reconciliation(root)
+    plan_reconciliation_items = collect_plan_reconciliation(root)
     ralph_items = collect_ralph_deferred(root)
     session_delta = collect_session_delta(root, canonical, tool_name=tool_name)
     upcoming = collect_upcoming_sessions(db_path)
@@ -2581,12 +2917,16 @@ def build_pulse(
         + git_items
         + action_items
         + debt_items
+        + debt_reconciliation_items
+        + plan_reconciliation_items
         + ralph_items
     )
+    all_items += collect_queue_reconciliation(canonical, all_items)
     all_items += collect_followup_coverage(canonical, all_items)
 
     # Attach skill invocation suggestions
     _attach_skill_suggestions(all_items)
+    next_actions = _build_next_actions(all_items)
 
     # Check system health for time-since-green
     is_green = not any(i.category in ("broken", "decaying") for i in all_items)
@@ -2623,6 +2963,7 @@ def build_pulse(
         },
         startup_latency_ms=system_brief_payload["startup_latency_ms"] if system_brief_payload else None,
         orientation_cost_budget=system_brief_payload["orientation_cost_budget"] if system_brief_payload else None,
+        next_actions=next_actions,
     )
 
     # Compute single recommendation after full report is assembled
@@ -2645,6 +2986,14 @@ CATEGORY_LABELS = {
 }
 
 SEVERITY_ICONS = {"high": "!", "medium": "~", "low": " "}
+
+
+def _next_action_get(action: NextAction | dict, key: str) -> str | None:
+    if isinstance(action, dict):
+        value = action.get(key)
+    else:
+        value = getattr(action, key)
+    return str(value) if value is not None else None
 
 
 def format_text(report: PulseReport) -> str:
@@ -2711,6 +3060,20 @@ def format_text(report: PulseReport) -> str:
             lines.append(f"  {step}")
         if len(report.handoff_next_steps) > 5:
             lines.append(f"  ... +{len(report.handoff_next_steps) - 5} more")
+        lines.append("")
+
+    if report.next_actions:
+        lines.append("Next actions:")
+        for action in report.next_actions[:5]:
+            label = _next_action_get(action, "label") or "action"
+            command = _next_action_get(action, "command")
+            queue_id = _next_action_get(action, "queue_id")
+            if queue_id and command:
+                lines.append(f"  [queue:{queue_id}] {command}")
+            elif command:
+                lines.append(f"  {command}  # {label}")
+            else:
+                lines.append(f"  {label}")
         lines.append("")
 
     if report.deployment_summary:
@@ -2860,6 +3223,7 @@ def format_json(report: PulseReport) -> str:
         "orientation_cost_budget": report.orientation_cost_budget,
         "upcoming_sessions": report.upcoming_sessions,
         "recommendation": report.recommendation,
+        "next_actions": [asdict(action) if not isinstance(action, dict) else action for action in report.next_actions],
         "time_since_green": report.time_since_green,
         "session_delta": report.session_delta,
         "counts": {cat: len([i for i in report.items if i.category == cat]) for cat in CATEGORIES},
