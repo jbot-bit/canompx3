@@ -1,9 +1,9 @@
-## Iteration: 216
-## Target: pipeline/asset_configs.py:234
-## Cluster: 1 finding (annotation_debt), severity=[LOW]
+## Iteration: 218
+## Target: trading_app/ai/provider_registry.py:203,224,248,267
+## Cluster: 4 findings, types=[annotation_debt/DRY], severity=[LOW, LOW, LOW, LOW]
 ## Classification: [mechanical]
-## Blast Radius: 0 callers affected (drift check enforces no raw orb_active reads outside asset_configs.py)
-## Invariants: ACTIVE_ORB_INSTRUMENTS = ['MES', 'MGC', 'MNQ'] must not change; DEAD_ORB_INSTRUMENTS must not change; 40 tests must pass
-## Diff estimate: 2 lines (comment update + flag value)
-## Doctrine cited: integrity-guardian.md § 7 (Never Trust Metadata — orb_active=True on a dead instrument is misleading metadata)
-## Findings deferred: NONE (file otherwise clean)
+## Blast Radius: 1 file (provider_registry.py only); 6 callers import from this module but none reference base_url directly
+## Invariants: all 4 OpenRouter profiles retain base_url="https://openrouter.ai/api/v1"; no behavior change; PROFILE_REGISTRY shape unchanged; 19 tests must pass
+## Diff estimate: 6 lines (add 1 constant, replace 4 string literals)
+## Doctrine cited: integrity-guardian.md § 2 (DRY on infrastructure constants); S3 pattern (avoid scattered literals)
+## Findings deferred: none — single cluster, all LOW

@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 218 — 2026-05-31
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ai/provider_registry.py:203,224,248,267
+- Cluster: 4 LOW findings (annotation_debt/DRY — hardcoded base_url literals)
+- Finding: "https://openrouter.ai/api/v1" repeated as 4 hardcoded string literals in deepseek_* profile definitions; extracted to module-level OPENROUTER_BASE_URL constant so a URL version bump is a single-line change
+- Doctrine cited: integrity-guardian.md S3 (avoid scattered infrastructure literals)
+- Action: add OPENROUTER_BASE_URL constant at line 25; replace 4 base_url= literals with constant reference
+- Blast radius: 1 file; 6 importers unaffected (none reference base_url directly)
+- Verification gate: fast
+- Verification: PASS — fast drift 152/0 PASS + ruff PASS + 19/19 pytest PASS
+- Commit: 0989bde3
+
 ## Iteration 217 — 2026-05-31
 - Phase: audit-only
 - Classification: N/A (no code change)
