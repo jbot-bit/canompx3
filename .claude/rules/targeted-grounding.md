@@ -24,6 +24,49 @@ and risks.
 
 This rule is prompted by `.claude/hooks/targeted-grounding-router.py`.
 
+## Every Plan Is 2-Pass — MANDATORY
+
+Any plan/design intent (`plan`, `design`, `brainstorm`, `approach`, `prereg`,
+`hypothesis`, `spec`, `proposal`, `memo`, `architecture`, `how should/do we`,
+`4t`) auto-fires the PLAN route — the operator must NOT have to ask for it. The
+first draft is always wrong, so:
+
+1. **Pass 1** — draft the plan.
+2. **Pass 2** — self-critique for gaps, silences, bias, error, and a simpler
+   path. Never present a single-pass plan.
+3. **Fold in a rigor section** covering: no-bias/no-look-ahead, honesty
+   (verified vs claimed), literature grounding, edge cases
+   (NULL/empty/sparse/failure), future-proofing/hardening.
+
+When the operator DOES say "improve/check/gaps/silences" on a plan, the same
+route fires — do it properly, not a token gesture. The hook's `PLAN_INTENT`
+regex is the source of truth for triggering; keep it in sync with this list.
+
+### Enforcement (v2) — the cue is not advisory
+
+The prompt cue above is only a reminder; these layers ENFORCE it so a thin plan
+cannot reach the operator:
+
+- **`.claude/hooks/_plan_rigor.py`** — single source of truth: the five
+  `RIGOR_PILLARS`, the 2nd-pass marker, and the performative-honesty tripwire.
+  The cue, the gate, and the backstop all import it; they cannot drift.
+- **`.claude/hooks/plan-rigor-gate.py`** (`PreToolUse:ExitPlanMode`) — reads the
+  plan text, audits it, and **soft-blocks (exit 2)** if a pillar is missing, the
+  2nd pass is not shown, or rigor is claimed without evidence. Returns the plan to
+  Claude to fix; never reaches the operator thin. Fail-open on any parse error.
+  This is the strong layer — it audits structured plan text, never guesses.
+- **`.claude/hooks/plan-stop-backstop.py`** (`Stop`) — covers plans the operator
+  explicitly asked for but that were written in chat (bypassing ExitPlanMode). It
+  keys on KNOWN intent: the router drops a per-turn breadcrumb
+  (`state/plan-intent.json`, session-keyed) when the PLAN route fires; the
+  backstop fires the advisory only if that breadcrumb is pending AND the reply
+  lacks rigor, then clears it. It does NOT classify prose as plan-vs-report
+  (that was tried, false-fired on a completion report, and was removed —
+  2026-05-31). Advisory injection only.
+
+Parity between the pillar list here and `_plan_rigor.RIGOR_PILLARS` is enforced
+by `check_plan_rigor_pillar_parity` in `pipeline/check_drift.py`.
+
 ## Resource And Fetch Triggers
 
 `/resource` and `/lit` mean: read the local grounding truth before planning or
