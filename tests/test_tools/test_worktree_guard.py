@@ -75,16 +75,82 @@ def test_acquire_then_refresh_same_pid(repo: Path):
 
 
 def test_blocked_by_live_peer(repo: Path):
-    # Acquire as "this" PID, then try to acquire as a different PID -> blocked.
-    s1, _, _ = wg.acquire(repo, pid=99991)
-    # Force the live registry to retain the lock object so the subsequent
-    # acquire from a different PID hits the held OS lock.
+    """A DIFFERENT session with a fresh heartbeat AND a LIVE ppid blocks.
+
+    The peer's liveness anchor is its recorded ppid; we pin it to THIS test
+    process's pid (definitely alive) so the block path is deterministic.
+    """
+    s1, _, _ = wg.acquire(repo, pid=99991, session_id="peerA", ppid=os.getpid())
     assert s1 == "acquired"
 
-    s2, payload, msg = wg.acquire(repo, pid=99992)
+    s2, payload, msg = wg.acquire(repo, pid=99992, session_id="callerB", ppid=os.getpid())
     assert s2 == "blocked", msg
     assert payload is not None
-    assert payload["pid"] == 99991
+    assert payload["session_id"] == "peerA"
+
+
+def test_reclaims_lease_with_dead_ppid(repo: Path):
+    """A peer lease whose recorded ppid is dead is reclaimed, not blocking.
+
+    This is the /clear-restart safety property: the prior session's Claude
+    process is gone, so its ppid reads dead and the new session takes over.
+    """
+    wg.acquire(repo, pid=99991, session_id="deadPeer", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # pid in a range no real process will hold
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    status_str, payload, msg = wg.acquire(repo, pid=99992, session_id="freshSession", ppid=os.getpid())
+    assert status_str == "reclaimed", msg
+    assert payload is not None and payload["session_id"] == "freshSession"
+
+
+def test_stale_heartbeat_with_live_ppid_still_blocks(repo: Path):
+    """A stale heartbeat does NOT reclaim while the holder's ppid is alive.
+
+    The heartbeat only refreshes on PreToolUse; a single long-running tool call
+    (e.g. check_drift.py at ~180s, past the 90s window) legitimately stops
+    refreshing it. ppid-liveness is authoritative — a provably-alive session
+    keeps its lease, so a peer must BLOCK, not steal it mid-call. (Adversarial
+    audit MED finding, 2026-05-30.)
+    """
+    wg.acquire(repo, pid=99991, session_id="busyPeer", ppid=os.getpid())  # alive ppid
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    status_str, payload, msg = wg.acquire(repo, pid=99992, session_id="peerB", ppid=os.getpid())
+    assert status_str == "blocked", msg
+    assert payload is not None and payload["session_id"] == "busyPeer"
+
+
+def test_reclaims_lease_stale_heartbeat_and_dead_ppid(repo: Path):
+    """Reclaim requires BOTH: heartbeat stale AND ppid dead (holder truly gone)."""
+    wg.acquire(repo, pid=99991, session_id="gonePeer", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    data["ppid"] = 2147480000  # dead
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    status_str, _, msg = wg.acquire(repo, pid=99992, session_id="freshSession", ppid=os.getpid())
+    assert status_str == "reclaimed", msg
+
+
+def test_same_session_refreshes_not_blocks(repo: Path):
+    """The SAME session_id re-acquiring is a refresh, never a block."""
+    s1, _, _ = wg.acquire(repo, pid=11111, session_id="sameSession", ppid=os.getpid())
+    s2, payload, msg = wg.acquire(repo, pid=22222, session_id="sameSession", ppid=os.getpid())
+    assert s1 == "acquired"
+    assert s2 == "refreshed", msg
+    assert payload is not None and payload["session_id"] == "sameSession"
 
 
 def test_status_shows_lease_state(repo: Path):
@@ -100,7 +166,9 @@ def test_status_no_lease(repo: Path):
     snap = wg.status(repo)
     assert snap["in_git_repo"] is True
     assert snap["lease_present"] is False
-    assert snap["is_locked"] is False
+    # The OS-lock `is_locked` field is gone in the heartbeat model — ownership
+    # is the sidecar, not a phantom subprocess lock. No lease → no holder.
+    assert "holder_pid" not in snap
 
 
 def test_release_by_current_pid(repo: Path):
