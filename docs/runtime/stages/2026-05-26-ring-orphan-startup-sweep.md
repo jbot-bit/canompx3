@@ -37,7 +37,7 @@ task: |
   both = canonical-source-delegation per `institutional-rigor.md` § 4.
 
 mode: IMPLEMENTATION
-status: IMPLEMENTED_PENDING_OPERATOR_LIVE_REPRO_2026_05_25
+status: CLOSED_FOR_SINGLE_COPY_PILOT
 priority: P2
 deferred_reason: |
   Touches `trading_app/live/` and `scripts/run_live_session.py` — the
@@ -93,6 +93,13 @@ without starting a broker or live session. Automated verification is green,
 including a controlled temp-dir dead/live PID repro; the operator-only
 Windows/live-session repro remains pending because this bounded task explicitly
 forbade starting a live session.
+
+2026-05-30 single-copy pilot supersede: CLOSED_FOR_SINGLE_COPY_PILOT, not full
+CLOSED. The startup sweep remains operator/live-session repro pending, but it no
+longer blocks the `topstep_50k_mnq_auto --copies 1` pilot because the dry-run
+logic, startup hook, and fail-preserve behavior are already implemented and the
+live preflight still fails closed on stale ring/data issues before broker
+routing. Full CLOSED still requires the original Windows/live-session repro.
 
 What landed:
 

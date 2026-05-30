@@ -29,9 +29,9 @@ Don't ask permission. Just do it.
 - For scoped repo tasks, prefer `python scripts/tools/context_resolver.py --task "<request>"` to get the exact read set and live views for that task.
 - If the resolver is unavailable or ambiguous, fall back to: `AGENTS.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`, `scripts/tools/system_context.py`, and `scripts/tools/project_pulse.py`.
 
-## Cross-Tool Coordination (Claude Code + Codex)
+## Cross-Tool Coordination (Claude Code + Codex + OpenCode)
 
-Two tools share this repo. They must not lose context when the user switches between them.
+Multiple AI tools may share this repo. They must not lose context when the user switches between them.
 
 **Shared state (both tools read/write):**
 - `HANDOFF.md` — session baton. Outgoing tool updates it; incoming tool reads it first.
@@ -42,13 +42,20 @@ Two tools share this repo. They must not lose context when the user switches bet
 - `.claude/` + `CLAUDE.md` — Claude Code rules, memory, skills
 - `.codex/` + `CODEX.md` — Codex adapter layer, config
 
+**OpenCode role:**
+- OpenCode is allowed as a third POV reviewer/coder, not as a canonical authority layer.
+- Default OpenCode mode is read-only review using `docs/prompts/opencode-third-pov.md`.
+- Mutating OpenCode work must stay inside a managed disposable worktree created with `python scripts/tools/worktree_manager.py create --tool opencode --name "<task>"`.
+- OpenCode must not commit, push, merge, write DBs, vendor repos, install OpenClaw/OpenClaw-like runtimes, or edit protected live/research/data truth surfaces unless explicitly approved in a later task.
+- Full operating contract: `docs/workflows/opencode.md`.
+
 **Rules:**
 - Decisions that affect both tools go in `HANDOFF.md` or `docs/plans/`, NOT in tool-private memory files.
 - Tool-specific memory (`.claude/projects/*/memory/`, `memory/*.md`) is scratch — useful within that tool, not a source of truth for the other tool.
 - On session start: read `HANDOFF.md` before starting work.
 - On session end: update `HANDOFF.md` if you changed anything meaningful.
 - Before code edits: run `git log --oneline -10` and re-read touched files if another tool may have committed.
-- For parallel edit sessions: prefer isolated worktrees via `scripts/infra/claude-worktree.sh` and `scripts/infra/codex-worktree.sh`. Do not let Claude and Codex edit the same mutable branch in parallel.
+- For parallel edit sessions: prefer isolated worktrees via `scripts/infra/claude-worktree.sh`, `scripts/infra/codex-worktree.sh`, or the managed `opencode` worktree namespace. Do not let Claude, Codex, and OpenCode edit the same mutable branch in parallel.
 - Repo launchers should run `scripts/tools/session_preflight.py` automatically; if you bypass them, run preflight manually.
 
 **Environment:**

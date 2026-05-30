@@ -18,7 +18,7 @@ WORKTREE_ROOT = PROJECT_ROOT / ".worktrees"
 WORKTREE_META = ".canompx3-worktree.json"
 LOCAL_WORKTREE_META = ".canompx3-worktree.local.json"
 TASK_NAMESPACE = "tasks"
-KNOWN_TOOLS = ("claude", "codex")
+KNOWN_TOOLS = ("claude", "codex", "opencode")
 SYMLINK_TARGETS = [".venv", ".venv-wsl"]
 # Files/dirs linked into worktrees via hard links (files) or junctions (dirs).
 # These don't need admin on Windows, unlike symlinks.
@@ -639,7 +639,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.set_defaults(func=cmd_list)
 
     p_create = sub.add_parser("create", help="Create or reuse a managed worktree")
-    p_create.add_argument("--tool", required=True, choices=["claude", "codex"], help="Owning tool")
+    p_create.add_argument("--tool", required=True, choices=list(KNOWN_TOOLS), help="Owning tool")
     p_create.add_argument("--name", required=True, help="Task/session name")
     p_create.add_argument("--purpose", default=None, help="Short purpose for the workstream")
     p_create.add_argument("--base-ref", default="HEAD", help="Base ref for the new branch/worktree")
@@ -647,17 +647,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_create.set_defaults(func=cmd_create)
 
     p_show = sub.add_parser("show", help="Show managed worktree metadata")
-    p_show.add_argument("--tool", required=True, choices=["claude", "codex"], help="Owning tool")
+    p_show.add_argument("--tool", required=True, choices=list(KNOWN_TOOLS), help="Owning tool")
     p_show.add_argument("--name", required=True, help="Managed workstream name")
     p_show.set_defaults(func=cmd_show)
 
     p_handoff = sub.add_parser("handoff", help="Reassign a managed workstream to another tool")
     p_handoff.add_argument("--path", default=None, help="Explicit worktree path")
-    p_handoff.add_argument(
-        "--tool", choices=["claude", "codex"], default=None, help="Current tool namespace for --name"
-    )
+    p_handoff.add_argument("--tool", choices=list(KNOWN_TOOLS), default=None, help="Current tool namespace for --name")
     p_handoff.add_argument("--name", default=None, help="Managed workstream name")
-    p_handoff.add_argument("--target-tool", required=True, choices=["claude", "codex"], help="New owning tool")
+    p_handoff.add_argument("--target-tool", required=True, choices=list(KNOWN_TOOLS), help="New owning tool")
     p_handoff.add_argument("--purpose", default=None, help="Optional updated purpose")
     p_handoff.add_argument("--note", default=None, help="Optional baton note")
     p_handoff.add_argument("--json", action="store_true", help="Print machine-readable result")
@@ -668,7 +666,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_close = sub.add_parser("close", help="Close and remove a managed worktree")
     p_close.add_argument("--path", default=None, help="Explicit worktree path")
-    p_close.add_argument("--tool", choices=["claude", "codex"], default=None, help="Tool namespace for --name")
+    p_close.add_argument("--tool", choices=list(KNOWN_TOOLS), default=None, help="Tool namespace for --name")
     p_close.add_argument("--name", default=None, help="Managed worktree name")
     p_close.add_argument("--force", action="store_true", help="Remove even if dirty")
     p_close.add_argument("--drop-branch", action="store_true", help="Delete the worktree branch after removal")
@@ -676,7 +674,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ship = sub.add_parser("ship", help="Commit if needed, merge into main, and close the worktree")
     p_ship.add_argument("--path", default=None, help="Explicit worktree path")
-    p_ship.add_argument("--tool", choices=["claude", "codex"], default=None, help="Tool namespace for --name")
+    p_ship.add_argument("--tool", choices=list(KNOWN_TOOLS), default=None, help="Tool namespace for --name")
     p_ship.add_argument("--name", default=None, help="Managed workstream name")
     p_ship.add_argument("--commit-message", default=None, help="Commit message to use if the worktree is dirty")
     p_ship.add_argument("--merge-target", default="main", help="Target branch to merge into")

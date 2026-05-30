@@ -6,7 +6,9 @@ Status: NO-GO until strict live readiness is green.
 
 - Profile: `topstep_50k_mnq_auto`.
 - Instrument: `MNQ` only.
-- Allocator book: current post-rebalance lane allocation from `docs/runtime/lane_allocation.json`.
+- Allocator book: 3-lane single-copy pilot book from `docs/runtime/lane_allocation.json`.
+- Active pilot lanes: `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`, `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08`, `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`.
+- Parked pilot exclusion: `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` is paused for SR `ALARM`; re-entry requires a separate prereg/re-audit decision.
 - First live pilot: single protected primary account only. Use `--copies 1` until per-shadow software loss belts exist.
 - No strategy research, lane expansion, parameter changes, or launch-mode edits are part of this runbook.
 
@@ -15,7 +17,7 @@ Status: NO-GO until strict live readiness is green.
 Run these before any live start:
 
 ```bash
-python scripts/tools/live_readiness_report.py --profile topstep_50k_mnq_auto --strict-zero-warn
+python scripts/tools/live_readiness_report.py --profile topstep_50k_mnq_auto --copies 1 --strict-zero-warn
 python scripts/tools/project_pulse.py --fast --format json
 python scripts/audits/run_all.py --phase 7
 python scripts/audits/run_all.py --quick

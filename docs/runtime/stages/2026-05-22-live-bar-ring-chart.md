@@ -12,7 +12,7 @@ scope_lock:
   - tests/test_trading_app/test_bar_persister.py
   - tests/test_trading_app/test_bot_dashboard_sse.py
   - tests/test_trading_app/test_recover_ring.py
-implementation_status: IMPLEMENTATION
+implementation_status: CLOSED_FOR_SINGLE_COPY_PILOT
 closed_note: |
   Implementation: 2 commits — a7d0e4c5 base + 6d5c248b audit-fix follow-up.
   Scope deviation: `data/live_bars/.gitignore` listed in scope_lock was NOT
@@ -41,6 +41,13 @@ closed_note: |
   intentionally deferred. Will mark CLOSED after the next --live debut
   confirms (a) fresh candle within 90s of session start, (b) ring file
   deleted on clean shutdown, (c) chart falls back to gold.db post-session.
+
+  2026-05-30 single-copy pilot supersede: CLOSED_FOR_SINGLE_COPY_PILOT, not
+  full CLOSED. This stage no longer blocks the `topstep_50k_mnq_auto`
+  single-account pilot because the operator-only smoke remains explicitly
+  deferred and the live launch path still runs ring freshness/startup preflight
+  before broker routing. Full CLOSED still requires the original live-session
+  evidence above.
 
   2026-05-23 Codex smoke attempt: NOT CLOSED. Signal-only preflight failed
   before a smoke session could start because ProjectX auth was missing

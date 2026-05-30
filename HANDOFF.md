@@ -12,28 +12,18 @@
 - **Summary:** Merged `origin/main` into `codex/plugin-routing-grounding` and resolved the HANDOFF-only conflict. Main's live-readiness automation summary remains current; this branch adds cross-tool plugin/data routing, automatic 2P targeted grounding, `/resource` and `/lit` local-corpus grounding, research/fetch source separation, PDF/OCR/literature coverage checks, and matching Claude/Codex prompt hooks.
 
 ## Last Session
-- **Tool:** Codex
+- **Tool:** Claude Code
 - **Date:** 2026-05-30
-- **Commit:** codex/plugin-routing-grounding - chore(codex): route plugins and grounding automatically
-- **Files changed:** 18 files
-  - `.claude/hooks/plugin-router.py`
-  - `.claude/hooks/targeted-grounding-router.py`
-  - `.claude/rules/auto-skill-routing.md`
-  - `.claude/rules/plugin-routing.md`
-  - `.claude/rules/targeted-grounding.md`
-  - `.claude/settings.json`
-  - `.codex/COMMANDS.md`
-  - `.codex/INTEGRATIONS.md`
-  - `.codex/PLUGIN_ROUTING.md`
-  - `.codex/STARTUP.md`
-  - `.codex/TARGETED_GROUNDING.md`
-  - `.codex/WORKFLOWS.md`
-  - `.codex/hooks/session_start.py`
-  - `.codex/hooks/user_prompt_submit_grounding.py`
-  - `HANDOFF.md`
-  - `scripts/tools/check_literature_coverage.py`
-  - `scripts/tools/check_pdf_tooling.py`
-  - `tests/test_hooks/test_targeted_grounding_router.py`
+- **Commit:** 1cc7f4a1 — fix(live): ralph iter 213 — lifecycle-block silent-fail + readiness effective-copies
+- **Files changed:** 8 files
+  - `scripts/run_live_session.py`
+  - `scripts/tools/live_readiness_report.py`
+  - `scripts/tools/refresh_control_state.py`
+  - `tests/test_scripts/test_run_live_session_preflight.py`
+  - `tests/test_tools/test_live_readiness_report.py`
+  - `tests/test_tools/test_refresh_control_state.py`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

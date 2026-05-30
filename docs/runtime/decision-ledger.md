@@ -4,6 +4,20 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `topstep-mnq-single-copy-3-lane-pilot-2026-05-30` - The immediate
+  `topstep_50k_mnq_auto` live-pilot authority is MNQ-only, effective
+  `--copies 1`, and exactly three active lanes:
+  `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`,
+  `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08`, and
+  `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`.
+  `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` is parked from the active allocator
+  book for the pilot because current SR state is `ALARM`; the lane is not
+  deleted, replaced, or re-tuned. Re-entry requires a separate prereg/re-audit
+  package with fresh canonical SR evidence, no active pause, and explicit
+  approval. Profile telemetry maturity is advisory for this express/funded
+  profile, not a hard live blocker; multi-copy live remains blocked until
+  per-shadow software daily-loss/HWM belts exist.
+
 - `track-d-gate0-runner-table-contract-2026-05-29` - Track D Gate 0 design
   blocker is closed at the contract level. Current checkout was refreshed
   against `origin/main` before authoring; `gold.db` read-only measurement found

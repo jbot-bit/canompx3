@@ -21,6 +21,15 @@ class TestHelpers:
         path = worktree_manager.build_worktree_path("claude", "Feature A")
         assert path.parts[-4:] == (".worktrees", "tasks", "claude", "feature-a")
 
+    def test_opencode_worktree_path(self) -> None:
+        path = worktree_manager.build_worktree_path("opencode", "Third POV")
+        assert path.parts[-4:] == (".worktrees", "tasks", "opencode", "third-pov")
+
+    def test_parser_accepts_opencode_tool(self) -> None:
+        parser = worktree_manager.build_parser()
+        args = parser.parse_args(["create", "--tool", "opencode", "--name", "review-a"])
+        assert args.tool == "opencode"
+
 
 class TestParseWorktreeList:
     def test_parses_porcelain_output(self) -> None:
@@ -178,6 +187,36 @@ class TestCreateClose:
         assert path != existing
         meta = json.loads((path / worktree_manager.WORKTREE_META).read_text(encoding="utf-8"))
         assert meta["tool"] == "codex"
+        assert meta["name"] == "foo"
+
+    def test_create_opencode_worktree_same_name_gets_separate_path(self, tmp_path: Path) -> None:
+        existing = tmp_path / ".worktrees" / "tasks" / "codex" / "foo"
+        existing.mkdir(parents=True)
+        (existing / worktree_manager.WORKTREE_META).write_text(
+            '{"tool":"codex","name":"foo","branch":"wt-codex-foo","base_ref":"HEAD"}',
+            encoding="utf-8",
+        )
+        active = [worktree_manager.WorktreeInfo(path=str(existing))]
+
+        def fake_run_git(*args: str, cwd: Path = worktree_manager.PROJECT_ROOT) -> subprocess.CompletedProcess[str]:
+            if args == ("worktree", "prune"):
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args[:3] == ("worktree", "add", "-b"):
+                Path(args[4]).mkdir(parents=True, exist_ok=True)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            raise AssertionError(f"Unexpected git call: {args} cwd={cwd}")
+
+        with (
+            patch.object(worktree_manager, "WORKTREE_ROOT", tmp_path / ".worktrees"),
+            patch.object(worktree_manager, "list_worktrees", return_value=active),
+            patch.object(worktree_manager, "_run_git", side_effect=fake_run_git),
+        ):
+            path = worktree_manager.create_worktree("opencode", "foo", purpose="Third POV build")
+
+        assert path == tmp_path / ".worktrees" / "tasks" / "opencode" / "foo"
+        assert path != existing
+        meta = json.loads((path / worktree_manager.WORKTREE_META).read_text(encoding="utf-8"))
+        assert meta["tool"] == "opencode"
         assert meta["name"] == "foo"
 
     def test_create_worktree_rejects_stale_existing_path(self, tmp_path: Path) -> None:
