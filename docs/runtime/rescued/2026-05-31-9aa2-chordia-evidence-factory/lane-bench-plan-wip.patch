@@ -1,0 +1,120 @@
+diff --git a/docs/superpowers/plans/2026-05-30-lane-bench-state-machine.md b/docs/superpowers/plans/2026-05-30-lane-bench-state-machine.md
+index 9185a68f..e16b9300 100644
+--- a/docs/superpowers/plans/2026-05-30-lane-bench-state-machine.md
++++ b/docs/superpowers/plans/2026-05-30-lane-bench-state-machine.md
+@@ -16,7 +16,7 @@
+ - Create: `scripts/tools/lane_bench_state.py`
+ - Test: `tests/test_tools/test_lane_bench_state.py`
+ 
+-- [ ] **Step 1: Write failing tests**
++- [x] **Step 1: Write failing tests**
+ 
+ ```python
+ from scripts.tools import chordia_unlock_batch as cub
+@@ -89,13 +89,13 @@ def test_blockers_precede_missing_chordia():
+     ]
+ ```
+ 
+-- [ ] **Step 2: Run tests to verify red**
++- [x] **Step 2: Run tests to verify red**
+ 
+ Run: `python -m pytest tests/test_tools/test_lane_bench_state.py -q`
+ 
+ Expected: import error because `scripts.tools.lane_bench_state` does not exist.
+ 
+-- [ ] **Step 3: Implement classifier**
++- [x] **Step 3: Implement classifier**
+ 
+ Create dataclass `BenchRow` with fields: rank, strategy_id, state, primary_blocker, next_action, instrument, session, orb_minutes, entry_model, rr_target, filter_type, trailing_expr, trailing_n, annual_r_estimate, chordia_verdict, c8_oos_status, family_priority, active_in_profile.
+ 
+@@ -110,7 +110,7 @@ Implement `build_bench_rows(candidates, allowed_instruments, allowed_sessions, a
+ 7. `PASS_CHORDIA` -> `ALLOCATOR_ELIGIBLE_BENCH`.
+ 8. `PASS_PROTOCOL_A` -> `ALLOCATOR_ELIGIBLE_BENCH` with 1-contract action.
+ 
+-- [ ] **Step 4: Run focused tests**
++- [x] **Step 4: Run focused tests**
+ 
+ Run: `python -m pytest tests/test_tools/test_lane_bench_state.py -q`
+ 
+@@ -122,11 +122,11 @@ Expected: all tests pass.
+ - Modify: `scripts/tools/lane_bench_state.py`
+ - Test: `tests/test_tools/test_lane_bench_state.py`
+ 
+-- [ ] **Step 1: Add report/artifact tests**
++- [x] **Step 1: Add report/artifact tests**
+ 
+ Test that `render_report()` includes `read-only`, `state counts`, and does not claim live mutation.
+ 
+-- [ ] **Step 2: Implement CLI**
++- [x] **Step 2: Implement CLI**
+ 
+ CLI flags:
+ 
+@@ -136,7 +136,7 @@ python scripts/tools/lane_bench_state.py --profile topstep_50k_mnq_auto --rebala
+ 
+ The CLI reads `compute_lane_scores()`, applies live-tradeability and C8 gates, classifies rows, writes `manifest.json`, `bench.csv`, and `report.md`.
+ 
+-- [ ] **Step 3: Verify CLI**
++- [x] **Step 3: Verify CLI**
+ 
+ Run:
+ 
+@@ -154,10 +154,56 @@ Expected: focused tests, ruff, py_compile pass; artifact manifest says no live m
+ **Files:**
+ - Modify: `HANDOFF.md`
+ 
+-- [ ] **Step 1: Add compact baton line**
++- [x] **Step 1: Add compact baton line**
+ 
+ Record the new `lane_bench_state` tool and artifact path. State explicitly that it is a read-only classifier, not deployment authority.
+ 
+-- [ ] **Step 2: Final verification snapshot**
++- [x] **Step 2: Final verification snapshot**
++
++### Task 4: Chordia Evidence Factory Follow-Up
++
++**Files:**
++- Create: `scripts/tools/chordia_evidence_factory.py`
++- Test: `tests/test_tools/test_chordia_evidence_factory.py`
++- Artifact: `artifacts/research/chordia_evidence_factory_2026_05_31/`
++
++- [x] **Step 1: Add failing tests**
++
++Covered default-stop prereg draft readiness, non-default-stop blocking, no-theory strict draft shape, and result-MD parsing into audit-log proposals.
++
++- [x] **Step 2: Implement factory**
++
++Added a proposal-only CLI that consumes `bench.csv`, filters `EXACT_LANE_READY_FOR_REPLAY` + `MISSING_CHORDIA`, writes `prereg_drafts/`, `run_manifest.csv`, `manifest.json`, `report.md`, and `audit_log_proposal.yaml`.
++
++- [x] **Step 3: Preserve strict runner boundary**
++
++`*_S075` and other non-default stop lanes are `BLOCKED_NON_DEFAULT_STOP` by default because `research/chordia_strict_unlock_v1.py` audits default-stop `orb_outcomes` only. The next action is an outcome-builder rebuild plus stop-specific runner, not a fake Chordia replay.
++
++- [x] **Step 4: Generate artifact and verify**
++
++Generated `artifacts/research/chordia_evidence_factory_2026_05_31/` with 12 priority-0 work items: 7 `PREREG_DRAFT_READY`, 5 `BLOCKED_NON_DEFAULT_STOP`, and 0 audit-log proposals because no measured result MDs were supplied.
++
++### Task 5: Full Queue Batch Planner
++
++**Files:**
++- Modify: `scripts/tools/chordia_evidence_factory.py`
++- Modify: `tests/test_tools/test_chordia_evidence_factory.py`
++- Artifact: `artifacts/research/chordia_evidence_factory_full_2026_05_31/`
++
++- [x] **Step 1: Add failing tests**
++
++Covered `limit=0` full-queue semantics, deterministic batch shard partitioning, blocked-row visibility inside shards, command shard emission, and loader-clean generated drafts.
++
++- [x] **Step 2: Implement full-queue planning**
++
++`limit=0` now means uncapped. `plan_batch_shards()` partitions all work items into deterministic `batch_###` shards and `write_factory_artifacts()` emits `batch_summary.csv`, per-batch CSV manifests, and proposal-only PowerShell command shards.
++
++- [x] **Step 3: Fix generated prereg schema**
++
++Generated drafts now include the conditional-role `role` block and hypothesis-level scope/filter fields required by `trading_app.hypothesis_loader`. Verification loaded all 479 generated full-queue draft preregs with zero failures.
++
++- [x] **Step 4: Generate full artifact**
++
++Generated `artifacts/research/chordia_evidence_factory_full_2026_05_31/` from the current bench CSV with all 708 exact replay rows: 479 `PREREG_DRAFT_READY`, 229 `BLOCKED_NON_DEFAULT_STOP`, 29 batches at batch size 25, and no audit-log proposals because no measured result MDs were supplied.
+ 
+ Run `git status --short` and report touched files plus verification commands.
