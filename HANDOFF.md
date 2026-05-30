@@ -16,7 +16,7 @@
 ## Last Session
 - **Tool:** Unknown
 - **Date:** 2026-05-31
-- **Commit:** 6e2b9dce — docs(runtime): preserve rescued WIP artifacts
+- **Commit:** 992a3262 — docs(runtime): preserve rescued WIP artifacts
 - **Files changed:** 16 files
   - `HANDOFF.md`
   - `docs/runtime/rescued/2026-05-31-3de6-webhook-wip/RESCUE-MANIFEST.md`
