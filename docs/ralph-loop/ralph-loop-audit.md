@@ -3,7 +3,48 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 212
+## Last iteration: 214
+
+## RALPH AUDIT — Iteration 214 (COMPLETED)
+## Date: 2026-05-31
+## Infrastructure Gates: 152 drift checks PASS (fast + skip-crg-advisory); 247 tests PASS; ruff PASS
+## Scope: trading_app/live/session_orchestrator.py — stale re-audit (hash changed since iter 182, 3 commits since ea0d4fec)
+
+---
+
+## Full-File Audit Results
+
+### trading_app/live/session_orchestrator.py — SCANNED (stale re-audit)
+
+Stale re-audit covering 3 commits since iter 182 (last audited):
+- `ea0d4fec`: NQ-mini symbol substitution, dormant-only wiring
+- `1cc7f4a1`: lifecycle-block silent-fail fix + readiness effective-copies
+- `a877fc89` (iter 213): broker-factory bypass in reconnect + TradovateContracts AttributeError
+
+**All iter-213 fixes verified:**
+- `_contracts_cls` stored at __init__ line 326; used at reconnect line 3835 — VERIFIED correct.
+- All three contracts classes accept `**kwargs` so `demo=self.demo` is absorbed safely — VERIFIED via grep.
+- Lifecycle block fail-open → `log.critical` + `_notify` at line 1132-1143 — VERIFIED correct behavior.
+- `LIVE_SIGNALS_DIR` from `pipeline.paths` (was `Path(__file__).parent.parent.parent`) at line 297 — canonical path migration VERIFIED.
+
+**ACCEPTABLE finding (not fixed):**
+- `_close_min_et or 0` at lines 1362 and 3701: falsy-zero pattern, but produces correct results in all cases. `_close_min_et` is `int | None`; when `None` → `0` (correct); when `0` (e.g., 16:00 close) → `0` (correct); when positive int → itself (correct). ACCEPTABLE per pattern 3 (style/preference difference with no correctness impact; no capital path impacted).
+
+**Seven Sins Scan — iteration 214:**
+- S1 (Silent failure): `_publish_state` `except Exception: pass` is intentional (dashboard state is best-effort, documented). `_minutes_to_close_et` `except Exception: return None` is defensive-safe. CLEAN.
+- S2 (Fail-open): Lifecycle block failure now emits `log.critical` + `_notify` — CLEAN (fixed iter 213).
+- S3 (Canonical violation): No hardcoded instruments, sessions, DB paths, costs, chordia verdicts. `LIVE_SIGNALS_DIR` from `pipeline.paths`. CLEAN.
+- S4-S7: No spec violations, no look-ahead bias, no research stats inline, no holdout date hardcoding. CLEAN.
+- Async safety: `time.sleep` only in `post_session()` (post-asyncio.run(), no event loop — documented intentional). CLEAN.
+- State persistence gap: `_kill_switch_fired` → `_safety_state.save()` on `_fire_kill_switch()`. CLEAN.
+- Contract drift: `_contracts_cls` contract preserved, `**kwargs` absorbs broker-specific params. CLEAN.
+
+**Domain-specific checks:**
+- ORB window timing: No `break_ts` fallback, no hardcoded orb_minutes. CLEAN.
+- E0 fill-on-touch: No `close_outside`/`closed_outside` references. CLEAN.
+- Holdout date: No `date(2026` literals in trading code. CLEAN.
+
+---
 
 ## RALPH AUDIT — Iteration 212 (COMPLETED)
 ## Date: 2026-05-30
@@ -68,9 +109,12 @@ call sites with the canonical function call.
 - trading_app/eligibility/builder.py (iter 211 — full scan; 1 annotation finding fixed)
 - trading_app/opportunity_awareness.py (iter 212 — full scan; 1 canonical violation fixed)
 - trading_app/allocation_promotion.py (iter 212 — batch fix; 1 canonical violation fixed)
+- trading_app/live/session_orchestrator.py (iter 214 — stale re-audit; 0 findings, ACCEPTABLE falsy-zero LOW)
 
 ## Next Iteration Targets
 
-Priority 0 — Open deferred HIGH/CRITICAL: NONE.
-Priority 2 — Stale re-audits: `trading_app/live/session_orchestrator.py` (last audited iter 182, 15+ commits since May 1, critical centrality, 8+ importers). High value — it's the live trading engine and has had significant changes (kill-switch fix, NQ-mini wiring, circuit breaker, bar-ring, etc.).
+Priority 0 — Open deferred HIGH/CRITICAL: NONE (SHADOW-MLL is MEDIUM, intentional design, dormant).
+Priority 1 — Unscanned critical/high files: `pipeline/build_daily_features.py` (critical centrality, 82 importers, last audited iter 189 — 5 audits but may have changed). Or `trading_app/execution_engine.py` (critical, not listed in centrality JSON but high usage).
+Priority 2 — Stale re-audits: `pipeline/asset_configs.py` (82 importers, critical centrality — check last scan date vs recent instrument changes). `trading_app/live/session_orchestrator.py` freshly audited iter 214.
+Priority 3 — Unscanned medium files: `trading_app/conditional_overlays.py` (new module referenced in session_orchestrator, unscanned).
 Priority 1 — Unscanned high files: `pipeline/paths.py` already audited iter 207 (3 audits). `trading_app/live/session_orchestrator.py` is Priority 2 stale re-audit but ranks highest.
