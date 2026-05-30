@@ -4,8 +4,9 @@ metadata:
   slug: 2026-05-31-adaptive-stops-h0-mfe-mae-symmetry-diagnostic-v1
   owner: canompx3
   created_at: 2026-05-31
-  status: DRAFT  # human review gates promotion to LOCKED. NOT runnable until
-                 # promoted out of drafts/ and committed (do_not_run_until_committed).
+  status: LOCKED  # promoted out of drafts/ after review 2026-05-31. Script/pre-reg
+                  # drift checked (gate=direct EV, no symmetry band, no 75% constant,
+                  # no lookahead, IS-only tuning); runnable.
   supersedes: none
   parent_memo: >
     Phase 0 memo "Adaptive / Condition-Dependent Stops + Liquidity-Sweep Logic"
@@ -53,10 +54,14 @@ metadata:
     - docs/STRATEGY_BLUEPRINT.md  # NO-GO §5: stop-geometry-conditioned-on-level-
                                   # distance NOT in registry; vol-regime param
                                   # switching IS (blueprint:287, DEAD).
-  committed_sha: "TO_FILL_AFTER_COMMIT"  # research-truth-protocol §2a placeholder
-  head_sha_at_draft: "RESOLVE_AT_LOCK"  # sibling rebase moved HEAD mid-session;
-                                        # resolve via `git rev-parse HEAD` at lock,
-                                        # NOT from memory (branch-flip-protection).
+  committed_sha: "filled_post_promotion"  # the promotion commit's own SHA is
+                                          # unknowable pre-commit; the result doc
+                                          # (docs/audit/results/2026-05-31-...md)
+                                          # records the actual landing SHA. Not a
+                                          # gate (no drift check reads this field).
+  head_sha_at_draft: "1bba95d7"  # parent the pre-reg sits on, resolved via
+                                 # `git rev-parse HEAD` at lock 2026-05-31
+                                 # (branch-flip-protection: not from memory).
   do_not_run_until_committed: true  # hard gate
   scope_note: >
     K=0 read-only descriptive diagnostic. For each deployed lane x entry model,
@@ -337,4 +342,4 @@ pre_reg_checklist:
   - "[x] MGC horizon-excluded with reason"
   - "[x] Existing 0.75 prop re-sim readout mandated BEFORE any new sweep"
   - "[x] Holdout bound via Python import; OOS monitoring-only"
-  - "[ ] Human review before promotion to LOCKED (DRAFT gate)"
+  - "[x] Human review before promotion to LOCKED (DRAFT gate) — reviewed + promoted 2026-05-31"
