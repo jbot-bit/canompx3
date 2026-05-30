@@ -67,21 +67,21 @@ class TestInstanceLock:
         """Multi-instrument: each instrument gets its own lock, all released together."""
         import trading_app.live.instance_lock as mod
 
-        acquire_instance_lock("MGC")
-        acquire_instance_lock("MNQ")
-        acquire_instance_lock("MES")
+        acquire_instance_lock("TEST_MGC")
+        acquire_instance_lock("TEST_MNQ")
+        acquire_instance_lock("TEST_MES")
 
         assert len(mod._locks) == 3
-        assert _lock_file_for("MGC").exists()
-        assert _lock_file_for("MNQ").exists()
-        assert _lock_file_for("MES").exists()
+        assert _lock_file_for("TEST_MGC").exists()
+        assert _lock_file_for("TEST_MNQ").exists()
+        assert _lock_file_for("TEST_MES").exists()
 
         release_instance_lock()
 
         assert len(mod._locks) == 0
-        assert not _lock_file_for("MGC").exists()
-        assert not _lock_file_for("MNQ").exists()
-        assert not _lock_file_for("MES").exists()
+        assert not _lock_file_for("TEST_MGC").exists()
+        assert not _lock_file_for("TEST_MNQ").exists()
+        assert not _lock_file_for("TEST_MES").exists()
 
     def test_reacquire_same_instrument_is_noop(self):
         """Acquiring the same instrument twice should not fail."""

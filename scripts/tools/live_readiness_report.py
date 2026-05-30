@@ -62,7 +62,7 @@ _ensure_repo_python()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.paths import GOLD_DB_PATH  # noqa: E402
+from pipeline.paths import CANONICAL_RUNTIME_ROOT, GOLD_DB_PATH, LIVE_SIGNALS_DIR  # noqa: E402
 from trading_app.lifecycle_state import read_lifecycle_state  # noqa: E402
 from trading_app.live.telemetry_maturity import (  # noqa: E402
     VERDICT_MATURE,
@@ -82,7 +82,20 @@ from trading_app.validated_shelf import deployable_validated_relation  # noqa: E
 # Stage 1b authority inversion).
 DEFAULT_ALLOCATION_PATH = legacy_lane_allocation_path()
 DEFAULT_TELEMETRY_INSTRUMENT = "MNQ"
-DEFAULT_SIGNALS_DIR = PROJECT_ROOT
+DEFAULT_SIGNALS_DIR = LIVE_SIGNALS_DIR
+AUTOMATION_TASKS: tuple[dict[str, str], ...] = (
+    {
+        "task_name": "CanonMPX_DailyRefresh",
+        "role": "daily_data_refresh",
+        "log_path": "logs/daily_refresh.log",
+    },
+    {
+        "task_name": "CanonMPX_TopstepTelemetry_SignalOnly",
+        "role": "topstep_signal_only_telemetry",
+        "log_path": "logs/telemetry_accrual_signal_only.log",
+    },
+)
+_RUNNING_TASK_RESULTS = {267009, 4294967295}
 LIVE_STAGE_PATHS: tuple[str, ...] = (
     "docs/runtime/stages/2026-05-22-live-bar-ring-chart.md",
     "docs/runtime/stages/2026-05-26-ring-orphan-startup-sweep.md",
@@ -122,6 +135,156 @@ def _git_branch(root: Path) -> str | None:
         return None
     branch = result.stdout.strip()
     return branch or None
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def _read_log_freshness(log_path: Path, last_run_time: datetime | None) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "path": str(log_path),
+        "exists": log_path.exists(),
+        "mtime": None,
+        "fresh_after_last_run": None,
+        "tail_hint": None,
+    }
+    if not log_path.exists():
+        return summary
+
+    try:
+        mtime = datetime.fromtimestamp(log_path.stat().st_mtime, tz=UTC)
+        summary["mtime"] = mtime.isoformat()
+        if last_run_time is not None:
+            summary["fresh_after_last_run"] = mtime >= last_run_time
+        tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-30:]
+    except OSError as exc:
+        summary["tail_hint"] = f"unreadable: {exc}"
+        return summary
+
+    for line in reversed(tail):
+        stripped = line.strip()
+        if stripped:
+            summary["tail_hint"] = stripped[:240]
+            break
+    return summary
+
+
+def _query_windows_scheduled_task(task_name: str) -> dict[str, Any]:
+    escaped_name = task_name.replace("'", "''")
+    command = (
+        "$ErrorActionPreference='Stop'; "
+        f"$task=Get-ScheduledTask -TaskName '{escaped_name}'; "
+        f"$info=Get-ScheduledTaskInfo -TaskName '{escaped_name}'; "
+        "[pscustomobject]@{"
+        "task_name=$task.TaskName;"
+        "state=[string]$task.State;"
+        "last_run_time=if($info.LastRunTime){$info.LastRunTime.ToUniversalTime().ToString('o')}else{$null};"
+        "next_run_time=if($info.NextRunTime){$info.NextRunTime.ToUniversalTime().ToString('o')}else{$null};"
+        "last_task_result=[uint32]$info.LastTaskResult"
+        "} | ConvertTo-Json -Compress"
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "").strip() or f"task query failed: {task_name}")
+    data = json.loads(result.stdout)
+    if not isinstance(data, dict):
+        raise RuntimeError(f"unexpected scheduled-task payload for {task_name}")
+    return data
+
+
+def _classify_scheduled_task_health(task: dict[str, Any]) -> str:
+    if task.get("available") is not True:
+        return "UNAVAILABLE"
+
+    result = task.get("last_task_result")
+    state = str(task.get("state") or "").upper()
+    if result == 0:
+        return "OK"
+    if state == "RUNNING" or result in _RUNNING_TASK_RESULTS:
+        log_summary = task.get("log") if isinstance(task.get("log"), dict) else {}
+        if log_summary.get("fresh_after_last_run") is True:
+            return "RUNNING_WITH_FRESH_LOG"
+        return "RUNNING_AWAITING_FRESH_LOG"
+    return "FAILED"
+
+
+def _load_automation_health(runtime_root: Path = CANONICAL_RUNTIME_ROOT) -> dict[str, Any]:
+    tasks: list[dict[str, Any]] = []
+    if os.name != "nt":
+        return {
+            "available": False,
+            "platform": os.name,
+            "overall": "UNAVAILABLE",
+            "tasks": [],
+            "notes": ["Windows Task Scheduler health is only queried on Windows."],
+        }
+
+    for spec in AUTOMATION_TASKS:
+        task_name = spec["task_name"]
+        log_path = runtime_root / spec["log_path"]
+        task: dict[str, Any] = {
+            "task_name": task_name,
+            "role": spec["role"],
+            "available": False,
+            "state": None,
+            "last_run_time": None,
+            "next_run_time": None,
+            "last_task_result": None,
+            "log": None,
+            "status": "UNAVAILABLE",
+            "error": None,
+        }
+        try:
+            raw = _query_windows_scheduled_task(task_name)
+            task.update(
+                {
+                    "available": True,
+                    "state": raw.get("state"),
+                    "last_run_time": raw.get("last_run_time"),
+                    "next_run_time": raw.get("next_run_time"),
+                    "last_task_result": int(raw["last_task_result"])
+                    if raw.get("last_task_result") is not None
+                    else None,
+                }
+            )
+        except (OSError, subprocess.TimeoutExpired, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            task["error"] = str(exc)
+
+        last_run_time = _parse_iso_datetime(task.get("last_run_time"))
+        task["log"] = _read_log_freshness(log_path, last_run_time)
+        task["status"] = _classify_scheduled_task_health(task)
+        tasks.append(task)
+
+    statuses = {str(task.get("status")) for task in tasks}
+    if any(status in {"FAILED", "UNAVAILABLE"} for status in statuses):
+        overall = "ACTION_REQUIRED"
+    elif any(status == "RUNNING_AWAITING_FRESH_LOG" for status in statuses):
+        overall = "VERIFY_LOG_FRESHNESS"
+    else:
+        overall = "OK"
+    return {
+        "available": True,
+        "platform": os.name,
+        "runtime_root": str(runtime_root),
+        "overall": overall,
+        "tasks": tasks,
+    }
 
 
 def _load_validated_strategy_ids(db_path: Path) -> list[str]:
@@ -316,6 +479,7 @@ def _normalize_telemetry_maturity(
             "signal_files_scanned": telemetry.signal_files_scanned,
             "records_scanned": telemetry.records_scanned,
             "records_qualifying": telemetry.records_qualifying,
+            "signals_dir": str(DEFAULT_SIGNALS_DIR),
         }
 
     trading_days = telemetry.get("trading_days") or []
@@ -332,6 +496,7 @@ def _normalize_telemetry_maturity(
         "signal_files_scanned": int(telemetry.get("signal_files_scanned") or 0),
         "records_scanned": int(telemetry.get("records_scanned") or 0),
         "records_qualifying": int(telemetry.get("records_qualifying") or 0),
+        "signals_dir": str(DEFAULT_SIGNALS_DIR),
     }
 
 
@@ -432,6 +597,7 @@ def _build_strict_zero_warn_summary(
     telemetry_maturity: dict[str, Any],
     live_stage_acceptance: dict[str, Any],
     profile_launch: dict[str, Any],
+    automation_health: dict[str, Any],
 ) -> dict[str, Any]:
     blockers: list[str] = []
     warnings: list[str] = []
@@ -519,6 +685,14 @@ def _build_strict_zero_warn_summary(
             f"Profile copies>1 without per-shadow software loss protection: copies={profile_launch.get('copies')}"
         )
 
+    if automation_health.get("available") is True and automation_health.get("overall") != "OK":
+        unhealthy = [
+            f"{task.get('task_name')}={task.get('status')}"
+            for task in automation_health.get("tasks", [])
+            if task.get("status") != "OK"
+        ]
+        warnings.append("Automation health not green: " + ", ".join(unhealthy))
+
     return {
         "green": not blockers,
         "blockers": blockers,
@@ -578,6 +752,7 @@ def build_live_readiness_report(
     }
     telemetry_maturity = _load_telemetry_maturity_summary(resolved_profile_id, active_lanes, profile_lanes)
     live_stage_acceptance = _evaluate_live_stage_acceptance()
+    automation_health = _load_automation_health()
     strict_zero_warn = _build_strict_zero_warn_summary(
         deployment_summary=deployment_summary,
         criterion11=lifecycle.get("criterion11"),
@@ -587,6 +762,7 @@ def build_live_readiness_report(
         telemetry_maturity=telemetry_maturity,
         live_stage_acceptance=live_stage_acceptance,
         profile_launch=profile_launch,
+        automation_health=automation_health,
     )
 
     return {
@@ -594,6 +770,7 @@ def build_live_readiness_report(
         "profile_id": resolved_profile_id,
         "git_branch": _git_branch(PROJECT_ROOT),
         "git_head": _git_head(PROJECT_ROOT),
+        "runtime_root": str(CANONICAL_RUNTIME_ROOT),
         "db_path": str(db_path),
         "allocation_path": str(allocation_path),
         "deployment_summary": deployment_summary,
@@ -606,6 +783,7 @@ def build_live_readiness_report(
         "allocator_summary": allocator_summary,
         "telemetry_maturity": telemetry_maturity,
         "live_stage_acceptance": live_stage_acceptance,
+        "automation_health": automation_health,
         "profile_launch": profile_launch,
         "strict_zero_warn": strict_zero_warn,
         "conditional_overlays": lifecycle.get("conditional_overlays"),
@@ -619,6 +797,7 @@ def _render_text(report: dict[str, Any]) -> str:
     allocator = report["allocator_summary"] or {}
     telemetry = report.get("telemetry_maturity") or {}
     live_stage_acceptance = report.get("live_stage_acceptance") or {}
+    automation_health = report.get("automation_health") or {}
     profile_launch = report.get("profile_launch") or {}
     strict_zero_warn = report.get("strict_zero_warn") or {}
 
@@ -675,8 +854,17 @@ def _render_text(report: dict[str, Any]) -> str:
             f"records={telemetry.get('records_scanned')} "
             f"qualifying={telemetry.get('records_qualifying')}"
         ),
+        (f"Automation: overall={automation_health.get('overall')} tasks={len(automation_health.get('tasks', []))}"),
         "Live stages:",
     ]
+
+    for task in automation_health.get("tasks", []):
+        lines.append(
+            "  - "
+            f"{task.get('task_name')} status={task.get('status')} "
+            f"state={task.get('state')} last={task.get('last_run_time')} "
+            f"result={task.get('last_task_result')}"
+        )
 
     for stage in live_stage_acceptance.get("stages", []):
         lines.append(f"  - {stage.get('path')} green={stage.get('green')} status={stage.get('status_text') or '-'}")
@@ -726,6 +914,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
     allocator = report["allocator_summary"] or {}
     telemetry = report.get("telemetry_maturity") or {}
     live_stage_acceptance = report.get("live_stage_acceptance") or {}
+    automation_health = report.get("automation_health") or {}
     profile_launch = report.get("profile_launch") or {}
     strict_zero_warn = report.get("strict_zero_warn") or {}
 
@@ -788,11 +977,22 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"- Files scanned: `{telemetry.get('signal_files_scanned')}`",
         f"- Records scanned: `{telemetry.get('records_scanned')}`",
         f"- Records qualifying: `{telemetry.get('records_qualifying')}`",
+        f"- Signals dir: `{telemetry.get('signals_dir')}`",
         "",
-        "## Live stage acceptance",
+        "## Automation",
         "",
+        f"- Overall: `{automation_health.get('overall')}`",
+        f"- Runtime root: `{automation_health.get('runtime_root')}`",
     ]
 
+    for task in automation_health.get("tasks", []):
+        lines.append(
+            f"- `{task.get('task_name')}` status=`{task.get('status')}` "
+            f"state=`{task.get('state')}` last=`{task.get('last_run_time')}` "
+            f"result=`{task.get('last_task_result')}`"
+        )
+
+    lines.extend(["", "## Live stage acceptance", ""])
     for stage in live_stage_acceptance.get("stages", []):
         lines.append(f"- `{stage.get('path')}` green=`{stage.get('green')}` status=`{stage.get('status_text') or '-'}`")
 

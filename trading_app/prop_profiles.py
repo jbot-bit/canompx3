@@ -514,7 +514,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         is_express_funded=True,  # Topstep XFA — active deployment
         firm="topstep",
         account_size=50_000,
-        copies=2,  # Start with 1-2 Express, scale to 5 after proving loop
+        copies=1,  # Single-account pilot until per-shadow loss belts exist
         # Per-account daily-loss belt: $450 = 22.5% of the $2K MLL, under
         # Carver Table 20's ≤25% ceiling, = the ~1% tail of the real 2026
         # per-trade risk distribution (100k-day Monte Carlo). Halts a genuine
