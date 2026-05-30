@@ -1,7 +1,9 @@
 """Tests for trading_app.mcp_server (no DB required)."""
 
+import json
 from unittest.mock import MagicMock, patch
 
+import duckdb
 import pandas as pd
 import pytest
 
@@ -10,6 +12,10 @@ from trading_app.mcp_server import (
     MAX_MCP_ROWS,
     _generate_warnings,
     _get_ai_research_packet,
+    _get_db_access_policy,
+    _get_db_freshness,
+    _get_db_health,
+    _get_db_snapshot_manifest,
     _get_strategy_fitness,
     _list_available_queries,
     _query_trading_db,
@@ -197,3 +203,85 @@ class TestAiResearchPacket:
         result = _get_ai_research_packet(task="Plan repo research", profile="deepseek_planning")
         assert result["error"] == "missing required env"
         assert result["profile"] == "deepseek_planning"
+
+
+def _make_health_db(path):
+    con = duckdb.connect(str(path))
+    con.execute("CREATE TABLE daily_features (trading_day DATE, symbol VARCHAR)")
+    con.execute("INSERT INTO daily_features VALUES ('2026-05-29', 'MNQ')")
+    con.execute("CREATE TABLE validated_setups (strategy_id VARCHAR, instrument VARCHAR)")
+    con.execute("INSERT INTO validated_setups VALUES ('S1', 'MNQ')")
+    con.close()
+
+
+class TestDbOperationalTools:
+    def test_db_health_reports_read_only_open_and_horizon(self, tmp_path):
+        db_path = tmp_path / "gold.db"
+        _make_health_db(db_path)
+
+        result = _get_db_health(db_path=db_path)
+
+        assert result["status"] == "OK"
+        assert result["db_path"] == str(db_path)
+        assert result["exists"] is True
+        assert result["read_only_open_ok"] is True
+        assert result["access"]["write_enabled"] is False
+        assert result["horizon"]["daily_features"]["max_trading_day"] == "2026-05-29"
+
+    def test_db_health_fails_closed_when_missing(self, tmp_path):
+        result = _get_db_health(db_path=tmp_path / "missing.db")
+
+        assert result["status"] == "MISSING"
+        assert result["exists"] is False
+        assert result["read_only_open_ok"] is False
+        assert "missing" in result["open_error"].lower()
+
+    def test_db_freshness_reports_missing_tables_without_silent_success(self, tmp_path):
+        db_path = tmp_path / "gold.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("CREATE TABLE daily_features (trading_day DATE, symbol VARCHAR)")
+        con.execute("INSERT INTO daily_features VALUES ('2026-05-29', 'MNQ')")
+        con.close()
+
+        result = _get_db_freshness(db_path=db_path)
+
+        assert result["status"] == "OK"
+        assert result["tables"]["daily_features"]["exists"] is True
+        assert result["tables"]["daily_features"]["row_count"] == 1
+        assert result["tables"]["orb_outcomes"]["exists"] is False
+
+    def test_db_access_policy_is_local_read_only_and_write_disabled(self):
+        policy = _get_db_access_policy()
+
+        assert policy["default_transport"] == "stdio"
+        assert policy["http_enabled"] is False
+        assert policy["write_enabled"] is False
+        assert policy["raw_sql_writes_enabled"] is False
+        assert policy["github_live_db_access"] == "forbidden"
+
+    def test_snapshot_manifest_lists_only_valid_approved_manifests(self, tmp_path):
+        root = tmp_path / "snapshots"
+        good = root / "snap-a"
+        good.mkdir(parents=True)
+        (good / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "manifest_version": 1,
+                    "snapshot_id": "snap-a",
+                    "generated_at_utc": "2026-05-30T00:00:00+00:00",
+                    "source_db": {"path": "C:/repo/gold.db", "mtime_utc": "2026-05-29T00:00:00+00:00"},
+                    "tables": {"daily_features": {"row_count": 1}},
+                    "horizon": {"daily_features": {"max_trading_day": "2026-05-29"}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        bad = root / "snap-b"
+        bad.mkdir()
+        (bad / "manifest.json").write_text(json.dumps({"snapshot_id": "snap-b"}), encoding="utf-8")
+
+        result = _get_db_snapshot_manifest(snapshot_root=root)
+
+        assert result["status"] == "OK_WITH_ERRORS"
+        assert [snap["snapshot_id"] for snap in result["snapshots"]] == ["snap-a"]
+        assert result["errors"][0]["snapshot_id"] == "snap-b"

@@ -5,6 +5,10 @@ Exposes read-only tools via stdio (fastmcp):
   - list_available_queries: discover what query templates exist
   - query_trading_db: run a pre-approved SQL template
   - get_strategy_fitness: FIT/WATCH/DECAY/STALE status
+  - get_db_health: path, freshness, read-only open, and lock/missing status
+  - get_db_freshness: table row counts and horizons for approved DB surfaces
+  - get_db_snapshot_manifest: approved remote/GitHub snapshot manifests
+  - get_db_access_policy: explicit local/read-only/no-write policy
   - get_canonical_context: load grounding docs for AI context
   - get_ai_research_packet: build an OpenRouter-grounded research packet
 
@@ -30,6 +34,7 @@ from trading_app.ai.sql_adapter import (
     SQLAdapter,
 )
 from trading_app.config import generate_strategy_warnings
+from trading_app.db_access import db_access_policy, db_freshness, db_health, snapshot_manifest
 from trading_app.strategy_fitness import compute_fitness, compute_portfolio_fitness
 
 DB_PATH = str(GOLD_DB_PATH)
@@ -206,6 +211,26 @@ def _get_ai_research_packet(task: str, profile: str = "deepseek_planning") -> di
         return {"error": str(exc), "task": task, "profile": profile}
 
 
+def _get_db_health(db_path: Path | None = None) -> dict:
+    """Return fail-closed gold.db health for agent/remote sessions."""
+    return db_health(db_path=db_path)
+
+
+def _get_db_freshness(db_path: Path | None = None) -> dict:
+    """Return approved table row counts and horizon timestamps."""
+    return db_freshness(db_path=db_path)
+
+
+def _get_db_snapshot_manifest(snapshot_root: Path | None = None) -> dict:
+    """Return approved local read-snapshot manifests."""
+    return snapshot_manifest(snapshot_root=snapshot_root)
+
+
+def _get_db_access_policy() -> dict:
+    """Return the explicit access policy for the gold-db MCP."""
+    return db_access_policy()
+
+
 # ---------------------------------------------------------------------------
 # MCP server (thin wrappers around core logic)
 # ---------------------------------------------------------------------------
@@ -224,10 +249,13 @@ def _build_server():
             "WORKFLOW: (1) list_available_queries to discover templates, "
             "(2) query_trading_db for strategy lookups/comparisons/raw outcomes, "
             "(3) get_strategy_fitness for rolling regime assessment (FIT/WATCH/DECAY/STALE), "
-            "(4) get_canonical_context to load trading rules before complex analysis, "
-            "(5) get_ai_research_packet for a canonical OpenRouter research packet. "
+            "(4) get_db_health/get_db_access_policy before remote or phone-driven DB work, "
+            "(5) get_db_snapshot_manifest for GitHub/remote read artifacts, "
+            "(6) get_canonical_context to load trading rules before complex analysis, "
+            "(7) get_ai_research_packet for a canonical OpenRouter research packet. "
             "Use instrument parameter to filter (default MGC). "
             "For recent performance, use get_strategy_fitness with rolling_months. "
+            "This MCP is local/read-only: no raw SQL writes, no live DB writes, no GitHub live DB access. "
             "NEVER query orb_outcomes directly without filters — use templates."
         ),
     )
@@ -316,6 +344,30 @@ def _build_server():
             rolling_months=rolling_months,
             summary_only=summary_only,
         )
+
+    @mcp.tool()
+    def get_db_health() -> dict:
+        """Report gold.db path, read-only open status, horizon, and access policy.
+
+        Use this before phone/remote agent work to confirm the session is using
+        the canonical local DB and has not silently lost access.
+        """
+        return _get_db_health()
+
+    @mcp.tool()
+    def get_db_freshness() -> dict:
+        """Report row counts and latest timestamps/dates for approved DB tables."""
+        return _get_db_freshness()
+
+    @mcp.tool()
+    def get_db_snapshot_manifest() -> dict:
+        """List valid local read snapshots approved for GitHub/remote consumers."""
+        return _get_db_snapshot_manifest()
+
+    @mcp.tool()
+    def get_db_access_policy() -> dict:
+        """Return the explicit local/read-only/no-write MCP access policy."""
+        return _get_db_access_policy()
 
     @mcp.tool()
     def get_canonical_context() -> dict:
