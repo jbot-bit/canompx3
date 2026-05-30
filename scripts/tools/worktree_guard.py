@@ -104,7 +104,7 @@ def _iso_age_seconds(iso: str) -> float | None:
     return (datetime.now(UTC) - ts).total_seconds()
 
 
-def _pid_is_alive(pid: int | None) -> bool:
+def _pid_is_alive(pid: int | None, expected_create_time: int | None = None) -> bool:
     """Reliable cross-platform liveness for a recorded ppid.
 
     Windows is the load-bearing case: ``os.kill(pid, 0)`` does NOT reliably
@@ -116,6 +116,10 @@ def _pid_is_alive(pid: int | None) -> bool:
     forever). So on Windows we probe via ``OpenProcess`` and inspect the exit
     code: a live process has exit code STILL_ACTIVE (259); a dead one has any
     other value (or fails to open with a not-found error).
+
+    `expected_create_time` is the low-DWORD of the process's Windows FILETIME at
+    lease-write time. When provided, a mismatch proves PID reuse — the original
+    session is gone even if exit code says STILL_ACTIVE.
 
     POSIX: ``os.kill(pid, 0)`` — ProcessLookupError = dead, PermissionError =
     alive-but-other-user.
@@ -129,7 +133,7 @@ def _pid_is_alive(pid: int | None) -> bool:
         return False
 
     if os.name == "nt":
-        return _pid_is_alive_windows(pid)
+        return _pid_is_alive_windows(pid, expected_create_time=expected_create_time)
 
     try:
         os.kill(pid, 0)
@@ -142,13 +146,55 @@ def _pid_is_alive(pid: int | None) -> bool:
         return True  # POSIX: cannot prove dead → assume alive (no false reclaim)
 
 
-def _pid_is_alive_windows(pid: int) -> bool:
+def _get_process_create_time_windows(pid: int) -> int | None:
+    """Return the Windows process creation time (FILETIME low DWORD) or None on failure.
+
+    Used to detect PID reuse: if the recorded creation time doesn't match the
+    live process's creation time, the PID was recycled and the old session is gone.
+    Returns None on any failure (caller falls back to exit-code check alone).
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return None
+        try:
+            creation = wintypes.FILETIME()
+            exit_ft = wintypes.FILETIME()
+            kernel_ft = wintypes.FILETIME()
+            user_ft = wintypes.FILETIME()
+            ok = kernel32.GetProcessTimes(
+                handle,
+                ctypes.byref(creation),
+                ctypes.byref(exit_ft),
+                ctypes.byref(kernel_ft),
+                ctypes.byref(user_ft),
+            )
+            if not ok:
+                return None
+            return creation.dwLowDateTime  # low 32 bits — sufficient for reuse detection
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception:
+        return None
+
+
+def _pid_is_alive_windows(pid: int, expected_create_time: int | None = None) -> bool:
     """Windows liveness via OpenProcess + GetExitCodeProcess.
 
     Returns False ONLY when we can positively prove the process is gone
     (OpenProcess fails with ERROR_INVALID_PARAMETER == the pid doesn't exist,
     or the process reports a non-STILL_ACTIVE exit code). Any ambiguity →
     True (conservative: never false-reclaim a possibly-live session).
+
+    When `expected_create_time` is provided (from the lease sidecar), it is
+    cross-checked against the live process's creation time. A mismatch means
+    the PID was reused by a different process — the original session is gone.
+    This closes the Windows PID-reuse false-block (adversarial audit HIGH, 2026-05-30).
     """
     try:
         import ctypes
@@ -173,7 +219,16 @@ def _pid_is_alive_windows(pid: int) -> bool:
             ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
             if not ok:
                 return True  # could not read exit code → assume alive
-            return exit_code.value == STILL_ACTIVE
+            if exit_code.value != STILL_ACTIVE:
+                return False  # process has exited
+
+            # Process is running. Cross-check creation time to detect PID reuse.
+            if expected_create_time is not None:
+                live_create = _get_process_create_time_windows(pid)
+                if live_create is not None and live_create != expected_create_time:
+                    return False  # PID reused by a different process → original is gone
+
+            return True
         finally:
             kernel32.CloseHandle(handle)
     except Exception:
@@ -250,7 +305,7 @@ def _build_payload(cwd: Path, pid: int, ppid: int, session_id: str, iso_started:
     wt_root = resolve_worktree_root(cwd) or cwd
     rc_branch, branch = _run_git(["branch", "--show-current"], cwd)
     branch = branch if rc_branch == 0 else ""
-    return {
+    payload: dict = {
         "pid": pid,
         "ppid": ppid,
         "session_id": session_id,
@@ -258,13 +313,24 @@ def _build_payload(cwd: Path, pid: int, ppid: int, session_id: str, iso_started:
         "iso_started": iso_started,
         "iso_heartbeat": _now_iso(),
         "branch": branch,
-        "schema": 2,
+        "schema": 3,
     }
+    # Store ppid creation time for PID-reuse detection on Windows (schema 3+).
+    if os.name == "nt":
+        ct = _get_process_create_time_windows(ppid)
+        if ct is not None:
+            payload["ppid_create_time"] = ct
+    return payload
 
 
 def _write_lease(lease_file: Path, payload: dict) -> None:
     lease_file.parent.mkdir(parents=True, exist_ok=True)
-    lease_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    # Atomic write: write to a temp file then os.replace() so read_lease()
+    # never sees a partial JSON during a concurrent heartbeat refresh. This
+    # is the torn-read fix (adversarial audit CRITICAL, 2026-05-30).
+    tmp = lease_file.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.replace(tmp, lease_file)
 
 
 def _same_session(existing: dict, session_id: str, pid: int) -> bool:
@@ -291,6 +357,7 @@ def _peer_is_live(existing: dict) -> bool:
     freshness alone (conservative: a fresh legacy heartbeat still blocks).
     """
     ppid = existing.get("ppid")
+    ppid_create_time = existing.get("ppid_create_time")  # schema 3+; None on older leases
 
     # ppid-liveness is AUTHORITATIVE. A provably-alive Claude session process
     # holds the worktree no matter how stale its heartbeat — because the
@@ -300,7 +367,9 @@ def _peer_is_live(existing: dict) -> bool:
     # ALONE would steal a live session's lease mid-call and let two sessions
     # write — the exact corruption this guard exists to prevent (adversarial
     # audit MED finding, 2026-05-30). So: a live ppid always blocks.
-    if ppid is not None and _pid_is_alive(ppid):
+    # ppid_create_time cross-check prevents Windows PID-reuse false-blocks
+    # (adversarial audit HIGH, 2026-05-30).
+    if ppid is not None and _pid_is_alive(ppid, expected_create_time=ppid_create_time):
         return True
 
     # ppid is dead (or absent). Now the heartbeat is the tiebreaker:

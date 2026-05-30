@@ -12,28 +12,16 @@
 - **Summary:** Merged `origin/main` into `codex/plugin-routing-grounding` and resolved the HANDOFF-only conflict. Main's live-readiness automation summary remains current; this branch adds cross-tool plugin/data routing, automatic 2P targeted grounding, `/resource` and `/lit` local-corpus grounding, research/fetch source separation, PDF/OCR/literature coverage checks, and matching Claude/Codex prompt hooks.
 
 ## Last Session
-- **Tool:** Codex
+- **Tool:** Claude Code
 - **Date:** 2026-05-30
-- **Commit:** codex/plugin-routing-grounding - chore(codex): route plugins and grounding automatically
-- **Files changed:** 18 files
-  - `.claude/hooks/plugin-router.py`
-  - `.claude/hooks/targeted-grounding-router.py`
-  - `.claude/rules/auto-skill-routing.md`
-  - `.claude/rules/plugin-routing.md`
-  - `.claude/rules/targeted-grounding.md`
-  - `.claude/settings.json`
-  - `.codex/COMMANDS.md`
-  - `.codex/INTEGRATIONS.md`
-  - `.codex/PLUGIN_ROUTING.md`
-  - `.codex/STARTUP.md`
-  - `.codex/TARGETED_GROUNDING.md`
-  - `.codex/WORKFLOWS.md`
-  - `.codex/hooks/session_start.py`
-  - `.codex/hooks/user_prompt_submit_grounding.py`
-  - `HANDOFF.md`
-  - `scripts/tools/check_literature_coverage.py`
-  - `scripts/tools/check_pdf_tooling.py`
-  - `tests/test_hooks/test_targeted_grounding_router.py`
+- **Commit:** bfab5942 — fix(hooks): real worktree mutex — (session_id,ppid)+heartbeat, not a phantom subprocess lock
+- **Files changed:** 6 files
+  - `.claude/hooks/session-start.py`
+  - `.claude/hooks/tests/test_worktree_guard_hook.py`
+  - `.claude/hooks/worktree_guard.py`
+  - `docs/runtime/stages/2026-05-30-worktree-lease-real-mutex.md`
+  - `scripts/tools/worktree_guard.py`
+  - `tests/test_tools/test_worktree_guard.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
