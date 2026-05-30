@@ -231,7 +231,7 @@ ASSET_CONFIGS = {
         "dbn_path": PROJECT_ROOT / "DB" / "M2K_DB",
         "symbol": "M2K",
         "parent_symbol": "RTY",  # dead micro — uses E-mini RTY parent data
-        "orb_active": True,
+        "orb_active": False,  # dead for ORB (Mar 2026, 0/18 families survive noise screening); excluded via DEAD_ORB_INSTRUMENTS
         "outright_pattern": re.compile(r"^RTY[HMUZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2021, 2, 21),
