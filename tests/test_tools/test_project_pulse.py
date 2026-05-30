@@ -29,6 +29,7 @@ from scripts.tools.project_pulse import (
     build_pulse,
     collect_action_queue,
     collect_debt_ledger,
+    collect_debt_reconciliation,
     collect_deployment_state,
     collect_drift,
     collect_followup_coverage,
@@ -36,6 +37,8 @@ from scripts.tools.project_pulse import (
     collect_handoff,
     collect_lifecycle_control,
     collect_pause_state,
+    collect_plan_reconciliation,
+    collect_queue_reconciliation,
     collect_ralph_deferred,
     collect_session_claims,
     collect_sr_state,
@@ -823,6 +826,289 @@ class TestCollectDebtLedger:
         assert not any("closed-item" in item.summary for item in items)
 
 
+class TestFollowupReconciliation:
+    def test_flags_actionable_pulse_item_not_covered_by_open_queue(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: unrelated",
+                    "    title: Unrelated queue work",
+                    "    class: ops",
+                    "    status: ready",
+                    "    priority: P2",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 7",
+                    "    next_action: Do unrelated work",
+                    "    exit_criteria: Finished",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        items = collect_queue_reconciliation(
+            tmp_path,
+            [PulseItem(category="broken", severity="high", source="live_journal", summary="live journal locked")],
+        )
+
+        assert len(items) == 1
+        assert items[0].source == "queue_reconciliation"
+        assert "live journal locked" in items[0].summary
+
+    def test_skips_pulse_item_covered_by_open_queue_text(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: live_journal_lock_followup",
+                    "    title: Investigate live journal locked pulse finding",
+                    "    class: ops",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 7",
+                    "    next_action: Resolve live journal locked blocker",
+                    "    exit_criteria: Pulse blocker gone",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        items = collect_queue_reconciliation(
+            tmp_path,
+            [PulseItem(category="broken", severity="high", source="live_journal", summary="live journal locked")],
+        )
+
+        assert items == []
+
+    def test_queue_reconciliation_does_not_treat_generic_source_as_coverage(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: generic_staleness_review",
+                    "    title: Review staleness pulse findings",
+                    "    class: ops",
+                    "    status: ready",
+                    "    priority: P2",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 7",
+                    "    next_action: Review generic staleness output",
+                    "    exit_criteria: Generic staleness review complete",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        items = collect_queue_reconciliation(
+            tmp_path,
+            [
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="staleness",
+                    summary="MES: 1 stale step(s) - experimental_strategies",
+                )
+            ],
+        )
+
+        assert len(items) == 1
+        assert "experimental_strategies" in items[0].summary
+
+    def test_queue_reconciliation_accepts_specific_finding_terms(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: mes_experimental_stale_followup",
+                    "    title: Resolve MES stale experimental_strategies pulse finding",
+                    "    class: ops",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 7",
+                    "    next_action: Fix MES stale experimental_strategies follow-up",
+                    "    exit_criteria: Pulse finding cleared",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        items = collect_queue_reconciliation(
+            tmp_path,
+            [
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="staleness",
+                    summary="MES: 1 stale step(s) - experimental_strategies",
+                )
+            ],
+        )
+
+        assert items == []
+
+    def test_debt_reconciliation_flags_missing_metadata_and_queue_coverage(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "debt-ledger.md",
+            "\n".join(
+                [
+                    "# Debt Ledger",
+                    "",
+                    "## Open Debt",
+                    "- `missing-meta` - Fix undocumented workflow debt.",
+                    "- `parked-debt` - owner=codex status=parked parking_lot: intentionally parked.",
+                ]
+            ),
+        )
+        _mkfile(tmp_path / "docs" / "runtime" / "action-queue.yaml", "schema_version: 1\nitems: []\n")
+
+        items = collect_debt_reconciliation(tmp_path)
+
+        assert len(items) == 1
+        assert "missing-meta" in items[0].summary
+        assert "owner" in str(items[0].detail)
+        assert not any("parked-debt" in item.summary for item in items)
+
+    def test_debt_reconciliation_accepts_queue_coverage(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "debt-ledger.md",
+            "\n".join(["# Debt Ledger", "", "## Open Debt", "- `covered-debt` - Fix covered workflow debt."]),
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "items:",
+                    "  - id: covered-debt",
+                    "    title: covered-debt",
+                    "    class: ops",
+                    "    status: ready",
+                    "    priority: P2",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 7",
+                    "    next_action: Fix covered debt",
+                    "    exit_criteria: Fixed",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        assert collect_debt_reconciliation(tmp_path) == []
+
+    def test_plan_reconciliation_flags_active_plan_without_queue_coverage(self, tmp_path: Path) -> None:
+        plan = tmp_path / "docs" / "plans" / "active" / "2026-05" / "2026-05-31-missing-plan.md"
+        _mkfile(
+            plan,
+            "\n".join(
+                [
+                    "---",
+                    "status: active",
+                    "owner: codex",
+                    "last_reviewed: 2026-05-31",
+                    'superseded_by: ""',
+                    "---",
+                    "# Missing Plan",
+                ]
+            ),
+        )
+        _mkfile(tmp_path / "docs" / "runtime" / "action-queue.yaml", "schema_version: 1\nitems: []\n")
+
+        items = collect_plan_reconciliation(tmp_path)
+
+        assert len(items) == 1
+        assert items[0].source == "plan_reconciliation"
+        assert "2026-05-31-missing-plan.md" in str(items[0].detail)
+
+    def test_plan_reconciliation_accepts_queue_evidence_ref(self, tmp_path: Path) -> None:
+        rel = "docs/plans/active/2026-05/2026-05-31-covered-plan.md"
+        _mkfile(
+            tmp_path / rel,
+            "\n".join(
+                [
+                    "---",
+                    "status: active",
+                    "owner: codex",
+                    "last_reviewed: 2026-05-31",
+                    'superseded_by: ""',
+                    "---",
+                    "# Covered Plan",
+                ]
+            ),
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "items:",
+                    "  - id: covered_plan",
+                    "    title: Covered plan implementation",
+                    "    class: feature",
+                    "    status: ready",
+                    "    priority: P2",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 7",
+                    "    next_action: Implement covered plan",
+                    "    exit_criteria: Plan implemented",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs:",
+                    f"      - {rel}",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        assert collect_plan_reconciliation(tmp_path) == []
+
+
 class TestCollectFollowupCoverage:
     def test_flags_actionable_items_when_queue_has_no_open_work(self, tmp_path: Path) -> None:
         _mkfile(
@@ -1136,6 +1422,13 @@ def _sample_report() -> PulseReport:
             "state_age_days": 0,
         },
         pause_summary={"paused_count": 0},
+        next_actions=[
+            {
+                "kind": "command",
+                "label": "Fix drift",
+                "command": ".\\.venv\\Scripts\\python.exe pipeline\\check_drift.py",
+            }
+        ],
         recommendation="Fix: Drift FAILED → /verify",
     )
 
@@ -1152,6 +1445,8 @@ class TestFormatText:
         assert "PAUSED" in text
         assert "Strategy fitness" in text
         assert "MGC: 573 active" in text
+        assert "Next actions:" in text
+        assert ".\\.venv\\Scripts\\python.exe pipeline\\check_drift.py" in text
         assert "Fix: Drift FAILED" in text  # recommendation line
 
     def test_all_clear_message(self) -> None:
@@ -1177,6 +1472,7 @@ class TestFormatJson:
         assert data["deployment_summary"]["deployed_count"] == 5
         assert data["survival_summary"]["gate_ok"] is True
         assert data["sr_summary"]["counts"]["CONTINUE"] == 5
+        assert data["next_actions"][0]["kind"] == "command"
         assert len(data["items"]) == 4
 
 
