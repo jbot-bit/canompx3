@@ -6,29 +6,19 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Current Codex Follow-up
-- **Tool:** Codex
-- **Date:** 2026-05-30
-- **Summary:** Track D Gate 0 MBP-1 validation runner is implemented on branch `codex/track-d-gate0-mbp1` and PR #322 (`https://github.com/jbot-bit/canompx3/pull/322`). Branch was rebased onto current `origin/main` (`806ed562`) before push. Verification passed after rebase: targeted Track D tests `13 passed`, manifest dry-run `1,742 total / 1,658 IS / 84 OOS` over `2019-05-06` to `2026-05-28`, MBP-1 metadata dry-run projected `$31.17`, and ruff format check passed. No DBN pull, no MBO, no recurring/live data purchase, no live state, no `validated_setups`, no allocation, and no `paper_trades` mutation.
-
 ## This Session
 - **Tool:** Codex
 - **Date:** 2026-05-30
-- **Summary:** Merged `origin/main` into `codex/plugin-routing-grounding` and resolved the HANDOFF-only conflict. Main's live-readiness automation summary remains current; this branch adds cross-tool plugin/data routing, automatic 2P targeted grounding, `/resource` and `/lit` local-corpus grounding, research/fetch source separation, PDF/OCR/literature coverage checks, and matching Claude/Codex prompt hooks.
+- **Summary:** Cleared the `topstep_50k_mnq_auto` live-validity blocker in both this Codex worktree and canonical `C:\Users\joshd\canompx3`. Root cause was strict live allocation using SR state for the current book as if it covered all candidates, allowing `UNKNOWN` SR candidates and old SR-alarm lanes to rotate back in. `rebalance_lanes.py --strict-live-clean` now requires current SR `CONTINUE` evidence, computes correlation only after hard gates, and the allocator caches feature rows so rebalance stays bounded. Canonical allocation is now 3 lanes: `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`, `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`, `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08`. Canonical C11/C12 refreshed green, `live_readiness_report --strict-zero-warn` green with only telemetry maturity advisory, and canonical signal-only preflight passed 13/13.
 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-30
-- **Commit:** 1cc7f4a1 — fix(live): ralph iter 213 — lifecycle-block silent-fail + readiness effective-copies
-- **Files changed:** 8 files
-  - `scripts/run_live_session.py`
+- **Commit:** 1bbc3a16 — fix(live): scope _ensure_repo_python to main() so import is preflight-safe
+- **Files changed:** 3 files
+  - `HANDOFF.md`
   - `scripts/tools/live_readiness_report.py`
-  - `scripts/tools/refresh_control_state.py`
-  - `tests/test_scripts/test_run_live_session_preflight.py`
   - `tests/test_tools/test_live_readiness_report.py`
-  - `tests/test_tools/test_refresh_control_state.py`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `trading_app/live/session_orchestrator.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
