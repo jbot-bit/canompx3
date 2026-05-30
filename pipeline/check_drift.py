@@ -10989,6 +10989,75 @@ def check_intent_router_routing_parity() -> list[str]:
     return violations
 
 
+def check_plan_rigor_pillar_parity() -> list[str]:
+    """Verify .claude/hooks/_plan_rigor.RIGOR_PILLARS ↔ targeted-grounding.md parity.
+
+    The plan-rigor contract ("every plan is 2-pass + carries a rigor section")
+    has a single source of truth in ``.claude/hooks/_plan_rigor.py``
+    (``RIGOR_PILLARS``), enforced by ``plan-rigor-gate.py`` (PreToolUse:
+    ExitPlanMode) and ``plan-stop-backstop.py`` (Stop). The same five pillars are
+    documented as prose in ``.claude/rules/targeted-grounding.md`` § Enforcement.
+    If the doc drops a pillar the gate still enforces (or vice versa), the
+    operator-facing contract lies about what is enforced.
+
+    Each pillar carries a stable keyword (first token before any '/' or '(') that
+    must appear in the rule file. Fail-closed: a missing keyword is drift.
+
+    Added 2026-05-31 with the v2 plan-rigor enforcement layer.
+    """
+    rule_file = PROJECT_ROOT / ".claude" / "rules" / "targeted-grounding.md"
+    hook_dir = PROJECT_ROOT / ".claude" / "hooks"
+    module_file = hook_dir / "_plan_rigor.py"
+    if not rule_file.exists() or not module_file.exists():
+        return []  # either missing -> hooks fail-open, nothing to enforce parity against
+
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("_plan_rigor_parity", module_file)
+        if spec is None or spec.loader is None:
+            return ["check_plan_rigor_pillar_parity: could not load _plan_rigor.py"]
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        pillars = list(mod.RIGOR_PILLARS)
+    except Exception as exc:
+        return [f"check_plan_rigor_pillar_parity: _plan_rigor import failed: {type(exc).__name__}: {exc}"]
+
+    try:
+        rule_text = rule_file.read_text(encoding="utf-8").lower()
+    except OSError as e:
+        return [f"check_plan_rigor_pillar_parity: read error: {e}"]
+
+    # Stable keyword per pillar: the leading token, lowercased.
+    keywords = {
+        "no-bias/no-look-ahead": "no-look-ahead",
+        "honesty (verified vs claimed)": "honesty",
+        "literature grounding": "literature grounding",
+        "edge cases": "edge case",
+        "future-proofing/hardening": "future-proofing",
+    }
+
+    violations: list[str] = []
+    expected_labels = {label for label, _ in pillars}
+    if expected_labels != set(keywords):
+        violations.append(
+            "check_plan_rigor_pillar_parity: RIGOR_PILLARS labels "
+            f"{sorted(expected_labels)} do not match this check's keyword map "
+            f"{sorted(keywords)}. Update both _plan_rigor.py and this check together."
+        )
+        return violations  # keyword map is stale; downstream scan would be meaningless
+
+    for label, _pat in pillars:
+        kw = keywords[label]
+        if kw not in rule_text:
+            violations.append(
+                f"check_plan_rigor_pillar_parity: pillar {label!r} (keyword {kw!r}) is "
+                "enforced by plan-rigor-gate.py but absent from targeted-grounding.md "
+                "§ Enforcement. The operator-facing doc must list every enforced pillar."
+            )
+    return violations
+
+
 def check_no_direct_requests_to_broker_endpoints(trading_app_dir: Path) -> list[str]:
     """Broker adapters MUST route HTTP through trading_app.live.http_client.BrokerHTTPClient.
 
@@ -15066,6 +15135,12 @@ CHECKS = [
         "intent-router.py routing table matches auto-skill-routing.md documented skills",
         check_intent_router_routing_parity,
         False,  # blocking — silent drift between hook + rule = unreachable routes
+        False,
+    ),
+    (
+        "plan-rigor pillars (_plan_rigor.py) match targeted-grounding.md doc",
+        check_plan_rigor_pillar_parity,
+        False,  # blocking — operator-facing doc must list every enforced pillar
         False,
     ),
     (

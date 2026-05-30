@@ -1,5 +1,28 @@
 # HANDOFF.md - Cross-Tool Session Baton
 
+---
+
+## 🔴 RESUME HERE (2026-05-31, Claude Code) — MFFU Builder backtest
+
+**Next action:** Model the deployed MNQ book against MFFU **Builder** plan constraints — read-only `gold.db` sim, NO config/schema/capital edits.
+
+Replay deployed MNQ lane daily P&L vs MFFU Builder (live-verified from help.myfundedfutures.com this session — repo snapshots are STALE, firms update constantly; re-fetch live before any firm-rule claim):
+- **$2,000 EOD trailing DD, locks permanently at +$100** above start
+- **$1,000 daily-loss soft-pause**; **40 micro** max (50k); **50% payout-consistency** (eval has none); 80/20, $500 min, **$2k/cycle cap**
+
+Per micro-contract size compute: max-DD-to-breach, P(breach), worst-day-vs-cycle. Output "profitable at N micros, X% breach prob." Use `COST_SPECS` (MNQ), `GOLD_DB_PATH`, `validated_setups WHERE status='active'`. Backtest books realized-eod (does NOT model intraday equity vs trailing DD — OK for Builder's EOD-lock; would NOT be OK for Rapid's intraday trailing).
+
+**Decisions locked (grounded, read-only):**
+1. **NQ vs MNQ = sizing/cost only, ZERO revalidation.** Same Nasdaq/R-multiples. NQ friction −34%/R but 10× coarser. Mechanism already designed: `prop_profiles.py:123-169` (Stage 1 landed, Stage 2 order-build unbuilt). `orb_active=False` does NOT block live use. **MNQ-micro <~$139k; hybrid $150–500k; NQ-primary $500k+.** `prop_profiles.py:420` "1 NQ/$25k" = STALE (Tier B flag, don't edit unprompted). All firms 10:1 mini:micro.
+2. **Firm fit for automated bot:** automation policy = dominant filter. **Apex DISQUALIFIED** (bans automation). **Bulenox + MFFU best.** TopStep auto-policy for autonomous bots UNVERIFIED → open risk on current live `topstep_50k_mnq_auto`.
+3. **MFFU plan = BUILDER** (EOD-lock-+$100 safe for E2 reversals; 40 micro granularity vs Pro's 5; no eval consistency). Rapid REJECTED (funded=intraday trailing, hostile to E2). NQ on 50k = ~3 losers to breach → micros only.
+
+**Task B PARKED:** adaptive stops/liquidity-sweep — heavy NO-GO overlap (breakeven trail DEAD, vol-regime DEAD, Chan stop-cascade twice-exhausted, Howard 2026 price-level stops EV-negative). Only seam = continuous Carver-Ch11-12 R4 modifier, blocked on lit extraction not a scan. Behind NQ + NYSE_PREOPEN O30 + powered-OOS.
+
+**Constraints:** no live config/profiles/strategy/schema/deploy edits without explicit approval + adversarial-audit gate. `--holdout-date 2026-01-01`.
+
+---
+
 **Rule:** If you made decisions, changed files, or left work half-done - update the baton.
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
