@@ -5,6 +5,21 @@
 
 ---
 
+## Iteration 217 — 2026-05-31
+- Phase: audit-only
+- Classification: N/A (no code change)
+- Target: pipeline/system_brief.py (P1 unscanned high, 6 importers) + trading_app/portfolio.py (P3 stale re-audit iter 118, findings=2 from old scan)
+- Cluster: 0 findings requiring fix; all acceptable patterns confirmed
+- Finding: system_brief.py: `except Exception` at line 49 is intentional fail-soft for non-critical work capsule module (ACCEPTABLE pattern 2). `expansion_triggers or` fallback at line 165 is intentional design — empty tuple means "use briefing contract defaults" (ACCEPTABLE pattern 1). No canonical violations, no ORB/session/instrument hardcoding. portfolio.py: ML_OVERLAY_SESSIONS (line 966) is a research-derived subset filter, not a canonical enumeration (ACCEPTABLE pattern 1). orb_minutes=5/30 in build_multi_rr_portfolio are architectural layer constants (ACCEPTABLE pattern 1). FITNESS_WEIGHTS 0.5 for WATCH is operational policy weight, not an unannotated research stat (ACCEPTABLE pattern 3). Both files CLEAN.
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — verified no violations), § 8 (research stats — @research-source at line 1397 is correctly annotated; FITNESS_WEIGHTS are policy weights not research stats)
+- Action: audit-only; no code change warranted
+- Blast radius: 0 files changed
+- Verification gate: fast (baseline only)
+- Verification: PASS — 152 drift checks PASS, ruff PASS, test_system_brief.py 2/2 PASS
+- Commit: NONE
+
+---
+
 ## Iteration 216 — 2026-05-31
 - Phase: fix
 - Classification: [mechanical]

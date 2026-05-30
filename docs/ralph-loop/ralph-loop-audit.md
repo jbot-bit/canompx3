@@ -3,7 +3,64 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 216
+## Last iteration: 217
+
+## RALPH AUDIT — Iteration 217 (COMPLETED)
+## Date: 2026-05-31
+## Infrastructure Gates: 152 drift checks PASS (fast + skip-crg-advisory); ruff PASS
+## Scope: pipeline/system_brief.py (P1 unscanned high) + trading_app/portfolio.py (P3 stale re-audit)
+
+---
+
+## Full-File Audit Results
+
+### pipeline/system_brief.py — SCANNED (first full scan)
+
+**Seven Sins Scan — iteration 217:**
+- S1 (Silent failure): `except Exception as exc` at line 49 in `_load_capsule_summary` — intentional fail-soft; work capsule is non-critical infrastructure. Returns `(None, [BriefIssue("warning", ...)])`. All callers handle `None` capsule_summary at line 160. ACCEPTABLE pattern 2.
+- S2 (Fail-open): No health check or success-reporting paths. `route_issues` blockers are passed through to the return dict. CLEAN.
+- S3 (Canonical violation): `DECISION_LEDGER_PATH` and `DEBT_LEDGER_PATH` are documentation ledger paths, not DB/instrument/session paths. Consistent with `pipeline/system_authority.py:136-137`. CLEAN.
+- S4 (Impact unawareness): test_system_brief.py has 2 tests, both PASS. CLEAN.
+- S5 (Evidence over assertion): All claims verified by code trace and test execution. CLEAN.
+- S6 (Spec compliance): No spec violations. CLEAN.
+- S7 (Metadata trust): `expansion_triggers or` fallback at line 165 — intentional design: empty tuple means "use briefing contract defaults" (ACCEPTABLE pattern 1). Not a silent masking issue.
+
+**Domain-specific checks:**
+- ORB window timing, session hardcoding, E0, holdout date, DST, DB path, cost inline: all CLEAN (no ORB/session/instrument/cost references in this module).
+
+**Ralph-specific extensions scan:**
+- Async safety, state persistence gap, contract drift, look-ahead bias: all CLEAN (no async code, no stateful objects, no ORB computation).
+
+**Findings:** 0 actionable findings. CLEAN.
+
+---
+
+### trading_app/portfolio.py — SCANNED (stale re-audit, iter 118 → 217)
+
+**Seven Sins Scan — iteration 217:**
+- S1 (Silent failure): No silent failure paths in this module's logic. CLEAN.
+- S2 (Fail-open): No health check paths. CLEAN.
+- S3 (Canonical violation):
+  - `ML_OVERLAY_SESSIONS = {"NYSE_OPEN", "US_DATA_1000", "US_DATA_830"}` at line 966: bootstrap-verified research-derived subset, NOT a canonical index. Comment documents BH FDR evidence. ACCEPTABLE pattern 1.
+  - `orb_minutes=5` (line 998) and `orb_minutes=30` (line 1012): architectural layer constants for the documented O5/O30 multi-RR design. ACCEPTABLE pattern 1.
+  - `instrument: str = "MGC"` (line 468) and `instrument: str = "MNQ"` (lines 614, 971): CLI-facing default convenience values, not canonical enumeration. ACCEPTABLE pattern 1.
+  - `GOLD_DB_PATH` imported from `pipeline.paths` (line 32). CLEAN.
+- S4 (Impact unawareness): Not checked (file unchanged since iter 118, hash verified stable). CLEAN.
+- S5 (Evidence over assertion): All assertions traced. CLEAN.
+- S6 (Spec compliance): No spec violations. CLEAN.
+- S7 (Metadata trust): `FITNESS_WEIGHTS` at lines 1443-1448 — operational policy weights implementing the fitness system contract, not unannotated research stats. `0.4` trades/day at line 1400 correctly has `@research-source` + `@revalidated-for`. CLEAN.
+
+**Domain-specific checks:**
+- ORB window timing: No `break_ts` fallback, no re-derivation of ORB windows. CLEAN.
+- E0 fill-on-touch: No `close_outside`/`closed_outside` references. CLEAN.
+- Holdout date: No `date(2026` literals. CLEAN.
+- DST contamination: Session strings are labels only. CLEAN.
+- DB path: `GOLD_DB_PATH` from `pipeline.paths`. CLEAN.
+- Cost inline: `get_cost_spec` imported from `pipeline.cost_model`. CLEAN.
+
+**Findings:** 0 actionable findings. CLEAN (iter-118 findings were resolved upstream).
+
+---
 
 ## RALPH AUDIT — Iteration 216 (COMPLETED)
 ## Date: 2026-05-31
@@ -156,10 +213,12 @@ Stale re-audit covering 3 commits since iter 182 (last audited):
 - trading_app/live/session_orchestrator.py (iter 214 — stale re-audit; 0 findings, ACCEPTABLE falsy-zero LOW)
 - pipeline/build_daily_features.py (iter 215 — stale re-audit; 0 findings, 2 ACCEPTABLE LOW)
 - pipeline/asset_configs.py (iter 216 — full scan; 1 LOW fixed annotation_debt AC-216-01)
+- pipeline/system_brief.py (iter 217 — first full scan; 0 findings, 2 ACCEPTABLE)
+- trading_app/portfolio.py (iter 217 — stale re-audit iter 118; 0 findings, 5 ACCEPTABLE)
 
 ## Next Iteration Targets
 
 Priority 0 — Open deferred HIGH/CRITICAL: NONE (SHADOW-MLL is MEDIUM, intentional design, dormant).
-Priority 1 — Unscanned critical/high files: All critical files now scanned. Next: high-centrality unscanned.
-Priority 2 — Stale re-audits: `trading_app/conditional_overlays.py` (new module referenced in session_orchestrator, unscanned). `trading_app/execution_engine.py` (critical usage, not in centrality JSON).
-Priority 3 — Unscanned medium files: `trading_app/portfolio.py` (imports COMPRESSION_SESSIONS from build_daily_features — verified in iter 215, but portfolio.py itself unscanned).
+Priority 1 — Unscanned high files: `pipeline/system_brief.py` DONE. Remaining: `pipeline/ingest_dbn_mgc.py` (high, 9 importers), `pipeline/system_brief.py` done. `trading_app/ai/provider_registry.py` (high, 6 importers, unscanned).
+Priority 2 — Stale re-audits (hash changed): `trading_app/live/broker_factory.py` (high, last iter 127, findings=1 — check if hash changed). `trading_app/conditional_overlays.py` (new module, unscanned per session_orchestrator audit).
+Priority 3 — Stale medium files with findings > 0: `trading_app/live_config.py` (high, last iter 119, findings=3 — check hash).

@@ -16,12 +16,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** 3b483d1c — chore(ralph): iter 215 bookkeeping — build_daily_features.py audit-only clean
+- **Commit:** b4fcf5b6 — [mechanical] chore: Ralph Loop iter 216 bookkeeping — audit.md, history.md, ledger rebuild
 - **Files changed:** 4 files
-  - `HANDOFF.md`
   - `docs/ralph-loop/ralph-ledger.json`
   - `docs/ralph-loop/ralph-loop-audit.md`
   - `docs/ralph-loop/ralph-loop-history.md`
+  - `docs/ralph-loop/ralph-loop-plan.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
