@@ -25,8 +25,9 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from research.oos_power import one_sample_power, one_sample_n_for_power, power_verdict
 from research.comprehensive_deployed_lane_scan import _overnight_lookhead_clean
+from research.oos_holdout import powered_oos_split
+from research.oos_power import one_sample_n_for_power, one_sample_power, power_verdict
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 
 # Trade-fraction reserved as OOS (most-recent, temporal order). 0.30 is the
@@ -126,9 +127,20 @@ def judge(con: duckdb.DuckDBPyConnection, c: Candidate) -> dict:
     pw_cal = one_sample_power(d_cal, no_c) if no_c >= 2 else 0.0
 
     # FRACTION holdout (the doctrine cut): last OOS_FRACTION of trades.
-    k = int(n_full * (1 - OOS_FRACTION))
-    is_f = df.iloc[:k]["pnl_r"]
-    oos_f = df.iloc[k:]["pnl_r"]
+    # Boundary delegated to the canonical helper (no inline re-encoding per
+    # institutional-rigor §4). We use the helper for the IS/OOS index split
+    # only; the IS-block-d power columns below are this script's own framing.
+    # target_tier=STATISTICALLY_USELESS (floor 0.0) disables auto-grow so the
+    # helper returns EXACTLY the fixed default block — this script reports the
+    # achieved power of that fixed cut and lets the verdict logic below judge
+    # it, rather than growing OOS to hit a tier.
+    split = powered_oos_split(
+        df["pnl_r"].to_numpy(),
+        default_fraction=OOS_FRACTION,
+        target_tier="STATISTICALLY_USELESS",
+    )
+    is_f = df.iloc[split.is_idx]["pnl_r"]
+    oos_f = df.iloc[split.oos_idx]["pnl_r"]
     ni_f, mi_f, ti_f = _t(is_f)
     no_f, mo_f, to_f = _t(oos_f)
     d_f = abs(ti_f) / np.sqrt(ni_f) if ni_f > 1 else 0.0
