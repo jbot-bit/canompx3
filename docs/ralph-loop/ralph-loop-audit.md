@@ -3,7 +3,45 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 218
+## Last iteration: 220
+
+## RALPH AUDIT — Iteration 220 (COMPLETED)
+## Date: 2026-05-31
+## Infrastructure Gates: 152 drift checks PASS (fast + skip-crg-advisory); ruff PASS
+## Scope: trading_app/live/broker_factory.py — stale re-audit (last iter 127, findings=1)
+
+---
+
+## Full-File Audit Results
+
+### trading_app/live/broker_factory.py — SCANNED (stale re-audit, iter 127 → 220)
+
+**Iter-127 fix verified:**
+- VALID_BROKERS coherence guard: `if broker not in VALID_BROKERS: raise ValueError(...)` present at line 55 — VERIFIED correct.
+- `raise AssertionError("unreachable")` at line 108 — defensive guard present — VERIFIED correct.
+- The iter-127 finding (VALID_BROKERS declared as "canonical source" but only used in error message, with actual dispatch as unguarded if/elif) has been fully resolved.
+
+**Seven Sins Scan — iteration 220:**
+- S1 (Silent failure): No `except` blocks in the file. CLEAN.
+- S2 (Fail-open): `ValueError` on unknown broker (line 56). `AssertionError("unreachable")` at line 108. CLEAN.
+- S3 (Canonical violation): `VALID_BROKERS` is the canonical source (imported by `deployable_shelf_gap.py`). No instrument names, session names, holdout dates, cost specs, DB paths, ORB windows. `get_broker_name()` default `"projectx"` is a dispatcher default, not a canonical list. CLEAN.
+- S4 (Impact unawareness): Tests in `test_run_live_session_preflight.py`, `test_rithmic_router.py`, `test_tradovate.py`. CLEAN.
+- S5 (Evidence over assertion): No assertions in code. CLEAN.
+- S6 (Spec compliance): No spec violations. CLEAN.
+- S7 (Metadata trust): No docstring-as-truth issues. CLEAN.
+
+**Domain-specific checks:**
+- ORB window timing, session hardcoding, E0 fill-on-touch, holdout date, DST contamination, DB path, cost inline, instrument hardcoding: all CLEAN (pure broker dispatch module — no ORB/trading logic).
+
+**Ralph-specific extensions scan:**
+- Async safety: No async code. CLEAN.
+- State persistence gap: No stateful objects. CLEAN.
+- Contract drift: `BrokerComponents` TypedDict with 5 keys; callers in `session_orchestrator.py` and `webhook_server.py` consume all 5 keys intact. CLEAN.
+- Look-ahead bias: Not applicable (broker dispatch module). CLEAN.
+
+**Findings: 0 actionable findings. CLEAN.**
+
+---
 
 ## RALPH AUDIT — Iteration 218 (COMPLETED)
 ## Date: 2026-05-31
@@ -248,10 +286,11 @@ Stale re-audit covering 3 commits since iter 182 (last audited):
 - pipeline/system_brief.py (iter 217 — first full scan; 0 findings, 2 ACCEPTABLE)
 - trading_app/portfolio.py (iter 217 — stale re-audit iter 118; 0 findings, 5 ACCEPTABLE)
 - trading_app/ai/provider_registry.py (iter 218 — first full scan; 1 LOW fixed PR-218-01)
+- trading_app/live/broker_factory.py (iter 220 — stale re-audit iter 127; 0 findings, iter-127 fix verified present)
 
 ## Next Iteration Targets
 
 Priority 0 — Open deferred HIGH/CRITICAL: NONE (SHADOW-MLL is MEDIUM, intentional design, dormant).
 Priority 1 — Unscanned high files: `pipeline/ingest_dbn_mgc.py` (high, 9 importers, findings=1 from iter 136 — stale re-audit needed).
-Priority 2 — Stale re-audits: `trading_app/live/broker_factory.py` (high, last iter 127, findings=1 — check hash). `trading_app/conditional_overlays.py` (unscanned, surfaced in iter 214).
-Priority 3 — Stale medium files: `trading_app/live_config.py` (high, last iter 119, findings=3 — check hash).
+Priority 2 — Stale re-audits: `trading_app/conditional_overlays.py` (unscanned, surfaced in iter 214). `trading_app/live_config.py` (high, last iter 119, findings=3 — check hash).
+Priority 3 — Stale medium files: `pipeline/outcome_builder.py` (last iter 185, findings=5 — check hash).

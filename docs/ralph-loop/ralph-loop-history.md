@@ -5,6 +5,21 @@
 
 ---
 
+## Iteration 220 — 2026-05-31
+- Phase: audit-only
+- Classification: [mechanical]
+- Target: trading_app/live/broker_factory.py (stale re-audit, last iter 127, findings=1)
+- Cluster: 0 findings
+- Finding: iter-127 fix (VALID_BROKERS coherence guard at line 55 + raise AssertionError unreachable at line 108) verified present and correct. File is 109 lines, clean on all Seven Sins + domain checks.
+- Doctrine cited: integrity-guardian.md S1-S7 (all CLEAN)
+- Action: audit-only — no findings, no edits
+- Blast radius: N/A
+- Verification gate: fast (baseline only)
+- Verification: PASS — fast drift 152/0 PASS + ruff PASS
+- Commit: NONE
+
+---
+
 ## Iteration 218 — 2026-05-31
 - Phase: fix
 - Classification: [mechanical]
