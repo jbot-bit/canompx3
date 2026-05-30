@@ -15,14 +15,16 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-05-30
-- **Commit:** 1e9b26f4 — feat(tools): stale-stage reaper audit — safe archival of provably-done stage files
-- **Files changed:** 5 files
-  - `docs/runtime/stages/2026-05-27-paper-trade-sync-automation.md`
-  - `docs/runtime/stages/2026-05-30-stale-stage-reaper-audit.md`
-  - `docs/runtime/stages/archive/2026-05-27-paper-trade-sync-automation.md`
-  - `scripts/tools/stage_reaper_audit.py`
-  - `tests/test_tools/test_stage_reaper_audit.py`
+- **Date:** 2026-05-31
+- **Commit:** 4c3228b9 — @ docs(handoff): close-out — live-preflight landed, capital-path work rescued
+- **Files changed:** 7 files
+  - `HANDOFF.md`
+  - `docs/runtime/rescued/2026-05-30-RESCUE-MANIFEST.md`
+  - `docs/runtime/rescued/2026-05-30-lane-allocator-feature-cache-WIP.patch`
+  - `docs/runtime/rescued/2026-05-30-lane_allocation.STASHED.json`
+  - `docs/runtime/rescued/2026-05-30-topstep_50k_mnq_auto.STASHED.json`
+  - `docs/runtime/stages/2026-05-30-opus-48-effort-wiring.md`
+  - `docs/runtime/stages/2026-05-30-worktree-lease-real-mutex.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
