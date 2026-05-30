@@ -1,6 +1,6 @@
 # Live Trading Readiness Runbook - Topstep MNQ Auto
 
-Status: NO-GO until strict live readiness is green.
+Status: NO-GO until live preflight is green with no strict readiness warnings.
 
 ## Scope Freeze
 
@@ -17,6 +17,7 @@ Status: NO-GO until strict live readiness is green.
 Run these before any live start:
 
 ```bash
+git status --short --branch --ahead-behind
 python scripts/tools/live_readiness_report.py --profile topstep_50k_mnq_auto --copies 1 --strict-zero-warn
 python scripts/tools/project_pulse.py --fast --format json
 python scripts/audits/run_all.py --phase 7
@@ -25,17 +26,17 @@ python pipeline/check_drift.py
 python scripts/run_live_session.py --profile topstep_50k_mnq_auto --instrument MNQ --live --copies 1 --preflight
 ```
 
-Live remains blocked if any command fails, or if the operator cannot confirm broker account, mode, and account count from the broker UI.
+Live remains blocked if any command fails, if `project_pulse` reports a broken/high live-control item or blocked capital recommendation, if `live_readiness_report` has blockers or warnings, or if the operator cannot confirm broker account, mode, and account count from the broker UI.
 
 ## Hard Blockers
 
-- Dirty or behind repo state for live mode.
+- Dirty, ahead, or behind repo state for live mode.
 - Active lane count does not match the intended allocator book.
 - Any active stale, paused, blocked, or SR `ALARM` lane.
-- Telemetry maturity below the profile-scoped floor for real-capital/self-funded live.
-- For explicit Express/Funded prop profiles (`is_express_funded=True`, including Topstep XFA), below-floor telemetry is an advisory warning, not a launch blocker.
+- Telemetry maturity below the profile-scoped floor is an advisory warning for explicit Express/Funded prop profiles (`is_express_funded=True`, including Topstep XFA), but live launch preflight treats strict readiness warnings as blockers until the operator intentionally accepts the exception.
 - Live stage acceptance not green.
 - Journal DB unavailable.
+- `project_pulse` live-control or capital recommendation blockers.
 - Broker auth/session check unavailable.
 - `copies>1` without per-shadow software daily-loss/HWM protection.
 - Router degraded from primary/shadow divergence.
