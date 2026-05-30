@@ -1,14 +1,14 @@
 {
-  "total_iterations": 207,
+  "total_iterations": 208,
   "last_updated": "2026-05-31",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 217,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 69,
-      "fixed": 54,
+      "found": 70,
+      "fixed": 55,
       "deferred": 4,
-      "fix_rate": 0.78
+      "fix_rate": 0.79
     },
     "silent_failure": {
       "found": 46,
@@ -129,11 +129,11 @@
     "CRITICAL": 10,
     "HIGH": 14,
     "MEDIUM": 55,
-    "LOW": 128
+    "LOW": 129
   },
   "classifications": {
     "judgment": 89,
-    "mechanical": 80,
+    "mechanical": 81,
     "audit-only": 38
   },
   "files_audited": {
@@ -1683,6 +1683,13 @@
       "findings": 0,
       "file_hash": "53f62261398e4779",
       "git_sha": "dc3a45c9"
+    },
+    "trading_app/ai/provider_registry.py": {
+      "audit_count": 1,
+      "last_iter": 218,
+      "findings": 1,
+      "file_hash": "95ba1f8f8e5be876",
+      "git_sha": "0989bde3"
     }
   },
   "known_acceptable_patterns": [
@@ -4192,6 +4199,17 @@
       "severity": "CRITICAL",
       "verdict": "CLEAN",
       "commit": "NONE"
+    },
+    {
+      "iter": 218,
+      "date": "2026-05-31",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/ai/provider_registry.py:203,224,248,267",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "0989bde3"
     }
   ]
 }

@@ -3,7 +3,39 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 217
+## Last iteration: 218
+
+## RALPH AUDIT — Iteration 218 (COMPLETED)
+## Date: 2026-05-31
+## Infrastructure Gates: 152 drift checks PASS (fast + skip-crg-advisory); ruff PASS; 19/19 tests PASS
+## Scope: trading_app/ai/provider_registry.py — P1 unscanned high (6 importers)
+
+---
+
+## Full-File Audit Results
+
+### trading_app/ai/provider_registry.py — SCANNED (first full scan)
+
+**Seven Sins Scan — iteration 218:**
+- S1 (Silent failure): `except KeyError as exc: raise KeyError(...)` at line 302 — re-raises with improved message. Not silent. CLEAN.
+- S2 (Fail-open): `validation_errors()` accumulates all errors; `assert_ready()` raises on non-empty list. `missing_env()` returns sorted list. No health-check-returns-True pattern. CLEAN.
+- S3 (Canonical violation): `CLAUDE_REASONING_MODEL`/`CLAUDE_STRUCTURED_MODEL` imported from `trading_app.ai.claude_client` (canonical source). `OPENROUTER_BASE_URL` now a module-level constant (PR-218-01 FIXED). No instrument names, session names, holdout dates, cost specs. CLEAN.
+- S4 (Impact unawareness): test_provider_registry.py has 19 tests, all PASS. CLEAN.
+- S5 (Evidence over assertion): All assertions verified by execution. CLEAN.
+- S6 (Spec compliance): No spec violations. CLEAN.
+- S7 (Metadata trust): No docstring-as-truth violations; notes fields are informational only. CLEAN.
+
+**Domain-specific checks:**
+- ORB window timing, session hardcoding, E0, holdout date, DST, DB path, cost inline, instrument hardcoding: all CLEAN (AI provider registry module — no ORB/trading logic).
+
+**Ralph-specific extensions scan:**
+- Async safety, state persistence gap, contract drift, look-ahead bias: all CLEAN (pure configuration/registry module, no async code, no stateful objects).
+
+**Finding fixed:**
+
+- PR-218-01 [LOW] — annotation_debt/DRY: `"https://openrouter.ai/api/v1"` hardcoded as 4 separate string literals at lines 203, 224, 248, 267 in deepseek_* profile `base_url=` fields. No module-level constant existed. Fix: extracted `OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"` constant at line 25; replaced all 4 literals with constant reference. Zero behavior change — same URL, now a single-point-of-change. Commit: 0989bde3.
+
+---
 
 ## RALPH AUDIT — Iteration 217 (COMPLETED)
 ## Date: 2026-05-31
@@ -215,10 +247,11 @@ Stale re-audit covering 3 commits since iter 182 (last audited):
 - pipeline/asset_configs.py (iter 216 — full scan; 1 LOW fixed annotation_debt AC-216-01)
 - pipeline/system_brief.py (iter 217 — first full scan; 0 findings, 2 ACCEPTABLE)
 - trading_app/portfolio.py (iter 217 — stale re-audit iter 118; 0 findings, 5 ACCEPTABLE)
+- trading_app/ai/provider_registry.py (iter 218 — first full scan; 1 LOW fixed PR-218-01)
 
 ## Next Iteration Targets
 
 Priority 0 — Open deferred HIGH/CRITICAL: NONE (SHADOW-MLL is MEDIUM, intentional design, dormant).
-Priority 1 — Unscanned high files: `pipeline/system_brief.py` DONE. Remaining: `pipeline/ingest_dbn_mgc.py` (high, 9 importers), `pipeline/system_brief.py` done. `trading_app/ai/provider_registry.py` (high, 6 importers, unscanned).
-Priority 2 — Stale re-audits (hash changed): `trading_app/live/broker_factory.py` (high, last iter 127, findings=1 — check if hash changed). `trading_app/conditional_overlays.py` (new module, unscanned per session_orchestrator audit).
-Priority 3 — Stale medium files with findings > 0: `trading_app/live_config.py` (high, last iter 119, findings=3 — check hash).
+Priority 1 — Unscanned high files: `pipeline/ingest_dbn_mgc.py` (high, 9 importers, findings=1 from iter 136 — stale re-audit needed).
+Priority 2 — Stale re-audits: `trading_app/live/broker_factory.py` (high, last iter 127, findings=1 — check hash). `trading_app/conditional_overlays.py` (unscanned, surfaced in iter 214).
+Priority 3 — Stale medium files: `trading_app/live_config.py` (high, last iter 119, findings=3 — check hash).
