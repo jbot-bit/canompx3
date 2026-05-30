@@ -174,6 +174,89 @@ _ALLOWED_ROLE_KINDS = {
     "execution",
 }
 
+# Allowed OOS holdout methods for the optional top-level ``oos_power_floor``
+# block. ``calendar`` is the sacred Mode-A date cut (trading_app.holdout_policy);
+# ``trade_fraction`` is the powered most-recent-fraction split carved by
+# ``research.oos_holdout.powered_oos_split``. The loader only validates this
+# block when ``holdout_method`` is explicitly declared (OPT-IN) — legacy
+# ``oos_power_floor`` blocks without the key load unchanged.
+_ALLOWED_OOS_HOLDOUT_METHODS = {
+    "calendar",
+    "trade_fraction",
+}
+
+# Power-tier names a ``trade_fraction`` block may target. Mirrors
+# ``research.oos_power.POWER_TIERS`` — kept as a literal set (not imported) to
+# avoid a research→trading_app import edge; parity is asserted by a loader test.
+_ALLOWED_OOS_TARGET_TIERS = {
+    "CAN_REFUTE",
+    "DIRECTIONAL_ONLY",
+    "STATISTICALLY_USELESS",
+}
+
+
+def _validate_oos_power_floor(data: dict[str, Any], path: Path) -> None:
+    """Validate the optional top-level ``oos_power_floor`` block (OPT-IN).
+
+    The block is only validated when it declares a ``holdout_method`` key.
+    Legacy ``oos_power_floor`` blocks (descriptive prose without
+    ``holdout_method``) are left untouched — this keeps the validator additive
+    and backward-compatible with every pre-2026-05-31 prereg.
+
+    When ``holdout_method`` IS present:
+      - it must be one of ``_ALLOWED_OOS_HOLDOUT_METHODS``;
+      - ``trade_fraction`` additionally REQUIRES:
+          * ``target_tier`` ∈ ``_ALLOWED_OOS_TARGET_TIERS``, and
+          * an explicit not-a-deployment-gate acknowledgment
+            (``deployment_gate: false``).
+
+    The deployment-gate guard encodes the literature scope limit at the schema
+    level: a trade-fraction split is a single-path OOS (López de Prado 2018
+    AFML § 12.2 names this WF pitfall #1) — it is research-validation evidence
+    on clean history, NOT a CPCV substitute (§ 12.4) and NOT a Criterion 8
+    forward-OOS clearance (``docs/institutional/pre_registered_criteria.md``
+    Criterion 8 / Amendment 3.5 — forward-OOS remains REQUIRED for deployment
+    and is explicitly NOT demoted). The loader REJECTS a fraction split that
+    asserts deployment readiness so the overclaim cannot enter via a prereg.
+
+    Raises
+    ------
+    HypothesisLoaderError
+        If the block is present, declares ``holdout_method``, and any of the
+        above constraints fail.
+    """
+    block = data.get("oos_power_floor")
+    if not isinstance(block, dict):
+        return  # absent or non-mapping legacy shape → not our concern (opt-in)
+    if "holdout_method" not in block:
+        return  # legacy descriptive block → leave untouched
+
+    method = block.get("holdout_method")
+    if method not in _ALLOWED_OOS_HOLDOUT_METHODS:
+        raise HypothesisLoaderError(
+            f"Hypothesis file {path} oos_power_floor.holdout_method must be one of "
+            f"{sorted(_ALLOWED_OOS_HOLDOUT_METHODS)}, got {method!r}."
+        )
+
+    if method == "trade_fraction":
+        tier = block.get("target_tier")
+        if tier not in _ALLOWED_OOS_TARGET_TIERS:
+            raise HypothesisLoaderError(
+                f"Hypothesis file {path} oos_power_floor.holdout_method='trade_fraction' "
+                f"requires target_tier ∈ {sorted(_ALLOWED_OOS_TARGET_TIERS)}, got {tier!r}."
+            )
+        # Not-a-deployment-gate acknowledgment is MANDATORY for trade_fraction.
+        # A fraction split is single-path OOS (AFML § 12.2) — it must not imply
+        # deployment readiness. Require deployment_gate to be explicitly False.
+        if block.get("deployment_gate") is not False:
+            raise HypothesisLoaderError(
+                f"Hypothesis file {path} oos_power_floor.holdout_method='trade_fraction' "
+                f"requires 'deployment_gate: false' — a trade-fraction split is a "
+                f"single-path research-validation OOS (AFML 2018 § 12.2), NOT a "
+                f"Criterion 8 forward-OOS deployment clearance. "
+                f"Got deployment_gate={block.get('deployment_gate')!r}."
+            )
+
 
 def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
     """Parse a hypothesis YAML file and validate its schema, returning metadata.
@@ -357,6 +440,11 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
                     raise HypothesisLoaderError(
                         f"Hypothesis file {path} hypothesis {i + 1} role.{field} must be a non-empty string."
                     )
+
+    # Optional top-level oos_power_floor block (opt-in: validated only when it
+    # declares holdout_method). Encodes the trade_fraction guardrail at schema
+    # level — see _validate_oos_power_floor.
+    _validate_oos_power_floor(data, path)
 
     return {
         "sha": compute_file_sha(path),

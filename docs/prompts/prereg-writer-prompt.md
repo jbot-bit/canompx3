@@ -84,6 +84,7 @@ The pre-reg file must include these sections (YAML keys):
 - reproducibility: repo_root, commit_sha (TO_FILL_AFTER_COMMIT), committed_required_before_run: true
 - scope: all verified dimensions
 - data_policy: is_window, oos_window, holdout_rule (constant_source + locked_boundary), tuning_against_oos: false
+- **oos_power_floor** (optional top-level block; validated OPT-IN by `trading_app.hypothesis_loader` only when `holdout_method` is declared): document the OOS power discipline per backtesting-methodology RULE 3.3. To use a POWERED trade-fraction holdout (`research.oos_holdout.powered_oos_split`) instead of the sacred calendar cut, declare `holdout_method: trade_fraction` AND `target_tier:` (one of CAN_REFUTE / DIRECTIONAL_ONLY / STATISTICALLY_USELESS) AND `deployment_gate: false`. The `deployment_gate: false` ack is MANDATORY and the loader rejects its absence: a trade-fraction split is a single-path research-validation OOS (López de Prado 2018 AFML § 12.2 — single-path WF pitfall #1), NOT a CPCV substitute (§ 12.4) and NOT a Criterion 8 forward-OOS deployment clearance (Criterion 8 remains REQUIRED for deployment, Amendment 3.5 — NOT demoted). Omit the block entirely, or declare `holdout_method: calendar`, to keep the sacred Mode-A date cut.
 - feature_definition: feature_name, column_source, canonical_source_of_truth, trade_time_knowable (bool), first_complete_time, temporal_alignment_note, lookhead_check
 - calibration: quantile_source / threshold_source, lock_policy
 - primary_schema or hypothesis_definition (whichever applies)

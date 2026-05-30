@@ -1081,3 +1081,134 @@ class TestAmendment33TheoryGrant:
         meta = load_hypothesis_metadata(p)
         assert meta["has_theory"] is False
         assert meta.get("testing_mode") == "individual"
+
+
+def _write_with_oos_power_floor(path: Path, block: dict) -> None:
+    """Write a minimal valid hypothesis plus a top-level oos_power_floor block."""
+    body: dict = {
+        "metadata": {
+            "name": "oos_power_floor_test",
+            "date_locked": "2026-05-31",
+            "holdout_date": "2026-01-01",
+            "total_expected_trials": 60,
+            "theory_grant": True,
+        },
+        "hypotheses": [
+            {
+                "id": 1,
+                "name": "synthetic",
+                "theory_citation": "docs/institutional/literature/synthetic_test.md",
+                "filter": {"type": "ORB_G5", "column": "orb_size", "thresholds": [5]},
+                "scope": {"sessions": ["NYSE_OPEN"]},
+            }
+        ],
+        "oos_power_floor": block,
+    }
+    path.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+
+
+class TestOosPowerFloorValidation:
+    """Stage 2 — opt-in validation of the oos_power_floor.holdout_method block.
+
+    The validator fires ONLY when holdout_method is declared, so legacy
+    descriptive blocks load unchanged. trade_fraction additionally requires a
+    target_tier and an explicit not-a-deployment-gate acknowledgment.
+    """
+
+    def test_legacy_block_without_holdout_method_loads_unchanged(self, tmp_path):
+        # The pre-2026-05-31 shape: descriptive keys, no holdout_method. Opt-in
+        # validator must NOT fire — this is the zero-regression guarantee.
+        p = tmp_path / "h.yaml"
+        _write_with_oos_power_floor(
+            p,
+            {
+                "required_tier_for_kill": "CAN_REFUTE (power >= 0.80)",
+                "measured_power_at_audit_time": 0.17,
+                "source": "research.oos_power.oos_ttest_power",
+            },
+        )
+        meta = load_hypothesis_metadata(p)  # must not raise
+        assert meta["name"] == "oos_power_floor_test"
+
+    def test_no_oos_power_floor_block_at_all_loads(self, tmp_path):
+        # Absent block → nothing to validate.
+        p = tmp_path / "h.yaml"
+        _write_minimal_hypothesis(p)
+        meta = load_hypothesis_metadata(p)
+        assert meta["name"] == "test_hypothesis"
+
+    def test_calendar_method_loads(self, tmp_path):
+        p = tmp_path / "h.yaml"
+        _write_with_oos_power_floor(p, {"holdout_method": "calendar"})
+        meta = load_hypothesis_metadata(p)  # must not raise
+        assert meta["name"] == "oos_power_floor_test"
+
+    def test_valid_trade_fraction_block_loads(self, tmp_path):
+        p = tmp_path / "h.yaml"
+        _write_with_oos_power_floor(
+            p,
+            {
+                "holdout_method": "trade_fraction",
+                "target_tier": "DIRECTIONAL_ONLY",
+                "deployment_gate": False,
+            },
+        )
+        meta = load_hypothesis_metadata(p)  # must not raise
+        assert meta["name"] == "oos_power_floor_test"
+
+    def test_unknown_holdout_method_rejected(self, tmp_path):
+        p = tmp_path / "h.yaml"
+        _write_with_oos_power_floor(p, {"holdout_method": "magic"})
+        with pytest.raises(HypothesisLoaderError, match="holdout_method must be one of"):
+            load_hypothesis_metadata(p)
+
+    def test_trade_fraction_without_target_tier_rejected(self, tmp_path):
+        p = tmp_path / "h.yaml"
+        _write_with_oos_power_floor(
+            p, {"holdout_method": "trade_fraction", "deployment_gate": False}
+        )
+        with pytest.raises(HypothesisLoaderError, match="requires target_tier"):
+            load_hypothesis_metadata(p)
+
+    def test_trade_fraction_bad_target_tier_rejected(self, tmp_path):
+        p = tmp_path / "h.yaml"
+        _write_with_oos_power_floor(
+            p,
+            {
+                "holdout_method": "trade_fraction",
+                "target_tier": "SOMETHING",
+                "deployment_gate": False,
+            },
+        )
+        with pytest.raises(HypothesisLoaderError, match="requires target_tier"):
+            load_hypothesis_metadata(p)
+
+    def test_trade_fraction_missing_deployment_gate_ack_rejected(self, tmp_path):
+        # The guardrail: a fraction split must explicitly disclaim deploy-readiness.
+        p = tmp_path / "h.yaml"
+        _write_with_oos_power_floor(
+            p, {"holdout_method": "trade_fraction", "target_tier": "DIRECTIONAL_ONLY"}
+        )
+        with pytest.raises(HypothesisLoaderError, match="requires 'deployment_gate: false'"):
+            load_hypothesis_metadata(p)
+
+    def test_trade_fraction_deployment_gate_true_rejected(self, tmp_path):
+        # deployment_gate: true is the overclaim the guardrail forbids.
+        p = tmp_path / "h.yaml"
+        _write_with_oos_power_floor(
+            p,
+            {
+                "holdout_method": "trade_fraction",
+                "target_tier": "CAN_REFUTE",
+                "deployment_gate": True,
+            },
+        )
+        with pytest.raises(HypothesisLoaderError, match="requires 'deployment_gate: false'"):
+            load_hypothesis_metadata(p)
+
+    def test_allowed_target_tiers_match_oos_power_module(self):
+        # Parity guard: the loader's literal tier set must match research.oos_power.
+        from research.oos_power import POWER_TIERS
+        from trading_app.hypothesis_loader import _ALLOWED_OOS_TARGET_TIERS
+
+        assert {t.name for t in POWER_TIERS} == _ALLOWED_OOS_TARGET_TIERS
