@@ -13,6 +13,11 @@
 - **⚠ Truth note (Claude, 2026-05-30, verified):** the `--strict-live-clean` flag and the lane_allocator `feature_cache` opt described above are **NOT committed on any branch** (`git log --all -S` = 0 hits). They live only in `stash@{0}` + `docs/runtime/rescued/2026-05-30-*` (see RESCUE-MANIFEST). Capital-path, Codex-owned — must be committed by its owner, not dropped. The regenerated `lane_allocation*.json` is the OUTPUT of that un-landed code, so canonical `docs/runtime/lane_allocation.json` on HEAD does NOT reflect it.
 - **✅ Drift CLEAN — RETRACTION of an earlier false claim (Claude, 2026-05-30, execution-verified):** an earlier version of this note (commit `82721bcc`) claimed `check_active_native_trade_windows_match_provenance` was FAILING on lane `MNQ_COMEX_SETTLE_...OVNRNG_100`. **That was wrong** — I wrote it from a stale memory note without executing, violating Rule 11 (never trust metadata). Direct call returns `VIOLATIONS: 0`; full `check_drift.py --skip-crg-advisory` = **NO DRIFT DETECTED, 170 passed, 0 failed** (incl. Check 191 cold-recheck PASSED). The COMEX_SETTLE lane IS present in canonical `lane_allocation.json` (one of the 3 active lanes). `backfill_validated_trade_windows.py` (live write) = `inspected=848 drifted=0 updated=0`. Trade-window provenance is canonical. No action owed.
 
+## Current Codex Follow-up
+- **Tool:** Codex
+- **Date:** 2026-05-31
+- **Summary:** PR #327 on `codex/db-mcp-safe-access` implements and formalizes local-first DB MCP safe access: `gold-db` exposes read-only health, freshness, snapshot-manifest, and access-policy tools; `scripts/tools/export_gold_db_snapshot.py` exports approved read snapshots with stamped manifests; durable write-broker boundaries live in `docs/plans/active/2026-05/2026-05-30-db-mcp-safe-access.md`; implementation-grade plan lives in `docs/superpowers/plans/2026-05-31-db-mcp-safe-access.md`; a remote-consumer test now proves exported Parquet can be read without opening source `gold.db`. Verification passes targeted tests/ruff/CLI, targeted drift checks, and full `pipeline/check_drift.py --quiet` (`SUMMARY: clean passed=170 advisory=21`). No live DB writes, allocation edits, order routing, or `paper_trades` mutation.
+
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31

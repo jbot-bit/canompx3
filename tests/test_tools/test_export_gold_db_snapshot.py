@@ -45,6 +45,30 @@ def test_export_snapshot_writes_parquet_and_manifest(snapshot_db: Path, tmp_path
     assert (root / "run-1" / "daily_features" / "daily_features.parquet").exists()
 
 
+def test_export_snapshot_can_be_consumed_without_source_db(snapshot_db: Path, tmp_path: Path) -> None:
+    root = tmp_path / "approved_snapshots"
+    now = datetime.fromtimestamp(snapshot_db.stat().st_mtime, tz=UTC)
+
+    manifest = export_snapshot(
+        db_path=snapshot_db,
+        output_dir=root / "run-remote",
+        snapshot_root=root,
+        tables=["daily_features"],
+        now=now,
+    )
+
+    con = duckdb.connect(":memory:")
+    try:
+        rows = con.execute(
+            "SELECT trading_day, symbol FROM read_parquet(?)",
+            [manifest["tables"]["daily_features"]["path"]],
+        ).fetchall()
+    finally:
+        con.close()
+
+    assert rows == [(datetime(2026, 5, 29).date(), "MNQ")]
+
+
 def test_export_snapshot_refuses_output_outside_approved_root(snapshot_db: Path, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="approved snapshot root"):
         export_snapshot(

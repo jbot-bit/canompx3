@@ -7,6 +7,8 @@ superseded_by: ""
 
 # DB MCP Safe Access Plan
 
+Implementation-grade task plan: `docs/superpowers/plans/2026-05-31-db-mcp-safe-access.md`.
+
 ## Decision
 
 `gold-db` remains the canonical database MCP for agents. It is local, stdio,
