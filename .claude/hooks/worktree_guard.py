@@ -17,20 +17,25 @@ exit-code semantics. Mirrors the structural template of every sibling hook
 
   1. If `acquire_or_refresh()` returns "acquired" / "refreshed" / "reclaimed"
      -> ALLOW. This process holds the lease and the sidecar is fresh.
-  2. If it returns "blocked" -> a live peer holds the OS-level FileLock for
-     this exact worktree. Print structured BLOCK message and exit 2.
+  2. If it returns "blocked" -> a DIFFERENT live session (fresh heartbeat AND
+     live ppid) holds the lease for this exact worktree. Print structured BLOCK
+     message and exit 2.
   3. If "skipped" (not in a git repo) or "error" (FS transient) -> ALLOW.
      Fail-open per `.claude/rules/branch-flip-protection.md` § "Fail-safe
      guarantee" — a guard that can't reason about state must not block.
 
 ## Auto-clear of stale leases
 
-Handled inside `scripts/tools/worktree_guard.py:acquire()` — when the OS lock
-is free (i.e. the prior holder process exited), this hook simply acquires it
-fresh. When the OS lock is HELD but the sidecar heartbeat is older than
-STALE_HEARTBEAT_SECONDS (30 min), the OS lock is the source of truth — we
-BLOCK regardless, because some process IS still holding the file. The
-operator's recovery path in that case is `--force-release`.
+Handled inside `scripts/tools/worktree_guard.py:acquire()`. Ownership is keyed
+on the holder's (session_id, ppid) + heartbeat — NOT an OS file-lock (the old
+lock was held by an ephemeral hook subprocess and provided no exclusion; see the
+canonical module docstring, n=2 incident 2026-05-29/30). A peer's lease is
+reclaimed only when the holder is provably gone: its ppid is dead AND its
+heartbeat is stale (older than STALE_HEARTBEAT_SECONDS = 90s). A live ppid keeps
+the lease no matter how stale the heartbeat — a single long-running tool call
+(e.g. `check_drift.py` at ~180s) legitimately stops refreshing it, and stealing
+the lease mid-call would let two sessions write. The operator's manual recovery
+path remains `--force-release`.
 
 ## Canonical-source delegation (institutional-rigor §4)
 
@@ -80,6 +85,8 @@ def _emit_block(peer_lease: dict | None, lease_module) -> None:
     """Structured stderr BLOCK message (mirrors the template used by
     `shared-state-commit-guard.py`)."""
     pid = (peer_lease or {}).get("pid", "?")
+    ppid = (peer_lease or {}).get("ppid", "?")
+    session_id = (peer_lease or {}).get("session_id", "?")
     worktree = (peer_lease or {}).get("worktree", "?")
     branch = (peer_lease or {}).get("branch", "?")
     started = (peer_lease or {}).get("iso_started", "?")
@@ -92,7 +99,8 @@ def _emit_block(peer_lease: dict | None, lease_module) -> None:
         "  ====================================================================",
         "  BLOCKED: Another Claude session holds the worktree concurrency lease.",
         "  --------------------------------------------------------------------",
-        f"  Peer PID:     {pid}",
+        f"  Peer session:{session_id}",
+        f"  Peer PID:     {pid} (Claude proc ppid {ppid})",
         f"  Worktree:     {worktree}",
         f"  Branch:       {branch}",
         f"  Started:      {started}",
@@ -132,13 +140,20 @@ def main() -> int:
         return 0  # canonical module unavailable -> fail-open
 
     # Bypass entirely when the env-var test seam is engaged (so the hook's
-    # own pytest suite can run without acquiring a real OS lock on the dev
+    # own pytest suite can run without acquiring a real lease on the dev
     # machine).
     if os.environ.get("WORKTREE_GUARD_BYPASS") == "1":
         return 0
 
+    # Identity = (session_id, ppid). session_id from the event payload is the
+    # stable per-session key; ppid (this hook subprocess's parent == the Claude
+    # session process) is the liveness anchor the canonical module probes. Both
+    # are passed so a SECOND session in this worktree is recognised as a
+    # different owner and blocked — the failure the old OS-lock model missed.
+    session_id = event.get("session_id", "") or os.environ.get("CLAUDE_SESSION_ID", "")
+
     try:
-        status_str, payload, _ = lease_module.acquire(Path.cwd())
+        status_str, payload, _ = lease_module.acquire(Path.cwd(), session_id=session_id)
     except BaseException:
         # Any unexpected failure in the canonical module -> fail-open. This
         # mirrors the fail-open contract in branch-flip-protection.md.
@@ -148,7 +163,7 @@ def main() -> int:
         _emit_block(payload, lease_module)
         return 2
 
-    # acquired / refreshed / skipped / error -> allow
+    # acquired / refreshed / reclaimed / skipped / error -> allow
     return 0
 
 

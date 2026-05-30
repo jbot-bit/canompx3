@@ -1087,16 +1087,22 @@ def _crg_context_lines() -> list[str]:
         return []
 
 
-def _worktree_lease_lines() -> tuple[list[str], bool]:
+def _worktree_lease_lines(session_id: str = "") -> tuple[list[str], bool]:
     """Acquire (or detect peer hold of) the worktree concurrency lease.
 
     Delegates entirely to `scripts/tools/worktree_guard.py` — institutional-
     rigor §4 (no inline copies). Returns (lines, should_block).
 
-    This is the SHORT-threshold (30 min heartbeat) lease enforced PreToolUse
-    by `.claude/hooks/worktree_guard.py`. The 12h `_session_lock_lines()`
-    mutex remains as a separate safety net for the longer-lived dead-lock
-    incident class. Both can coexist; they target different failure modes.
+    The lease is now keyed on (session_id, ppid)+heartbeat, NOT an OS file-lock
+    (the old lock was held by an ephemeral hook subprocess and provided no
+    mutual exclusion — see the canonical module docstring, n=2 incident
+    2026-05-29/30). Passing `session_id` here is what lets a SECOND session in
+    this worktree be recognised as a different owner and BLOCKED at startup,
+    even when the peer's working tree is clean (e.g. mid git-surgery after a
+    stash) — the exact case `_active_sibling_lines()`'s mtime signal misses.
+
+    The 12h `_session_lock_lines()` PID mutex remains as a separate safety net
+    for the longer-lived dead-lock incident class. Both coexist intentionally.
     Fail-open on any error.
     """
     try:
@@ -1110,19 +1116,20 @@ def _worktree_lease_lines() -> tuple[list[str], bool]:
             return [], False
         mod = _ilu.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        status_str, payload, msg = mod.acquire(PROJECT_ROOT)
+        status_str, payload, msg = mod.acquire(PROJECT_ROOT, session_id=session_id)
     except BaseException:
         return [], False
 
     if status_str == "blocked":
         pl: dict = payload if isinstance(payload, dict) else {}
         pid = pl.get("pid", "?")
+        sid = pl.get("session_id", "?")
         wt = pl.get("worktree", "?")
         lines = [
             "",
             "  ====================================================================",
             "  BLOCKED: another Claude session holds the worktree concurrency lease.",
-            f"  Peer PID {pid} on worktree {wt}",
+            f"  Peer session {sid} (PID {pid}) on worktree {wt}",
             "  Recovery (after confirming peer is truly gone):",
             "    python scripts/tools/worktree_guard.py --force-release",
             "  Or spawn a fresh worktree: scripts/tools/new_session.sh",
@@ -1130,7 +1137,7 @@ def _worktree_lease_lines() -> tuple[list[str], bool]:
             "",
         ]
         return lines, True
-    if status_str in ("acquired", "refreshed"):
+    if status_str in ("acquired", "refreshed", "reclaimed"):
         return [f"  Worktree lease: {status_str} ({msg})"], False
     return [], False  # skipped / error -> fail-open silently
 
@@ -1196,6 +1203,7 @@ def main() -> None:
         sys.exit(0)
 
     session_type = event.get("session_type", "startup")
+    session_id = event.get("session_id", "") or os.environ.get("CLAUDE_SESSION_ID", "")
     lines: list[str] = []
     task_route_lines = _task_route_lines()
 
@@ -1207,10 +1215,13 @@ def main() -> None:
         if should_block:
             print("\n".join(block_lines), file=sys.stderr)
             sys.exit(2)
-        # Short-threshold (30 min) lease for PreToolUse enforcement. Separate
-        # from the 12h PID lock above. Acquires (or refreshes) for this PID
-        # so the PreToolUse hook recognises this session as the holder.
-        lease_lines, lease_block = _worktree_lease_lines()
+        # (session_id, ppid)+heartbeat lease — the real worktree mutex, also
+        # enforced PreToolUse by `.claude/hooks/worktree_guard.py`. Passing this
+        # session's id lets the canonical module recognise a DIFFERENT live
+        # session in this tree and BLOCK us at startup, even when the peer's
+        # tree is clean (mid git-surgery after a stash) — the case the
+        # mtime-based `_active_sibling_lines()` below structurally misses.
+        lease_lines, lease_block = _worktree_lease_lines(session_id)
         if lease_block:
             print("\n".join(lease_lines), file=sys.stderr)
             sys.exit(2)
