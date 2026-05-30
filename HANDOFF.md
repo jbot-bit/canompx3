@@ -16,14 +16,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** aa5963ea — [mechanical] fix: Ralph Loop iter 219 — ingest_dbn_mgc SYMBOL constant DRY (MGC literals x6)
-- **Files changed:** 6 files
+- **Commit:** 7522e194 — chore(ralph): iters 220-221 bookkeeping — broker_factory stale re-audit clean, outcome_builder CLI fix
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/ralph-ledger.json`
   - `docs/ralph-loop/ralph-loop-audit.md`
   - `docs/ralph-loop/ralph-loop-history.md`
-  - `pipeline/ingest_dbn_mgc.py`
-  - `trading_app/outcome_builder.py`
+  - `docs/ralph-loop/ralph-loop-plan.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

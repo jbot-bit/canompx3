@@ -5,6 +5,21 @@
 
 ---
 
+## Iteration 222 — 2026-05-31
+- Phase: audit-only
+- Classification: audit-only
+- Target: trading_app/live_config.py
+- Cluster: 0 findings, 4 ACCEPTABLE patterns confirmed (same as iter 119)
+- Finding: File clean — stale ledger entry (findings=3 was pre-iter-119 state). All 4 ACCEPTABLE patterns re-confirmed: MGC in INSTRUMENT_ATR_GATE (per-instrument heuristic), MGC default in deprecated build_live_portfolio() (dormant infra), MGC CLI default guarded by choices= (deprecated tool), broad-except in _exp_dollars display helper (logged, no capital path).
+- Doctrine cited: integrity-guardian.md § 2 (instrument canonical source); ACCEPTABLE rules 1+2+3
+- Action: Audit only; no fix applied; ledger findings=3 stale entry corrected to findings=0 via ledger rebuild
+- Blast radius: N/A
+- Verification gate: fast
+- Verification: PASS — 152 drift checks, ruff clean, 41/41 live_config tests
+- Commit: NONE
+
+---
+
 ## Iteration 221 — 2026-05-31
 - Phase: fix
 - Classification: [mechanical]

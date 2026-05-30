@@ -1,12 +1,12 @@
 {
-  "total_iterations": 209,
+  "total_iterations": 211,
   "last_updated": "2026-05-31",
-  "consecutive_low_only": 2,
+  "consecutive_low_only": 4,
   "last_high_finding_iter": 217,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 70,
-      "fixed": 55,
+      "found": 71,
+      "fixed": 56,
       "deferred": 4,
       "fix_rate": 0.79
     },
@@ -35,10 +35,10 @@
       "fix_rate": 0.86
     },
     "stale_metadata": {
-      "found": 5,
+      "found": 6,
       "fixed": 5,
       "deferred": 0,
-      "fix_rate": 1.0
+      "fix_rate": 0.83
     },
     "lint": {
       "found": 5,
@@ -135,12 +135,12 @@
     "CRITICAL": 10,
     "HIGH": 14,
     "MEDIUM": 55,
-    "LOW": 130
+    "LOW": 132
   },
   "classifications": {
     "judgment": 89,
-    "mechanical": 82,
-    "audit-only": 38
+    "mechanical": 83,
+    "audit-only": 39
   },
   "files_audited": {
     "trading_app/live/session_orchestrator.py": {
@@ -164,6 +164,13 @@
       "file_hash": "c67fb8ca46055e9d",
       "git_sha": "19a344c6"
     },
+    "trading_app/outcome_builder.py": {
+      "audit_count": 6,
+      "last_iter": 221,
+      "findings": 6,
+      "file_hash": "2410712ab7e947f8",
+      "git_sha": "aa5963ea"
+    },
     "trading_app/strategy_validator.py": {
       "audit_count": 5,
       "last_iter": 191,
@@ -178,12 +185,12 @@
       "file_hash": "aab0db06d73080fb",
       "git_sha": "89f8e97b"
     },
-    "trading_app/outcome_builder.py": {
+    "trading_app/live_config.py": {
       "audit_count": 5,
-      "last_iter": 185,
-      "findings": 5,
-      "file_hash": "7a6d9f31f27c4b0a",
-      "git_sha": "9e23de0c"
+      "last_iter": 222,
+      "findings": 3,
+      "file_hash": "351e3730fd2a9c26",
+      "git_sha": "dc3a45c9"
     },
     "trading_app/prop_profiles.py": {
       "audit_count": 5,
@@ -212,13 +219,6 @@
       "findings": 3,
       "file_hash": "",
       "git_sha": ""
-    },
-    "trading_app/live_config.py": {
-      "audit_count": 4,
-      "last_iter": 119,
-      "findings": 3,
-      "file_hash": "351e3730fd2a9c26",
-      "git_sha": "dc3a45c9"
     },
     "trading_app/strategy_discovery.py": {
       "audit_count": 4,
@@ -1373,7 +1373,7 @@
       "last_iter": 136,
       "findings": 1,
       "file_hash": "cabdb58d20182ea1",
-      "git_sha": "ccb44343"
+      "git_sha": "aa5963ea"
     },
     "pipeline/ingest_dbn_daily.py": {
       "audit_count": 1,
@@ -4224,6 +4224,28 @@
       "classification": "mechanical",
       "target": "trading_app/live/broker_factory.py (stale re-audit, last iter 127, findings=1)",
       "finding_type": "unreachable_code",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 221,
+      "date": "2026-05-31",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/outcome_builder.py:1098 (first full scan, critical centrality 11 importers)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "aa5963ea (bundled with iter 219)"
+    },
+    {
+      "iter": 222,
+      "date": "2026-05-31",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/live_config.py",
+      "finding_type": "stale_metadata",
       "severity": "LOW",
       "verdict": "CLEAN",
       "commit": "NONE"
