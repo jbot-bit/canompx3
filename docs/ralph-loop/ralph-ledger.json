@@ -1,7 +1,7 @@
 {
-  "total_iterations": 205,
+  "total_iterations": 206,
   "last_updated": "2026-05-31",
-  "consecutive_low_only": 2,
+  "consecutive_low_only": 3,
   "last_high_finding_iter": 213,
   "findings_by_type": {
     "canonical_violation": {
@@ -76,6 +76,12 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
+    "drift_check_fix": {
+      "found": 2,
+      "fixed": 2,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
     "type_error": {
       "found": 2,
       "fixed": 1,
@@ -112,12 +118,6 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
-    "drift_check_fix": {
-      "found": 1,
-      "fixed": 1,
-      "deferred": 0,
-      "fix_rate": 1.0
-    },
     "async_safety": {
       "found": 1,
       "fixed": 0,
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 55,
-    "LOW": 127
+    "LOW": 128
   },
   "classifications": {
     "judgment": 89,
-    "mechanical": 79,
+    "mechanical": 80,
     "audit-only": 37
   },
   "files_audited": {
@@ -305,6 +305,13 @@
       "file_hash": "d255cbc9d7e6471e",
       "git_sha": "c20716b6"
     },
+    "pipeline/asset_configs.py": {
+      "audit_count": 3,
+      "last_iter": 216,
+      "findings": 2,
+      "file_hash": "95df2c060f618c67",
+      "git_sha": "0e77cda4"
+    },
     "trading_app/pre_session_check.py": {
       "audit_count": 3,
       "last_iter": 201,
@@ -451,13 +458,6 @@
       "findings": 2,
       "file_hash": "bd1e001df1a1289d",
       "git_sha": "f1ec4cdf"
-    },
-    "pipeline/asset_configs.py": {
-      "audit_count": 2,
-      "last_iter": 182,
-      "findings": 1,
-      "file_hash": "a17e375cc95bb83c",
-      "git_sha": "6aed3f72"
     },
     "research/research_edge_structure.py": {
       "audit_count": 2,
@@ -4163,6 +4163,17 @@
       "severity": "LOW",
       "verdict": "CLEAN",
       "commit": "NONE"
+    },
+    {
+      "iter": 216,
+      "date": "2026-05-31",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/asset_configs.py:234",
+      "finding_type": "drift_check_fix",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "0e77cda4"
     }
   ]
 }

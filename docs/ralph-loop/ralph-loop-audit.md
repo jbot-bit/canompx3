@@ -3,7 +3,49 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 215
+## Last iteration: 216
+
+## RALPH AUDIT — Iteration 216 (COMPLETED)
+## Date: 2026-05-31
+## Infrastructure Gates: 152 drift checks PASS (fast + skip-crg-advisory); ruff PASS
+## Scope: pipeline/asset_configs.py — P1 unscanned critical (82 importers)
+
+---
+
+## Full-File Audit Results
+
+### pipeline/asset_configs.py — SCANNED (first full scan)
+
+**Seven Sins Scan — iteration 216:**
+- S1 (Silent failure): `get_enabled_sessions` returns `[]` for unknown instruments — both callers (outcome_builder.py:792-795, strategy_discovery.py:1299-1302) raise ValueError on empty. No silent path. CLEAN.
+- S2 (Fail-open): `require_dbn_available` raises ValueError on all failure paths (missing dbn_path, missing minimum_start_date, FileNotFoundError on disk check). CLEAN.
+- S3 (Canonical violation): `ACTIVE_ORB_INSTRUMENTS` derives from `ASSET_CONFIGS` dict + `DEAD_ORB_INSTRUMENTS` exclusion — canonical source, not hardcoded list. All session names in `enabled_sessions` validated against `SESSION_CATALOG` (0 unknown). `PROJECT_ROOT / "DB"` paths are raw DBN data stores (not deprecated gold.db scratch path). CLEAN.
+- S4 (Impact unawareness): test_asset_configs.py has 40 tests, all pass. CLEAN.
+- S5 (Evidence over assertion): All claims verified by execution. CLEAN.
+- S6 (Spec compliance): No spec violations. CLEAN.
+- S7 (Metadata trust): AC-216-01 FIXED — M2K `orb_active: True` was misleading metadata. Changed to `orb_active: False` (commit 0e77cda4). FIXED.
+
+**Domain-specific checks:**
+- ORB window timing: No `break_ts`, no hardcoded orb_minutes. CLEAN.
+- Session hardcoding: All session strings validated against SESSION_CATALOG. CLEAN.
+- E0 fill-on-touch: No `close_outside`/`closed_outside` references. CLEAN.
+- Holdout date: No `date(2026` literals in instrument configuration. CLEAN.
+- DST contamination: No fixed timing constants; sessions are labels only. CLEAN.
+- DB path: No `gold.db` references; `PROJECT_ROOT / "DB"` paths are raw DBN stores (correct). CLEAN.
+
+**Ralph-specific extensions scan:**
+- Async safety: No async code in this module. CLEAN.
+- State persistence gap: No stateful objects. CLEAN.
+- Contract drift: `get_asset_config`/`require_dbn_available` API split from 2026-04-19 intact. CLEAN.
+- Look-ahead bias: Not applicable (configuration module). CLEAN.
+
+**Finding fixed:**
+
+- AC-216-01 [LOW] — annotation_debt: M2K `"orb_active": True` at line 234 was misleading — M2K has been in `DEAD_ORB_INSTRUMENTS` since Mar 2026 (0/18 families survive noise screening). The drift check `check_no_raw_orb_active_reads` (check_drift.py:6126) explicitly documented M2K as a "trap" with `orb_active=True`. Fixed: changed to `"orb_active": False` with clarifying comment. Zero behavior change — `ACTIVE_ORB_INSTRUMENTS` derivation still correctly excludes M2K via `DEAD_ORB_INSTRUMENTS`. Commit: 0e77cda4.
+
+**Known acceptable patterns from prior iter (182 scan):** none recorded in ledger for this file.
+
+---
 
 ## RALPH AUDIT — Iteration 215 (COMPLETED)
 ## Date: 2026-05-31
@@ -113,10 +155,11 @@ Stale re-audit covering 3 commits since iter 182 (last audited):
 - trading_app/allocation_promotion.py (iter 212 — batch fix; 1 canonical violation fixed)
 - trading_app/live/session_orchestrator.py (iter 214 — stale re-audit; 0 findings, ACCEPTABLE falsy-zero LOW)
 - pipeline/build_daily_features.py (iter 215 — stale re-audit; 0 findings, 2 ACCEPTABLE LOW)
+- pipeline/asset_configs.py (iter 216 — full scan; 1 LOW fixed annotation_debt AC-216-01)
 
 ## Next Iteration Targets
 
 Priority 0 — Open deferred HIGH/CRITICAL: NONE (SHADOW-MLL is MEDIUM, intentional design, dormant).
-Priority 1 — Unscanned critical/high files: `pipeline/asset_configs.py` (82 importers, critical centrality — unscanned in ledger, highest centrality unscanned file).
+Priority 1 — Unscanned critical/high files: All critical files now scanned. Next: high-centrality unscanned.
 Priority 2 — Stale re-audits: `trading_app/conditional_overlays.py` (new module referenced in session_orchestrator, unscanned). `trading_app/execution_engine.py` (critical usage, not in centrality JSON).
-Priority 3 — Unscanned medium files: `trading_app/portfolio.py` (imports COMPRESSION_SESSIONS from build_daily_features — verified in this iter, but portfolio.py itself unscanned).
+Priority 3 — Unscanned medium files: `trading_app/portfolio.py` (imports COMPRESSION_SESSIONS from build_daily_features — verified in iter 215, but portfolio.py itself unscanned).

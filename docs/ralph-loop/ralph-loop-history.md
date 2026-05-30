@@ -5,6 +5,21 @@
 
 ---
 
+## Iteration 216 — 2026-05-31
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/asset_configs.py:234
+- Cluster: 1 finding (annotation_debt LOW)
+- Finding: M2K ASSET_CONFIGS had orb_active=True despite being in DEAD_ORB_INSTRUMENTS since Mar 2026. Drift check explicitly flagged this as a trap (check_drift.py:6126). Fixed to orb_active=False with clarifying comment; ACTIVE_ORB_INSTRUMENTS unchanged.
+- Doctrine cited: integrity-guardian.md § 7 (Never Trust Metadata)
+- Action: Changed pipeline/asset_configs.py:234 orb_active True→False + comment update
+- Blast radius: 0 files (drift check enforces no raw orb_active reads outside asset_configs.py)
+- Verification gate: fast
+- Verification: PASS — 152 drift PASS, 40/40 asset_configs tests PASS, ruff PASS
+- Commit: 0e77cda4
+
+---
+
 ## Iteration 215 — 2026-05-31
 - Phase: audit-only
 - Classification: N/A (no code change)
