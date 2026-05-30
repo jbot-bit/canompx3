@@ -310,9 +310,7 @@ def _active_strategy_ids(profile_id: str) -> frozenset[str]:
 
 def _allowed_profile_sets(profile_id: str) -> tuple[frozenset[str] | None, frozenset[str] | None]:
     profile = ACCOUNT_PROFILES[profile_id]
-    allowed_instruments = (
-        frozenset(profile.allowed_instruments) if profile.allowed_instruments is not None else None
-    )
+    allowed_instruments = frozenset(profile.allowed_instruments) if profile.allowed_instruments is not None else None
     allowed_sessions = frozenset(profile.allowed_sessions) if profile.allowed_sessions is not None else None
     return allowed_instruments, allowed_sessions
 
@@ -326,10 +324,7 @@ def _write_artifacts(
     args: argparse.Namespace,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    serializable_args = {
-        key: str(value) if isinstance(value, Path) else value
-        for key, value in vars(args).items()
-    }
+    serializable_args = {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}
     manifest = {
         "generated_at": datetime.now(UTC).isoformat(),
         "profile_id": profile_id,
