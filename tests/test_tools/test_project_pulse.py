@@ -899,6 +899,91 @@ class TestFollowupReconciliation:
 
         assert items == []
 
+    def test_queue_reconciliation_does_not_treat_generic_source_as_coverage(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: generic_staleness_review",
+                    "    title: Review staleness pulse findings",
+                    "    class: ops",
+                    "    status: ready",
+                    "    priority: P2",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 7",
+                    "    next_action: Review generic staleness output",
+                    "    exit_criteria: Generic staleness review complete",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        items = collect_queue_reconciliation(
+            tmp_path,
+            [
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="staleness",
+                    summary="MES: 1 stale step(s) - experimental_strategies",
+                )
+            ],
+        )
+
+        assert len(items) == 1
+        assert "experimental_strategies" in items[0].summary
+
+    def test_queue_reconciliation_accepts_specific_finding_terms(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: mes_experimental_stale_followup",
+                    "    title: Resolve MES stale experimental_strategies pulse finding",
+                    "    class: ops",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 7",
+                    "    next_action: Fix MES stale experimental_strategies follow-up",
+                    "    exit_criteria: Pulse finding cleared",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref:",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        items = collect_queue_reconciliation(
+            tmp_path,
+            [
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="staleness",
+                    summary="MES: 1 stale step(s) - experimental_strategies",
+                )
+            ],
+        )
+
+        assert items == []
+
     def test_debt_reconciliation_flags_missing_metadata_and_queue_coverage(self, tmp_path: Path) -> None:
         _mkfile(
             tmp_path / "docs" / "runtime" / "debt-ledger.md",

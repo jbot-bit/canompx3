@@ -2022,6 +2022,11 @@ def _coverage_tokens(text: str) -> list[str]:
         "fix",
         "run",
         "check",
+        "pulse",
+        "finding",
+        "findings",
+        "generic",
+        "review",
     }
     tokens = [token for token in _normalize_coverage_text(text).split() if len(token) >= 4 and token not in stop]
     deduped: list[str] = []
@@ -2029,6 +2034,22 @@ def _coverage_tokens(text: str) -> list[str]:
         if token not in deduped:
             deduped.append(token)
     return deduped[:8]
+
+
+def _coverage_needles(*needles: str) -> list[tuple[str, list[str]]]:
+    candidates: list[tuple[str, list[str]]] = []
+    for needle in needles:
+        normalized = _normalize_coverage_text(needle)
+        if not normalized:
+            continue
+        tokens = _coverage_tokens(needle)
+        if (
+            len(tokens) >= 2
+            or len(normalized) >= 16
+            or (len(normalized) >= 6 and any(ch.isdigit() for ch in normalized))
+        ):
+            candidates.append((normalized, tokens))
+    return candidates
 
 
 def _queue_coverage_blobs(root: Path) -> list[str]:
@@ -2064,12 +2085,11 @@ def _is_covered_by_queue(root: Path, *needles: str) -> bool:
     if not blobs:
         return False
 
-    normalized_needles = [_normalize_coverage_text(needle) for needle in needles if _normalize_coverage_text(needle)]
+    candidates = _coverage_needles(*needles)
     for blob in blobs:
-        if any(needle and needle in blob for needle in normalized_needles):
+        if any(normalized and normalized in blob for normalized, _tokens in candidates):
             return True
-        for needle in needles:
-            tokens = _coverage_tokens(needle)
+        for _normalized, tokens in candidates:
             if len(tokens) >= 2 and sum(1 for token in tokens if token in blob) >= min(3, len(tokens)):
                 return True
     return False
@@ -2172,7 +2192,7 @@ def collect_queue_reconciliation(canonical: Path, items: list[PulseItem]) -> lis
         actionable = item.category in {"broken", "decaying", "unactioned"}
         if not actionable:
             continue
-        if _is_covered_by_queue(canonical, item.source, item.summary, item.detail or ""):
+        if _is_covered_by_queue(canonical, item.summary, item.detail or ""):
             continue
         missing.append(
             PulseItem(
