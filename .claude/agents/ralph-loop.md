@@ -36,7 +36,7 @@ Classification gates verification depth. Assign classification BEFORE touching a
 | `[judgment]` | any logic change, guard, exception narrowing, new behavior, new test | `python pipeline/check_drift.py --fast && ruff check pipeline/ trading_app/ scripts/` | Full drift + behavioral + targeted pytest |
 | `[mixed]` | cluster with both types | Use `[mechanical]` baseline; `[judgment]` post-fix | Full drift required |
 
-**`--fast` cuts 174s of the 184s typical drift runtime** (skips CRG bridge-node check at 52s + slow advisory checks). Always use it for BASELINE. Use full `check_drift.py` post-fix ONLY for `[judgment]`/`[mixed]` clusters.
+**`--fast` cuts ~90s of the ~185s typical drift runtime** (skips CRG bridge-node check at 52s + slow advisory checks; live-measured 2026-05-29). Always use it for BASELINE. Use full `check_drift.py` post-fix ONLY for `[judgment]`/`[mixed]` clusters.
 
 ---
 
@@ -432,7 +432,34 @@ rm -f docs/runtime/stages/ralph_iter_ITER.md
 
 ---
 
-## Step 4: UPDATE FILES
+## Step 4: FINAL REPORT (emit BEFORE bookkeeping)
+
+**Emit the report first.** If the agent exhausts turns during Step 5 bookkeeping, the report
+must already exist in the conversation. Bookkeeping loss is recoverable; report loss is not.
+
+Return this exact format:
+```
+=== RALPH LOOP ITER [N] COMPLETE ===
+Scope: [target file(s)]
+Audit: N findings (X CRIT, X HIGH, X MED, X LOW)
+Cluster fixed: [type] — N findings in [file(s)]
+Classification: [mechanical | judgment | mixed]
+Action: [fix | audit-only | rejected | needs-review | diminishing-returns]
+Baseline gate: [fast drift PASS/FAIL + ruff PASS/FAIL]
+Post-fix gate: [fast | full] [PASS/FAIL]
+Doctrine cited: [integrity-guardian.md § X / backtesting-methodology.md § RULE N]
+Blast radius: [N files, key callers]
+Verdict: [ACCEPT | REJECT | SKIPPED | NEEDS_REVIEW | DIMINISHING_RETURNS]
+Commit: [hash or NONE]
+Deferred debt: [N open items]
+Other clusters deferred: [brief list]
+Next: [top candidate for next iteration — specific file:line if known]
+================================
+```
+
+---
+
+## Step 5: UPDATE FILES (bookkeeping — after report is emitted)
 
 **Overwrite** `docs/ralph-loop/ralph-loop-audit.md` with:
 - `## Last iteration: ITER`
@@ -472,30 +499,6 @@ python scripts/tools/ralph_build_ledger.py
 
 ---
 
-## Step 5: FINAL REPORT
-
-Return this exact format:
-```
-=== RALPH LOOP ITER [N] COMPLETE ===
-Scope: [target file(s)]
-Audit: N findings (X CRIT, X HIGH, X MED, X LOW)
-Cluster fixed: [type] — N findings in [file(s)]
-Classification: [mechanical | judgment | mixed]
-Action: [fix | audit-only | rejected | needs-review | diminishing-returns]
-Baseline gate: [fast drift PASS/FAIL + ruff PASS/FAIL]
-Post-fix gate: [fast | full] [PASS/FAIL]
-Doctrine cited: [integrity-guardian.md § X / backtesting-methodology.md § RULE N]
-Blast radius: [N files, key callers]
-Verdict: [ACCEPT | REJECT | SKIPPED | NEEDS_REVIEW | DIMINISHING_RETURNS]
-Commit: [hash or NONE]
-Deferred debt: [N open items]
-Other clusters deferred: [brief list]
-Next: [top candidate for next iteration — specific file:line if known]
-================================
-```
-
----
-
 ## Critical Rules
 
 Most behavioral rules are canonical in `.claude/rules/institutional-rigor.md` (loaded Step 0a).
@@ -510,7 +513,7 @@ Ralph-specific deltas — these are NOT in canonical docs:
 - **No-touch zones** — config/dst/cost_model/init_db/research values = audit only.
 - **Classify every commit** — `[mechanical]`, `[judgment]`, or `[mixed]`. When unsure → `[judgment]`.
 - **Cite doctrine** — every finding must cite its violated rule. No citation = not grounded.
-- **Tiered verification is MANDATORY** — `[mechanical]` cluster uses `--fast` drift; `[judgment]`/`[mixed]` runs full drift + behavioral. Never run full `check_drift.py` at BASELINE — always use `--fast` there. The 174s saved per iteration compounds across continuous runs.
+- **Tiered verification is MANDATORY** — `[mechanical]` cluster uses `--fast` drift; `[judgment]`/`[mixed]` runs full drift + behavioral. Never run full `check_drift.py` at BASELINE — always use `--fast` there. The ~90s saved per iteration (live-measured 2026-05-29) compounds across continuous runs.
 - **CRG is CONDITIONAL** — skip preamble for `medium`/`low` centrality targets. Bridge-node check is 52s.
 - **Domain checks are MANDATORY** — the ORB-specific check table in Step 1e runs every iteration, not just when you think it's relevant. E0 fill-on-touch, holdout date hardcoding, and `orb_utc_window` bypasses have burned this pipeline before. Scan for them every time.
 
