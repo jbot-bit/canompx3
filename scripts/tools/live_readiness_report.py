@@ -529,6 +529,17 @@ def _extract_stage_status_fields(text: str) -> dict[str, str]:
     return status_fields
 
 
+def _is_green_stage_acceptance(status_fields: dict[str, str]) -> bool:
+    normalized_values = [value.upper() for value in status_fields.values()]
+    if any(value == "CLOSED_FOR_SINGLE_COPY_PILOT" for value in normalized_values):
+        return True
+    has_closed = any(value == "CLOSED" for value in normalized_values)
+    has_pending_or_implementation = any(
+        ("PENDING" in value) or ("IMPLEMENT" in value) for value in normalized_values if value != "CLOSED"
+    )
+    return has_closed and not has_pending_or_implementation
+
+
 def _read_stage_acceptance(path_text: str) -> dict[str, Any]:
     path = PROJECT_ROOT / path_text
     summary: dict[str, Any] = {
@@ -549,13 +560,8 @@ def _read_stage_acceptance(path_text: str) -> dict[str, Any]:
         summary["status_text"] = "NO_STATUS_FIELDS"
         return summary
 
-    normalized_values = [value.upper() for value in status_fields.values()]
     summary["status_text"] = ", ".join(f"{field}={status_fields[field]}" for field in sorted(status_fields))
-    has_closed = any(value == "CLOSED" for value in normalized_values)
-    has_pending_or_implementation = any(
-        ("PENDING" in value) or ("IMPLEMENT" in value) for value in normalized_values if value != "CLOSED"
-    )
-    summary["green"] = has_closed and not has_pending_or_implementation
+    summary["green"] = _is_green_stage_acceptance(status_fields)
     return summary
 
 
@@ -567,22 +573,28 @@ def _evaluate_live_stage_acceptance() -> dict[str, Any]:
     }
 
 
-def _load_profile_launch_summary(profile_id: str) -> dict[str, Any]:
+def _load_profile_launch_summary(profile_id: str, effective_copies: int = 0) -> dict[str, Any]:
     profile = get_profile(profile_id)
-    copies = int(profile.copies)
+    profile_copies = int(profile.copies)
+    launch_copies = int(effective_copies) if int(effective_copies) > 0 else profile_copies
     daily_loss_dollars = profile.daily_loss_dollars
     return {
         "profile_id": profile.profile_id,
         "firm": profile.firm,
         "account_size": profile.account_size,
         "is_express_funded": bool(profile.is_express_funded),
-        "copies": copies,
+        "profile_copies": profile_copies,
+        "effective_copies": launch_copies,
+        "copies": profile_copies,
         "daily_loss_dollars": daily_loss_dollars,
-        "shadow_copy_loss_protection": copies <= 1,
+        "shadow_copy_loss_protection": launch_copies <= 1,
         "shadow_copy_loss_protection_detail": (
-            "single-account pilot"
-            if copies <= 1
-            else "primary software daily-loss/HWM belt only; shadows rely on broker/account-side controls"
+            f"single-account pilot (effective_copies={launch_copies}, profile_copies={profile_copies})"
+            if launch_copies <= 1
+            else (
+                "primary software daily-loss/HWM belt only; shadows rely on broker/account-side controls "
+                f"(effective_copies={launch_copies}, profile_copies={profile_copies})"
+            )
         ),
     }
 
@@ -680,9 +692,11 @@ def _build_strict_zero_warn_summary(
         if stage.get("green") is not True:
             blockers.append(f"Live stage not green: {stage.get('path')}")
 
-    if int(profile_launch.get("copies") or 0) > 1 and profile_launch.get("shadow_copy_loss_protection") is not True:
+    effective_copies = int(profile_launch.get("effective_copies") or profile_launch.get("copies") or 0)
+    if effective_copies > 1 and profile_launch.get("shadow_copy_loss_protection") is not True:
         blockers.append(
-            f"Profile copies>1 without per-shadow software loss protection: copies={profile_launch.get('copies')}"
+            "Effective copies>1 without per-shadow software loss protection: "
+            f"effective_copies={effective_copies} profile_copies={profile_launch.get('profile_copies')}"
         )
 
     if automation_health.get("available") is True and automation_health.get("overall") != "OK":
@@ -705,6 +719,7 @@ def build_live_readiness_report(
     *,
     db_path: Path = GOLD_DB_PATH,
     allocation_path: Path = DEFAULT_ALLOCATION_PATH,
+    effective_copies: int = 0,
 ) -> dict[str, Any]:
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
     profile_lanes = get_profile_lane_definitions(resolved_profile_id)
@@ -714,7 +729,7 @@ def build_live_readiness_report(
 
     blocked_reason_by_strategy = lifecycle.get("blocked_reason_by_strategy", {})
     strategy_states = lifecycle.get("strategy_states", {})
-    profile_launch = _load_profile_launch_summary(resolved_profile_id)
+    profile_launch = _load_profile_launch_summary(resolved_profile_id, effective_copies=effective_copies)
     allocator_summary = _load_allocator_summary(
         resolved_profile_id,
         allocation_path,
@@ -833,7 +848,8 @@ def _render_text(report: dict[str, Any]) -> str:
         ),
         (
             "Profile launch: "
-            f"copies={profile_launch.get('copies')} "
+            f"profile_copies={profile_launch.get('profile_copies', profile_launch.get('copies'))} "
+            f"effective_copies={profile_launch.get('effective_copies', profile_launch.get('copies'))} "
             f"shadow_loss_protection={profile_launch.get('shadow_copy_loss_protection')} "
             f"detail={profile_launch.get('shadow_copy_loss_protection_detail')}"
         ),
@@ -956,7 +972,8 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Profile Launch",
         "",
-        f"- Copies: `{profile_launch.get('copies')}`",
+        f"- Profile copies: `{profile_launch.get('profile_copies', profile_launch.get('copies'))}`",
+        f"- Effective launch copies: `{profile_launch.get('effective_copies', profile_launch.get('copies'))}`",
         f"- Shadow loss protection: `{profile_launch.get('shadow_copy_loss_protection')}`",
         f"- Detail: `{profile_launch.get('shadow_copy_loss_protection_detail')}`",
         "",
@@ -1057,6 +1074,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Exit nonzero when the strict zero-warn gate is not green.",
     )
+    parser.add_argument(
+        "--copies",
+        type=int,
+        default=0,
+        help="Effective launch copy count for this readiness run (0=profile default).",
+    )
     return parser
 
 
@@ -1066,6 +1089,7 @@ def main() -> None:
         profile_id=args.profile,
         db_path=GOLD_DB_PATH,
         allocation_path=Path(args.allocation_path),
+        effective_copies=args.copies,
     )
 
     if args.format == "json":

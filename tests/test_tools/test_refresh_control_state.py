@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+
 from scripts.tools import refresh_control_state
 
 
@@ -76,3 +79,14 @@ def test_refresh_control_state_force_runs_both(monkeypatch):
     assert calls == ["c11", "c12"]
     assert result["criterion11"].refreshed is True
     assert result["criterion12"].refreshed is True
+
+
+def test_refresh_control_state_direct_script_help_imports() -> None:
+    result = subprocess.run(
+        [sys.executable, "scripts/tools/refresh_control_state.py", "--help"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Refresh stale or mismatched control-state surfaces" in result.stdout

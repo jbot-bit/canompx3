@@ -604,6 +604,28 @@ def test_shadow_copy_loss_protection_allows_live_single_copy_override(monkeypatc
     assert "copies=1" in result.message
 
 
+def test_live_readiness_report_receives_single_copy_override(monkeypatch):
+    captured = {}
+
+    def _fake_report(**kwargs):
+        captured.update(kwargs)
+        return {"strict_zero_warn": {"green": True, "blockers": []}}
+
+    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
+    ctx = _make_copy_trading_ctx(
+        profile_id="topstep_50k_mnq_auto",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = False
+
+    result = rls._check_live_readiness_report(ctx)
+
+    assert result.passed is True
+    assert captured["profile_id"] == "topstep_50k_mnq_auto"
+    assert captured["effective_copies"] == 1
+
+
 def test_repo_drift_gate_blocks_dirty_live_repo(monkeypatch):
     monkeypatch.setattr(
         rls.subprocess,

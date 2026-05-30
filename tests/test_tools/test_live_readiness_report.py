@@ -849,6 +849,20 @@ def test_strict_zero_warn_blocks_when_live_stage_pending(tmp_path: Path, monkeyp
     assert any("live stage" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
 
 
+def test_live_stage_acceptance_allows_single_copy_pilot_supersede(tmp_path: Path, monkeypatch) -> None:
+    stage = tmp_path / "stage.md"
+    stage.write_text(
+        "---\nmode: IMPLEMENTATION\nimplementation_status: CLOSED_FOR_SINGLE_COPY_PILOT\n---\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(live_readiness_report, "PROJECT_ROOT", tmp_path)
+
+    summary = live_readiness_report._read_stage_acceptance("stage.md")
+
+    assert summary["green"] is True
+    assert "CLOSED_FOR_SINGLE_COPY_PILOT" in summary["status_text"]
+
+
 def test_strict_zero_warn_blocks_multi_copy_without_shadow_loss_protection(
     tmp_path: Path,
     monkeypatch,
@@ -874,9 +888,43 @@ def test_strict_zero_warn_blocks_multi_copy_without_shadow_loss_protection(
     )
 
     assert report["profile_launch"]["copies"] == 2
+    assert report["profile_launch"]["profile_copies"] == 2
+    assert report["profile_launch"]["effective_copies"] == 2
     assert report["profile_launch"]["shadow_copy_loss_protection"] is False
     assert report["strict_zero_warn"]["green"] is False
-    assert any("copies>1" in blocker for blocker in report["strict_zero_warn"]["blockers"])
+    assert any("Effective copies>1" in blocker for blocker in report["strict_zero_warn"]["blockers"])
+
+
+def test_strict_zero_warn_allows_single_copy_effective_override(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(monkeypatch, allocation_path)
+    monkeypatch.setattr(
+        live_readiness_report,
+        "get_profile",
+        lambda _profile_id: SimpleNamespace(
+            profile_id="topstep_50k_mnq_auto",
+            firm="topstep",
+            account_size=50_000,
+            is_express_funded=True,
+            copies=2,
+            daily_loss_dollars=450.0,
+        ),
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+        effective_copies=1,
+    )
+
+    assert report["profile_launch"]["profile_copies"] == 2
+    assert report["profile_launch"]["effective_copies"] == 1
+    assert report["profile_launch"]["shadow_copy_loss_protection"] is True
+    assert report["strict_zero_warn"]["green"] is True
+    assert not any("copies>1" in blocker for blocker in report["strict_zero_warn"]["blockers"])
 
 
 def test_main_strict_zero_warn_exits_nonzero_when_not_green(monkeypatch, capsys) -> None:

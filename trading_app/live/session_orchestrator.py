@@ -1129,7 +1129,17 @@ class SessionOrchestrator:
             if blocked_ids:
                 log.warning("Loaded %d lifecycle lane blocks", len(blocked_ids))
         except Exception as e:
-            log.warning("Failed to load lifecycle lane blocks: %s", e)
+            # S2 Fail-open guard: lifecycle blocks could not be loaded — SR-ALARMed
+            # or Criterion-11-failed lanes are UNBLOCKED for this session. This is a
+            # capital-path safety failure: operator must know and verify manually.
+            # Session continues (raising here would leave existing positions unmanaged)
+            # but the operator alert ensures it is not silent. (integrity-guardian.md § 3)
+            msg = (
+                f"LIFECYCLE BLOCKS FAILED TO LOAD: {e} — SR-ALARMed or regime-failed "
+                "lanes may trade unblocked this session. Verify lifecycle state manually."
+            )
+            log.critical(msg)
+            self._notify(msg)
 
     @staticmethod
     def _build_daily_features_row(trading_day: date, instrument: str, orb_minutes: int) -> dict:

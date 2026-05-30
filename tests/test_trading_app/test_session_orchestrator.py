@@ -2048,6 +2048,29 @@ class TestNotifications:
 
         assert STRATEGY_ID not in orch._blocked_strategies
 
+    def test_lifecycle_load_failure_notifies_operator(self):
+        """S2 Fail-open guard: if read_lifecycle_state raises, operator is notified
+        via _notify (not silently logged at WARNING). Session continues — raising
+        here would leave existing positions unmanaged. SO-213-01."""
+        orch = build_orchestrator()
+        orch._profile_id_for_lane_ctl = "topstep_50k_mnq_auto"
+        orch._notify = MagicMock()
+
+        with patch(
+            "trading_app.lifecycle_state.read_lifecycle_state",
+            side_effect=RuntimeError("DB schema changed"),
+        ):
+            orch._load_paused_lane_blocks()
+
+        # Must NOT raise — session continues
+        # Operator notification must fire with the failure reason
+        orch._notify.assert_called_once()
+        call_msg = orch._notify.call_args[0][0]
+        assert "LIFECYCLE BLOCKS FAILED TO LOAD" in call_msg
+        assert "DB schema changed" in call_msg
+        # No lanes accidentally blocked (empty failed load)
+        assert STRATEGY_ID not in orch._blocked_strategies
+
     async def test_paused_lane_blocks_new_entry_with_pause_reason(self):
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
         orch._notify = MagicMock()

@@ -567,7 +567,7 @@ def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
     try:
         from scripts.tools.live_readiness_report import build_live_readiness_report
 
-        report = build_live_readiness_report(profile_id=ctx.profile_id)
+        report = build_live_readiness_report(profile_id=ctx.profile_id, effective_copies=ctx.requested_copies)
         strict = report.get("strict_zero_warn") or {}
         blockers = list(strict.get("blockers") or [])
         if strict.get("green") is True:
