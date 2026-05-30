@@ -1,12 +1,12 @@
 {
-  "total_iterations": 201,
-  "last_updated": "2026-05-29",
-  "consecutive_low_only": 5,
-  "last_high_finding_iter": 206,
+  "total_iterations": 202,
+  "last_updated": "2026-05-30",
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 212,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 65,
-      "fixed": 52,
+      "found": 66,
+      "fixed": 53,
       "deferred": 4,
       "fix_rate": 0.8
     },
@@ -128,12 +128,12 @@
   "findings_by_severity": {
     "CRITICAL": 9,
     "HIGH": 14,
-    "MEDIUM": 53,
+    "MEDIUM": 54,
     "LOW": 125
   },
   "classifications": {
     "judgment": 88,
-    "mechanical": 78,
+    "mechanical": 79,
     "audit-only": 35
   },
   "files_audited": {
@@ -1225,6 +1225,16 @@
     "trading_app/eligibility/builder.py": {
       "audit_count": 1,
       "last_iter": 211,
+      "findings": 1
+    },
+    "trading_app/opportunity_awareness.py": {
+      "audit_count": 1,
+      "last_iter": 212,
+      "findings": 1
+    },
+    "trading_app/allocation_promotion.py": {
+      "audit_count": 1,
+      "last_iter": 212,
       "findings": 1
     }
   },
@@ -3439,6 +3449,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "8d5f3b00"
+    },
+    {
+      "iter": 212,
+      "date": "2026-05-30",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/opportunity_awareness.py:38 + trading_app/allocation_promotion.py:18",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "NONE (pre-commit step 2b blocked by persistent gold.db lock from stale MCP processes \u2014 same known class as MEMORY.md feedback_mcp_venv_sidecar_rot_beartype_authlib_2026_05_30)"
     }
   ]
 }

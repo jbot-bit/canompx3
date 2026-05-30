@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.chordia import chordia_verdict_allows_deploy
 from trading_app.derived_state import (
     build_code_fingerprint,
     build_db_identity,
@@ -34,8 +35,6 @@ STATE_DIR = PROJECT_ROOT / "data" / "state"
 OPPORTUNITY_STATE_TYPE = "opportunity_awareness_shadow"
 OPPORTUNITY_STATE_SCHEMA_VERSION = 1
 OPPORTUNITY_MAX_AGE_DAYS = 1
-
-PASSING_CHORDIA_VERDICTS = frozenset({"PASS_CHORDIA", "PASS_PROTOCOL_A"})
 
 
 @dataclass(frozen=True)
@@ -245,7 +244,7 @@ def _build_lane(
         warnings.append("Allocation status is PROVISIONAL")
 
     chordia_verdict = source.get("chordia_verdict")
-    if chordia_verdict and chordia_verdict not in PASSING_CHORDIA_VERDICTS:
+    if chordia_verdict and not chordia_verdict_allows_deploy(chordia_verdict):
         warnings.append(f"Chordia gate: {chordia_verdict}")
 
     trailing_expr = _coerce_float(source.get("trailing_expr"))
@@ -260,7 +259,7 @@ def _build_lane(
     elif (
         allocation_status == "DEPLOY"
         and session_regime == "HOT"
-        and chordia_verdict in PASSING_CHORDIA_VERDICTS
+        and chordia_verdict_allows_deploy(chordia_verdict)
         and trailing_expr is not None
         and trailing_expr >= 0.20
     ):

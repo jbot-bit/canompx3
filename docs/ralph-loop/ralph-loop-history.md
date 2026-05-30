@@ -2346,6 +2346,19 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 
 ---
 
+## Iteration 212 — 2026-05-30
+- Phase: fix (COMMIT BLOCKED — gold.db lock held by stale MCP server PIDs; pre-existing infrastructure issue)
+- Classification: [mechanical]
+- Target: trading_app/opportunity_awareness.py:38 + trading_app/allocation_promotion.py:18
+- Finding: CANON-212 — Both files define local copies of Chordia passing-verdict sets (PASSING_CHORDIA_VERDICTS / PASS_CHORDIA_VERDICTS) instead of calling canonical chordia.chordia_verdict_allows_deploy(). If a new passing verdict is added to chordia.py, the local copies would silently miss it, producing wrong tier assignments in opportunity awareness and blocking valid promotions.
+- Doctrine cited: institutional-rigor.md § 10 (canonical sources — never re-encode); integrity-guardian.md § 2 (never hardcode canonical lists)
+- Action: Removed local frozenset/set; added `from trading_app.chordia import chordia_verdict_allows_deploy`; replaced 3 call sites with the canonical function. Both files ruff-clean.
+- Blast radius: 2 files (opportunity_awareness.py, allocation_promotion.py), 5 importers of opportunity_awareness, 0 production importers of allocation_promotion
+- Verification: PASS — 10/10 tests (test_opportunity_awareness + test_allocation_promotion); 151/0 drift fast-check; ruff PASS; backfill dry-run drifted=0
+- Commit: NONE (pre-commit step 2b blocked by persistent gold.db lock from stale MCP processes — same known class as MEMORY.md feedback_mcp_venv_sidecar_rot_beartype_authlib_2026_05_30)
+
+---
+
 ## Iteration 211 — 2026-05-29
 - Phase: fix
 - Classification: [mechanical]

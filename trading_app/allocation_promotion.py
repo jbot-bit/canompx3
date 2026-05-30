@@ -13,9 +13,10 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+from trading_app.chordia import chordia_verdict_allows_deploy
+
 DEPLOYABLE_STATUSES = {"DEPLOY", "PROVISIONAL"}
 PASS_DECISIONS = {"PASS_ADD", "PASS_REPLACE"}
-PASS_CHORDIA_VERDICTS = {"PASS_CHORDIA", "PASS_PROTOCOL_A"}
 
 
 class AllocationPromotionError(ValueError):
@@ -115,7 +116,7 @@ def _validate_candidate(candidate: PromotionCandidate, allocation: dict[str, Any
         f"{candidate.strategy_id}: status {candidate.status!r} is not runtime deployable",
     )
     _require(
-        candidate.chordia_verdict in PASS_CHORDIA_VERDICTS,
+        chordia_verdict_allows_deploy(candidate.chordia_verdict or ""),
         f"{candidate.strategy_id}: Chordia verdict {candidate.chordia_verdict!r} is not promotable",
     )
     _require(candidate.chordia_audit_age_days is not None, f"{candidate.strategy_id}: missing Chordia audit age")
