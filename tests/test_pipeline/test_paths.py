@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 import pipeline.paths as path_mod
-from pipeline.paths import DBN_DIR, GOLD_DB_PATH, OHLCV_DIR, PROJECT_ROOT
+from pipeline.paths import DBN_DIR, GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH, LIVE_SIGNALS_DIR, OHLCV_DIR, PROJECT_ROOT
 
 
 class TestPaths:
@@ -77,3 +77,25 @@ class TestPaths:
 
         monkeypatch.setattr(path_mod._subprocess, "run", _unexpected)
         assert path_mod._default_canonical_db(project_root) == local_db
+
+    def test_runtime_root_uses_shared_git_root_when_worktree_has_no_runtime_artifacts(self, tmp_path, monkeypatch):
+        worktree_root = tmp_path / "worktree"
+        common_root = tmp_path / "canonical"
+        worktree_root.mkdir()
+        common_root.mkdir()
+        (common_root / "pipeline").mkdir()
+        (common_root / "live_signals_2026-05-29.jsonl").write_text("{}", encoding="utf-8")
+
+        completed = subprocess.CompletedProcess(
+            args=["git", "rev-parse", "--git-common-dir"],
+            returncode=0,
+            stdout=str(common_root / ".git"),
+            stderr="",
+        )
+        monkeypatch.setattr(path_mod._subprocess, "run", lambda *args, **kwargs: completed)
+
+        assert path_mod._default_runtime_root(worktree_root) == common_root
+
+    def test_live_runtime_paths_share_runtime_root(self):
+        assert LIVE_SIGNALS_DIR == path_mod.CANONICAL_RUNTIME_ROOT
+        assert LIVE_JOURNAL_DB_PATH == path_mod.CANONICAL_RUNTIME_ROOT / "live_journal.db"

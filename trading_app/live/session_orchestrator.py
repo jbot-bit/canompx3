@@ -17,14 +17,13 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from pipeline.calendar_filters import day_of_week, is_friday, is_nfp_day, is_opex_day
 from pipeline.cost_model import CostSpec, get_cost_spec
 from pipeline.daily_backfill import run_backfill_for_instrument
 from pipeline.db_config import configure_connection
-from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
+from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH, LIVE_SIGNALS_DIR
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.live.bar_aggregator import Bar
 from trading_app.live.bar_persister import BarPersister
@@ -295,7 +294,7 @@ class SessionOrchestrator:
     # R4 (Ralph iter 181): replaced single unbounded live_signals.jsonl with daily rotation
     # via SignalLogRotator. The log directory is the project root (same location as the old
     # monolithic file) so the Live Monitor UI path prefix is unchanged.
-    SIGNALS_DIR = Path(__file__).parent.parent.parent
+    SIGNALS_DIR = LIVE_SIGNALS_DIR
 
     def __init__(
         self,

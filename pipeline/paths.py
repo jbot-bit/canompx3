@@ -92,6 +92,24 @@ def _default_canonical_db(project_root: Path) -> Path:
     return local_db
 
 
+def _default_runtime_root(project_root: Path) -> Path:
+    """Return the repo root that owns mutable runtime artifacts."""
+    runtime_markers = ("gold.db", "live_journal.db")
+    common_root = _discover_git_common_root(project_root)
+    if common_root is not None:
+        if any((common_root / marker).exists() for marker in runtime_markers):
+            return common_root
+        if any(common_root.glob("live_signals_*.jsonl")):
+            return common_root
+
+    if any((project_root / marker).exists() for marker in runtime_markers):
+        return project_root
+    if any(project_root.glob("live_signals_*.jsonl")):
+        return project_root
+
+    return project_root
+
+
 def _resolve_db_path(project_root: Path = PROJECT_ROOT) -> Path:
     """Resolve the canonical DB path. ALWAYS returns project root gold.db.
 
@@ -122,6 +140,7 @@ def _resolve_db_path(project_root: Path = PROJECT_ROOT) -> Path:
 
 
 GOLD_DB_PATH = _resolve_db_path()
+CANONICAL_RUNTIME_ROOT = _default_runtime_root(PROJECT_ROOT)
 
 # Data directories
 DBN_DIR = PROJECT_ROOT / "dbn"
@@ -137,4 +156,5 @@ DEFAULT_DBN_FILE = OHLCV_DIR / "glbx-mdp3-20100912-20260203.ohlcv-1m.dbn.zst"
 TRACES_DIR = PROJECT_ROOT / "logs" / "traces"
 
 # Live trading journal — separate DB to avoid write contention with gold.db
-LIVE_JOURNAL_DB_PATH = PROJECT_ROOT / "live_journal.db"
+LIVE_JOURNAL_DB_PATH = CANONICAL_RUNTIME_ROOT / "live_journal.db"
+LIVE_SIGNALS_DIR = CANONICAL_RUNTIME_ROOT

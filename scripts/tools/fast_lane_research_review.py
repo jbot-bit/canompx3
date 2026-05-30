@@ -60,8 +60,8 @@ UNDERPOWERED_OOS_TIERS = frozenset({"NA_N_BELOW_FLOOR", "STATISTICALLY_USELESS",
 _TITLE_RE = re.compile(r"^#\s+Chordia strict unlock audit\s+[—-]\s+(?P<strategy_id>\S+)\s*$", re.MULTILINE)
 _MEASURED_RE = re.compile(r"\*\*MEASURED (?P<key>[^:*]+):\*\*\s*`?(?P<value>[^`\n]+)`?")
 
-type StrategyLabProvider = Callable[[str, int], dict[str, Any]]
-type CorrelationProvider = Callable[[list[dict[str, Any]]], dict[str, Any]]
+StrategyLabProvider = Callable[[str, int], dict[str, Any]]
+CorrelationProvider = Callable[[list[dict[str, Any]]], dict[str, Any]]
 
 CANONICAL_C8_PASS_LABELS = frozenset({"PASSED"})
 SHADOW_ONLY_CHANGE_REASON = "shadow_only_packet_no_allocator_or_profile_mutation"
