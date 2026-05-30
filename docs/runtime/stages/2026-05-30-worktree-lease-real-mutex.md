@@ -66,4 +66,4 @@ makes /clear-restart safe).
 - [x] parity drift CLEAN; ruff clean.
 - [ ] full check_drift.py exit 0 (CONFIRM /tmp/drift_real.txt).
 - [ ] adversarial-audit gate run + clean.
-- [ ] committed + PR.
+- [x] merged + pushed (8f3ea8ed on origin/main).

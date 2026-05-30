@@ -16,9 +16,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-30
-- **Commit:** 82721bcc — docs(handoff): fix stale SHA + surface un-landed Codex capital work and provenance drift
-- **Files changed:** 1 files
-  - `HANDOFF.md`
+- **Commit:** 1e9b26f4 — feat(tools): stale-stage reaper audit — safe archival of provably-done stage files
+- **Files changed:** 5 files
+  - `docs/runtime/stages/2026-05-27-paper-trade-sync-automation.md`
+  - `docs/runtime/stages/2026-05-30-stale-stage-reaper-audit.md`
+  - `docs/runtime/stages/archive/2026-05-27-paper-trade-sync-automation.md`
+  - `scripts/tools/stage_reaper_audit.py`
+  - `tests/test_tools/test_stage_reaper_audit.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
