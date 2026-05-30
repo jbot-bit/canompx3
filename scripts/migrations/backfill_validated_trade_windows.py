@@ -35,6 +35,9 @@ from pathlib import Path
 
 import duckdb
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.validation_provenance import StrategyTradeWindowResolver
