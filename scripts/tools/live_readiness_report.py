@@ -1106,7 +1106,8 @@ def main() -> None:
     else:
         print(rendered)
 
-    if args.strict_zero_warn and not bool((report.get("strict_zero_warn") or {}).get("green")):
+    strict_zero_warn = report.get("strict_zero_warn") or {}
+    if args.strict_zero_warn and (not bool(strict_zero_warn.get("green")) or bool(strict_zero_warn.get("warnings"))):
         raise SystemExit(1)
 
 

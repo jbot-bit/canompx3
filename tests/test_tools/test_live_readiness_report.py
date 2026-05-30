@@ -964,7 +964,7 @@ def test_main_strict_zero_warn_returns_zero_when_green(monkeypatch, capsys) -> N
         lambda **_kwargs: {
             "profile_id": "topstep_50k_mnq_auto",
             "git_head": "deadbeef",
-            "strict_zero_warn": {"green": True, "blockers": []},
+            "strict_zero_warn": {"green": True, "blockers": [], "warnings": []},
         },
     )
     monkeypatch.setattr(live_readiness_report, "_render_text", lambda _report: "Live Readiness")
@@ -972,6 +972,26 @@ def test_main_strict_zero_warn_returns_zero_when_green(monkeypatch, capsys) -> N
 
     live_readiness_report.main()
 
+    assert "Live Readiness" in capsys.readouterr().out
+
+
+def test_main_strict_zero_warn_exits_nonzero_when_warnings_exist(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        live_readiness_report,
+        "build_live_readiness_report",
+        lambda **_kwargs: {
+            "profile_id": "topstep_50k_mnq_auto",
+            "git_head": "deadbeef",
+            "strict_zero_warn": {"green": True, "blockers": [], "warnings": ["telemetry immature"]},
+        },
+    )
+    monkeypatch.setattr(live_readiness_report, "_render_text", lambda _report: "Live Readiness")
+    monkeypatch.setattr("sys.argv", ["live_readiness_report.py", "--strict-zero-warn"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        live_readiness_report.main()
+
+    assert excinfo.value.code == 1
     assert "Live Readiness" in capsys.readouterr().out
 
 
