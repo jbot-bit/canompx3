@@ -1,0 +1,53 @@
+diff --git a/scripts/run_live_session.py b/scripts/run_live_session.py
+index 80dc843e..84eb553d 100644
+--- a/scripts/run_live_session.py
++++ b/scripts/run_live_session.py
+@@ -110,9 +110,7 @@ def _probe_brackets(components: dict[str, Any] | None) -> bool:
+             qty=1,
+         )
+         if spec is None:
+-            log.warning(
+-                "BRACKET PROBE FAILED: build_bracket_spec returned None despite supports_native_brackets=True"
+-            )
++            log.warning("BRACKET PROBE FAILED: build_bracket_spec returned None despite supports_native_brackets=True")
+             return False
+         log.info("Bracket probe PASS")
+         return True
+@@ -303,9 +301,7 @@ def _check_notifications(ctx: PreflightContext) -> CheckResult:
+         ctx.components_all_pass = all(test_results.values())
+         # Build a deterministic per-component status suffix so the summary line
+         # always lists every probe (PASS or FAIL), not just the failures.
+-        status_suffix = " · ".join(
+-            f"{name}:{'PASS' if ok else 'FAIL'}" for name, ok in test_results.items()
+-        )
++        status_suffix = " · ".join(f"{name}:{'PASS' if ok else 'FAIL'}" for name, ok in test_results.items())
+         if ctx.components_all_pass:
+             return CheckResult(True, f"OK ({status_suffix})")
+         # Probes are surfaced but non-blocking at preflight time; the live
+diff --git a/scripts/tools/backup_gold_db.py b/scripts/tools/backup_gold_db.py
+index 724b4d04..0e9f03a3 100644
+--- a/scripts/tools/backup_gold_db.py
++++ b/scripts/tools/backup_gold_db.py
+@@ -4,6 +4,7 @@ Run manually or via Windows Task Scheduler. Single-writer pipeline so a
+ file-level copy is safe; SHA-256 verifies integrity. Keeps the most recent
+ 4 snapshots, prunes the rest.
+ """
++
+ from __future__ import annotations
+ 
+ import gzip
+diff --git a/tests/test_scripts/test_run_live_session_preflight.py b/tests/test_scripts/test_run_live_session_preflight.py
+index baa3a439..2ff0de39 100644
+--- a/tests/test_scripts/test_run_live_session_preflight.py
++++ b/tests/test_scripts/test_run_live_session_preflight.py
+@@ -596,9 +596,7 @@ def test_no_hardcoded_self_test_stubs():
+     `results["fill_poller"] = True` lines MUST be gone. Surfaces accidental
+     reintroduction during a future merge."""
+     src = (ROOT / "scripts" / "run_live_session.py").read_text(encoding="utf-8")
+-    assert 'results["brackets"] = True' not in src, (
+-        "preflight is rubber-stamping bracket self-test results again"
+-    )
++    assert 'results["brackets"] = True' not in src, "preflight is rubber-stamping bracket self-test results again"
+     assert 'results["fill_poller"] = True' not in src, (
+         "preflight is rubber-stamping fill-poller self-test results again"
+     )

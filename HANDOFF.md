@@ -14,17 +14,26 @@
 - **✅ Drift CLEAN — RETRACTION of an earlier false claim (Claude, 2026-05-30, execution-verified):** an earlier version of this note (commit `82721bcc`) claimed `check_active_native_trade_windows_match_provenance` was FAILING on lane `MNQ_COMEX_SETTLE_...OVNRNG_100`. **That was wrong** — I wrote it from a stale memory note without executing, violating Rule 11 (never trust metadata). Direct call returns `VIOLATIONS: 0`; full `check_drift.py --skip-crg-advisory` = **NO DRIFT DETECTED, 170 passed, 0 failed** (incl. Check 191 cold-recheck PASSED). The COMEX_SETTLE lane IS present in canonical `lane_allocation.json` (one of the 3 active lanes). `backfill_validated_trade_windows.py` (live write) = `inspected=848 drifted=0 updated=0`. Trade-window provenance is canonical. No action owed.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Unknown
 - **Date:** 2026-05-31
-- **Commit:** 4c3228b9 — @ docs(handoff): close-out — live-preflight landed, capital-path work rescued
-- **Files changed:** 7 files
+- **Commit:** 6e2b9dce — docs(runtime): preserve rescued WIP artifacts
+- **Files changed:** 16 files
   - `HANDOFF.md`
-  - `docs/runtime/rescued/2026-05-30-RESCUE-MANIFEST.md`
-  - `docs/runtime/rescued/2026-05-30-lane-allocator-feature-cache-WIP.patch`
-  - `docs/runtime/rescued/2026-05-30-lane_allocation.STASHED.json`
-  - `docs/runtime/rescued/2026-05-30-topstep_50k_mnq_auto.STASHED.json`
-  - `docs/runtime/stages/2026-05-30-opus-48-effort-wiring.md`
-  - `docs/runtime/stages/2026-05-30-worktree-lease-real-mutex.md`
+  - `docs/runtime/rescued/2026-05-31-3de6-webhook-wip/RESCUE-MANIFEST.md`
+  - `docs/runtime/rescued/2026-05-31-3de6-webhook-wip/webhook-wip.patch`
+  - `docs/runtime/rescued/2026-05-31-ehr-live-session-wip/RESCUE-MANIFEST.md`
+  - `docs/runtime/rescued/2026-05-31-ehr-live-session-wip/ehr-live-session-wip.patch`
+  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/RESCUE-MANIFEST.md`
+  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/2026-05-30-orb-edge-inventory-prereg.md`
+  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/cells.csv`
+  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/edge_inventory.csv`
+  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/family_summary.csv`
+  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/metadata.json`
+  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/artifacts-research/orb_edge_inventory_2026_05_30/report.md`
+  - `docs/runtime/rescued/2026-05-31-f5ee-research-scripts/rebuild_orb_edge_inventory_2026_05_30.py`
+  - `docs/runtime/rescued/2026-05-31-peer-codex-followup-wip/RESCUE-MANIFEST.md`
+  - `docs/runtime/rescued/2026-05-31-peer-codex-followup-wip/peer-codex-followup-wip.patch`
+  - ... and 1 more
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

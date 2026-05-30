@@ -1,0 +1,311 @@
+diff --git a/docs/plans/2026-05-29-live-trading-readiness-runbook.md b/docs/plans/2026-05-29-live-trading-readiness-runbook.md
+index b0ca0242..62e1df99 100644
+--- a/docs/plans/2026-05-29-live-trading-readiness-runbook.md
++++ b/docs/plans/2026-05-29-live-trading-readiness-runbook.md
+@@ -1,6 +1,6 @@
+ # Live Trading Readiness Runbook - Topstep MNQ Auto
+ 
+-Status: NO-GO until strict live readiness is green.
++Status: NO-GO until live preflight is green with no strict readiness warnings.
+ 
+ ## Scope Freeze
+ 
+@@ -17,6 +17,7 @@ Status: NO-GO until strict live readiness is green.
+ Run these before any live start:
+ 
+ ```bash
++git status --short --branch --ahead-behind
+ python scripts/tools/live_readiness_report.py --profile topstep_50k_mnq_auto --copies 1 --strict-zero-warn
+ python scripts/tools/project_pulse.py --fast --format json
+ python scripts/audits/run_all.py --phase 7
+@@ -25,17 +26,17 @@ python pipeline/check_drift.py
+ python scripts/run_live_session.py --profile topstep_50k_mnq_auto --instrument MNQ --live --copies 1 --preflight
+ ```
+ 
+-Live remains blocked if any command fails, or if the operator cannot confirm broker account, mode, and account count from the broker UI.
++Live remains blocked if any command fails, if `project_pulse` reports a broken/high live-control item or blocked capital recommendation, if `live_readiness_report` has blockers or warnings, or if the operator cannot confirm broker account, mode, and account count from the broker UI.
+ 
+ ## Hard Blockers
+ 
+-- Dirty or behind repo state for live mode.
++- Dirty, ahead, or behind repo state for live mode.
+ - Active lane count does not match the intended allocator book.
+ - Any active stale, paused, blocked, or SR `ALARM` lane.
+-- Telemetry maturity below the profile-scoped floor for real-capital/self-funded live.
+-- For explicit Express/Funded prop profiles (`is_express_funded=True`, including Topstep XFA), below-floor telemetry is an advisory warning, not a launch blocker.
++- Telemetry maturity below the profile-scoped floor is an advisory warning for explicit Express/Funded prop profiles (`is_express_funded=True`, including Topstep XFA), but live launch preflight treats strict readiness warnings as blockers until the operator intentionally accepts the exception.
+ - Live stage acceptance not green.
+ - Journal DB unavailable.
++- `project_pulse` live-control or capital recommendation blockers.
+ - Broker auth/session check unavailable.
+ - `copies>1` without per-shadow software daily-loss/HWM protection.
+ - Router degraded from primary/shadow divergence.
+diff --git a/docs/runtime/decision-ledger.md b/docs/runtime/decision-ledger.md
+index 8971e218..96bafe24 100644
+--- a/docs/runtime/decision-ledger.md
++++ b/docs/runtime/decision-ledger.md
+@@ -18,6 +18,15 @@ Use this file for durable accepted decisions that should survive handoff churn.
+   profile, not a hard live blocker; multi-copy live remains blocked until
+   per-shadow software daily-loss/HWM belts exist.
+ 
++- `live-preflight-zero-warn-promotion-gate-2026-05-31` - Real-money live
++  launch preflight is stricter than the report-only readiness summary. For
++  `--live`, `scripts/run_live_session.py --preflight` blocks when the checkout
++  is dirty, ahead, or behind `origin`, when `live_readiness_report` has any
++  strict blockers or warnings, or when `project_pulse --fast --format json`
++  reports a broken/high live-control item or blocked capital recommendation.
++  Demo and signal-only remain evidence-accrual paths; this gate is for live
++  promotion safety, not strategy research or lane expansion.
++
+ - `track-d-gate0-runner-table-contract-2026-05-29` - Track D Gate 0 design
+   blocker is closed at the contract level. Current checkout was refreshed
+   against `origin/main` before authoring; `gold.db` read-only measurement found
+diff --git a/scripts/run_live_session.py b/scripts/run_live_session.py
+index f8743dac..33ea0cf0 100644
+--- a/scripts/run_live_session.py
++++ b/scripts/run_live_session.py
+@@ -26,6 +26,7 @@ Examples:
+ import argparse
+ import asyncio
+ import io
++import json
+ import logging
+ import os
+ import subprocess
+@@ -48,6 +49,10 @@ logging.basicConfig(
+ )
+ log = logging.getLogger(__name__)
+ 
++PROJECT_ROOT = Path(__file__).resolve().parents[1]
++if str(PROJECT_ROOT) not in sys.path:
++    sys.path.insert(0, str(PROJECT_ROOT))
++
+ from scripts.tools import sweep_orphan_rings
+ from trading_app.live.instance_lock import acquire_instance_lock, release_instance_lock
+ from trading_app.live.session_orchestrator import SessionOrchestrator
+@@ -448,7 +453,7 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
+     if ctx.demo:
+         return CheckResult(True, "SKIPPED (demo)")
+ 
+-    root = Path(__file__).resolve().parents[1]
++    root = PROJECT_ROOT
+     try:
+         result = subprocess.run(
+             ["git", "status", "--short", "--branch"],
+@@ -469,6 +474,8 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
+     changes = lines[1:]
+     if "behind" in branch.lower():
+         return CheckResult(False, f"FAILED: repo behind origin ({branch})")
++    if "ahead" in branch.lower():
++        return CheckResult(False, f"FAILED: repo ahead of origin ({branch}); push or isolate before live launch")
+     if changes:
+         return CheckResult(False, f"FAILED: repo dirty ({len(changes)} path(s)); clean or isolate live launch branch")
+     return CheckResult(True, f"OK ({branch})")
+@@ -570,7 +577,13 @@ def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
+         report = build_live_readiness_report(profile_id=ctx.profile_id, effective_copies=ctx.requested_copies)
+         strict = report.get("strict_zero_warn") or {}
+         blockers = list(strict.get("blockers") or [])
++        warnings = list(strict.get("warnings") or [])
+         if strict.get("green") is True:
++            if not ctx.demo and warnings:
++                msg = "; ".join(str(warning) for warning in warnings[:3])
++                if len(warnings) > 3:
++                    msg += f"; +{len(warnings) - 3} more"
++                return CheckResult(False, f"FAILED: live readiness has strict warnings ({msg})")
+             return CheckResult(True, "OK (strict_zero_warn green)")
+         msg = "; ".join(str(blocker) for blocker in blockers[:3])
+         if len(blockers) > 3:
+@@ -584,6 +597,70 @@ def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
+         return CheckResult(False, f"FAILED: live readiness report unavailable ({e})")
+ 
+ 
++def _check_project_pulse_for_live(ctx: PreflightContext) -> CheckResult:
++    """Project pulse launch blocker for live mode.
++
++    This is intentionally live-only because demo/signal-only are evidence
++    accrual paths. A real-money launch must not proceed when the operator pulse
++    still reports broken/high live-control findings or an explicit capital
++    recommendation block.
++    """
++    if ctx.signal_only:
++        return CheckResult(True, "SKIPPED (signal-only)")
++    if ctx.demo:
++        return CheckResult(True, "SKIPPED (demo)")
++
++    root = PROJECT_ROOT
++    try:
++        result = subprocess.run(
++            [
++                sys.executable,
++                "scripts/tools/project_pulse.py",
++                "--fast",
++                "--format",
++                "json",
++                "--no-cache",
++            ],
++            cwd=root,
++            capture_output=True,
++            text=True,
++            timeout=90,
++            check=False,
++        )
++    except (OSError, subprocess.TimeoutExpired) as exc:
++        return CheckResult(False, f"FAILED: project_pulse unavailable ({exc})")
++
++    stdout = result.stdout.strip()
++    try:
++        payload = json.loads(stdout)
++    except json.JSONDecodeError as exc:
++        detail = (result.stderr or stdout or str(result.returncode)).strip().splitlines()[-1:]
++        suffix = f": {detail[0]}" if detail else ""
++        return CheckResult(False, f"FAILED: project_pulse JSON parse failed ({exc}){suffix}")
++
++    capital_recommendation = str(payload.get("capital_recommendation") or "")
++    if "blocked" in capital_recommendation.lower():
++        return CheckResult(False, f"FAILED: {capital_recommendation}")
++
++    blocking_items = [
++        item
++        for item in payload.get("items", [])
++        if isinstance(item, dict)
++        and item.get("category") == "broken"
++        and str(item.get("severity") or "").lower() in {"critical", "high"}
++    ]
++    if blocking_items:
++        summaries = "; ".join(str(item.get("summary") or "unknown") for item in blocking_items[:3])
++        if len(blocking_items) > 3:
++            summaries += f"; +{len(blocking_items) - 3} more"
++        return CheckResult(False, f"FAILED: project_pulse blocker(s): {summaries}")
++
++    if result.returncode != 0:
++        return CheckResult(False, f"FAILED: project_pulse exited {result.returncode}")
++
++    return CheckResult(True, "OK (project_pulse no live blockers)")
++
++
+ def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
+     """Copy-trading account resolution (dry run).
+ 
+@@ -670,6 +747,7 @@ PREFLIGHT_CHECKS: list[CheckFn] = [
+     _check_repo_drift_for_live,
+     _check_telemetry_maturity,
+     _check_live_readiness_report,
++    _check_project_pulse_for_live,
+     _check_copy_trading_accounts,
+     _check_shadow_copy_loss_protection,
+ ]
+diff --git a/tests/test_scripts/test_run_live_session_preflight.py b/tests/test_scripts/test_run_live_session_preflight.py
+index 614edf95..fac06ab0 100644
+--- a/tests/test_scripts/test_run_live_session_preflight.py
++++ b/tests/test_scripts/test_run_live_session_preflight.py
+@@ -15,6 +15,7 @@ behavior-identical to the manual constant.
+ 
+ from __future__ import annotations
+ 
++import json
+ import sys
+ from pathlib import Path
+ from types import SimpleNamespace
+@@ -372,8 +373,9 @@ def test_preflight_checks_is_an_ordered_list():
+     """Lock the canonical ordering at the test layer alongside the dataclass.
+ 
+     Order matters: _check_auth must run first (populates ctx.components for
+-    contracts / notifications / copy-trading), and _check_copy_trading_accounts
+-    must run last (depends on ctx.components AND inspects profile.copies).
++    contracts / notifications / copy-trading), and copy/shadow checks must run
++    after readiness/pulse gates because they inspect effective launch profile
++    state and broker account topology.
+     """
+     names = [c.__name__ for c in rls.PREFLIGHT_CHECKS]
+     assert names == [
+@@ -388,6 +390,7 @@ def test_preflight_checks_is_an_ordered_list():
+         "_check_repo_drift_for_live",
+         "_check_telemetry_maturity",
+         "_check_live_readiness_report",
++        "_check_project_pulse_for_live",
+         "_check_copy_trading_accounts",
+         "_check_shadow_copy_loss_protection",
+     ]
+@@ -626,6 +629,31 @@ def test_live_readiness_report_receives_single_copy_override(monkeypatch):
+     assert captured["effective_copies"] == 1
+ 
+ 
++def test_live_readiness_report_warnings_block_live(monkeypatch):
++    def _fake_report(**_kwargs):
++        return {
++            "strict_zero_warn": {
++                "green": True,
++                "blockers": [],
++                "warnings": ["Telemetry not mature: UNVERIFIED_INSUFFICIENT_TELEMETRY (5/30 trading days)"],
++            }
++        }
++
++    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
++    ctx = _make_copy_trading_ctx(
++        profile_id="topstep_50k_mnq_auto",
++        requested_account_id=None,
++        requested_copies=1,
++    )
++    ctx.demo = False
++
++    result = rls._check_live_readiness_report(ctx)
++
++    assert result.passed is False
++    assert "strict warnings" in result.message
++    assert "Telemetry not mature" in result.message
++
++
+ def test_repo_drift_gate_blocks_dirty_live_repo(monkeypatch):
+     monkeypatch.setattr(
+         rls.subprocess,
+@@ -642,6 +670,50 @@ def test_repo_drift_gate_blocks_dirty_live_repo(monkeypatch):
+     assert "repo dirty" in result.message
+ 
+ 
++def test_repo_drift_gate_blocks_ahead_live_repo(monkeypatch):
++    monkeypatch.setattr(
++        rls.subprocess,
++        "run",
++        lambda *_args, **_kwargs: SimpleNamespace(
++            returncode=0,
++            stdout="## main...origin/main [ahead 1]\n",
++            stderr="",
++        ),
++    )
++    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
++    result = rls._check_repo_drift_for_live(ctx)
++    assert result.passed is False
++    assert "repo ahead" in result.message
++
++
++def test_project_pulse_gate_blocks_live_capital_recommendation(monkeypatch):
++    payload = {
++        "capital_recommendation": "NO_CHANGE: capital evidence blocked - topstep_50k_mnq_auto: live journal unavailable",
++        "items": [],
++    }
++    monkeypatch.setattr(
++        rls.subprocess,
++        "run",
++        lambda *_args, **_kwargs: SimpleNamespace(returncode=1, stdout=json.dumps(payload), stderr=""),
++    )
++    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
++    result = rls._check_project_pulse_for_live(ctx)
++    assert result.passed is False
++    assert "capital evidence blocked" in result.message
++
++
++def test_project_pulse_gate_passes_clean_live_pulse(monkeypatch):
++    payload = {"capital_recommendation": "GO", "items": []}
++    monkeypatch.setattr(
++        rls.subprocess,
++        "run",
++        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr=""),
++    )
++    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
++    result = rls._check_project_pulse_for_live(ctx)
++    assert result.passed is True
++
++
+ def test_dashboard_auto_launch_disabled_for_dashboard_origin(monkeypatch):
+     monkeypatch.setenv("CANOMPX3_DASHBOARD_ORIGIN", "1")
+     assert rls._should_launch_dashboard() is False

@@ -1,0 +1,62 @@
+{
+  "db_path": "C:\\Users\\joshd\\canompx3\\gold.db",
+  "holdout_date": "2026-01-01",
+  "rows": 861051,
+  "pre_holdout_rows": 815880,
+  "holdout_rows": 45171,
+  "bars_1m_horizon": {
+    "MNQ": [
+      2467247,
+      "2019-05-06 10:00:00+10:00",
+      "2026-05-29 09:59:00+10:00"
+    ],
+    "MES": [
+      2467418,
+      "2019-05-06 10:00:00+10:00",
+      "2026-05-29 09:59:00+10:00"
+    ],
+    "MGC": [
+      1372481,
+      "2022-06-13 10:00:00+10:00",
+      "2026-05-29 09:59:00+10:00"
+    ]
+  },
+  "trial_counts": {
+    "global_cells_tested": 6462,
+    "by_family_variant": {
+      "baseline_orb / NO_FILTER": 594,
+      "cross_market_flow / PEER_COST_AND_ATR_OK_GE_1": 558,
+      "cross_market_flow / PEER_COST_OK_GE_1": 558,
+      "session_participation / orb_volume_ratio_HIGH_TERCILE": 594,
+      "session_participation / orb_volume_ratio_LOW_TERCILE": 594,
+      "size_friction / COST_TO_RISK_LE_0.08": 594,
+      "size_friction / COST_TO_RISK_LE_0.10": 594,
+      "size_friction / COST_TO_RISK_LE_0.12": 594,
+      "size_friction / COST_TO_RISK_LE_0.15": 594,
+      "volatility_state / atr_vel_ratio_HIGH_TERCILE": 594,
+      "volatility_state / atr_vel_ratio_LOW_TERCILE": 594
+    }
+  },
+  "active_orb_instruments": [
+    "MES",
+    "MGC",
+    "MNQ"
+  ],
+  "excluded": {
+    "entry_models": [
+      "E0",
+      "E3"
+    ],
+    "derived_truth_tables": [
+      "validated_setups",
+      "edge_families",
+      "live_config"
+    ],
+    "lookahead_features": [
+      "rel_vol_{session}",
+      "break_delay_min",
+      "daily_close",
+      "ts_* outcomes"
+    ]
+  }
+}
