@@ -270,6 +270,64 @@ def test_replay_mismatch_blocks_deployability():
     assert any(issue.id == "replay_mismatch" for issue in result.issues)
 
 
+def test_replay_counts_scratch_days_as_traded_days(monkeypatch):
+    """Scratch trades (real entered positions that exited flat, pnl_r NULL) must
+    count toward the replayed trade-day total so a lane with flat days is NOT
+    spuriously flagged as a replay mismatch.
+
+    Regression for the deployability-vs-resolver NULL-predicate divergence: the
+    canonical resolver counts traded days with `outcome IS NOT NULL` (scratch
+    included); `_replay_strategy` previously matched against the priced-only
+    (`pnl_r IS NOT NULL`) count, flagging every scratch-bearing lane as a hard
+    mismatch. See build_daily_features.py:1058-1069 for scratch semantics.
+    """
+    # 5 traded days: 3 priced (win/loss R-multiples), 2 scratch (flat, pnl_r NULL).
+    synthetic = [
+        {"trading_day": "2025-01-02", "pnl_r": 1.5},
+        {"trading_day": "2025-01-03", "pnl_r": -1.0},
+        {"trading_day": "2025-01-06", "pnl_r": None},  # scratch (flat)
+        {"trading_day": "2025-01-07", "pnl_r": 1.5},
+        {"trading_day": "2025-01-08", "pnl_r": None},  # scratch (flat)
+    ]
+    monkeypatch.setattr(dep, "_load_strategy_outcomes", lambda *a, **k: synthetic)
+
+    # Stored provenance trade_day_count is scratch-INCLUSIVE (resolver semantics) = 5.
+    row = _row(trade_day_count=5, sample_size=5, expectancy_r=0.0)
+    replay = dep._replay_strategy(con=None, row=row)
+
+    assert replay["ok"] is True, replay
+    assert replay["sample_size_match"] is True
+    assert replay["trade_day_count_including_scratch"] == 5
+    assert replay["priced_nonflat_count"] == 3
+    assert replay["scratch_count"] == 2
+    assert replay["null_pnl_count"] == 2  # back-compat key still carries scratch count
+    # recomputed_sample_size remains the priced-only count (unchanged meaning).
+    assert replay["recomputed_sample_size"] == 3
+
+
+def test_replay_real_mismatch_still_flags_when_day_count_diverges(monkeypatch):
+    """A genuine day-count divergence (NOT explained by scratch) must still fail.
+
+    Guards against the fix masking real mismatches: stored trade_day_count=10 but
+    only 5 traded days reproduce → mismatch must persist.
+    """
+    synthetic = [
+        {"trading_day": "2025-01-02", "pnl_r": 1.5},
+        {"trading_day": "2025-01-03", "pnl_r": -1.0},
+        {"trading_day": "2025-01-06", "pnl_r": None},
+        {"trading_day": "2025-01-07", "pnl_r": 1.5},
+        {"trading_day": "2025-01-08", "pnl_r": None},
+    ]
+    monkeypatch.setattr(dep, "_load_strategy_outcomes", lambda *a, **k: synthetic)
+
+    row = _row(trade_day_count=10, sample_size=10, expectancy_r=0.0)
+    replay = dep._replay_strategy(con=None, row=row)
+
+    assert replay["ok"] is False, replay
+    assert replay["sample_size_match"] is False
+    assert replay["trade_day_count_including_scratch"] == 5
+
+
 def test_dsr_below_cross_check_blocks_institutional_language_only():
     result = _classify(row=_row(dsr_score=0.10))
 

@@ -478,13 +478,29 @@ def _replay_strategy(
         }
 
     pnl = [float(o["pnl_r"]) for o in outcomes if o.get("pnl_r") is not None]
-    n = len(pnl)
-    avg = sum(pnl) / n if n else None
+    priced_nonflat_count = len(pnl)
+    avg = sum(pnl) / priced_nonflat_count if priced_nonflat_count else None
+    # `outcomes` is loaded with `outcome IS NOT NULL` — the SAME predicate the
+    # canonical resolver (validation_provenance.StrategyTradeWindowResolver) and
+    # discovery loader (_load_outcomes_bulk) use to count traded days. So every
+    # row here is a real entered trade, including `outcome='scratch'` days that
+    # exited flat (target/stop both unhit; build_daily_features.py:1058-1069).
+    # Scratch days carry no win/loss R-multiple, so `pnl_r` is NULL on them, but
+    # they ARE traded days and belong in the day-count that pairs to the stored
+    # provenance `trade_day_count`. Comparing `expected_n` against the priced-only
+    # count would spuriously flag every lane with a flat day as a replay mismatch.
+    # Invariant (verified): exactly one outcome row per trading_day per lane spec,
+    # so len(outcomes) == resolver trade_day_count (both scratch-inclusive).
+    scratch_count = len(outcomes) - priced_nonflat_count
+    trade_day_count_including_scratch = len(outcomes)
     stored_n = int(row["sample_size"]) if row.get("sample_size") is not None else None
     stored_trade_day_count = int(row["trade_day_count"]) if row.get("trade_day_count") is not None else None
     expected_n = stored_trade_day_count if stored_trade_day_count is not None else stored_n
     stored_exp = float(row["expectancy_r"]) if row.get("expectancy_r") is not None else None
-    n_match = expected_n == n if expected_n is not None else False
+    # Day-count match compares like-to-like: stored provenance day-count vs the
+    # scratch-inclusive replayed day-count. The priced-only count is reported
+    # separately (priced_nonflat_count) for the expectancy check.
+    n_match = expected_n == trade_day_count_including_scratch if expected_n is not None else False
     exp_match = avg is not None and stored_exp is not None and math.isclose(avg, stored_exp, abs_tol=0.005)
     # If trade_day_count exists, it is the promotion provenance count for the
     # replayed trade set. sample_size/expectancy_r can be split-specific legacy
@@ -492,7 +508,10 @@ def _replay_strategy(
     ok = n_match and (stored_trade_day_count is not None or exp_match)
     return {
         "ok": bool(ok),
-        "recomputed_sample_size": n,
+        "recomputed_sample_size": priced_nonflat_count,
+        "trade_day_count_including_scratch": trade_day_count_including_scratch,
+        "priced_nonflat_count": priced_nonflat_count,
+        "scratch_count": scratch_count,
         "stored_sample_size": stored_n,
         "stored_trade_day_count": stored_trade_day_count,
         "sample_count_source": "trade_day_count" if stored_trade_day_count is not None else "sample_size",
@@ -500,7 +519,7 @@ def _replay_strategy(
         "stored_expectancy_r": stored_exp,
         "sample_size_match": n_match,
         "expectancy_match": exp_match,
-        "null_pnl_count": len(outcomes) - n,
+        "null_pnl_count": scratch_count,
         "replay_window": {"start": str(start_date) if start_date else None, "end": str(end_date) if end_date else None},
         "first_trade_day": min((str(o["trading_day"]) for o in outcomes), default=None),
         "last_trade_day": max((str(o["trading_day"]) for o in outcomes), default=None),
