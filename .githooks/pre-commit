@@ -357,14 +357,19 @@ fi
 echo "  PASSED"
 
 # 3. Drift check (~2 seconds)
-# Commit-time coverage must remain the FULL drift set. The post-edit hook's
-# debounce file only suppresses repeated FAST drift runs while editing; it must
-# never suppress the full commit-time gate, or slow-check regressions can slip
+# Commit-time coverage must remain the FULL BLOCKING drift set. The post-edit
+# hook's debounce file only suppresses repeated FAST drift runs while editing; it
+# must never suppress the full commit-time gate, or slow-check regressions can slip
 # through unnoticed.
+#
+# --skip-crg-advisory drops ONLY the CRG D1-D5 ADVISORY checks (D5 alone ~73s, a
+# per-node graph query measured 2026-05-30). These checks NEVER block a commit, so
+# zero blocking coverage is lost: CI runs the full set, and step 3b below rebuilds
+# the CRG graph anyway. Rollback = remove the flag token (flag defaults off).
 echo "[3/8] Drift check..."
 DRIFT_TMPFILE=$(mktemp)
 set +e
-"$PYTHON" pipeline/check_drift.py 2>&1 | tee "$DRIFT_TMPFILE" | awk '
+"$PYTHON" pipeline/check_drift.py --skip-crg-advisory 2>&1 | tee "$DRIFT_TMPFILE" | awk '
     /^python-dotenv could not parse statement starting at line / { next }
     /^Check [0-9]+:/ || /^  FAILED:/ || /^  WARNING:/ || /^  SKIPPED/ || /^DRIFT / || /^NO DRIFT/ || /^====/ { print }
 '

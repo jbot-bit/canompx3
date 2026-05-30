@@ -15189,6 +15189,56 @@ def _assert_slow_labels_valid() -> None:
 _assert_slow_labels_valid()
 
 
+# CRG-backed advisory checks (D1-D5). All ADVISORY by construction — they only
+# print warnings and always return [] (verified 2026-05-30). The `--skip-crg-advisory`
+# flag (used by pre-commit step 3) removes them from the commit drift gate because
+# D5 alone costs ~73s against an already-fresh graph (per-node TESTED_BY query loop;
+# NOT a graph-staleness cost). Skipping loses ZERO blocking coverage — CI runs the
+# full set, and the post-edit hook already skips D1/D2/D3/D5 via SLOW_CHECK_LABELS,
+# so no in-session last-look is removed. See docs/runtime/stages/2026-05-30-drift-skip-crg-advisory.md.
+CRG_ADVISORY_LABELS = frozenset(
+    {
+        "CRG D1: Surprising cross-layer connections between pipeline/ and trading_app/ (bypassing canonical surfaces)",
+        "CRG D2: Canonical-import enforcement -- research scripts must not re-implement canonical functions",
+        "CRG D3: Canonical functions must have at least one import-and-call test (AST-based; CRG tests_for graph proven incomplete)",
+        "CRG D4: Canonical-path function size cap (>200 lines = monster-function class)",
+        "CRG D5: Top-10 bridge nodes (betweenness-centrality chokepoints) must have TESTED_BY edges",
+    }
+)
+
+
+def _assert_crg_advisory_labels_valid() -> None:
+    """Fail closed if CRG_ADVISORY_LABELS drifts from CHECKS or skips a blocking check.
+
+    Two invariants, both load-bearing:
+      1. Every label must exist in CHECKS (catches rename/typo — same class as
+         _assert_slow_labels_valid).
+      2. Every referenced check must be ``is_advisory=True``. This is the honesty
+         property: ``--skip-crg-advisory`` must NEVER skip a check that can change
+         a commit verdict. If a future edit makes a CRG check blocking, this guard
+         raises at import — the flag cannot silently suppress a blocking finding.
+    """
+    by_label = {label: is_advisory for label, _fn, is_advisory, _db in CHECKS}
+    stale = CRG_ADVISORY_LABELS - by_label.keys()
+    if stale:
+        raise RuntimeError(
+            "CRG_ADVISORY_LABELS references label(s) not present in CHECKS: "
+            f"{sorted(stale)}. A CRG check was renamed/removed without updating "
+            "CRG_ADVISORY_LABELS, or the label string has a typo."
+        )
+    blocking = sorted(lbl for lbl in CRG_ADVISORY_LABELS if not by_label[lbl])
+    if blocking:
+        raise RuntimeError(
+            "CRG_ADVISORY_LABELS includes BLOCKING check(s): "
+            f"{blocking}. --skip-crg-advisory must only skip advisory checks "
+            "(a skipped blocking check would silently weaken the commit gate). "
+            "Remove these labels from CRG_ADVISORY_LABELS or restore is_advisory=True."
+        )
+
+
+_assert_crg_advisory_labels_valid()
+
+
 def main():
     import argparse
 
@@ -15211,9 +15261,21 @@ def main():
             "Exit code semantics are unchanged (0 = clean, 1 = drift detected)."
         ),
     )
+    parser.add_argument(
+        "--skip-crg-advisory",
+        action="store_true",
+        help=(
+            "Skip the CRG advisory checks (D1-D5) — used by pre-commit step 3 to drop "
+            "the ~73s D5 bridge-node query from the commit drift gate. These checks are "
+            "ADVISORY (never block); skipping loses zero blocking coverage. CI runs the "
+            "full set; the post-edit hook already skips them via --fast. Exit-code "
+            "semantics unchanged."
+        ),
+    )
     args = parser.parse_args()
     fast_mode = args.fast
     quiet_mode = args.quiet
+    skip_crg_advisory = args.skip_crg_advisory
 
     if not quiet_mode:
         print("=" * 60)
@@ -15242,9 +15304,17 @@ def main():
                 print(f"  WARNING: could not open DB ({exc}) — DB-dependent checks will skip")
 
     fast_skipped = 0  # tracks --fast skips separately from DB-unavailable skips
+    crg_skipped = 0  # tracks --skip-crg-advisory skips (commit drift gate)
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         if fast_mode and label in SLOW_CHECK_LABELS:
             fast_skipped += 1
+            continue
+        if skip_crg_advisory and label in CRG_ADVISORY_LABELS:
+            crg_skipped += 1
+            if not quiet_mode:
+                print(f"Check {i}: {label}...")
+                print("  SKIPPED (--skip-crg-advisory; advisory, runs in CI)")
+                print()
             continue
         if not quiet_mode:
             print(f"Check {i}: {label}...")
@@ -15322,9 +15392,10 @@ def main():
 
     # Summary — blocking_count tracks actual passes (not computed from total)
     fast_part = f", {fast_skipped} skipped (--fast)" if fast_skipped else ""
+    crg_part = f", {crg_skipped} skipped (--skip-crg-advisory)" if crg_skipped else ""
     summary_line = (
         f"{blocking_count} checks passed [OK], "
-        f"{skip_count} skipped (DB unavailable){fast_part}, "
+        f"{skip_count} skipped (DB unavailable){fast_part}{crg_part}, "
         f"{advisory_count} advisory"
     )
     if all_violations:
