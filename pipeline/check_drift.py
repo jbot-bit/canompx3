@@ -53,6 +53,20 @@ CHECK_DEPS: dict[str, list[str]] = {
         "trading_app/config.py",
         "trading_app/ai/sql_adapter.py",
     ],
+    # Canary suite (deliverable #4) — pure-function call over the canary suite
+    # and every canonical guard it delegates to. PASS is keyed on the content
+    # hash of these; any guard edit re-runs the suite for real. The dep list
+    # must stay COMPLETE (under-declaration is caught by the cold-recheck).
+    "Canary contamination suite green (every guard catches its trap)": [
+        "scripts/tests/canary_suite.py",
+        "research/oos_power.py",
+        "pipeline/session_guard.py",
+        "pipeline/stats.py",
+        "trading_app/config.py",
+        "trading_app/holdout_policy.py",
+        "research/comprehensive_deployed_lane_scan.py",
+        "research/filter_utils.py",
+    ],
 }
 
 # Records labels that returned a cached HIT during the current run, so the meta
@@ -8899,6 +8913,106 @@ def check_e2_lookahead_research_contamination() -> list[str]:
     return violations
 
 
+def check_research_scans_call_guards(files: list[str] | None = None) -> list[str]:
+    """Research scans that read canonical layers + filter/use-E2 but call NO guard.
+
+    Deliverable #3 of the canary contamination-detection harness. The Tier-1
+    canary suite (``scripts/tests/canary_suite.py``) proves each canonical guard
+    FUNCTION fires; this check proves the guards are actually WIRED into the scan
+    layer. A scan that reads ``orb_outcomes`` / ``daily_features``, applies a
+    filter (or uses the E2 entry model) inline, and never delegates to
+    ``filter_signal`` / ``session_guard`` / ``enforce_holdout_date`` /
+    ``t0_correlation`` can launder fake edge straight through — the guard exists
+    but is never invoked. This is the structural bridge between "the guard works"
+    (Tier-1) and "the guard is used" (Tier-2, deferred).
+
+    Delegates the AST scan to ``scripts.tools.canary_guard_coverage`` (single
+    source of truth — never re-encode the detection logic here, per
+    institutional-rigor.md §4). The scanner reads the monkeypatchable
+    ``PROJECT_ROOT`` so tests can point it at a ``fake_research_root``.
+
+    Opt-out: a script that has been manually verified clean may carry the marker
+    ``# canary-guard-coverage: cleared`` (mirrors ``# e2-lookahead-policy:
+    cleared``).
+
+    ADVISORY at registration: 66 pre-existing research scans read canonical
+    layers + filter/use-E2 without referencing a guard (the initial deliverable
+    -#3 list). Like ``check_e2_lookahead_research_contamination`` (advisory until
+    the 18-script registry was annotated), this surfaces the class without
+    blocking commits; promotion to blocking follows annotation/refactor of the
+    pre-existing list.
+
+    ``files`` is accepted for the standard drift-check signature (the runner
+    calls every check no-arg) but the scan is whole-tree by design — a
+    guard-bypass is a property of the file set, not of one edited file.
+
+    @rule canary-guard-coverage
+    """
+    from scripts.tools.canary_guard_coverage import scan_guard_coverage
+
+    flagged = scan_guard_coverage(project_root=PROJECT_ROOT)
+    violations: list[str] = []
+    for rel in flagged:
+        violations.append(
+            f"  {rel}: reads a canonical layer (orb_outcomes/daily_features) "
+            f"and applies a filter or uses entry_model='E2' but references NO "
+            f"canonical guard (filter_signal/session_guard/enforce_holdout_date/"
+            f"t0_correlation). It could pass a fake edge because the guard is "
+            f"never invoked. Route through the canonical guard, or add "
+            f"'# canary-guard-coverage: cleared' after manual verification. "
+            f"See docs/audit/hypotheses/drafts/2026-05-30-canary-contamination-harness.draft.yaml."
+        )
+    return violations
+
+
+def check_canary_suite_green(files: list[str] | None = None) -> list[str]:
+    """Every Tier-1 canary guard must CATCH its injected contamination (BLOCKING).
+
+    Deliverable #4 of the canary contamination-detection harness. Runs every
+    canary in ``scripts.tests.canary_suite`` against its trap and returns a
+    violation string for each canary whose guard FAILED to fire
+    (``fired=False``) — i.e. a contamination class the pipeline can no longer
+    reject. Empty == all guards fired == the pipeline still kills fake edge on
+    every synthetic trap.
+
+    FAIL-CLOSED / BLOCKING: a guard that stops detecting its own contamination
+    is an integrity regression, not advisory. There are zero pre-existing
+    violations (all 10 canaries fire today), so blocking is safe: if a future
+    edit disables a guard (e.g. neuters ``enforce_holdout_date`` or
+    ``is_feature_safe``), the canary for that guard flips to ``fired=False`` and
+    this check blocks the commit. That is the harness's purpose — a regression
+    in fake-edge-rejection capability must not land silently.
+
+    FAST: Tier-1 canaries are pure-function calls (stats, session-guard lookups,
+    holdout enforcement, bootstrap on small synthetic arrays) — well under a
+    second. Cache-eligible via the ``CHECK_DEPS`` entry keyed on the canary
+    suite + the guard modules it delegates to.
+
+    ``files`` is accepted for the standard drift-check signature (the runner
+    calls every check no-arg). The suite is whole — there is no per-file scoping.
+
+    Companion: this asserts the guards WORK on their traps; the advisory
+    ``check_research_scans_call_guards`` asserts the guards are CALLED by scans.
+    Both are needed — a working-but-uncalled guard is still a hole.
+
+    @rule canary-suite-green
+    """
+    from scripts.tests.canary_suite import run_canaries
+
+    violations: list[str] = []
+    for result in run_canaries():
+        if not result.fired:
+            violations.append(
+                f"  canary '{result.name}' guard FAILED to fire: the "
+                f"contamination slipped past {result.guard}. Expected signature: "
+                f"{result.signature}. The pipeline can no longer reject this "
+                f"fake-edge class — fix the guard before committing. "
+                f"See scripts/tests/canary_suite.py and "
+                f"docs/audit/hypotheses/drafts/2026-05-30-canary-contamination-harness.draft.yaml."
+            )
+    return violations
+
+
 # ── iso_utc silent-None formatter class bug (2026-05-04) ──
 # Class memo: memory/feedback_iso_utc_silent_none_class_pattern.md
 # Pattern: operator-visible formatter helper takes Any → does isinstance branch
@@ -14846,6 +14960,12 @@ CHECKS = [
         False,
     ),
     (
+        "Research scans reading canonical layers + filter/E2 must call a canonical guard (canary harness deliverable #3)",
+        check_research_scans_call_guards,
+        True,  # advisory — 74 pre-existing guard-bypass scans; promote to blocking after annotation/refactor
+        False,
+    ),
+    (
         "Routine-TBBO slippage pilot v1 PASS coverage in ROUTINE_TBBO_SLIPPAGE_REGISTRY (deployability inference parity)",
         check_routine_tbbo_slippage_registry_coverage,
         False,  # BLOCKING — registry under/over-coverage silently mis-classifies slippage_missing
@@ -15108,6 +15228,12 @@ CHECKS = [
         "CI pytest invocations must unload pytest-timeout plugin (`-p no:timeout`); `--timeout=0` is forbidden (n=4 same-class watchdog-race close, 2026-05-25)",
         check_ci_pytest_no_timeout_plugin,
         False,  # blocking — class has failed CI 5+ times; further regression silently red-CIs main
+        False,
+    ),
+    (
+        "Canary contamination suite green (every guard catches its trap)",
+        check_canary_suite_green,
+        False,  # blocking — a guard that stops detecting fake edge is an integrity regression
         False,
     ),
     # MUST stay LAST — re-runs cached-hit checks cold to verify cache honesty.
