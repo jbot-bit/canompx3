@@ -195,11 +195,61 @@ class TestSessionLockMutex:
         lines, should_block = hook._session_lock_lines()
 
         # Conservative: a corrupted lock means an unknown other session may
-        # be live, so we still BLOCK rather than auto-clean.
+        # be live, so we still BLOCK rather than auto-clean. But the message
+        # must name the REAL failure mode (malformed lock → guards inactive),
+        # NOT the misleading "another session is active" framing — the operator
+        # must not be sent chasing a phantom concurrent session.
         assert should_block is True
         joined = "\n".join(lines)
         assert "BLOCKED" in joined
-        assert "(corrupted lock file)" in joined
+        assert "malformed" in joined.lower()
+        assert "guards are INACTIVE" in joined or "guards" in joined.lower()
+        assert f"rm '{lock}'" in joined  # exact recovery command surfaced
+        # Must NOT mislead: a corrupt lock is not a confirmed live session.
+        assert "Another Claude session is active" not in joined
+
+    def test_malformed_unescaped_windows_path_lock_surfaces_guards_inactive(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression for the live 2026-05-24 incident: an older writer emitted
+        a single-line lock with unescaped Windows backslashes in the worktree
+        path (``"worktree": "C:\\Users\\joshd\\canompx3"`` → invalid \\U \\j \\c
+        JSON escapes). ``json.loads`` rejects it, which (a) blocks session start
+        and (b) silently disables branch-flip / head-flip guards.
+
+        The operator must be told the guards are inactive and given the exact
+        rm+restart recovery — not the misleading "another session active" text.
+        """
+        _setup_git_dir(tmp_path)
+        lock = tmp_path / ".git" / ".claude.pid"
+        # Write the RAW malformed bytes verbatim (NOT via json.dumps, which
+        # would escape correctly and defeat the test). This is the exact shape
+        # of the dead 2026-05-24 lock.
+        lock.write_text(
+            '{"pid": 63904, "ppid": 56032, '
+            '"iso_started": "2026-05-24T03:00:32.569658+00:00", '
+            '"worktree": "C:\\Users\\joshd\\canompx3", '
+            '"branch_at_start": "main", '
+            '"head_at_start": "3aad1235aed7156e7a3ee14af04251f75819c924"}',
+            encoding="utf-8",
+        )
+        # Confirm the fixture really is invalid JSON (guards against a future
+        # editor "fixing" the escapes and silently neutering the test).
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(lock.read_text(encoding="utf-8"))
+
+        hook = _load_hook(monkeypatch, tmp_path)
+        lines, should_block = hook._session_lock_lines()
+
+        assert should_block is True
+        joined = "\n".join(lines)
+        assert "malformed" in joined.lower()
+        assert "inactive" in joined.lower()  # guards-inactive signal present
+        assert f"rm '{lock}'" in joined
+        assert "Another Claude session is active" not in joined
+        # The malformed lock must be left untouched (no auto-overwrite of a
+        # lock we could not parse).
+        assert "63904" in lock.read_text(encoding="utf-8")
 
     def test_stale_dead_pid_lock_auto_recovers(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Lock from a dead PID older than STALE_LOCK_RECLAIM_HOURS must be

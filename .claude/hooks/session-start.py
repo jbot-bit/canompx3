@@ -577,18 +577,61 @@ def _session_lock_lines() -> tuple[list[str], bool]:
         # we're trying to prevent.
         return ([f"  WARNING: could not write Claude session lock at {lock_path}: {e}"], False)
 
-    # Conflict path: read existing lock for the BLOCK message. Tolerate
-    # corruption (treat as "unknown other session" — still safer to BLOCK).
+    # Conflict path: read existing lock for the BLOCK message.
+    #
+    # Two distinct failure modes converge here and DESERVE distinct messages:
+    #   (a) the lock parses → a real (possibly live) concurrent session.
+    #   (b) the lock is present but UNPARSEABLE (malformed JSON) → almost
+    #       always a stale/corrupt lock, NOT a concurrent session. The live
+    #       2026-05-24 incident was an older writer emitting unescaped Windows
+    #       backslashes (`"worktree": "C:\Users\..."` → invalid \U \j \c
+    #       escapes), which `json.loads` rejects. Critically, a malformed lock
+    #       also SILENTLY disables the per-tool branch-flip / head-flip guards
+    #       (they read `branch_at_start` / `head_at_start` via `_branch_state`,
+    #       which return None on parse failure and exit 0). The operator must
+    #       be told the guards are inactive — the old "Another session is
+    #       active" framing sent them chasing a phantom concurrent session.
+    #
+    # We still BLOCK in BOTH cases: a corrupt lock cannot prove no live session
+    # exists, and blocking-conservatively is the mutex contract
+    # (`test_corrupted_lock_still_blocks_and_degrades_gracefully`). The fix is
+    # message ACCURACY, not the block decision.
     try:
         existing = json.loads(lock_path.read_text(encoding="utf-8"))
-        other_pid = existing.get("pid", "?")
-        other_started = existing.get("iso_started", "?")
-        other_worktree = existing.get("worktree", "?")
+        lock_malformed = False
     except (json.JSONDecodeError, OSError, ValueError):
-        other_pid = "(corrupted lock file)"
-        other_started = "?"
-        other_worktree = "?"
+        existing = {}
+        lock_malformed = True
 
+    if lock_malformed:
+        return (
+            [
+                "",
+                "  ====================================================================",
+                "  BLOCKED: session lock is malformed (unparseable JSON).",
+                "  --------------------------------------------------------------------",
+                "  Branch-flip and head-flip guards are INACTIVE — they read",
+                "  branch_at_start / head_at_start from this lock and fail open on",
+                "  a parse error. No live session could be confirmed; this is almost",
+                "  certainly a stale/corrupt lock, NOT a concurrent session.",
+                f"  Lock file:    {lock_path}",
+                "  --------------------------------------------------------------------",
+                "  Common cause: an older writer emitted unescaped Windows paths",
+                "  (e.g. \"worktree\": \"C:\\Users\\...\") — invalid JSON escapes.",
+                "",
+                "  Recover (restores guards):",
+                f"    1. rm '{lock_path}'",
+                "    2. Restart this session — session-start rewrites a clean,",
+                "       properly-escaped lock and re-enables the guards.",
+                "  ====================================================================",
+                "",
+            ],
+            True,
+        )
+
+    other_pid = existing.get("pid", "?")
+    other_started = existing.get("iso_started", "?")
+    other_worktree = existing.get("worktree", "?")
     return (
         [
             "",
