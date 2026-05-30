@@ -153,7 +153,10 @@ jobs:
           --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (pipeline drift)
-        timeout-minutes: 10
+        # The check_drift shard is intentionally broad and can exceed 10m
+        # under GitHub coverage instrumentation; keep the timeout bounded but
+        # above the observed 2026-05-30 82%-complete CI kill.
+        timeout-minutes: 15
         shell: pwsh
         run: |
           $paths = Get-ChildItem tests/test_pipeline -File -Filter "test_check_drift*.py" | ForEach-Object { $_.FullName }
