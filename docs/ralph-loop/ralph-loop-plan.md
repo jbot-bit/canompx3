@@ -1,17 +1,9 @@
-## Iteration: 213
-## Target: trading_app/live/session_orchestrator.py:1132
-## Cluster: 1 finding, types=[fail_open], severity=[HIGH]
-## Classification: [judgment]
-## Blast Radius: 1 caller (session_orchestrator.__init__ L1062), 1 test file (3 existing test methods + 1 new)
-## Invariants:
-##   1. Session MUST still start even if lifecycle load fails (don't raise — positions need management)
-##   2. Operator MUST be notified when lifecycle blocks cannot be loaded (blocked lanes may trade unblocked)
-##   3. No behavior change when lifecycle load succeeds
-## Diff estimate: ~8 lines production + ~15 lines test = ~23 lines total
-## Doctrine cited: integrity-guardian.md § 3 (fail-closed mindset), institutional-rigor.md § 6 (no silent failures)
-## Findings deferred: all other handlers are ACCEPTABLE (documented, justified, or non-capital-path)
-
-Finding SO-213-01 [HIGH] — S2 Fail-open: _load_paused_lane_blocks silently swallows all
-exceptions, leaving SR-ALARMed / Criterion-11-failed lanes unblocked. Operator sees only
-log.warning; no notification dispatched. Fix: log.critical + _notify so operator knows
-lifecycle safety guard failed.
+## Iteration: 216
+## Target: pipeline/asset_configs.py:234
+## Cluster: 1 finding (annotation_debt), severity=[LOW]
+## Classification: [mechanical]
+## Blast Radius: 0 callers affected (drift check enforces no raw orb_active reads outside asset_configs.py)
+## Invariants: ACTIVE_ORB_INSTRUMENTS = ['MES', 'MGC', 'MNQ'] must not change; DEAD_ORB_INSTRUMENTS must not change; 40 tests must pass
+## Diff estimate: 2 lines (comment update + flag value)
+## Doctrine cited: integrity-guardian.md § 7 (Never Trust Metadata — orb_active=True on a dead instrument is misleading metadata)
+## Findings deferred: NONE (file otherwise clean)
