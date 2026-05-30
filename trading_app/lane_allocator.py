@@ -170,6 +170,7 @@ def _per_month_expr(
     stop_multiplier: float,
     rebalance_date: date,
     n_months: int = 6,
+    feature_cache: dict[tuple[str, int, date, date], list[dict]] | None = None,
 ) -> tuple[list[tuple[str, float, int]], int, int]:
     """Compute per-calendar-month ExpR for a strategy.
 
@@ -196,33 +197,37 @@ def _per_month_expr(
     if not outcomes:
         return [], 0, 0
 
-    # Load daily_features for filter application
-    features = con.execute(
-        """
-        SELECT * FROM daily_features
-        WHERE symbol = ? AND orb_minutes = ?
-          AND trading_day >= ? AND trading_day < ?
-        ORDER BY trading_day
-        """,
-        [instrument, orb_minutes, start, end],
-    ).fetchall()
+    cache_key = (instrument, orb_minutes, start, end)
+    feature_rows = feature_cache.get(cache_key) if feature_cache is not None else None
+    if feature_rows is None:
+        # Load daily_features for filter application
+        features = con.execute(
+            """
+            SELECT * FROM daily_features
+            WHERE symbol = ? AND orb_minutes = ?
+              AND trading_day >= ? AND trading_day < ?
+            ORDER BY trading_day
+            """,
+            [instrument, orb_minutes, start, end],
+        ).fetchall()
 
-    if not features:
-        return [], 0, 0
+        if not features:
+            return [], 0, 0
 
-    feat_cols = [desc[0] for desc in con.description]
-    feat_by_day = {}
-    for row in features:
-        d = dict(zip(feat_cols, row, strict=False))
-        feat_by_day[d["trading_day"]] = d
+        feat_cols = [desc[0] for desc in con.description]
+        feature_rows = [dict(zip(feat_cols, row, strict=False)) for row in features]
 
-    # Inject cross-asset ATR enrichment (cross_atr_{source}_pct) for any
-    # CrossAssetATRFilter in ALL_FILTERS. Without this the filter fails-closed
-    # on every day and the lane shows STALE ("No trades in trailing window")
-    # despite an active validated_setups cohort. Canonical helper from
-    # strategy_discovery; live entry path injects identically. See
-    # trading_app/config.py:982-984 for the schema-not-stored doctrine note.
-    _inject_cross_asset_atrs(con, list(feat_by_day.values()), instrument, ALL_FILTERS)
+        # Inject cross-asset ATR enrichment (cross_atr_{source}_pct) for any
+        # CrossAssetATRFilter in ALL_FILTERS. Without this the filter fails-closed
+        # on every day and the lane shows STALE ("No trades in trailing window")
+        # despite an active validated_setups cohort. Canonical helper from
+        # strategy_discovery; live entry path injects identically. See
+        # trading_app/config.py:982-984 for the schema-not-stored doctrine note.
+        _inject_cross_asset_atrs(con, feature_rows, instrument, ALL_FILTERS)
+        if feature_cache is not None:
+            feature_cache[cache_key] = feature_rows
+
+    feat_by_day = {row["trading_day"]: row for row in feature_rows}
 
     # Apply filter
     strat_filter = ALL_FILTERS.get(filter_type)
@@ -336,6 +341,7 @@ def compute_lane_scores(
 
         scores = []
         session_regime_cache: dict[tuple[str, str, date], float | None] = {}
+        feature_cache: dict[tuple[str, int, date, date], list[dict]] = {}
         for sid, inst, orb, om, em, rr, cb, ft, sm, c8_status in strategies:
             chordia_verdict_value = audit_log.verdict(sid) or "MISSING"
             chordia_age = audit_log.audit_age_days(sid, rebalance_date)
@@ -381,6 +387,7 @@ def compute_lane_scores(
                 sm,
                 rebalance_date,
                 trailing_months,
+                feature_cache,
             )
 
             if not monthly:
