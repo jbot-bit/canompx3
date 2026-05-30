@@ -3,7 +3,51 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 220
+## Last iteration: 221
+
+## RALPH AUDIT — Iteration 221 (COMPLETED)
+## Date: 2026-05-31
+## Infrastructure Gates: 152 drift checks PASS (fast + skip-crg-advisory); ruff PASS; 36/36 tests PASS
+## Scope: trading_app/outcome_builder.py — first full scan (critical centrality, 11 importers)
+
+---
+
+## Full-File Audit Results
+
+### trading_app/outcome_builder.py — SCANNED (first full scan)
+
+**Seven Sins Scan — iteration 221:**
+- S1 (Silent failure): `return None` at lines 83 and 101 in `_check_fill_bar_exit` — early exits when fill bar missing or no exit hit. Both are defensive guards, not silent failures. CLEAN.
+- S2 (Fail-open): `build_outcomes()` raises `ValueError` when instrument is None (line 736). `get_enabled_sessions` returns empty → `ValueError` raised (line 793). CLEAN.
+- S3 (Canonical violation): OB-221-01 FIXED — `default="MGC"` in CLI argparse (line 1098) bypassed the `build_outcomes()` `instrument is None` guard. Fixed: `required=True`. All other instrument references are explicit caller-supplied values. `GOLD_DB_PATH` from `pipeline.paths`. `orb_utc_window` from `pipeline.dst`. `get_cost_spec` from `pipeline.cost_model`. CLEAN.
+- S4 (Impact unawareness): `tests/test_trading_app/test_outcome_builder.py` has 36 tests, all PASS. `TestCLI.test_help` uses `--help` only — unaffected by `required=True`. CLEAN.
+- S5 (Evidence over assertion): All assertions verified by execution. CLEAN.
+- S6 (Spec compliance): No spec violations. CLEAN.
+- S7 (Metadata trust): `RR_TARGETS` and `CONFIRM_BARS_OPTIONS` are grid parameters documented in config.py — not research stats embedded as literals. CLEAN.
+
+**Domain-specific checks:**
+- ORB window timing: `orb_utc_window` from `pipeline.dst` used exclusively (line 898). No `break_ts` fallback. CLEAN.
+- Session hardcoding: `get_enabled_sessions(instrument)` from `pipeline.asset_configs`. CLEAN.
+- E0 fill-on-touch: `close_outside`/`closed_outside` absent. CLEAN.
+- Holdout date: No `date(2026` literals. CLEAN.
+- DST contamination: No fixed clock times. CLEAN.
+- DB path: `GOLD_DB_PATH` from `pipeline.paths`. CLEAN.
+- Cost inline: `get_cost_spec`, `pnl_points_to_r`, `risk_in_dollars`, `to_r_multiple` all from `pipeline.cost_model`. CLEAN.
+
+**Ralph-specific extensions scan:**
+- Async safety: No async code. CLEAN.
+- State persistence gap: No stateful objects. CLEAN.
+- Contract drift: `compute_single_outcome` public API (break_ts, orb_high, orb_low, break_dir, rr_target, confirm_bars, trading_day_end, cost_spec) unchanged. CLEAN.
+- Look-ahead bias: All outcome computation is post-entry (bars after entry_ts). `orb_end_utc` from canonical window — not from `break_ts`. CLEAN.
+
+**Finding fixed:**
+
+- OB-221-01 [LOW] — canonical_violation: `default="MGC"` in CLI argparse at line 1098 bypassed the `build_outcomes()` guard. The file's own docstring (lines 724-727) documented the prior MGC default as a canonical violation per integrity-guardian.md § 2. Fix: `required=True` replacing `default="MGC"`. Commit: aa5963ea (bundled with iter 219).
+
+**ACCEPTABLE findings:**
+- `TODO(E3-retired)` at line 964: dormant infrastructure with existing TODO annotation. ACCEPTABLE pattern 2.
+
+---
 
 ## RALPH AUDIT — Iteration 220 (COMPLETED)
 ## Date: 2026-05-31
@@ -287,10 +331,11 @@ Stale re-audit covering 3 commits since iter 182 (last audited):
 - trading_app/portfolio.py (iter 217 — stale re-audit iter 118; 0 findings, 5 ACCEPTABLE)
 - trading_app/ai/provider_registry.py (iter 218 — first full scan; 1 LOW fixed PR-218-01)
 - trading_app/live/broker_factory.py (iter 220 — stale re-audit iter 127; 0 findings, iter-127 fix verified present)
+- trading_app/outcome_builder.py (iter 221 — first full scan; 1 LOW fixed OB-221-01, ACCEPTABLE TODO(E3-retired))
 
 ## Next Iteration Targets
 
 Priority 0 — Open deferred HIGH/CRITICAL: NONE (SHADOW-MLL is MEDIUM, intentional design, dormant).
-Priority 1 — Unscanned high files: `pipeline/ingest_dbn_mgc.py` (high, 9 importers, findings=1 from iter 136 — stale re-audit needed).
-Priority 2 — Stale re-audits: `trading_app/conditional_overlays.py` (unscanned, surfaced in iter 214). `trading_app/live_config.py` (high, last iter 119, findings=3 — check hash).
-Priority 3 — Stale medium files: `pipeline/outcome_builder.py` (last iter 185, findings=5 — check hash).
+Priority 1 — Unscanned high files: `pipeline/ingest_dbn_mgc.py` (high, 9 importers, findings=1 from iter 136 — stale re-audit needed, hash changed since iter 219 fix).
+Priority 2 — Stale re-audits: `trading_app/live_config.py` (high, last iter 119, findings=3, hash unchanged — re-audit to verify fixes). `trading_app/conditional_overlays.py` (medium, 2 importers, never scanned).
+Priority 3 — Stale medium files: `trading_app/db_manager.py` (last iter 180, findings=2 — check hash).

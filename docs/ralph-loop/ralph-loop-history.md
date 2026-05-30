@@ -5,6 +5,21 @@
 
 ---
 
+## Iteration 221 — 2026-05-31
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/outcome_builder.py:1098 (first full scan, critical centrality 11 importers)
+- Cluster: 1 finding, severity=[LOW]
+- Finding: OB-221-01 — CLI argparse `default="MGC"` at line 1098 bypassed the `build_outcomes(instrument is None → ValueError)` guard added to fix the prior canonical violation. The file's own docstring (lines 724-727) documented the original MGC default as a canonical violation per integrity-guardian.md § 2. Fix: `required=True` replacing `default="MGC"`.
+- Doctrine cited: integrity-guardian.md § 2 (instrument literals are canonical violations)
+- Action: fix — `required=True` replacing `default="MGC"` in CLI argparse. Fix bundled into aa5963ea (iter 219) via pre-commit auto-format.
+- Blast radius: 1 file; CLI only; build_outcomes() API and all programmatic importers unaffected
+- Verification gate: fast
+- Verification: PASS — fast drift 152/0 PASS + ruff PASS + pytest 36/36 + pre-commit 2102/2102
+- Commit: aa5963ea (bundled with iter 219)
+
+---
+
 ## Iteration 220 — 2026-05-31
 - Phase: audit-only
 - Classification: [mechanical]
