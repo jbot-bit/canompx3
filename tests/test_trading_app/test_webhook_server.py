@@ -243,6 +243,25 @@ async def test_qty_within_max_accepted():
         assert resp.status == "submitted"
 
 
+async def test_profile_execution_map_applies_qty_cap_after_division():
+    """Mapped broker qty, not strategy qty, should be checked against MAX_ORDER_QTY."""
+    ws = _load_ws()
+    ws.MAX_ORDER_QTY = 5
+    profile = _nq_mini_profile()
+
+    with (
+        patch("trading_app.live.webhook_server.asyncio.get_running_loop", return_value=_ImmediateLoop()),
+        patch("trading_app.live.webhook_server._get_account_profile", return_value=profile),
+        patch("trading_app.live.webhook_server._get_contract", side_effect=lambda instrument: f"{instrument}M6"),
+        patch("trading_app.live.webhook_server._place_order", return_value=12345) as place_order,
+    ):
+        resp = await _run_trade(ws, {**_ENTRY_PAYLOAD, "instrument": "MNQ", "qty": 20})
+
+    assert resp.status == "submitted"
+    place_order.assert_called_once()
+    assert place_order.call_args.args[2] == 5
+
+
 async def test_profile_execution_map_resolves_contract_and_divides_qty():
     """Configured webhook profile routes MNQ alerts to NQ broker contracts."""
     ws = _load_ws()
