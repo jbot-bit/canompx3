@@ -5,6 +5,21 @@
 
 ---
 
+## Iteration 215 — 2026-05-31
+- Phase: audit-only
+- Classification: N/A (no code change)
+- Target: pipeline/build_daily_features.py (critical centrality, 17 importers, stale re-audit iter 189 + 3 commits)
+- Cluster: 0 findings requiring fix; 2 ACCEPTABLE (LOW)
+- Finding: Comprehensive re-scan after 3 commits (NYSE_PREOPEN session wiring, holiday-contamination guard, verify-before-commit fix). SESSION_WINDOWS hardcoded times are documented intentional approximations not used in strategy filters. insert_count logging inaccuracy is style-only. All new code (holiday guard, verify-before-commit) is clean and correctly structured.
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed verified — verify before COMMIT), § 5 (evidence over assertion — traced all exception paths)
+- Action: audit-only; no code change warranted
+- Blast radius: 0 files changed
+- Verification gate: fast (baseline only)
+- Verification: PASS — 152 drift checks, ruff PASS
+- Commit: NONE
+
+---
+
 ## Iteration 214 — 2026-05-31
 - Phase: audit-only
 - Classification: N/A (no code change)

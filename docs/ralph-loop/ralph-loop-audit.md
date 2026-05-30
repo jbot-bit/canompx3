@@ -3,7 +3,61 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 214
+## Last iteration: 215
+
+## RALPH AUDIT — Iteration 215 (COMPLETED)
+## Date: 2026-05-31
+## Infrastructure Gates: 152 drift checks PASS (fast + skip-crg-advisory); ruff PASS
+## Scope: pipeline/build_daily_features.py — stale re-audit (findings=4 since iter 189, 3 commits since)
+
+---
+
+## Full-File Audit Results
+
+### pipeline/build_daily_features.py — SCANNED (stale re-audit)
+
+Stale re-audit covering 3 commits since iter 189 (last audited):
+- `62c51a14`: NYSE_PREOPEN session added (comment-only change to build_daily_features.py)
+- `296c54f2`: NYSE_PREOPEN holiday-contamination guard added to compute_orb_range
+- `19a344c6`: verify_daily_features moved before COMMIT (fail-before-commit fix)
+
+**Iter-189 fix verified:**
+- GARCH-SILENT-N1: logger.debug → logger.warning at except Exception block (line 860-862) — VERIFIED correct.
+
+**New changes verified:**
+
+**296c54f2 (holiday guard):** `compute_orb_range` at line 231 correctly gates NYSE_PREOPEN on NYSE holidays using `is_nyse_holiday()` (canonical `pipeline.market_calendar` source). Returns all-None routing into the existing empty-ORB path. Uses `_orb_utc_window` for non-holiday days. Fail-closed. CLEAN.
+
+**19a344c6 (verify-before-commit):** `verify_daily_features` now called BEFORE `con.execute("COMMIT")`. On integrity failure, raises `RuntimeError` before committing — outer `except Exception as e` catches it, executes ROLLBACK, re-raises. Correct pattern. CLEAN.
+
+**ACCEPTABLE findings (not fixed):**
+
+- `SESSION_WINDOWS = {"asia": (9, 0, 17, 0), "london": (18, 0, 23, 0), "ny": (23, 0, 2, 0)}` at line 95: Fixed Brisbane-time windows for session_asia/london/ny range features. Comment at line 93-94 explicitly documents "These do NOT track actual market opens which shift with DST." Features not used in any strategy filter (config.py has zero references). Used only for informational market profile data. ACCEPTABLE per pattern 1 (intentional per-session heuristic, documented non-DST approximation).
+
+- `insert_count = len(rows) - existing_count` at line 1743: minor logging inaccuracy (counts rows-before-update, not true new inserts). No capital path impact, no correctness impact. ACCEPTABLE per pattern 3 (style, no correctness impact).
+
+**Seven Sins Scan — iteration 215:**
+- S1 (Silent failure): `except Exception as exc` at line 860 → `logger.warning` + `return None` (logging elevated from debug in iter 189). `except Exception as e` at line 1779 → ROLLBACK + logger.error + re-raise. `except Exception` at line 1958 (main) → `sys.exit(1)` (already logged by inner handler). CLEAN.
+- S2 (Fail-open): `verify_daily_features` called before COMMIT; RuntimeError on failure triggers ROLLBACK. CLEAN.
+- S3 (Canonical violation): `_orb_utc_window` used for all ORB windows. `SESSION_WINDOWS` documented as intentional approximation (no strategy filter use). `GOLD_DB_PATH` from `pipeline.paths`. `COMPRESSION_SESSIONS` defined here and imported by portfolio.py (not a duplication — single definition). CLEAN.
+- S4 (Impact unawareness): test_build_daily_features.py updated in all 3 commits. CLEAN.
+- S5 (Evidence over assertion): All assertions verified by execution in commit messages. CLEAN.
+- S6 (Spec compliance): No spec violations identified. CLEAN.
+- S7 (Metadata trust): No docstring-as-truth violations. CLEAN.
+
+**Domain-specific checks:**
+- ORB window timing: `_orb_utc_window` (aliased from `pipeline.dst.orb_utc_window`) used exclusively. No `break_ts` fallback, no re-derivation. CLEAN.
+- Session hardcoding: `SESSION_WINDOWS` is a documented approximation for informational features only. ORB sessions all use `ORB_LABELS` from init_db. CLEAN.
+- E0 fill-on-touch: No `close_outside`/`closed_outside` references. CLEAN.
+- Holdout date: No `date(2026` literals in feature computation. CLEAN.
+- DST contamination: `SESSION_WINDOWS` documented as non-DST-aware approximation. All ORB windows use `_orb_utc_window` resolver. CLEAN.
+
+**Ralph-specific extensions scan:**
+- Look-ahead bias: All feature computation is retrospective (daily features builder runs post-session). post-pass rolling features use `post_rows[0..i-1]` indexing (prior-only). CLEAN.
+- State persistence gap: No stateful objects; all data passed through `con` transactions. CLEAN.
+- Contract drift: `build_daily_features(con, symbol, start_date, end_date, orb_minutes, dry_run)` signature unchanged. CLEAN.
+
+---
 
 ## RALPH AUDIT — Iteration 214 (COMPLETED)
 ## Date: 2026-05-31
@@ -46,58 +100,6 @@ Stale re-audit covering 3 commits since iter 182 (last audited):
 
 ---
 
-## RALPH AUDIT — Iteration 212 (COMPLETED)
-## Date: 2026-05-30
-## Infrastructure Gates: 151 drift checks PASS (fast); 10 tests PASS; ruff PASS; backfill dry-run drifted=0
-## Scope: trading_app/opportunity_awareness.py — first full scan (high centrality, 5 importers, unscanned); trading_app/allocation_promotion.py — batch same fix type
-
----
-
-## Full-File Audit Results
-
-### trading_app/opportunity_awareness.py — SCANNED
-
-Shadow-only opportunity awareness module (display/pre-session, no trade authorization).
-Well-structured: fail-closed exception handling with proper `available=False` returns,
-canonical delegation to `resolve_profile_id`, `resolve_allocation_json`, `build_state_envelope`.
-
-**Finding FIXED (canonical_violation, MEDIUM):**
-`PASSING_CHORDIA_VERDICTS = frozenset({"PASS_CHORDIA", "PASS_PROTOCOL_A"})` at line 38
-duplicates the policy encoded in `chordia.chordia_verdict_allows_deploy()` (chordia.py:468).
-Two call sites used this local frozenset instead of the canonical function. If the verdict
-taxonomy gains a new passing label (e.g., `PASS_PROTOCOL_B`), the local copy would silently
-miss it — wrong tier assignment in PRIME_SHADOW detection, wrong "Chordia gate:" warnings.
-
-Also found same pattern in `trading_app/allocation_promotion.py:18` (`PASS_CHORDIA_VERDICTS = {"PASS_CHORDIA", "PASS_PROTOCOL_A"}`) — batched in same fix.
-
-Fix: Added `from trading_app.chordia import chordia_verdict_allows_deploy`; replaced all 3
-call sites with the canonical function call.
-
-**ACCEPTABLE findings (not fixed):**
-- `date.today()` at lines 329/383/446: shadow-only display module; trading_day is always
-  passed explicitly by session_orchestrator callers via `today=` param; staleness is bounded
-  by `OPPORTUNITY_MAX_AGE_DAYS=1`. ACCEPTABLE per pattern 1 (intentional per-session heuristic).
-- `trailing_expr >= 0.20` at line 265: PRIME_SHADOW threshold — operational heuristic for
-  display tier, not a deployed trading parameter. No `@research-source` required per project
-  standards (operator-visible only, no capital path). ACCEPTABLE per pattern 3 (style/preference
-  with no correctness impact).
-- Broad `except Exception` at lines 456/481: both handlers return `available=False/valid=False`
-  explicitly — fail-closed, not swallowed. ACCEPTABLE per pattern 4 (guarded by fail-closed return).
-
----
-
-## Seven Sins Scan — iteration 212
-
-- Sin 1 (Silent failure): Both except blocks return structured error envelope with `available=False`. CLEAN.
-- Sin 2 (Canonical violation): FIXED — local chordia verdict set replaced with canonical function. allocation_promotion.py also fixed.
-- Sin 3 (Fail-open): No path returns success after failure; `_validated_opportunity_state` returns (False, reason, None) on any validity failure. CLEAN.
-- Sin 4-7: Shadow-only module; no capital gate, no inline research stats, no spec violations, no holdout contamination. CLEAN.
-
-**Ralph-specific extensions scan:**
-- Async safety: No async code in scope. CLEAN.
-- State persistence gap: `write_state=True` path uses `state_path.write_text()` atomically. CLEAN.
-- Contract drift: `validate_state_envelope` receives full inputs; `_validated_opportunity_state` return tuple used consistently. CLEAN.
-
 ## Files Fully Scanned
 
 - pipeline/system_context.py (iter 208)
@@ -110,11 +112,11 @@ call sites with the canonical function call.
 - trading_app/opportunity_awareness.py (iter 212 — full scan; 1 canonical violation fixed)
 - trading_app/allocation_promotion.py (iter 212 — batch fix; 1 canonical violation fixed)
 - trading_app/live/session_orchestrator.py (iter 214 — stale re-audit; 0 findings, ACCEPTABLE falsy-zero LOW)
+- pipeline/build_daily_features.py (iter 215 — stale re-audit; 0 findings, 2 ACCEPTABLE LOW)
 
 ## Next Iteration Targets
 
 Priority 0 — Open deferred HIGH/CRITICAL: NONE (SHADOW-MLL is MEDIUM, intentional design, dormant).
-Priority 1 — Unscanned critical/high files: `pipeline/build_daily_features.py` (critical centrality, 82 importers, last audited iter 189 — 5 audits but may have changed). Or `trading_app/execution_engine.py` (critical, not listed in centrality JSON but high usage).
-Priority 2 — Stale re-audits: `pipeline/asset_configs.py` (82 importers, critical centrality — check last scan date vs recent instrument changes). `trading_app/live/session_orchestrator.py` freshly audited iter 214.
-Priority 3 — Unscanned medium files: `trading_app/conditional_overlays.py` (new module referenced in session_orchestrator, unscanned).
-Priority 1 — Unscanned high files: `pipeline/paths.py` already audited iter 207 (3 audits). `trading_app/live/session_orchestrator.py` is Priority 2 stale re-audit but ranks highest.
+Priority 1 — Unscanned critical/high files: `pipeline/asset_configs.py` (82 importers, critical centrality — unscanned in ledger, highest centrality unscanned file).
+Priority 2 — Stale re-audits: `trading_app/conditional_overlays.py` (new module referenced in session_orchestrator, unscanned). `trading_app/execution_engine.py` (critical usage, not in centrality JSON).
+Priority 3 — Unscanned medium files: `trading_app/portfolio.py` (imports COMPRESSION_SESSIONS from build_daily_features — verified in this iter, but portfolio.py itself unscanned).
