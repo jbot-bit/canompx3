@@ -1,0 +1,329 @@
+metadata:
+  theory_grant: false
+  name: adaptive-stops-h0-mfe-mae-symmetry-diagnostic-v1
+  slug: 2026-05-31-adaptive-stops-h0-mfe-mae-symmetry-diagnostic-v1
+  owner: canompx3
+  created_at: 2026-05-31
+  status: DRAFT  # human review gates promotion to LOCKED. NOT runnable until
+                 # promoted out of drafts/ and committed (do_not_run_until_committed).
+  supersedes: none
+  parent_memo: >
+    Phase 0 memo "Adaptive / Condition-Dependent Stops + Liquidity-Sweep Logic"
+    (2026-05-31, v2). VERDICT NEED EVIDENCE. This H0 is the K=0 gating
+    diagnostic the memo's "Highest-EV next action" specifies: it decides
+    whether H1-H4 are live or pre-killed BEFORE any change to entry_rules.py /
+    outcome_builder.py / compute_stop_price() / schema.
+  testing_mode: individual  # Pathway B framing for schema purposes, BUT this is
+                            # a DESCRIPTIVE diagnostic, not a hypothesis test.
+                            # n_trials = 0 (see trial_budget). No family search,
+                            # no BH-FDR, no promotion to experimental_strategies
+                            # or validated_setups. It REPORTS excursion geometry;
+                            # it does not select survivors.
+  pathway: B
+  diagnostic_only: true  # CANONICAL FLAG — this pre-reg performs NO statistical
+                         # test that can promote a strategy. It computes
+                         # descriptive statistics (median MFE/MAE ratio,
+                         # Howard-selectivity at a stop-multiplier grid) that
+                         # GATE downstream hypotheses H1-H4. Writes nothing to
+                         # experimental_strategies / validated_setups.
+  chordia_threshold_basis: not_applicable_descriptive  # No t-test promotion
+                                                        # gate fires in H0. The
+                                                        # t-threshold becomes
+                                                        # binding only at H1/H3.
+  depends_on:
+    - trading_app/config.py  # apply_tight_stop() — canonical MAE-driven stop
+                             # counterfactual; H0 CALLS it, does not re-encode.
+    - trading_app/strategy_fitness.py  # _load_strategy_outcomes() — canonical
+                                       # filtered-outcome loader (eligible days
+                                       # only, ALL_FILTERS applied).
+    - trading_app/holdout_policy.py  # HOLDOUT_SACRED_FROM — IS boundary import.
+    - research/oos_power.py  # one_sample_power / power_verdict — power tiers.
+    - trading_app/prop_profiles.py  # ACCOUNT_PROFILES — deployed-lane source.
+    - pipeline/cost_model.py  # get_cost_spec — friction for apply_tight_stop.
+  authority:
+    - docs/institutional/pre_registered_criteria.md  # locked criteria
+    - .claude/rules/backtesting-methodology.md  # RULE 6.3 (MFE/MAE banned as
+                                                # PREDICTORS, legitimate as
+                                                # descriptive MEASUREMENT here),
+                                                # RULE 9 triple-join, RULE 7
+                                                # tautology, RULE 3.3 OOS power.
+    - docs/institutional/mechanism_priors.md  # R4 STOP modifier, Stage 3 GATED
+    - docs/institutional/literature/howard_2026_value_area_breakouts_es.md  # the
+                                                # negative prior + selectivity recipe
+    - docs/STRATEGY_BLUEPRINT.md  # NO-GO §5: stop-geometry-conditioned-on-level-
+                                  # distance NOT in registry; vol-regime param
+                                  # switching IS (blueprint:287, DEAD).
+  committed_sha: "TO_FILL_AFTER_COMMIT"  # research-truth-protocol §2a placeholder
+  head_sha_at_draft: "RESOLVE_AT_LOCK"  # sibling rebase moved HEAD mid-session;
+                                        # resolve via `git rev-parse HEAD` at lock,
+                                        # NOT from memory (branch-flip-protection).
+  do_not_run_until_committed: true  # hard gate
+  scope_note: >
+    K=0 read-only descriptive diagnostic. For each deployed lane x entry model,
+    (a) read out the realized-EV delta of the EXISTING stop_multiplier=0.75 prop
+    re-sim (already in production via account_survival.py); (b) measure median
+    MFE/MAE ratio on the traded (post-filter) population; (c) sweep
+    config.apply_tight_stop over stop_multiplier in {0.5,0.6,0.7,0.75,0.8,0.9,1.0}
+    and report measured mean pnl_r, winner-damage, and stop-selectivity per
+    multiplier. The verdict gates on direct measured EV (does any tighter stop
+    improve EV?). Touches NO production code, NO schema, NO DB write.
+
+edge_claim_summary: >
+  NOT an edge claim. A pre-determinability test. Howard 2026 (ES, single-source,
+  caveated) found near-symmetric early MFE/MAE makes price-based stops
+  value-destroying at all 12 distances tested (his max stop-selectivity 69% <
+  his ES-specific ~75% breakeven). H0 tests whether tighter price stops destroy
+  measured EV on OUR deployed ORB lanes (different setup: ORB E2 enters at
+  boundary on first range-cross; Howard's value-area-breakout-continuation
+  enters after a 120s acceptance delay). VERDICT = direct measured EV: if NO
+  tighter stop_multiplier improves realized IS mean pnl_r over the baseline ->
+  the price-stop family (H1, H3) is pre-killed. If at least one improves EV ->
+  H1/H3 are live. H4 (time-based exit, Howard's POSITIVE alternative) is NOT
+  gated by this result either way. No symmetry-band or 75% threshold gates the
+  verdict; those are reported as measured mechanism only.
+
+mechanism:
+  summary: >
+    Excursion geometry determines whether a tighter or condition-dependent PRICE
+    stop can add EV. If the median ratio of early max-favorable to early
+    max-adverse excursion is ~1.0 (symmetric), a price stop set inside the
+    current opposite-ORB-boundary anchor removes eventual winners at roughly the
+    same rate it removes eventual losers, so tightening should not improve
+    measured EV. Asymmetry (winners run further than losers before reversing) is
+    the condition under which a tighter price stop could improve EV. H0 does not
+    assume which holds — it MEASURES the realized EV across the multiplier grid
+    and reports the symmetry/winner-damage/selectivity that explains it. A
+    measurable property of orb_outcomes, not a belief.
+  measured_descriptors:
+    source: docs/institutional/literature/howard_2026_value_area_breakouts_es.md
+    note: >
+      These are REPORTED as the measured mechanism behind the EV result; NONE
+      is a gating threshold. Howard's ~75% breakeven is ES-SPECIFIC (derived
+      from HIS symmetric MFE/MAE + 20-30 tick winner horizons, extract line 88),
+      NOT a generic constant — the verdict does NOT compare any of our numbers
+      against 75%. The verdict gates only on direct measured EV (decision_rule).
+    median_mfe_mae_ratio:
+      ref: "Howard §5.3.1 (extract line 88); ~1.0 = symmetric = stop cannot discriminate"
+    winner_damage:
+      ref: "Howard §5.3.2 (extract line 94)"
+      def: "fraction of eventual (baseline) winners the tighter stop would terminate"
+      howard_es_value: "90.2% of ES horizon-winners breach a +/-2-tick stop"
+    stop_selectivity:
+      ref: "Howard §5.3.1-5.3.2 (Table 5 'Select.' column)"
+      def: "of the events the stop FIRED on, the fraction that were eventual losers"
+      howard_es_value: "peaks at 69% (boundary +/-16 ticks), below his ~75% breakeven"
+  why_descriptive_not_predictive:
+    rule: .claude/rules/backtesting-methodology.md RULE 6.3
+    statement: >
+      mae_r / mfe_r are BANNED as backtest PREDICTORS (intra-trade
+      retrospective). H0 uses them as the REQUIRED MEASUREMENT INPUT to a
+      post-hoc descriptive symmetry statistic — the same dual status that makes
+      config.apply_tight_stop() legitimate (it reads mae_r to re-price a
+      counterfactual stop, it does not predict with it). No mae_r/mfe_r value
+      enters any decision rule that selects a trade or promotes a strategy.
+
+canonical_features_in_scope:
+  measurement_inputs_not_predictors:
+    - name: mae_r
+      source: orb_outcomes (trade-level)
+      role: descriptive_measurement_only
+      banned_as_predictor: true
+      note: "Howard symmetry numerator/denominator + apply_tight_stop threshold."
+    - name: mfe_r
+      source: orb_outcomes (trade-level)
+      role: descriptive_measurement_only
+      banned_as_predictor: true
+    - name: pnl_r
+      source: orb_outcomes (trade-level)
+      role: realized_EV_measurement
+    - name: entry_price
+      source: orb_outcomes
+      role: apply_tight_stop input (risk_pts = abs(entry_price - stop_price))
+    - name: stop_price
+      source: orb_outcomes
+      role: apply_tight_stop input (opposite-ORB-boundary anchor per entry_rules.py:247)
+  no_predictors: >
+    H0 declares NO predictor features. It is a descriptive sweep, not a feature
+    test. This block exists to make explicit that the only orb_outcomes columns
+    read are excursion/price measurements, all used post-hoc.
+
+scope:
+  instruments: [MNQ, MES]  # MGC horizon-EXCLUDED: 2.7yr clean -> strict-Bailey
+                           # N<=4 (N<=7 with Databento backfill to 3.9yr). Not
+                           # enough clean data to pre-register H1-H4 regardless
+                           # of mechanism. Revisit only after backfill. (Memo
+                           # correction #3: horizon-excluded, not mechanism-excluded.)
+  lane_source:
+    canonical: trading_app/prop_profiles.py::ACCOUNT_PROFILES
+    rule: >
+      Enumerate deployed DailyLaneSpec strategy_ids from ACCOUNT_PROFILES at
+      runtime. Do NOT hardcode the lane list. Parse each strategy_id into
+      (instrument, orb_label, orb_minutes, entry_model, rr_target, confirm_bars,
+      filter_type) and feed _load_strategy_outcomes().
+  entry_model_stratification:
+    rule: >
+      Memo correction #4: realized risk differs by entry model — E1
+      (market-next-bar) overshoots ~1.18x ORB, E2 (stop-market) ~1.0x + 1 tick,
+      E3 (limit) ~1.0x. The symmetry statistic MUST be stratified by entry
+      model, NEVER pooled across them. Deployed lanes are all E2; H0 ALSO
+      measures the same lane spec under E1 and E3 from orb_outcomes where rows
+      exist, reporting each stratum separately.
+    models: [E1, E2, E3]
+  stop_multiplier_grid: [0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1.0]
+  data_source_mode: clean_real_micro
+  data_source_disclosure: >
+    MNQ + MES 1m-derived orb_outcomes from instrument inception to pre-sacred
+    boundary. No proxy, no parent-futures backfill. Canonical layers only
+    (orb_outcomes JOIN daily_features via _load_strategy_outcomes; filter applied).
+
+holdout:
+  source: trading_app/holdout_policy.py::HOLDOUT_SACRED_FROM
+  value_at_draft: "2026-01-01"  # informational; script MUST import at runtime
+  binding_rule: >
+    Symmetry/selectivity measured on IS only (trading_day < HOLDOUT_SACRED_FROM).
+    The existing 0.75 prop re-sim realized-EV readout is reported IS and OOS
+    SEPARATELY (OOS is monitoring-only, never tuned). No hardcoded date literal.
+  is_window:
+    start: instrument_inception
+    end_exclusive: HOLDOUT_SACRED_FROM
+  mode: A
+  forbidden: [discovery_on_oos, tuning_on_oos, multiple_looks_at_oos]
+
+trial_budget:
+  n_trials: 0  # DESCRIPTIVE. No hypothesis test, no promotion gate, no
+               # experimental_strategies / validated_setups write. K=0 by design.
+  downstream_family_budget:
+    note: >
+      H0 itself spends K=0. The DOWNSTREAM hypotheses it gates (H1<=8, H2<=6,
+      H3<=6, H4=1) sum to 21 trials. Live-verified via research-catalog
+      estimate_k_budget on 2026-05-31:
+    minbtl_for_downstream_K21:
+      instrument: MNQ
+      n_trials: 21
+      clean_years: 6.65
+      minbtl_years_required: 6.09
+      headroom_years: 0.56  # CORRECTION vs memo: memo cited "2.24yr headroom"
+                            # which was the SINGLE-LANE N=24 check, NOT the K=21
+                            # aggregate. The aggregate has only 0.56yr headroom.
+                            # H1-H4 combined K is NEAR the MinBTL ceiling — no
+                            # room to expand any one hypothesis's trial count.
+      verdict: PASS  # passes, but tightly. Recorded honestly per the memo's own
+                     # second-pass-corrections discipline.
+      authority: >
+        pre_registered_criteria.md Criterion 2;
+        literature/bailey_et_al_2013_pseudo_mathematics.md Theorem 1.
+
+existing_evidence_readout:
+  # Memo correction #2: the 0.75 counterfactual is ALREADY simulated in
+  # production for survival sizing. Read it out FIRST before spending any K.
+  source: trading_app/account_survival.py:332-339
+  mechanism: >
+    Prop profiles run stop_multiplier=0.75 (prop_profiles.py:445/477/523). The
+    _load_lane_trade_paths path calls config.apply_tight_stop(outcomes, 0.75,
+    cost_spec) when stop_multiplier != 1.0. H0 reports, per deployed lane:
+    realized mean pnl_r at multiplier 1.0 vs 0.75 (and the full grid). If 0.75
+    SYSTEMATICALLY reduces realized EV per trade, that is pre-existing
+    on-our-data evidence that tighter PRICE stops destroy EV — corroborating
+    Howard before any new test.
+
+decision_rule:
+  # H0 produces a per-(lane, entry_model) verdict that GATES H1-H4. The gate is
+  # the DIRECT measured EV from the canonical apply_tight_stop sweep — NOT a
+  # symmetry band and NOT a comparison against a hardcoded selectivity threshold.
+  # The median MFE/MAE ratio, winner-damage, and stop-selectivity are REPORTED as
+  # the measured mechanism, never as gating inputs (no 75% constant anywhere).
+  primary_gate: direct_measured_EV
+  pre_kill:
+    condition: >
+      NO tighter stop_multiplier (< 1.0) in the grid improves realized IS mean
+      pnl_r over the baseline (1.0, opposite-ORB-boundary) stop. i.e. tightening
+      the price stop is monotone-non-improving on measured EV.
+    consequence: >
+      PRE-KILL the price-stop family (H1 level-distance anchor, H3 ATR-scaled
+      distance) for that lane. Reported mechanism (expected to corroborate):
+      median MFE/MAE ~1.0, high winner-damage, low stop-selectivity. H2
+      (sweep-then-reverse, an ENTRY switch not a price stop) and H4 (time-based
+      exit) remain live regardless.
+  proceed:
+    condition: "at least one tighter stop_multiplier improves realized IS mean pnl_r over baseline."
+    consequence: "H1 / H3 are LIVE for that lane (measured EV headroom exists). Proceed to draft them."
+  insufficient_n:
+    condition: "N_IS < 50 traded trades for the (lane, entry_model) stratum."
+    consequence: "No verdict — descriptive output only. Aligns with backtesting-methodology N>=50 floor."
+  h4_independence:
+    statement: >
+      H4 (time-based no-progress exit) is a DIFFERENT mechanism (Howard's
+      time-stack beat price-stops 11/13 months, sign-test p=0.02). It is NOT
+      gated by the H0 symmetry result and remains separately testable even if
+      H0 kills the price-stop family.
+
+nogo_overlap_disclosure:
+  # Memo "what's different" — explicit per STRATEGY_BLUEPRINT §5 NO-GO registry.
+  adjacent_paths:
+    - adjacent: "Vol-regime parameter switching (blueprint:287)"
+      verdict: DEAD
+      difference: >
+        H0/H1/H3 condition stop GEOMETRY on level distance / measured excursion
+        asymmetry, NOT switch params by vol bucket.
+    - adjacent: "Breakeven trail stops (blueprint:281, -0.12..-0.17 Sharpe)"
+      verdict: DEAD
+      difference: >
+        Trailing != conditional initial placement. Howard's time-stack
+        (trailing + no-progress) actually beat price-stops — informs H4, not H0.
+    - adjacent: "PDH/PDL entry filters (graveyard, ExpR -0.12/-0.25)"
+      verdict: "NEGATIVE (deployment)"
+      difference: "Those were ENTRY filters; H1 is stop PLACEMENT on a taken trade."
+    - adjacent: "Sweep-then-reverse (H2)"
+      verdict: NO_PRIOR_WORK
+      difference: "Genuinely novel; needs own mechanism citation + pre-reg. Not in H0."
+  decision_variable_statement: >
+    The "what's different this time" is NOT "more parameters." It is: MEASURE
+    MFE/MAE symmetry / selectivity FIRST — the decision-determining statistic no
+    prior project stop-test computed — on existing canonical machinery
+    (apply_tight_stop), before touching any anchor geometry.
+
+methodology_gates:
+  triple_join:
+    rule: >
+      _load_strategy_outcomes already joins orb_outcomes to daily_features on
+      (trading_day, symbol, orb_minutes) for filter application. H0 reuses it;
+      no hand-rolled join. RULE 9 / daily-features-joins.md satisfied by delegation.
+  canonical_delegation:
+    rule: >
+      institutional-rigor §4: H0 CALLS config.apply_tight_stop,
+      strategy_fitness._load_strategy_outcomes, oos_power.one_sample_power,
+      holdout_policy.HOLDOUT_SACRED_FROM, cost_model.get_cost_spec,
+      prop_profiles.ACCOUNT_PROFILES. It re-encodes NONE of them.
+  no_db_write:
+    rule: "Read-only. DuckDB opened read_only=True. No INSERT/UPDATE/DELETE."
+  oos_power_floor:
+    rule: >
+      The 0.75-vs-1.0 realized-EV delta on the OOS slice is reported WITH its
+      one-sample power tier (research.oos_power.power_verdict). A direction
+      change between IS and OOS is NOT treated as refutation unless power
+      tier == CAN_REFUTE (RULE 3.3). H0 makes no kill on OOS alone.
+
+artifacts_to_save:
+  pre_lock:
+    - docs/audit/hypotheses/drafts/2026-05-31-adaptive-stops-h0-mfe-mae-symmetry-diagnostic-v1.draft.yaml  # this file
+    - research/adaptive_stops_h0_symmetry_diagnostic.py  # the read-only script
+  post_run:
+    - docs/audit/results/2026-05-31-adaptive-stops-h0-symmetry-diagnostic-results.md
+    - docs/audit/results/2026-05-31-adaptive-stops-h0-raw-per-lane.csv
+
+execution_gates:
+  - "this YAML promoted out of drafts/ and committed (committed_sha non-empty)"
+  - "DuckDB opened read_only=True (no writer lock contention; script aborts if it cannot open read-only)"
+  - "HOLDOUT_SACRED_FROM imported from trading_app.holdout_policy (no hardcoded date)"
+  - "deployed lanes enumerated from ACCOUNT_PROFILES (no hardcoded strategy_id list)"
+
+pre_reg_checklist:
+  - "[x] Diagnostic-only flag set; n_trials = 0; no experimental_strategies/validated_setups write"
+  - "[x] MFE/MAE declared as MEASUREMENT inputs, never predictors (RULE 6.3 dual-status disclosed)"
+  - "[x] Canonical delegation: apply_tight_stop / _load_strategy_outcomes / oos_power reused, not re-encoded"
+  - "[x] Downstream K=21 MinBTL re-verified live (0.56yr headroom, corrected vs memo)"
+  - "[x] Entry-model stratification mandated (E1/E2/E3 separate, never pooled)"
+  - "[x] MGC horizon-excluded with reason"
+  - "[x] Existing 0.75 prop re-sim readout mandated BEFORE any new sweep"
+  - "[x] Holdout bound via Python import; OOS monitoring-only"
+  - "[ ] Human review before promotion to LOCKED (DRAFT gate)"
