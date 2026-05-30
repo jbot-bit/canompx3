@@ -1,14 +1,14 @@
 {
-  "total_iterations": 204,
+  "total_iterations": 205,
   "last_updated": "2026-05-31",
-  "consecutive_low_only": 1,
+  "consecutive_low_only": 2,
   "last_high_finding_iter": 213,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 67,
+      "found": 68,
       "fixed": 54,
       "deferred": 4,
-      "fix_rate": 0.81
+      "fix_rate": 0.79
     },
     "silent_failure": {
       "found": 46,
@@ -129,12 +129,12 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 55,
-    "LOW": 126
+    "LOW": 127
   },
   "classifications": {
     "judgment": 89,
     "mechanical": 79,
-    "audit-only": 36
+    "audit-only": 37
   },
   "files_audited": {
     "trading_app/live/session_orchestrator.py": {
@@ -152,8 +152,8 @@
       "git_sha": ""
     },
     "pipeline/build_daily_features.py": {
-      "audit_count": 5,
-      "last_iter": 189,
+      "audit_count": 6,
+      "last_iter": 215,
       "findings": 4,
       "file_hash": "c67fb8ca46055e9d",
       "git_sha": "19a344c6"
@@ -4151,6 +4151,17 @@
       "finding_type": "falsy_zero",
       "severity": "LOW",
       "verdict": "NOTED",
+      "commit": "NONE"
+    },
+    {
+      "iter": 215,
+      "date": "2026-05-31",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/build_daily_features.py (critical centrality, 17 importers, stale re-audit iter 189 + 3 commits)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
       "commit": "NONE"
     }
   ]

@@ -16,9 +16,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** a877fc89 — [judgment] fix: Ralph Loop iter 213 — broker-factory bypass in reconnect contract re-resolution (SO-213-01, SO-213-02)
-- **Files changed:** 1 files
-  - `trading_app/live/session_orchestrator.py`
+- **Commit:** f83f7a59 — [mechanical] audit: Ralph Loop iter 214 — session_orchestrator stale re-audit (audit-only)
+- **Files changed:** 4 files
+  - `HANDOFF.md`
+  - `docs/ralph-loop/ralph-ledger.json`
+  - `docs/ralph-loop/ralph-loop-audit.md`
+  - `docs/ralph-loop/ralph-loop-history.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
