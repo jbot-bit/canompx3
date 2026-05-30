@@ -57,10 +57,7 @@ _BASE_REQUIRED_COLS = (
     "entry_model, filter_type, sample_size, win_rate, expectancy_r, "
     "years_tested, all_years_positive, stress_test_passed, status"
 )
-_BASE_REQUIRED_VALUES = (
-    "?, 'MGC', 'CME_REOPEN', 5, 2.0, 3, 'E1', 'NONE', "
-    "100, 0.55, 0.25, 5, TRUE, TRUE, 'ACTIVE'"
-)
+_BASE_REQUIRED_VALUES = "?, 'MGC', 'CME_REOPEN', 5, 2.0, 3, 'E1', 'NONE', 100, 0.55, 0.25, 5, TRUE, TRUE, 'ACTIVE'"
 
 
 def _column_types(con: duckdb.DuckDBPyConnection, table: str) -> dict[str, str]:
@@ -107,9 +104,7 @@ def test_validation_mode_default_is_standard(db_path):
         ["test_default"],
     )
     con.commit()
-    row = con.execute(
-        "SELECT validation_mode FROM validated_setups WHERE strategy_id = 'test_default'"
-    ).fetchone()
+    row = con.execute("SELECT validation_mode FROM validated_setups WHERE strategy_id = 'test_default'").fetchone()
     con.close()
 
     assert row is not None
@@ -181,3 +176,64 @@ def test_round_trip_ehr_row_preserves_columns(db_path):
     assert row[2] == date(2026, 1, 1)
     assert row[3] == "RESEARCH_PROVISIONAL"
     assert row[4] == 342
+
+
+# ---------- Stage 3 — experimental_strategies discovery-emitted columns ----------
+#
+# Stage 4 discovery writes validation_mode + cumulative_search_count to
+# experimental_strategies; the validator propagates them through promotion.
+# Only these TWO columns mirror to experimental_strategies — the other three
+# Stage-2 columns (verdict_ceiling, pseudo_oos_window_*) are validator-emitted
+# at promotion-time and stay on validated_setups only.
+
+_EXPERIMENTAL_MIRRORED_COLUMNS = {"validation_mode", "cumulative_search_count"}
+_EXPERIMENTAL_NOT_MIRRORED = {
+    "verdict_ceiling",
+    "pseudo_oos_window_start",
+    "pseudo_oos_window_end",
+}
+
+
+def test_experimental_strategies_has_discovery_emitted_ehr_columns(db_path):
+    """Stage 3 acceptance #1 — experimental_strategies carries exactly the two
+    discovery-emitted EHR columns with the right types, and NOT the three
+    validator-emitted ones (those belong on validated_setups only)."""
+    con = duckdb.connect(str(db_path), read_only=True)
+    types = _column_types(con, "experimental_strategies")
+    con.close()
+
+    missing = _EXPERIMENTAL_MIRRORED_COLUMNS - set(types)
+    assert not missing, f"experimental_strategies missing discovery EHR columns: {missing}"
+    assert types["validation_mode"] in {"VARCHAR", "TEXT"}
+    assert types["cumulative_search_count"] == "INTEGER"
+
+    leaked = _EXPERIMENTAL_NOT_MIRRORED & set(types)
+    assert not leaked, f"validator-emitted columns must NOT be on experimental_strategies: {leaked}"
+
+
+def test_experimental_validation_mode_default_is_standard(db_path):
+    """Stage 3 acceptance #1 — an experimental row inserted without
+    validation_mode lands as 'STANDARD' (same SQL DEFAULT as validated_setups),
+    so pre-Stage-4 discovery rows are STANDARD by construction."""
+    con = duckdb.connect(str(db_path))
+    # experimental_strategies has its OWN NOT NULL set (no years_tested /
+    # stress_test_passed — those are validated_setups-only). created_at has a
+    # DEFAULT. Insert just the experimental required columns.
+    con.execute(
+        """
+        INSERT INTO experimental_strategies
+            (strategy_id, instrument, orb_label, orb_minutes,
+             rr_target, confirm_bars, entry_model)
+        VALUES (?, 'MGC', 'CME_REOPEN', 5, 2.0, 3, 'E1')
+        """,
+        ["exp_default"],
+    )
+    con.commit()
+    row = con.execute(
+        "SELECT validation_mode, cumulative_search_count FROM experimental_strategies WHERE strategy_id = 'exp_default'"
+    ).fetchone()
+    con.close()
+
+    assert row is not None
+    assert row[0] == "STANDARD" == STANDARD_MODE_LABEL  # canonical-source parity
+    assert row[1] is None  # cumulative_search_count nullable, NULL by default

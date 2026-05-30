@@ -220,3 +220,34 @@ satisfying invariant 4's "end-to-end identifiability."
   the experimental→validated promotion.
 - **#5** (EHR rows research-provisional only, never deployable) — validator
   hard-caps `status='RESEARCH_PROVISIONAL'` when `verdict_ceiling` is set.
+
+## Completion (2026-05-30) — PROVEN
+
+Implemented: db_manager experimental_strategies mirror (validation_mode +
+cumulative_search_count); `_derive_ehr_promotion_fields` canonical helper +
+module const `RESEARCH_PROVISIONAL_STATUS` + `is_research_provisional` flag;
+INSERT 55→60 cols with status hard-cap branch consuming the flag.
+
+Refinement past the original plan: acceptance #11 strengthened — the INSERT-site
+branch consumes the helper's `is_research_provisional` flag instead of comparing
+`verdict_ceiling == "RESEARCH_PROVISIONAL"`, so the literal lives in exactly one
+place (`RESEARCH_PROVISIONAL_STATUS`). Added a 6th validator test
+(`test_research_provisional_row_excluded_from_active_validated_view`) proving
+invariant #5 self-enforcement at the ACTIVE_VALIDATED_VIEW level.
+
+Verification:
+- `test_strategy_validator_ehr.py` — 6/6 pass.
+- `test_db_manager_ehr_schema.py` — 6/6 (4 Stage-2 + 2 new).
+- `test_db_manager.py` — 13/13 (schema regression).
+- `test_strategy_validator.py` — 140/140 (full validator regression).
+- `test_holdout_policy*.py` — 30/30 (Stage 1 regression).
+- ruff clean on all 4 changed files.
+- Drift: the EHR branch's `check_context_view_contracts` reports a pre-existing
+  branch-age condition (context_views package not yet wired on this branch),
+  unrelated to Stage 3; clears on merge to main. No Stage-3 drift introduced.
+
+Adversarial-audit gate (independent-context evidence-auditor, per
+`adversarial-audit-gate.md`): **CLEAN** — all four falsification hypotheses HOLD
+(deployability leak / column alignment / STANDARD regression / canonical
+delegation). Follow-up note: `ai/sql_adapter.py` reads validated_setups
+unfiltered for AI diagnostics — read-only, not a deploy path; non-blocking.

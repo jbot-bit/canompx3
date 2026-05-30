@@ -669,6 +669,28 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         ]:
             con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
+        # Migration: EHR discovery-emitted columns on experimental_strategies
+        # (2026-05-17, PASS 2 Stage 3). Only the TWO columns that Stage 4
+        # discovery writes are mirrored here; the validator propagates them
+        # verbatim through the experimental→validated promotion. Without this
+        # mirror the EHR label would be lost the moment Stage 4 inserts an
+        # experimental row (plan invariant 4 — EHR rows identifiable end-to-end).
+        # - validation_mode TEXT DEFAULT 'STANDARD' — same SQL literal default as
+        #   the validated_setups column (module-level assert pins it to
+        #   trading_app.holdout_policy.STANDARD_MODE_LABEL).
+        # - cumulative_search_count INTEGER — Bailey-Lopez de Prado 2014
+        #   disclosure, computed by Stage 4 at discovery-date.
+        # The other three Stage-2 columns (verdict_ceiling, pseudo_oos_window_*)
+        # are validator-emitted at promotion-time, NOT discovery-emitted, so they
+        # deliberately stay on validated_setups only.
+        # @research-source: trading_app/holdout_policy.py EARLY_HOLDOUT_BOUNDARY
+        # @entry-models: ALL (mode is orthogonal to entry rules)
+        for col, typedef in [
+            ("validation_mode", "TEXT DEFAULT 'STANDARD'"),
+            ("cumulative_search_count", "INTEGER"),
+        ]:
+            con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN IF NOT EXISTS {col} {typedef}")
+
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.
         con.execute("""
