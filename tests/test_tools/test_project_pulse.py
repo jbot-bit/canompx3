@@ -1269,6 +1269,7 @@ class TestBuildPulse:
             patch.object(project_pulse, "collect_fitness_fast", return_value=({}, [])),
             patch.object(project_pulse, "collect_deployment_state", return_value=(None, [])),
             patch.object(project_pulse, "collect_lifecycle_control", return_value=(None, None, None, [])),
+            patch.object(project_pulse, "collect_live_readiness", return_value=(None, [])),
             patch.object(project_pulse, "collect_worktrees", return_value=[]),
             patch.object(project_pulse, "collect_session_claims", return_value=[]),
             patch.object(project_pulse, "collect_action_queue", return_value=[]),
@@ -1732,6 +1733,34 @@ class TestRecommendation:
         report = PulseReport(generated_at="now", cache_hit=False, git_head="abc", git_branch="main")
         rec = _compute_recommendation(report)
         assert "All clear" in rec
+
+
+class TestLiveReadinessPulse:
+    def test_collect_live_readiness_surfaces_strict_blockers(self, monkeypatch) -> None:
+        from scripts.tools import live_readiness_report
+        from scripts.tools.project_pulse import collect_live_readiness
+
+        monkeypatch.setattr(
+            live_readiness_report,
+            "build_live_readiness_report",
+            lambda **_kwargs: {
+                "profile_id": "topstep_50k_mnq_auto",
+                "runtime_root": "C:/Users/joshd/canompx3",
+                "strict_zero_warn": {"green": False, "blockers": ["Profile copies>1"]},
+                "automation_health": {"available": True, "overall": "OK", "tasks": []},
+                "telemetry_maturity": {"n_unique_trading_days": 2, "min_required": 30},
+                "profile_launch": {"copies": 2},
+            },
+        )
+
+        summary, items = collect_live_readiness()
+
+        assert summary is not None
+        assert summary["runtime_root"] == "C:/Users/joshd/canompx3"
+        assert len(items) == 1
+        assert items[0].category == "broken"
+        assert items[0].source == "live_readiness"
+        assert "Profile copies>1" in (items[0].detail or "")
 
 
 class TestSkillSuggestions:

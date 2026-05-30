@@ -88,7 +88,7 @@ class TestAccountProfile:
         assert p.firm == "topstep"
         assert p.account_size == 50_000
         assert p.stop_multiplier == 0.75
-        assert p.copies == 2  # start small, scale after proving loop
+        assert p.copies == 1  # single-account pilot until per-shadow loss belts exist
         assert p.payout_policy_id == "topstep_express_standard"
         assert p.active is True
 

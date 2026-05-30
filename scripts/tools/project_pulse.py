@@ -145,6 +145,7 @@ class PulseReport:
     execution_summary: dict | None = None
     capital_packet_summary: dict | None = None
     capital_recommendation: str | None = None
+    live_readiness_summary: dict | None = None
     # Trading day context
     upcoming_sessions: list[dict] = field(default_factory=list)
     # Single recommendation
@@ -1396,6 +1397,71 @@ def collect_capital_packet(root: Path) -> tuple[dict | None, list[PulseItem]]:
     return summary, items
 
 
+def collect_live_readiness(profile_id: str = "topstep_50k_mnq_auto") -> tuple[dict | None, list[PulseItem]]:
+    """Read the live-readiness cockpit and project it into pulse actions."""
+    try:
+        from scripts.tools.live_readiness_report import build_live_readiness_report
+
+        report = build_live_readiness_report(profile_id=profile_id, db_path=GOLD_DB_PATH)
+    except Exception as e:
+        return (
+            None,
+            [
+                PulseItem(
+                    category="broken",
+                    severity="medium",
+                    source="live_readiness",
+                    summary=f"Live readiness check error: {type(e).__name__}",
+                    detail=str(e),
+                    action=f"python scripts/tools/live_readiness_report.py --profile {profile_id} --format text",
+                )
+            ],
+        )
+
+    summary = {
+        "profile_id": report.get("profile_id"),
+        "runtime_root": report.get("runtime_root"),
+        "strict_zero_warn": report.get("strict_zero_warn"),
+        "automation_health": report.get("automation_health"),
+        "telemetry_maturity": report.get("telemetry_maturity"),
+        "profile_launch": report.get("profile_launch"),
+    }
+    items: list[PulseItem] = []
+    strict = report.get("strict_zero_warn") or {}
+    blockers = [str(blocker) for blocker in strict.get("blockers", [])]
+    if blockers:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="high",
+                source="live_readiness",
+                summary=f"{summary['profile_id']}: {len(blockers)} live-readiness blocker(s)",
+                detail="\n".join(blockers[:8]),
+                action=f"python scripts/tools/live_readiness_report.py --profile {summary['profile_id']} --strict-zero-warn",
+            )
+        )
+
+    automation = report.get("automation_health") or {}
+    if automation.get("available") is True and automation.get("overall") not in (None, "OK"):
+        task_lines = [
+            f"{task.get('task_name')}={task.get('status')}"
+            for task in automation.get("tasks", [])
+            if task.get("status") != "OK"
+        ]
+        items.append(
+            PulseItem(
+                category="decaying",
+                severity="medium",
+                source="automation_health",
+                summary=f"Automation health {automation.get('overall')}",
+                detail="\n".join(task_lines),
+                action=f"python scripts/tools/live_readiness_report.py --profile {summary['profile_id']} --format text",
+            )
+        )
+
+    return summary, items
+
+
 def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple[dict | None, list[PulseItem]]:
     """Expose the repo's core identity from linked canonical registries."""
     items: list[PulseItem] = []
@@ -2463,6 +2529,7 @@ def build_pulse(
     execution_summary = deployment_summary.get("execution_evidence") if isinstance(deployment_summary, dict) else None
     survival_summary, sr_summary, pause_summary, lifecycle_items = collect_lifecycle_control(db_path)
     capital_packet_summary, capital_packet_items = collect_capital_packet(root)
+    live_readiness_summary, live_readiness_items = collect_live_readiness()
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical, fast=fast)
     claim_items = collect_session_claims(root)
@@ -2506,6 +2573,7 @@ def build_pulse(
         + deployment_items
         + lifecycle_items
         + capital_packet_items
+        + live_readiness_items
         + claim_items
         + conflict_items
         + handoff_items
@@ -2543,6 +2611,7 @@ def build_pulse(
         pause_summary=pause_summary,
         execution_summary=execution_summary,
         capital_packet_summary=capital_packet_summary,
+        live_readiness_summary=live_readiness_summary,
         upcoming_sessions=upcoming,
         time_since_green=time_since_green,
         session_delta=session_delta,
@@ -2704,6 +2773,18 @@ def format_text(report: PulseReport) -> str:
             )
         if report.capital_recommendation:
             lines.append(f"  Capital recommendation: {report.capital_recommendation}")
+        if report.live_readiness_summary:
+            live = report.live_readiness_summary
+            strict = live.get("strict_zero_warn") or {}
+            automation = live.get("automation_health") or {}
+            telemetry = live.get("telemetry_maturity") or {}
+            lines.append(
+                "  "
+                f"Live readiness green={bool(strict.get('green'))} "
+                f"blockers={len(strict.get('blockers', []))} "
+                f"automation={automation.get('overall')} "
+                f"telemetry_days={telemetry.get('n_unique_trading_days')}/{telemetry.get('min_required')}"
+            )
         lines.append("")
 
     # Cap display items per category to keep output scannable
@@ -2771,6 +2852,7 @@ def format_json(report: PulseReport) -> str:
         "execution_summary": report.execution_summary,
         "capital_packet_summary": report.capital_packet_summary,
         "capital_recommendation": report.capital_recommendation,
+        "live_readiness_summary": report.live_readiness_summary,
         "work_capsule_summary": report.work_capsule_summary,
         "system_brief_summary": report.system_brief_summary,
         "history_debt_summary": report.history_debt_summary,

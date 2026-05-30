@@ -13,6 +13,21 @@ import pytest
 from scripts.tools import live_readiness_report
 
 
+@pytest.fixture(autouse=True)
+def _default_automation_health(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        live_readiness_report,
+        "_load_automation_health",
+        lambda: {
+            "available": True,
+            "platform": "nt",
+            "runtime_root": str(live_readiness_report.DEFAULT_SIGNALS_DIR),
+            "overall": "OK",
+            "tasks": [],
+        },
+    )
+
+
 def _write_allocator(
     path: Path,
     *,
@@ -166,6 +181,46 @@ def _install_happy_path(
         ),
         raising=False,
     )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "_load_automation_health",
+        lambda: {
+            "available": True,
+            "platform": "nt",
+            "runtime_root": str(live_readiness_report.DEFAULT_SIGNALS_DIR),
+            "overall": "OK",
+            "tasks": [],
+        },
+        raising=False,
+    )
+
+
+def test_default_signals_dir_uses_canonical_runtime_root() -> None:
+    from pipeline.paths import LIVE_SIGNALS_DIR
+
+    assert live_readiness_report.DEFAULT_SIGNALS_DIR == LIVE_SIGNALS_DIR
+
+
+def test_running_task_with_fresh_log_is_not_failed() -> None:
+    task = {
+        "available": True,
+        "state": "Running",
+        "last_task_result": 4294967295,
+        "log": {"fresh_after_last_run": True},
+    }
+
+    assert live_readiness_report._classify_scheduled_task_health(task) == "RUNNING_WITH_FRESH_LOG"
+
+
+def test_failed_task_classifies_as_failed() -> None:
+    task = {
+        "available": True,
+        "state": "Ready",
+        "last_task_result": 1,
+        "log": {"fresh_after_last_run": False},
+    }
+
+    assert live_readiness_report._classify_scheduled_task_health(task) == "FAILED"
 
 
 def test_build_live_readiness_report_merges_allocator_and_lifecycle(tmp_path: Path, monkeypatch) -> None:
