@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Post-compaction context re-injection."""
+"""Post-compaction context re-injection.
+
+Wired as a SessionStart hook with matcher "compact" (the only event where
+post-compaction context can be re-injected — PreCompact fires *before*
+compaction and its stdout is discarded; see code.claude.com/docs/en/hooks).
+SessionStart auto-adds stdout to Claude's context, so a bare print() is the
+correct emit contract here.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +14,16 @@ import json
 import os
 import sys
 from pathlib import Path
+
+# Force UTF-8 stdout: Claude Code invokes this hook directly (no PYTHONIOENCODING
+# wrapper), and on Windows stdout defaults to cp1252, which raises
+# UnicodeEncodeError on the arrows/em-dashes in the re-injected brief. Same
+# footgun documented in post-edit-pipeline.py. errors="replace" keeps the hook
+# fail-open even on an un-encodable character.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+except Exception:
+    pass
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -70,7 +87,11 @@ def main() -> None:
             ]
         )
 
-    print("\n".join(lines))
+    try:
+        print("\n".join(lines))
+    except Exception:
+        # Never let a re-injection emit failure break compaction/session start.
+        pass
     sys.exit(0)
 
 

@@ -1,0 +1,84 @@
+{
+  "skill": "optimize-setup",
+  "version": 1,
+  "tests": [
+    {
+      "id": "os-01",
+      "prompt": "optimize my claude code setup",
+      "assertions": [
+        {
+          "id": "os-01-a1",
+          "type": "command_ran",
+          "pattern": "settings\\.json|\\.claude/hooks|\\.mcp\\.json",
+          "description": "Grounds in this repo's actual config (settings.json / hooks / mcp.json), not a generic catalog"
+        },
+        {
+          "id": "os-01-a2",
+          "type": "regex_match",
+          "pattern": "(wired|referenced|on.?disk|unreferenced|dormant)",
+          "description": "Distinguishes wired-vs-on-disk hooks"
+        },
+        {
+          "id": "os-01-a3",
+          "type": "regex_not_match",
+          "pattern": "(add (an? )?(auto.?)?(ruff |)format hook|recommend context7|add (a )?GitHub MCP|add (a )?code.?reviewer subagent)",
+          "description": "Does NOT recommend automations already present (format=pre-commit, context7/GitHub MCP, reviewer agent)"
+        },
+        {
+          "id": "os-01-a4",
+          "type": "regex_match",
+          "pattern": "(smallest.?diff|highest.?EV|high.?EV|low.?EV|redundant)",
+          "description": "Frames findings by EV / diff size, not volume"
+        }
+      ]
+    },
+    {
+      "id": "os-02",
+      "prompt": "are my hooks all wired up or is anything dead?",
+      "assertions": [
+        {
+          "id": "os-02-a1",
+          "type": "command_ran",
+          "pattern": "settings\\.json|grep .*hooks|ls .*hooks",
+          "description": "Diffs on-disk hooks against settings.json wiring"
+        },
+        {
+          "id": "os-02-a2",
+          "type": "regex_match",
+          "pattern": "(shared module|imported by|load.?bearing|_[a-z]+_state)",
+          "description": "Recognizes _-prefixed shared modules as load-bearing, not dead"
+        },
+        {
+          "id": "os-02-a3",
+          "type": "text_not_contains",
+          "description": "Does NOT propose deleting unwired hooks (zero runtime cost, loses code)",
+          "pattern": "delete the dead hook"
+        }
+      ]
+    },
+    {
+      "id": "os-03",
+      "prompt": "should I wire the post-compact-reinject hook under PreCompact?",
+      "assertions": [
+        {
+          "id": "os-03-a1",
+          "type": "command_ran",
+          "pattern": "code\\.claude\\.com/docs|WebFetch|docs/en/hooks",
+          "description": "Verifies the event contract against official hook docs before answering"
+        },
+        {
+          "id": "os-03-a2",
+          "type": "regex_match",
+          "pattern": "(PreCompact (cannot|can't|does not|doesn't) inject|stdout.*(discard|debug.?log)|SessionStart.*compact|matcher.*compact)",
+          "description": "Correctly identifies PreCompact can't inject context; SessionStart matcher:compact is the right home"
+        },
+        {
+          "id": "os-03-a3",
+          "type": "regex_match",
+          "pattern": "(cp1252|UnicodeEncode|reconfigure.*utf|PYTHONIOENCODING|smoke.?test)",
+          "description": "Flags the Windows cp1252 stdout footgun / requires smoke-test before wiring"
+        }
+      ]
+    }
+  ]
+}
