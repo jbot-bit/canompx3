@@ -101,6 +101,22 @@ CROSSWALK: dict[str, tuple[str, str | None]] = {
         "Harris microstructure — OCR full text (searchable)",
         "harris_2002_trading_exchanges_microstructure",
     ),
+    # Value-area / auction-market-theory corpus — UNREVIEWED 2026 preprints
+    # (theory_grant:false; require t>=3.79). Closed gaps G1-G3: extract existed,
+    # source PDF was located-but-uncommitted and is now copied into resources/
+    # (untracked — CI-safe mode unaffected; strict-local verifies page count).
+    "howard_2026_value_area": (
+        "Value-area breakout / stop methodology (Howard 2026, UNREVIEWED preprint)",
+        "howard_2026_value_area_breakouts_es",
+    ),
+    "tolusic_2026_amt": (
+        "Auction-market-theory inventory dynamics (Tolusic 2026, UNREVIEWED preprint)",
+        "tolusic_2026_amt_inventory_dynamics",
+    ),
+    "advances_in_financial_machine_learning": (
+        "Advances in Financial Machine Learning — full book (Lopez de Prado 2018)",
+        "lopez_de_prado_2018_afml_ch_3_7_8",
+    ),
 }
 
 
@@ -241,7 +257,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if fresh else 1
 
     content = build_index()
-    INDEX_PATH.write_text(content, encoding="utf-8")
+    # newline="\n" disables Windows text-mode CRLF translation so the committed
+    # INDEX stays LF regardless of the OS that regenerates it (a Windows regen
+    # otherwise silently flips the whole file to CRLF — a spurious full-file diff).
+    INDEX_PATH.write_text(content, encoding="utf-8", newline="\n")
     n = content.count("\n| `")
     print(f"Wrote {INDEX_PATH.relative_to(PROJECT_ROOT)} ({n} resources indexed).")
     return 0

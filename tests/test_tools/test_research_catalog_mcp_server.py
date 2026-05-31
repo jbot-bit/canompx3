@@ -61,6 +61,75 @@ def test_list_literature_sources_includes_metadata() -> None:
     assert payload["items"][0]["authors"] == "Tarun Chordia"
 
 
+def test_literature_payload_carries_grounding_status_from_manifest() -> None:
+    """A grounding lookup must surface the source's verification status inline so
+    an agent sees VERIFIED/MISSING/WEB_DERIVED/UNSUPPORTED at the point of use,
+    not just the extract text (the verification-visibility gap)."""
+    with _temporary_catalog() as (literature, _hypotheses, _results, _blueprint):
+        (literature / "chordia.md").write_text(
+            "# Chordia 2018\n\n**Source:** `resources/chordia.pdf`\n\nMultiple-testing.\n",
+            encoding="utf-8",
+        )
+        manifest = literature.parent / "manifest.yaml"
+        manifest.write_text(
+            "\n".join(
+                [
+                    "sources:",
+                    "  - source_id: chordia",
+                    "    extract_files:",
+                    "      - docs/institutional/literature/chordia.md",
+                    "    expected_resource: resources/chordia.pdf",
+                    "    source_tier: peer-reviewed",
+                    "    tracked: n",
+                    "    ci_verifiable: y",
+                    "    status: MISSING_LOCAL",
+                    "out_of_scope: []",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        with patch.object(research_catalog_mcp_server, "MANIFEST_PATH", manifest):
+            research_catalog_mcp_server._artifact_index_cache_clear()
+            payload = research_catalog_mcp_server._list_literature_sources()
+            research_catalog_mcp_server._artifact_index_cache_clear()
+
+    item = payload["items"][0]
+    assert item["grounding_status"] == "MISSING_LOCAL"
+    assert item["source_tier"] == "peer-reviewed"
+
+
+def test_literature_payload_marks_unmanifested_extract() -> None:
+    """An extract with no manifest row must be flagged (not silently statusless) —
+    parallels the drift check's false-completeness guard, surfaced to the agent."""
+    with _temporary_catalog() as (literature, _hypotheses, _results, _blueprint):
+        (literature / "orphan.md").write_text(
+            "# Orphan\n\n**Source:** `resources/orphan.pdf`\n\nBody.\n",
+            encoding="utf-8",
+        )
+        manifest = literature.parent / "manifest.yaml"
+        manifest.write_text("sources: []\nout_of_scope: []\n", encoding="utf-8")
+        with patch.object(research_catalog_mcp_server, "MANIFEST_PATH", manifest):
+            research_catalog_mcp_server._artifact_index_cache_clear()
+            payload = research_catalog_mcp_server._list_literature_sources()
+            research_catalog_mcp_server._artifact_index_cache_clear()
+
+    assert payload["items"][0]["grounding_status"] == "NOT_IN_MANIFEST"
+
+
+def test_literature_payload_degrades_when_manifest_absent() -> None:
+    """No manifest on disk → status UNKNOWN, never a crash (fail-open: the MCP is
+    a read surface, not a gate)."""
+    with _temporary_catalog() as (literature, _hypotheses, _results, _blueprint):
+        (literature / "chan.md").write_text("# Chan\n\n**Source:** `resources/chan.pdf`\n\nBody.\n", encoding="utf-8")
+        missing = literature.parent / "does_not_exist.yaml"
+        with patch.object(research_catalog_mcp_server, "MANIFEST_PATH", missing):
+            research_catalog_mcp_server._artifact_index_cache_clear()
+            payload = research_catalog_mcp_server._list_literature_sources()
+            research_catalog_mcp_server._artifact_index_cache_clear()
+
+    assert payload["items"][0]["grounding_status"] == "UNKNOWN"
+
+
 def test_get_literature_excerpt_honors_section_hint() -> None:
     with _temporary_catalog() as (literature, _hypotheses, _results, _blueprint):
         (literature / "harvey.md").write_text(
