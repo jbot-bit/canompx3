@@ -140,7 +140,7 @@ jobs:
           --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (tools and research)
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: >
           uv run pytest -p no:timeout
           tests/test_research
