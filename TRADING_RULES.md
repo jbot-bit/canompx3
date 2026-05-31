@@ -4,6 +4,11 @@
 Single source of truth for live trading. All claims verified against gold.db.
 Document-role registry: `docs/governance/document_authority.md`.
 For research deep-dives and data tables, see `docs/RESEARCH_ARCHIVE.md`.
+Literature cited inline below by author (e.g. Chordia t>=3.79) resolves to a
+page-cited extract in `docs/institutional/literature/`; source presence is
+verified by `pipeline/check_drift.py::check_literature_source_integrity` and
+ledgered in `docs/audit/research_grounding_gap_ledger.md` (retrieval !=
+verification - absent source => UNSUPPORTED).
 
 ---
 
