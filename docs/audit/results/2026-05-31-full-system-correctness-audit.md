@@ -117,4 +117,30 @@ Orphan sweep: **848 active rows scanned, 0 integrity violations.**
 - **Evidence:** zero test files reference `strict_live_clean`/`strict-live-clean`. Traced the code: strict list is correctly threaded into both `apply_*_gate` (line 144) and `build_allocation` (line 156) via the reassigned `scoring_input` — **no logic hole found**. The gate behaves correctly; it is simply **unasserted**.
 - **Classification: WORKS (untested).** Decision: log as a coverage gap → Phase 4 recurrence candidate (this is a live-safety control on a recent-incident path; a behavioral test belongs here but writing it requires SR-scoring fixtures — queued, not a defect). No fix needed.
 
-_(Phase 3+ findings appended below.)_
+### Phase 3 — Verified dead/half-wired resolution
+
+**F3-A · `trading_app/rolling_correlation.py` re-adjudicated (v1 said DEAD) · none · WORKS.**
+- **Full probe set (every probe must be negative for DEAD):**
+  | Probe | Result |
+  |---|---|
+  | 1. Python import (non-test) | none — BUT module is CLI-invoked, not imported |
+  | 1b. Python import (test) | ✅ `test_rolling_correlation.py` imports `compute_rolling_correlation` — **12 tests** |
+  | 2. allowlist/manifest | ✅ `check_drift.py:1885` — listed in the read-only-consumers allowlist (the v1 MISS) |
+  | 4. CLI entrypoint | ✅ `__main__` (line 360) + argparse `--db-path/--instrument/--window-days/...` (line 13 usage doc) |
+  | 5. graph/centrality | ✅ `docs/ralph-loop/import_centrality.json`, ralph audit reports |
+- **Verdict: NOT DEAD.** It is a standalone CLI risk-analysis tool (`python -m trading_app.rolling_correlation`). Zero importers ≠ dead when the caller is the operator/shell. **v1's one-grep "DEAD" verdict is OVERTURNED.** Decision: keep; no deletion. *This is the canonical proof of why the method requires the full probe set.*
+
+**F3-B · `lane_allocation` single-file → per-profile-dir migration (plan's "half-wired" example) · capital-path · WORKS (intentional staged migration).**
+- **Probe:** are both `docs/runtime/lane_allocation.json` (legacy) and `docs/runtime/lane_allocation/<profile>.json` (new) live? Is it silent half-life or an annotated migration? Are they in sync? Which does the reader prefer?
+- **Evidence:**
+  - `lane_allocator.py:73-77` — explicit comment: *"Stage 1a (2026-05-21): per-profile directory introduced alongside the legacy single-profile file. Writer emits to BOTH paths; reader prefers new, falls back to legacy. Stage 1d removes the legacy path."* Schema spec: `docs/specs/lane_allocation_schema.md`.
+  - Reader `prop_profiles.load_allocation_lanes` (line 1458+) — single-owner resolver, "prefers the per-profile file first, falling back to legacy" (documented removal point line 1333).
+  - **Files byte-identical:** both SHA `294955e5...`, 260,514 bytes — dual-write in sync.
+- **Verdict: WORKS — intentional, spec'd, staged dual-write migration, NOT silent half-life.** It is annotated at the constant, the resolver, and the schema spec, with an explicit teardown stage (1d). Decision: no action; this is the plan's "explicit intentional-fallback annotation" case, already satisfied by the existing comments.
+
+**F3-C · `walk_forward.py` vs `walkforward.py` (ralph-flagged) · none · DEFERRED-UNCERTAIN.**
+- Ralph audit (`ralph-audit-report.md:84,367`) flagged two similarly-named files; `strategy_validator.py` imports `walkforward.py` (active). `walk_forward.py` *may* be an older copy. **Not re-probed in this pass** (out of capital-path scope; needs its own full probe set before any delete). Classification: UNCERTAIN — reported, not guessed, not deleted. Queued as a Phase-4 follow-up.
+
+**Phase 3 net: zero deletions.** Both flagship candidates (rolling_correlation, lane_allocation) are alive/intentional. This is a correct outcome — the method's job is to PREVENT the v1-style wrong deletion, and it did.
+
+_(Phase 4+ appended below.)_
