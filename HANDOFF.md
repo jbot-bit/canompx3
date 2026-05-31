@@ -1,4 +1,4 @@
-# HANDOFF.md - Cross-Tool Session Baton
+﻿# HANDOFF.md - Cross-Tool Session Baton
 
 **Rule:** If you made decisions, changed files, or left work half-done - update the baton.
 
@@ -19,19 +19,19 @@
 - **Update:** Finished the throughput blocker with an automated reviewed batch pipeline. Added `scripts/tools/chordia_batch_queue_runner.py` to drain refreshed factory `batch_001` cycles repeatedly, and hardened `scripts/tools/chordia_audit_log_apply.py` / `scripts/tools/chordia_batch_cycle.py` after review: proposal files now reject duplicate `strategy_id`s before write, and batch-cycle apply refuses partial mutation if any strict replay exits non-zero. Drained the remaining strict replay queue through reviewed batches. Final bench artifact `artifacts/research/lane_bench_state_2026_05_31_stop_support_queue_drain_no_status_b7_001_apply/`: `ALLOCATOR_ELIGIBLE_BENCH=165`, `LIVE_ACTIVE=3`, `KILLED=529`, `PARKED=151`, and no `EXACT_LANE_READY_FOR_REPLAY` / no `MISSING_CHORDIA`. Final factory artifact `artifacts/research/chordia_evidence_factory_2026_05_31_stop_support_queue_drain_no_status_b7_001_apply_p5/`: `work_item_count=0`, `batch_count=0`. Current audit-log verdict counts: `PASS_CHORDIA=165`, `PASS_PROTOCOL_A=3`, `PARK=46`, `FAIL_CHORDIA=257`, `FAIL_BOTH=274`. Live allocation and `validated_setups` remain untouched; this created an allocator-eligible bench, not 100+ live-active lanes. Review fixes also corrected drift check #172 so only `ESCALATED` promote-queue rows with heavyweight preregs require cherry-pick journal entries; `REVOKED` rows now match the documented exemption. Verification: 151 focused Chordia/lane tests passed, `tests/test_research/test_cherry_pick_journal.py` + `tests/test_tools/test_fast_lane_status.py` passed (47 tests), ruff clean, py_compile clean, behavioral audit passed, integrity audit passed, and `pipeline/check_drift.py` green (`NO DRIFT DETECTED: 170 checks passed [OK], 0 skipped, 21 advisory`).
 - **Merge note:** Current `origin/main` also carried a 2026-05-31 live-pilot readiness rest pass: `topstep_50k_mnq_auto` remains a 3-lane MNQ single-account pilot, NYSE_OPEN SR-alarm lane is paused/parked, funded telemetry maturity is advisory, strict readiness/preflight checks were green, and no live launch was started.
 
+## Current Codex Research Follow-up
+- **Tool:** Codex
+- **Date:** 2026-05-31
+- **Summary:** Completed the previously promised Phase 1 peer capability parity map in `docs/audit/results/2026-05-31-peer-capability-parity-map.md`. Fresh official peer docs were checked for LEAN, NautilusTrader, Freqtrade, VectorBT, and Backtrader. Finding: canompx3 is strongest on anti-bias/research doctrine but weaker on proof packaging and operator surfaces. Next worthwhile work is EV-2 profile proof-pack hardening, EV-1 bootstrap health proof artifact, and EV-3 bounded benchmark harness. No trading or live-launch authorization was made.
+
 ## Last Session
-- **Tool:** Claude Code
-- **Date:** 2026-05-30
-- **Commit:** 1cc7f4a1 — fix(live): ralph iter 213 — lifecycle-block silent-fail + readiness effective-copies
-- **Files changed:** 8 files
-  - `scripts/run_live_session.py`
-  - `scripts/tools/live_readiness_report.py`
-  - `scripts/tools/refresh_control_state.py`
-  - `tests/test_scripts/test_run_live_session_preflight.py`
-  - `tests/test_tools/test_live_readiness_report.py`
-  - `tests/test_tools/test_refresh_control_state.py`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `trading_app/live/session_orchestrator.py`
+- **Tool:** Unknown
+- **Date:** 2026-05-31
+- **Commit:** 94da137c â€” docs(audit): add peer capability parity map
+- **Files changed:** 3 files
+  - `HANDOFF.md`
+  - `docs/audit/results/2026-05-02-competitive-landscape-canompx3.md`
+  - `docs/audit/results/2026-05-31-peer-capability-parity-map.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

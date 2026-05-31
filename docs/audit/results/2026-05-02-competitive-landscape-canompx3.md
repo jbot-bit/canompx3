@@ -312,6 +312,11 @@ operator plan to run now, in order.
 
 **Deliverable:** `docs/audit/results/2026-05-03-peer-capability-parity-map.md`
 
+Execution note (2026-05-31): Phase 1 was completed in
+`docs/audit/results/2026-05-31-peer-capability-parity-map.md`. The current
+artifact refreshes official peer sources and updates the EV ranking against
+current repo truth.
+
 ### Phase 2 — Design package (same day)
 
 4. Draft three implementation specs (not just ideas):
