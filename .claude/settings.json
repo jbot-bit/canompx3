@@ -376,16 +376,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-compact-reinject.py",
-            "timeout": 15
-          }
-        ]
       }
     ]
   },
