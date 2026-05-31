@@ -10,6 +10,7 @@ Usage:
 import argparse
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -17,6 +18,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from trading_app.lane_allocator import (
+    apply_c8_gate,
+    apply_chordia_gate,
+    apply_live_tradeability_gate,
     build_allocation,
     compute_lane_scores,
     compute_orb_size_stats,
@@ -52,6 +56,11 @@ def main() -> None:
         type=str,
         default=None,
         help="Output JSON path. Default: docs/runtime/lane_allocation.json",
+    )
+    parser.add_argument(
+        "--strict-live-clean",
+        action="store_true",
+        help="Require current SR CONTINUE evidence so the allocation can satisfy strict live-readiness.",
     )
     args = parser.parse_args()
 
@@ -115,8 +124,25 @@ def main() -> None:
             )
         max_dd = tier.max_dd
 
-        # Compute pairwise correlation matrix for deployable candidates
-        deployable = [s for s in scores if s.status in ("DEPLOY", "RESUME", "PROVISIONAL")]
+        scoring_input = scores
+        if args.strict_live_clean:
+            scoring_input = [
+                replace(
+                    s,
+                    status="PAUSE",
+                    status_reason=f"strict live gate: SR status {s.sr_status or 'UNKNOWN'} is not CONTINUE for fresh live allocation",
+                )
+                if s.sr_status != "CONTINUE" and s.status not in ("PAUSE", "STALE")
+                else s
+                for s in scores
+            ]
+
+        # Compute pairwise correlation matrix only for candidates that survive
+        # the same hard gates build_allocation applies before selection. Without
+        # this, the CLI spends minutes correlating hundreds of Chordia/C8-blocked
+        # rows that can never be selected.
+        gated_scores = apply_live_tradeability_gate(apply_c8_gate(apply_chordia_gate(scoring_input)))
+        deployable = [s for s in gated_scores if s.status in ("DEPLOY", "RESUME", "PROVISIONAL")]
         if profile.allowed_instruments:
             deployable = [s for s in deployable if s.instrument in profile.allowed_instruments]
         if profile.allowed_sessions:
@@ -127,7 +153,7 @@ def main() -> None:
 
         displaced: list[dict] = []
         allocation = build_allocation(
-            scores,
+            scoring_input,
             max_slots=profile.max_slots,
             max_dd=max_dd,
             allowed_instruments=profile.allowed_instruments,
@@ -138,14 +164,14 @@ def main() -> None:
             displaced_out=displaced,
         )
 
-        report = generate_report(scores, allocation, args.date, pid)
+        report = generate_report(scoring_input, allocation, args.date, pid)
         print(report)
         if displaced:
             print(f"Displaced (soft-gate rejected): {len(displaced)} lanes")
 
         # Save allocation
         out_path = save_allocation(
-            scores,
+            scoring_input,
             allocation,
             args.date,
             pid,
