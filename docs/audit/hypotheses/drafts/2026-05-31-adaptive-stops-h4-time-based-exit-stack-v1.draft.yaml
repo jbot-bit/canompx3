@@ -1,0 +1,337 @@
+# =============================================================================
+# H4 — Time-Based No-Progress Exit (heavyweight Chordia pre-reg DRAFT)
+# =============================================================================
+# STATUS: DRAFT. Unreviewed. Lives in drafts/ until human review promotes it to
+# docs/audit/hypotheses/<slug>.yaml with status: LOCKED. NO script, NO discovery
+# run, NO DB write is authorized by this file in its DRAFT state.
+#
+# This is the budget-rational FIRST branch off the H0 adaptive-stops diagnostic.
+# The H0 independent audit (commit c80db6ee, branch session/joshd-adaptive-stops-
+# audit) parked the price-stop family (H1 level-distance anchor, H3 ATR-scaled)
+# as PARK/largely-DEAD (4/7 deployed E2 lanes PRE-KILL on symmetric MFE/MAE), and
+# named H4 the live branch: K=1, applies to all 7 deployed lanes, carries the
+# strongest external grounding, and is UNAFFECTED by every H0 symmetry verdict.
+# =============================================================================
+
+metadata:
+  theory_grant: false
+  name: adaptive-stops-h4-time-based-exit-stack-v1
+  slug: 2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1
+  owner: canompx3
+  created_at: 2026-05-31
+  status: DRAFT  # NOT runnable. Promotion to LOCKED requires human review per
+                 # the propose-hypothesis canon (script refuses to fabricate
+                 # citations; .draft.yaml requires review before promotion).
+  supersedes: none
+  parent_memo: >
+    Phase 0 memo "Adaptive / Condition-Dependent Stops + Liquidity-Sweep Logic"
+    (2026-05-31, v2, VERDICT NEED-EVIDENCE) -> H0 MFE/MAE-symmetry diagnostic
+    (K=0, commit 4db9b5dd, branch session/joshd-adaptive-stops-h0) -> H0
+    independent audit (commit c80db6ee, branch session/joshd-adaptive-stops-
+    audit). The audit's single executable "highest-EV next action" is THIS
+    pre-reg: register H4 before drafting MES_CME_PRECLOSE H1/H3, because H4
+    costs 1 trial of a near-ceiling family budget and the price-stop branch
+    costs up to 12.
+  testing_mode: individual  # Pathway B framing. Paired-deltaR comparison, K=1.
+  pathway: B
+  diagnostic_only: false  # UNLIKE H0 (which was descriptive K=0), H4 performs a
+                          # hypothesis test (paired-deltaR, per-lane + pooled)
+                          # that CAN promote toward heavyweight Chordia review.
+                          # It still writes NOTHING to experimental_strategies /
+                          # validated_setups directly; promotion is downstream.
+  chordia_threshold_basis: pathway_b_paired_delta_r  # Per pooled-finding-rule:
+                          # report per-lane breakdown, not pooled-only. The
+                          # Chordia single-strategy hurdle (t>=3.79) binds at the
+                          # per-lane promotion decision, NOT at this draft.
+  depends_on:
+    # Canonical modules H4 WILL CALL when run (it re-encodes NONE of them). The
+    # no-progress-exit counterfactual util does NOT yet exist; building it is the
+    # FIRST implementation step after this draft is reviewed+locked. It must be a
+    # READ of the existing orb_outcomes excursion path, not a new sim engine.
+    - trading_app/strategy_fitness.py  # _load_strategy_outcomes() — canonical
+                                       # filtered-outcome loader (eligible days
+                                       # only, ALL_FILTERS applied). Same loader
+                                       # H0 used. Triple-join satisfied by it.
+    - trading_app/holdout_policy.py  # HOLDOUT_SACRED_FROM — IS boundary import
+                                     # at runtime (no hardcoded date literal).
+    - research/oos_power.py  # one_sample_power / power_verdict — power tiers for
+                             # the OOS paired-deltaR slice (RULE 3.3).
+    - trading_app/prop_profiles.py  # ACCOUNT_PROFILES — deployed-lane source of
+                                    # truth (the 7 lanes in `scope` below).
+    - pipeline/cost_model.py  # get_cost_spec — friction applied identically to
+                              # BOTH arms (price-stop baseline and time-exit) so
+                              # the paired-deltaR is cost-neutral, not cost-gamed.
+  authority:
+    - docs/institutional/pre_registered_criteria.md  # locked criteria; Criterion
+                                                      # 2 (MinBTL) verified below.
+    - .claude/rules/backtesting-methodology.md  # RULE 3.3 (OOS power), RULE 7
+                                                # (tautology), RULE 9 (triple-
+                                                # join), pooled-finding per-lane.
+    - .claude/rules/pooled-finding-rule.md  # per-lane breakdown mandatory, not
+                                            # pooled-only.
+    - docs/institutional/mechanism_priors.md  # R4 STOP/EXIT modifier family.
+    - docs/institutional/literature/howard_2026_value_area_breakouts_es.md  # the
+                                            # POSITIVE prior for the time-stack.
+    - docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md  # MinBTL.
+    - docs/STRATEGY_BLUEPRINT.md  # NO-GO §5 overlap disclosure (see below).
+  committed_sha: "filled_post_promotion"  # the promotion commit's SHA is
+                                          # unknowable pre-commit; the future
+                                          # result doc records the landing SHA.
+  head_sha_at_draft: "7782a573"  # parent this DRAFT sits on, resolved via
+                                 # `git rev-parse HEAD` in worktree canompx3-
+                                 # adaptive-stops-h4 at authoring 2026-05-31
+                                 # (branch-flip-protection: not from memory).
+                                 # NOTE: main advanced past this during a peer
+                                 # terminal's merge sweep; this branch is off
+                                 # origin/main@7782a573 and will rebase before push.
+  do_not_run_until_committed: true  # hard gate. DRAFT status additionally bars
+                                    # any run until promoted to LOCKED.
+  scope_note: >
+    Pathway-B K=1 paired-deltaR. For each of the 7 deployed E2 lanes, score every
+    traded (post-filter) trade under TWO exit rules computed from the SAME
+    orb_outcomes excursion path: (A) the current price-based stop (baseline,
+    opposite-ORB-boundary anchor), and (B) a time-based no-progress exit (exit if
+    the trade has not reached +0.5R MFE within 120s wall-clock of entry; otherwise
+    the trade's existing exit stands). Report per-lane and pooled realized mean
+    pnl_r delta (B - A), with the OOS slice carrying its one-sample power tier.
+    Touches NO production entry/exit logic, NO schema, NO DB write. The single
+    no-progress parameter pair (0.5R MFE / 120s) is PRE-COMMITTED here and is NOT
+    swept — this is what keeps K=1 honest (see trial_budget).
+
+edge_claim_summary: >
+  CLAIM: a time-based no-progress exit produces realized IS mean pnl_r >= the
+  current price-based stop, per-lane, on the 7 deployed E2 lanes. GROUNDING:
+  Howard 2026 (ES) found a time-based exit STACK outperformed the price-based
+  baseline in 11 of 13 months (sign test p = 0.023, extract lines 28/102), with
+  the largest gains in the two most volatile months — the mechanism is temporal
+  conditioning ("exit if no progress within a time window") providing the
+  discrimination price stops lack (extract §6.2). CRITICAL CAVEAT carried from
+  the extract's "ILLEGITIMATE uses" section: Howard's stack is "LESS BAD, not
+  good" — BOTH arms had negative pooled mean on his data; the stack is not shown
+  to be positive-EV standalone. Therefore H4's verdict is a RELATIVE comparison
+  (time-exit vs price-stop, paired on the same trades), NOT a standalone positive-
+  EV deployment claim. A PROCEED here means "the time-exit is measurably less
+  value-destroying than the price-stop on our lanes" and routes to heavyweight
+  Chordia + independent positive-EV validation, never to capital.
+
+mechanism:
+  summary: >
+    Price-based stops exit on instantaneous price crossing a fixed level; under
+    near-symmetric early MFE/MAE (which H0 measured on 4/7 of these lanes) such a
+    stop removes eventual winners at roughly the rate it removes eventual losers
+    and cannot discriminate. A time-based no-progress exit conditions instead on
+    TEMPORAL evolution: a trade that has not made meaningful favorable progress
+    (>= +0.5R MFE) within a fixed window is statistically more likely to be an
+    eventual loser, so terminating it diverts capital away from the structural
+    stop that (per Howard §5.6) fires on ~77-100% of events in volatile regimes.
+    The discrimination is in TIME, not PRICE — a different axis than H1/H3, which
+    is exactly why H4 is independent of the H0 symmetry verdict.
+  literature_descriptors:
+    source: docs/institutional/literature/howard_2026_value_area_breakouts_es.md
+    note: >
+      REPORTED as the external prior, NOT a gating threshold. The exit-stack
+      table and the sign-test result frame the mechanism; the verdict gates only
+      on our own measured paired-deltaR (see decision_rule).
+    exit_stack_outperformance:
+      ref: "Howard §5.4 (extract lines 28, 102)"
+      value: "stack beat price-baseline 11/13 months, sign test p = 0.023"
+    exit_layer_table:
+      ref: "Howard Table 7 (extract lines ~106-116)"
+      note: >
+        Full 7-layer stack reduces structural-stop exit share from ~77-100% to
+        37-50%. H4 tests ONLY the single no-progress layer (10-15% share in
+        Howard's stack), NOT the full 7-layer system — the minimal K=1 isolation
+        of the layer with the clearest temporal-conditioning mechanism.
+    regime_concentration:
+      ref: "Howard §5.6 + §5.4 (extract lines ~118, 102)"
+      note: >
+        The stack's edge concentrated in the two most-volatile months
+        (April +32.20 ticks, August +18.20 ticks). H4 must report per-lane AND
+        flag whether any per-lane gain is regime-concentrated rather than broad
+        (a regime-concentrated gain is weaker evidence per Tolušić balance/
+        imbalance phase-transition concerns).
+
+hypothesis:
+  H0_null: >
+    The time-based no-progress exit produces realized IS mean pnl_r EQUAL TO or
+    WORSE THAN the current price-based stop, per-lane (paired-deltaR <= 0).
+  H1_alt: >
+    The time-based no-progress exit produces realized IS mean pnl_r STRICTLY
+    GREATER THAN the current price-based stop on at least one deployed lane
+    (paired-deltaR > 0), with the per-lane breakdown reported (not pooled-only).
+  pre_committed_parameters:
+    # FIXED BEFORE ANY RUN. Anchored to Howard extract line 188 ("exit if no 0.5R
+    # MFE within 120s after entry"). These are LITERATURE values, NOT tuned on our
+    # data — zero researcher degrees of freedom (Bailey 2013). No sweep, no grid.
+    mfe_progress_threshold_r: 0.5  # Howard line 188.
+    no_progress_window_seconds: 120  # Howard line 188 (120s acceptance/horizon).
+    window_granularity_note: >
+      Howard's 120s is on a 1-second tick series; our orb_outcomes is bar-based.
+      The 120s is resolved as a WALL-CLOCK window against bar entry/exit
+      timestamps (e.g. on 1m bars, the first 2 bars after entry), NOT as a free
+      bar-count we get to choose. The wall-clock anchor is the pre-commit; the
+      bar mapping is a deterministic consequence of bar size, not a tunable.
+    forbidden: [parameter_sweep, grid_search, post_hoc_threshold_rescue, multi_window_argmax]
+
+scope:
+  # The 7 deployed E2 lanes, enumerated from the H0 raw per-lane CSV (which sourced
+  # them from prop_profiles.ACCOUNT_PROFILES). Deployed entry model = E2 for all.
+  # At runtime the lane list MUST be re-derived from prop_profiles.ACCOUNT_PROFILES,
+  # not from this static copy (volatile-data rule).
+  entry_model: E2
+  lanes:
+    - MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8        # the H0 "survives gate" lane
+    - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5
+    - MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
+    - MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12
+    - MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15
+    - MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12
+    - MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15
+  lane_source_of_truth: trading_app/prop_profiles.py::ACCOUNT_PROFILES
+
+trial_budget:
+  n_trials: 1  # Check 57 / MinBTL. ONE hypothesis test: the single pre-committed
+               # (0.5R, 120s) time-exit vs the price-stop baseline, paired. The
+               # per-lane breakdown is a REPORTING requirement (pooled-finding-
+               # rule), NOT 7 separate trials — it is one rule tested across the
+               # deployed population, reported per-cell.
+  standalone_k_budget:
+    # Live-verified via research-catalog estimate_k_budget on 2026-05-31:
+    instrument: MNQ
+    n_trials: 1
+    clean_years: 6.65
+    minbtl_years_required: 0.0
+    n_max_at_horizon: 27
+    headroom_years: 6.65
+    verdict: PASS
+    authority: >
+      pre_registered_criteria.md Criterion 2;
+      literature/bailey_et_al_2013_pseudo_mathematics.md Theorem 1.
+  family_aggregate_note:
+    # From the H0 pre-reg downstream-family block (2026-05-31-adaptive-stops-h0-
+    # ...v1.yaml). H4 is the H4=1 term. The aggregate matters because the family
+    # is NEAR the MinBTL ceiling — H4's K=1 is the cheapest live branch.
+    downstream_family_K: 21  # H1 + H2 + H3 + H4=1
+    family_minbtl_years_required: 6.09
+    family_headroom_years: 0.56  # tight; no room to expand any one hypothesis.
+    implication: >
+      H4 (K=1) is budget-rational; MES_CME_PRECLOSE H1/H3 (up to 12 trials) is
+      not budget-rational to draft first even though it survived the H0 gate.
+
+decision_rule:
+  primary_gate: per_lane_paired_delta_r  # B (time-exit) minus A (price-stop),
+                                         # realized mean pnl_r, IS, per lane.
+  proceed:
+    condition: >
+      At least one deployed lane shows paired-deltaR (time-exit minus price-stop)
+      STRICTLY POSITIVE on the IS slice with N_IS >= 50 traded trades, AND the
+      gain is not solely regime-concentrated (flag per mechanism.regime_
+      concentration), AND the per-lane breakdown is reported.
+    consequence: >
+      That lane's time-exit overlay is worth heavyweight Chordia review +
+      independent positive-EV validation. PROCEED routes to a heavyweight pre-reg,
+      NEVER to capital (edge_claim_summary "less bad, not good").
+  kill:
+    condition: >
+      NO deployed lane shows positive IS paired-deltaR at N_IS >= 50 (time-exit is
+      monotone-non-improving vs the price-stop across all lanes).
+    consequence: >
+      The single-layer time-based no-progress exit is dead for these lanes. Does
+      NOT kill the full 7-layer Howard stack (untested here) but removes the
+      cheapest isolated layer from the live set.
+  insufficient_n:
+    condition: "N_IS < 50 traded trades for a lane."
+    consequence: "No per-lane verdict; descriptive output only (N>=50 floor)."
+  oos_handling:
+    rule: >
+      The OOS paired-deltaR is reported WITH its one-sample power tier
+      (research.oos_power.power_verdict). An IS->OOS sign change is NOT treated as
+      refutation unless power tier == CAN_REFUTE (RULE 3.3). No kill on OOS alone.
+
+nogo_overlap_disclosure:
+  # STRATEGY_BLUEPRINT §5 NO-GO registry — distinguish H4 from the dead adjacents.
+  adjacent_paths:
+    - adjacent: "Breakeven trail stops (blueprint:281, -0.12..-0.17 Sharpe, DEAD)"
+      verdict: DEAD
+      difference: >
+        A trailing/breakeven stop moves a PRICE level as the trade progresses.
+        H4's no-progress exit is a TIME condition (exit if no 0.5R MFE within
+        120s) — it does not trail price. Howard's stack contained BOTH layers;
+        H4 isolates only the no-progress (time) layer, explicitly NOT the
+        trailing/breakeven layers that are dead in our registry.
+    - adjacent: "Vol-regime parameter switching (blueprint:287, DEAD)"
+      verdict: DEAD
+      difference: >
+        H4 uses ONE fixed (0.5R, 120s) rule applied uniformly to all trades. It
+        does not switch parameters by volatility bucket. Regime is a REPORTING
+        flag (is the gain regime-concentrated?), never a parameter selector.
+    - adjacent: "H1/H3 price-stop family (PARKED by H0 audit c80db6ee)"
+      verdict: "PARK / largely DEAD"
+      difference: >
+        H1/H3 condition the PRICE stop geometry; H0 found symmetric MFE/MAE makes
+        that value-destroying on 4/7 lanes. H4 conditions on TIME, a different
+        axis — explicitly declared independent of the H0 symmetry verdict in the
+        H0 pre-reg's `decision_rule.h4_independence` clause.
+  decision_variable_statement: >
+    The "what's different this time" is NOT "another stop parameter." It is the
+    AXIS: time-based no-progress discrimination, the one exit mechanism Howard
+    showed POSITIVE (relative) evidence for, isolated to its single cheapest
+    layer, tested paired against the incumbent price-stop on our own deployed
+    lanes with a literature-fixed parameter and no sweep.
+
+methodology_gates:
+  triple_join:
+    rule: >
+      Reuse strategy_fitness._load_strategy_outcomes (already joins orb_outcomes
+      to daily_features on (trading_day, symbol, orb_minutes) for filter
+      application). No hand-rolled join. RULE 9 / daily-features-joins.md
+      satisfied by delegation.
+  canonical_delegation:
+    rule: >
+      institutional-rigor §4: H4 CALLS _load_strategy_outcomes,
+      holdout_policy.HOLDOUT_SACRED_FROM, oos_power.power_verdict,
+      prop_profiles.ACCOUNT_PROFILES, cost_model.get_cost_spec. The no-progress-
+      exit counterfactual is computed by READING the existing orb_outcomes
+      excursion path (the same path apply_tight_stop reads), NOT by building a new
+      simulation engine. Re-encodes NONE of the canonical modules.
+  no_db_write:
+    rule: "Read-only. DuckDB opened read_only=True. No INSERT/UPDATE/DELETE."
+  cost_neutrality:
+    rule: >
+      Identical cost_model.get_cost_spec friction applied to BOTH arms so the
+      paired-deltaR reflects exit timing only, never a cost asymmetry. RULE 7
+      (tautology) guard: the time-exit must not be able to 'win' by avoiding a
+      cost the price-stop pays.
+  howard_illegitimate_uses_guard:
+    # Carried verbatim-in-spirit from the extract's "ILLEGITIMATE uses" section.
+    rules:
+      - "NOT positive-EV proof: Howard's stack has negative pooled mean on his
+         data; a PROCEED here is RELATIVE (less value-destroying), never a
+         standalone deployment claim."
+      - "NOT OOS evidence: Howard's 2025-01..2026-01 period overlaps our
+         HOLDOUT_SACRED_FROM=2026-01-01. Howard's numbers are informational
+         priors only; our own OOS slice (post-holdout) is the only OOS evidence."
+      - "NOT an MGC basis: Howard is single-instrument ES. H4 scope is the
+         existing MES/MNQ deployed lanes only; no MGC extension from this draft."
+      - "NOT the full 7-layer stack: H4 tests only the single no-progress layer."
+
+artifacts_to_save:
+  pre_lock:
+    - docs/audit/hypotheses/drafts/2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1.draft.yaml  # this file
+  on_promotion_to_locked:
+    - docs/audit/hypotheses/2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1.yaml  # after human review
+    - research/adaptive_stops_h4_time_exit_paired.py  # the read-only script (NOT yet written)
+  post_run:
+    - docs/audit/results/2026-05-31-adaptive-stops-h4-time-exit-results.md
+    - docs/audit/results/2026-05-31-adaptive-stops-h4-raw-per-lane.csv
+
+execution_gates:
+  status_gate: "DRAFT — no run authorized until promoted to LOCKED after human review."
+  do_not_run_until_committed: true
+  nogo_check:
+    result: "NOT_FOUND — time-based no-progress exit is not in STRATEGY_BLUEPRINT §5 NO-GO; adjacent dead paths (trailing/breakeven, vol-regime switching) disclosed and distinguished above."
+    method: "blueprint §5 review + H0 nogo_overlap_disclosure cross-check at authoring 2026-05-31."
+  reviewer_todo:
+    - "Confirm the 120s->bar-granularity mapping is acceptable for the deployed lanes' bar size before lock."
+    - "Confirm the no-progress-exit counterfactual will READ orb_outcomes excursion, not re-simulate (institutional-rigor §4)."
+    - "Re-run estimate_k_budget --hypothesis_id 2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1 after promotion to confirm K=1 PASS against the committed file."
