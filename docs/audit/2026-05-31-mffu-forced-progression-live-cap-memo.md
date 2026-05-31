@@ -1,5 +1,45 @@
 # MFFU Forced Progression + Live Account Cap — Design Memo (Layer C)
 
+**Status (updated 2026-05-31, Option A landed):** Layer C **DATA + drift guard
+DONE**. The forced-transition STATE MACHINE / payout-count ledger (Option B) is
+still DESIGN ONLY, deferred behind the adversarial-audit gate. Created 2026-05-31
+alongside Stage 2 (specs+payout-policy data).
+
+## ✅ Resolution log (2026-05-31 — Option A)
+
+The operator chose **Option A: data-only + drift check** (no state machine, no
+ledger, no live-session logic, no account-routing). Findings on re-grounding:
+
+- **The "what the codebase lacks" list below was 2/3 STALE.** Stage 2 already
+  encoded `max_live_accounts: 1` AND `forced_live_after_sim_payouts: 5` as DATA
+  in `prop_profiles.py` `firm_specific_rules` (Builder, line ~351; Flex covered).
+  `PropFirmSpec.firm_specific_rules` (field at line 60) is the carrier — no new
+  class field was needed. The only genuine remaining gap was enforcement LOGIC,
+  which Option A deliberately does NOT build.
+- **The anecdote is RESOLVED against verbatim source — no avoidance path exists.**
+  `docs/research-input/mffu/mffu_live_accounts_faq.md:237` (verbatim): "rejecting
+  the move to a Live Funded Account is not possible once you are selected." The
+  friend's "withdrew many times" is explained by `:89` — Live accounts allow
+  **daily** payouts with no cap, i.e. repeated withdrawals are normal POST-promotion
+  behavior, exactly as hypothesized. There is nothing to model as "avoidance."
+- **`max_live_accounts=1` is the DEFAULT / entry cap, not an absolute structural
+  invariant.** Verbatim `mffu_live_accounts_faq.md:243`: "Multiple live accounts
+  can be discussed with your risk manager, but are reserved solely for
+  high-performing traders that have a long track record." So `1` is the cap a new
+  live trader gets; discretionary exceptions exist. The data field encodes the
+  default; the discretionary path is not modeled (no consumer).
+- **Drift guard shipped:** `check_live_funded_firms_declare_max_live_accounts`
+  (`pipeline/check_drift.py`) — every firm backing a `live_funded` PayoutPolicy
+  must declare `firm_specific_rules['max_live_accounts']`. Surfaced + closed a real
+  gap: the **Topstep** spec had the cap only as prose ("5 Express + 1 Live"); it is
+  now structured data, verbatim from `topstep_xfa_parameters.txt:228,235` ("Only 1
+  Live Funded Account is permitted"). Tests: `tests/test_pipeline/test_check_drift_live_account_cap.py`.
+
+**Everything below is the ORIGINAL memo, retained for lineage. The "lacks" list and
+the "⚠️ UNVERIFIED anecdote" section are SUPERSEDED by the resolution log above.**
+
+---
+
 **Status:** DESIGN ONLY. No code. Gated for separate adversarial-audit sign-off
 (capital-path logic). Created 2026-05-31 alongside Stage 2 (specs+payout-policy data).
 

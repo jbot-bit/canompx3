@@ -290,6 +290,15 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         min_hold_seconds=None,
         banned_instruments=frozenset(),
         auto_trading="full",
+        firm_specific_rules={
+            # @canonical-source docs/research-input/topstep/topstep_xfa_parameters.txt (article 8284215, 2026-05-31)
+            # @verbatim "Reminder: Only 1 Live Funded Account is permitted." (line 228)
+            # @verbatim "Traders can only have one (1) Live Funded Account when offered a Live trading account." (line 235)
+            # DATA only (MFFU Layer C Option A): the forced-progression state machine and
+            # payout-count ledger are deliberately unbuilt (Option B deferred — see
+            # docs/audit/2026-05-31-mffu-forced-progression-live-cap-memo.md).
+            "max_live_accounts": 1,
+        },
         notes="MGC morning lane. 5 Express + 1 Live (stay Express). ProjectX API. Copier on Express only.",
     ),
     "mffu": PropFirmSpec(

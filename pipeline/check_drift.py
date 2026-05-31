@@ -7295,6 +7295,73 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
     return violations
 
 
+def check_live_funded_firms_declare_max_live_accounts() -> list[str]:
+    """Every firm with a ``live_funded`` payout policy must declare the hard
+    live-account cap as structured data.
+
+    MFFU Layer C (Option A, operator 2026-05-31): prop plans force a staged path
+    (Evaluation -> Sim Funded -> Live Funded) and the live stage caps accounts.
+    The cap is a firm operational FACT (we do not model the promotion event), so
+    it lives as DATA in ``PropFirmSpec.firm_specific_rules["max_live_accounts"]``,
+    not as behavioral logic. This check stops a live_funded firm from leaving that
+    cap as undocumented prose (a silent-failure / lying-field class per
+    ``institutional-rigor.md`` §§ 5-6) — the book-builder / survival sim must be
+    able to READ the cap rather than infer it from a notes string.
+
+    Verbatim sources for the currently-modeled caps:
+      - Topstep: ``docs/research-input/topstep/topstep_xfa_parameters.txt:228``
+        "Reminder: Only 1 Live Funded Account is permitted."
+      - MFFU Builder: ``docs/research-input/mffu/mffu_builder_50k.md`` (article
+        14290805) -> ``prop_profiles.py`` ``firm_specific_rules["max_live_accounts"]``.
+
+    Fail-closed: a ``live_funded`` policy whose ``firm`` has no matching
+    ``PROP_FIRM_SPECS`` entry FAILS loud (not a silent skip).
+
+    Scope: data-only. The forced-transition state machine + payout-count ledger
+    are deliberately NOT built (Layer C Option B, deferred — see
+    ``docs/audit/2026-05-31-mffu-forced-progression-live-cap-memo.md``).
+
+    @canonical-source: trading_app/prop_firm_policies.py (PAYOUT_POLICIES),
+    trading_app/prop_profiles.py (PROP_FIRM_SPECS)
+    """
+    violations: list[str] = []
+    try:
+        from trading_app.prop_firm_policies import PAYOUT_POLICIES
+        from trading_app.prop_profiles import PROP_FIRM_SPECS
+    except Exception as e:  # pragma: no cover - import guard
+        return [f"  cannot import prop policy/spec registries: {type(e).__name__}: {e}"]
+
+    live_funded = [p for p in PAYOUT_POLICIES.values() if p.stage == "live_funded"]
+    if not live_funded:
+        # No live_funded policy modeled yet — nothing to enforce, but say so
+        # rather than silently passing (the universe is expected to be non-empty
+        # while topstep_live_funded is modeled).
+        return [
+            "  no PayoutPolicy with stage='live_funded' found in PAYOUT_POLICIES — "
+            "layout changed (topstep_live_funded removed?); update "
+            "check_live_funded_firms_declare_max_live_accounts to match."
+        ]
+
+    for policy in live_funded:
+        spec = PROP_FIRM_SPECS.get(policy.firm)
+        if spec is None:
+            violations.append(
+                f"  PayoutPolicy {policy.policy_id!r} (stage=live_funded) has "
+                f"firm={policy.firm!r} with no matching PROP_FIRM_SPECS entry — "
+                "cannot verify max_live_accounts (firm-name mismatch is fail-closed)."
+            )
+            continue
+        rules = spec.firm_specific_rules
+        if not rules or rules.get("max_live_accounts") is None:
+            violations.append(
+                f"  PROP_FIRM_SPECS[{policy.firm!r}] backs a live_funded payout policy "
+                f"({policy.policy_id!r}) but does not declare "
+                "firm_specific_rules['max_live_accounts']. The live-account cap must be "
+                "structured data, not prose — populate it from the firm's verbatim source."
+            )
+    return violations
+
+
 def check_validated_setups_writer_allowlist() -> list[str]:
     """Only canonical validator/maintenance paths may mutate validated_setups."""
     violations: list[str] = []
@@ -14919,6 +14986,12 @@ CHECKS = [
         "Prop contract caps must not leak into self_funded sizing (margin-guard marker present)",
         check_prop_caps_do_not_leak_into_self_funded,
         False,  # blocking — a prop cap silently bounding personal-capital earnings is a silent failure
+        False,
+    ),
+    (
+        "Every live_funded payout policy's firm must declare max_live_accounts (data, not prose)",
+        check_live_funded_firms_declare_max_live_accounts,
+        False,  # blocking — undocumented live-account cap is a silent-failure / lying-field class
         False,
     ),
     ("Shared profile fingerprint helper is canonical", check_shared_profile_fingerprint_canonical, False, False),
