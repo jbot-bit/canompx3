@@ -120,6 +120,6 @@ class ProjectXAuth(BrokerAuth):
                 log.info("ProjectX auth: token refreshed via validate")
             else:
                 self._login()
-        except Exception:
-            log.warning("ProjectX token validate failed, falling back to full login")
+        except Exception as exc:
+            log.warning("ProjectX token validate failed (%s), falling back to full login", exc)
             self._login()
