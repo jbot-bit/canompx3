@@ -1,9 +1,11 @@
 # =============================================================================
 # H4 — Time-Based No-Progress Exit (heavyweight Chordia pre-reg DRAFT)
 # =============================================================================
-# STATUS: DRAFT. Unreviewed. Lives in drafts/ until human review promotes it to
-# docs/audit/hypotheses/<slug>.yaml with status: LOCKED. NO script, NO discovery
-# run, NO DB write is authorized by this file in its DRAFT state.
+# STATUS: LOCKED (promoted 2026-05-31 after human review). Now lives at
+# docs/audit/hypotheses/2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1.yaml.
+# LOCK freezes the (0.5R, 120s) parameter + K=1. The read-only paired-deltaR
+# script may now be authored; NO discovery grid, NO DB write, and NO run until the
+# promotion commit lands (do_not_run_until_committed). Review trail below.
 #
 # This is the budget-rational FIRST branch off the H0 adaptive-stops diagnostic.
 # The H0 independent audit (commit c80db6ee, branch session/joshd-adaptive-stops-
@@ -19,9 +21,15 @@ metadata:
   slug: 2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1
   owner: canompx3
   created_at: 2026-05-31
-  status: DRAFT  # NOT runnable. Promotion to LOCKED requires human review per
-                 # the propose-hypothesis canon (script refuses to fabricate
-                 # citations; .draft.yaml requires review before promotion).
+  status: LOCKED  # Human-reviewed and promoted 2026-05-31. The three reviewer_todo
+                  # items (below) were cleared: (1) Howard line-188 parameter
+                  # verified verbatim in the extract; (2) K-budget gate parses
+                  # n_trials=1 / testing_mode=individual / pathway=B → MinBTL 0.0yr
+                  # PASS; (3) lane list defers to prop_profiles re-derivation at
+                  # runtime (static copy carries a re-derive instruction). LOCKED =
+                  # the (0.5R, 120s) parameter and K=1 are frozen; the read-only
+                  # script may now be written, but still NO DB write / NO discovery
+                  # grid and no run until the promotion commit lands (see gates).
   supersedes: none
   parent_memo: >
     Phase 0 memo "Adaptive / Condition-Dependent Stops + Liquidity-Sweep Logic"
@@ -160,11 +168,17 @@ hypothesis:
     GREATER THAN the current price-based stop on at least one deployed lane
     (paired-deltaR > 0), with the per-lane breakdown reported (not pooled-only).
   pre_committed_parameters:
-    # FIXED BEFORE ANY RUN. Anchored to Howard extract line 188 ("exit if no 0.5R
-    # MFE within 120s after entry"). These are LITERATURE values, NOT tuned on our
-    # data — zero researcher degrees of freedom (Bailey 2013). No sweep, no grid.
-    mfe_progress_threshold_r: 0.5  # Howard line 188.
-    no_progress_window_seconds: 120  # Howard line 188 (120s acceptance/horizon).
+    # FIXED BEFORE ANY RUN. Anchored to Howard extract line 188, which proposes
+    # exactly this pre-reg: "exit if no 0.5R MFE within 120s after entry".
+    # HONEST SCOPE (review note 2026-05-31): line 188 frames (0.5R, 120s) with an
+    # "e.g." — they are the extract's ILLUSTRATIVE pre-reg values, not a measured
+    # constant from Howard's results table. What that buys us is still the thing
+    # that matters for Bailey 2013: the pair is LITERATURE-SOURCED and pre-committed
+    # here BEFORE any run, NOT tuned on canompx3 data. The `forbidden` list below
+    # (no sweep / no grid / no multi-window argmax) is what holds K=1 honest — we
+    # do not get to search for a better window after seeing our paired-deltaR.
+    mfe_progress_threshold_r: 0.5  # Howard extract line 188 (illustrative pre-reg value).
+    no_progress_window_seconds: 120  # Howard extract line 188 (120s window).
     window_granularity_note: >
       Howard's 120s is on a 1-second tick series; our orb_outcomes is bar-based.
       The 120s is resolved as a WALL-CLOCK window against bar entry/exit
@@ -179,6 +193,10 @@ scope:
   # At runtime the lane list MUST be re-derived from prop_profiles.ACCOUNT_PROFILES,
   # not from this static copy (volatile-data rule).
   entry_model: E2
+  instruments: [MNQ, MES]  # deployed-lane instruments (6/7 MNQ, 1/7 MES). Lets
+                           # estimate_k_budget evaluate the horizon non-trivially;
+                           # MNQ is the binding (most clean-years) instrument in
+                           # standalone_k_budget below.
   lanes:
     - MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8        # the H0 "survives gate" lane
     - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5
@@ -326,12 +344,28 @@ artifacts_to_save:
     - docs/audit/results/2026-05-31-adaptive-stops-h4-raw-per-lane.csv
 
 execution_gates:
-  status_gate: "DRAFT — no run authorized until promoted to LOCKED after human review."
+  status_gate: "LOCKED (2026-05-31, human-reviewed) — read-only script may be authored; no run until promotion commit lands."
   do_not_run_until_committed: true
   nogo_check:
     result: "NOT_FOUND — time-based no-progress exit is not in STRATEGY_BLUEPRINT §5 NO-GO; adjacent dead paths (trailing/breakeven, vol-regime switching) disclosed and distinguished above."
     method: "blueprint §5 review + H0 nogo_overlap_disclosure cross-check at authoring 2026-05-31."
-  reviewer_todo:
-    - "Confirm the 120s->bar-granularity mapping is acceptable for the deployed lanes' bar size before lock."
-    - "Confirm the no-progress-exit counterfactual will READ orb_outcomes excursion, not re-simulate (institutional-rigor §4)."
-    - "Re-run estimate_k_budget --hypothesis_id 2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1 after promotion to confirm K=1 PASS against the committed file."
+  reviewer_cleared:  # all three resolved at promotion 2026-05-31
+    - item: "120s->bar-granularity mapping acceptable before lock."
+      resolution: >
+        ACCEPTED. window_granularity_note pins 120s as a WALL-CLOCK anchor against
+        bar entry/exit timestamps (deterministic from bar size), not a tunable
+        bar-count. The script must assert the realized bar mapping per lane and
+        report it; no degrees of freedom are introduced.
+    - item: "Counterfactual READS orb_outcomes excursion, not re-simulate (institutional-rigor §4)."
+      resolution: >
+        ENFORCED by methodology_gates.canonical_delegation: H4 calls
+        _load_strategy_outcomes and reads the existing excursion path
+        (same path apply_tight_stop reads). A new sim engine is forbidden; the
+        script will be reviewed against this clause before its run.
+    - item: "K-budget PASS against the committed file."
+      resolution: >
+        VERIFIED 2026-05-31: estimate_k_budget parser extracts n_trials=1,
+        testing_mode=individual, pathway=B → required_minbtl_years=0.0,
+        n_max_at_horizon=27, headroom 6.65yr, verdict PASS. n_trials is a
+        recognized _TRIAL_COUNT_KEYS entry, so check_hypothesis_minbtl_compliance
+        does not block. Re-confirm post-commit per standard practice.
