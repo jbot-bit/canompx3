@@ -194,7 +194,7 @@ PAYOUT_POLICIES: dict[str, PayoutPolicy] = {
         profit_split_pct=0.80,
         winning_days_required=5,
         consistency_rule=None,  # payout stage = none; 50% consistency is EVAL-only (spec.firm_specific_rules)
-        payout_cap_balance_pct=0.50,  # up to 50% of total profits per payout
+        payout_cap_balance_pct=0.50,  # up to 50% of total profits per payout; TODO: add drift check asserting a consumer reads this when payout logic is built
         payout_cap_dollars=2_000.0,
         min_payout_amount=500.0,  # 50k; 25k = $250 (size-specific, see prop_profiles firm_specific_rules.by_size)
         notes=(

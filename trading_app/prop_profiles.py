@@ -538,12 +538,14 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     ("mffu", 50_000): PropFirmAccount("mffu", 50_000, 2_000, 5, 50),
     ("mffu", 100_000): PropFirmAccount("mffu", 100_000, 3_000, 10, 100),
     ("mffu", 150_000): PropFirmAccount("mffu", 150_000, 4_500, 15, 150),
-    # MFFU Builder ($50k only). EOD trailing. 2 MLL options share one tier here at the
-    # Default $2,000 MLL; the Add-On $1,500 MLL lives in firm_specific_rules.mll_options
-    # (a single ACCOUNT_TIERS key cannot hold both; sim/deploy code selects via the spec).
+    # MFFU Builder ($50k only). EOD trailing. Two MLL options → two tier keys.
     # @canonical-source docs/research-input/mffu/mffu_builder_50k.md (article 14290805)
-    # @verbatim "Max Contracts: 4 Minis / 40 Micros"  "Max EOD Drawdown (MLL): $2,000"
+    # @verbatim "Max Contracts: 4 Minis / 40 Micros"
+    # @verbatim "Max EOD Drawdown (MLL): $2,000 (Default) / $1,500 (Add-On)"
     ("mffu_builder", 50_000): PropFirmAccount("mffu_builder", 50_000, 2_000, 4, 40),
+    # Add-On MLL variant: identical plan/contracts, tighter $1,500 drawdown.
+    # Use this tier key when the user has purchased the Add-On MLL option.
+    ("mffu_builder_addon", 50_000): PropFirmAccount("mffu_builder_addon", 50_000, 1_500, 4, 40),
     # MFFU Flex ($25k/$50k). EOD trailing. Contract caps are the TOP of the scaled ladder
     # (full balance); the scaled ladder lives in firm_specific_rules. MLL per size.
     # @canonical-source docs/research-input/mffu/mffu_flex_25k.md
