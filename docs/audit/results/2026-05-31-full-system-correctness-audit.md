@@ -96,15 +96,16 @@ Orphan sweep: **848 active rows scanned, 0 integrity violations.**
 |---|---|---|
 | `outcome_builder`/`execution_engine` (E2 entry) | backtest entry == live entry (ts+price) | ✅ `test_backtest_live_convergence` |
 | `account_survival` | sim survival/DD/MLL/contract-cap modelling | ✅ `test_account_survival.py` |
-| `prop_portfolio.build_book` (prop sizing) | prop contract cap binds prop book | ✅ `test_contract_cap` (tradeify) |
-| **`prop_portfolio.build_book` (self_funded sizing)** | **self_funded book bound by RISK, not prop cap** | ❌ **GAP → F2-A (defect, test added)** |
+| `prop_portfolio.select_for_profile` (prop sizing) | prop contract cap binds prop book | ✅ `test_contract_cap` (tradeify) |
+| **`prop_portfolio.select_for_profile` (self_funded sizing)** | **self_funded book bound by RISK, not prop cap** | ❌ **GAP → F2-A (defect, test added)** |
 | **`rebalance_lanes --strict-live-clean`** | **non-CONTINUE SR status → PAUSE before live alloc** | ❌ **GAP → F2-B (no defect, coverage gap)** |
 | `lane_allocator` | rebalance/feature-cache correctness | partial (7 test refs; no strict-live behavioral assert) |
 
-**F2-A · `build_book` binds a `self_funded` book on the prop-style contract cap · capital-path · HALF-WORKS.**
-- **Probe set:** (1) does `build_book` have a firm branch on `contract_budget`? (2) is there a live `self_funded` profile? (3) does building its book hit the prop micro-cap? (4) does any existing test assert the doctrine-correct behavior?
+**F2-A · `select_for_profile` (doctrine's "build_book") binds a `self_funded` book on the prop-style contract cap · capital-path · HALF-WORKS.**
+- **Symbol note (self-review correction):** there is no `build_book` function — the doctrine's shorthand "build_book" is the actual symbol **`select_for_profile`** (`prop_portfolio.py:518`); the contract-budget logic is inside it (line 558). `_load_strategies_and_build_books` is a separate higher-level wrapper. The test and reproduction call `select_for_profile` (correct).
+- **Probe set:** (1) does `select_for_profile` have a firm branch on `contract_budget`? (2) is there a live `self_funded` profile? (3) does building its book hit the prop micro-cap? (4) does any existing test assert the doctrine-correct behavior?
 - **Evidence (execution-traced):**
-  - `prop_portfolio.py:559` — `contract_budget = tier.max_contracts_micro` **unconditional**; the "Contract cap reached (N/{budget} micro)" exclusion (line ~584) fires regardless of `firm`. No `self_funded` branch (grep: only firm logic is `banned_instruments`).
+  - `prop_portfolio.py:558` (inside `select_for_profile`, line 518) — `contract_budget = tier.max_contracts_micro` **unconditional**; the "Contract cap reached (N/{budget} micro)" exclusion (line 585/591) fires regardless of `firm`. No `self_funded` branch (grep: only firm logic is `banned_instruments`).
   - Live profile `self_funded_tradovate` (firm=self_funded, $30k) → tier `max_contracts_micro=12`.
   - Reproduced: `select_for_profile(AccountProfile('sf','self_funded',30000,max_slots=30), 30 strats)` → **total_contracts=12, 18× "Contract cap reached (12/12 micro)"**. The prop cap bound a personal-capital book.
   - No existing test asserts self_funded contract-cap behavior (`test_contract_cap` uses `tradeify`; self_funded tests assert slot/cognitive caps only).

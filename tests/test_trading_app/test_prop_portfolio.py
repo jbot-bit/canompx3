@@ -140,7 +140,8 @@ class TestSelectForProfile:
 
     @pytest.mark.xfail(
         reason="KNOWN CAPITAL DEFECT (HALF-WORKS) surfaced by 2026-05-31 correctness audit "
-        "finding F2-A. build_book() has NO firm branch: it binds a self_funded book on "
+        "finding F2-A. select_for_profile() (the doctrine's 'build_book') has NO firm "
+        "branch: it binds a self_funded book on "
         "tier.max_contracts_micro (prop-style earnings ceiling) instead of on risk. This "
         "violates .claude/rules/self-funded-sizing-doctrine.md ('prop caps NEVER bound "
         "personal-capital earnings'). The structural fix is Tier-B (capital-allocation path, "
