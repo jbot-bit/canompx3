@@ -21,11 +21,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** 80c49130 — research(adaptive-stops): PROMOTE H4 time-exit pre-reg DRAFT -> LOCKED (K=1)
-- **Files changed:** 3 files
+- **Commit:** f5873c64 — research(adaptive-stops): AMEND H4 prereg data-contract before run (bars_1m, not orb_outcomes)
+- **Files changed:** 2 files
   - `HANDOFF.md`
   - `docs/audit/hypotheses/2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1.yaml`
-  - `docs/audit/hypotheses/drafts/2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1.draft.yaml`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
