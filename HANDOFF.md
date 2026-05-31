@@ -16,7 +16,7 @@
 ## Current Codex Follow-up
 - **Tool:** Codex
 - **Date:** 2026-05-31
-- **Summary:** PR #327 on `codex/db-mcp-safe-access` implements and formalizes local-first DB MCP safe access: `gold-db` exposes read-only health, freshness, snapshot-manifest, and access-policy tools; `scripts/tools/export_gold_db_snapshot.py` exports approved read snapshots with stamped manifests; durable write-broker boundaries live in `docs/plans/active/2026-05/2026-05-30-db-mcp-safe-access.md`; implementation-grade plan lives in `docs/superpowers/plans/2026-05-31-db-mcp-safe-access.md`; a remote-consumer test now proves exported Parquet can be read without opening source `gold.db`. Verification passes targeted tests/ruff/CLI, targeted drift checks, and full `pipeline/check_drift.py --quiet` (`SUMMARY: clean passed=170 advisory=21`). No live DB writes, allocation edits, order routing, or `paper_trades` mutation.
+- **Summary:** Live-pilot readiness rest pass on `main`: `topstep_50k_mnq_auto` is a 3-lane MNQ single-account pilot (`--copies 1`), NYSE_OPEN SR-alarm lane is paused/parked, funded telemetry maturity remains advisory, strict readiness is green, ProjectX preflight passed 14/14, phase 7 passed, targeted live readiness/preflight tests passed. Also fixed docs/audit drift: CLAUDE sample thresholds, TRADING_RULES `NYSE_PREOPEN`, `.claude/rules/large-file-reads.md` false old-session hit, regenerated `REPO_MAP.md`, and fixed Phase 3's REPO_MAP checker to call `gen_repo_map.py --check`. No live launch was started; `START_BOT.bat` remains `--demo`.
 
 ## Last Session
 - **Tool:** Claude Code
