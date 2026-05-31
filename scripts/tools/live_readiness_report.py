@@ -82,6 +82,7 @@ from trading_app.validated_shelf import deployable_validated_relation  # noqa: E
 DEFAULT_ALLOCATION_PATH = legacy_lane_allocation_path()
 DEFAULT_TELEMETRY_INSTRUMENT = "MNQ"
 DEFAULT_SIGNALS_DIR = LIVE_SIGNALS_DIR
+ADVISORY_WARNING_MARKER = "(advisory for express/funded profile)"
 AUTOMATION_TASKS: tuple[dict[str, str], ...] = (
     {
         "task_name": "CanonMPX_DailyRefresh",
@@ -99,6 +100,20 @@ LIVE_STAGE_PATHS: tuple[str, ...] = (
     "docs/runtime/stages/2026-05-22-live-bar-ring-chart.md",
     "docs/runtime/stages/2026-05-26-ring-orphan-startup-sweep.md",
 )
+
+
+def is_launch_blocking_strict_warning(warning: object) -> bool:
+    """Return True when a strict warning should block a launch gate.
+
+    Express/funded telemetry maturity is intentionally advisory. It stays
+    visible in the report, but it must not become a hard blocker via the
+    generic warning path.
+    """
+    return ADVISORY_WARNING_MARKER not in str(warning)
+
+
+def launch_blocking_strict_warnings(strict_zero_warn: dict) -> list[object]:
+    return [warning for warning in strict_zero_warn.get("warnings", []) if is_launch_blocking_strict_warning(warning)]
 
 
 def _git_head(root: Path) -> str | None:
@@ -699,12 +714,13 @@ def _build_strict_zero_warn_summary(
         )
 
     if automation_health.get("available") is True and automation_health.get("overall") != "OK":
-        unhealthy = [
-            f"{task.get('task_name')}={task.get('status')}"
-            for task in automation_health.get("tasks", [])
-            if task.get("status") != "OK"
-        ]
-        warnings.append("Automation health not green: " + ", ".join(unhealthy))
+        unhealthy_tasks = [task for task in automation_health.get("tasks", []) if task.get("status") != "OK"]
+        unhealthy = [f"{task.get('task_name')}={task.get('status')}" for task in unhealthy_tasks]
+        warning = "Automation health not green: " + ", ".join(unhealthy)
+        task_names = {str(task.get("task_name") or "") for task in unhealthy_tasks}
+        if telemetry_is_advisory and task_names and task_names <= {"CanonMPX_TopstepTelemetry_SignalOnly"}:
+            warning += f" {ADVISORY_WARNING_MARKER}"
+        warnings.append(warning)
 
     return {
         "green": not blockers,
@@ -1107,7 +1123,9 @@ def main() -> None:
         print(rendered)
 
     strict_zero_warn = report.get("strict_zero_warn") or {}
-    if args.strict_zero_warn and (not bool(strict_zero_warn.get("green")) or bool(strict_zero_warn.get("warnings"))):
+    if args.strict_zero_warn and (
+        not bool(strict_zero_warn.get("green")) or bool(launch_blocking_strict_warnings(strict_zero_warn))
+    ):
         raise SystemExit(1)
 
 

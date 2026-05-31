@@ -572,18 +572,18 @@ def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, "FAILED: live launch requires --profile for strict readiness")
 
     try:
-        from scripts.tools.live_readiness_report import build_live_readiness_report
+        from scripts.tools.live_readiness_report import build_live_readiness_report, launch_blocking_strict_warnings
 
         report = build_live_readiness_report(profile_id=ctx.profile_id, effective_copies=ctx.requested_copies)
         strict = report.get("strict_zero_warn") or {}
         blockers = list(strict.get("blockers") or [])
-        warnings = list(strict.get("warnings") or [])
+        blocking_warnings = launch_blocking_strict_warnings(strict)
         if strict.get("green") is True:
-            if not ctx.demo and warnings:
-                msg = "; ".join(str(warning) for warning in warnings[:3])
-                if len(warnings) > 3:
-                    msg += f"; +{len(warnings) - 3} more"
-                return CheckResult(False, f"FAILED: live readiness has strict warnings ({msg})")
+            if not ctx.demo and blocking_warnings:
+                msg = "; ".join(str(warning) for warning in blocking_warnings[:3])
+                if len(blocking_warnings) > 3:
+                    msg += f"; +{len(blocking_warnings) - 3} more"
+                return CheckResult(False, f"FAILED: live readiness has blocking strict warnings ({msg})")
             return CheckResult(True, "OK (strict_zero_warn green)")
         msg = "; ".join(str(blocker) for blocker in blockers[:3])
         if len(blockers) > 3:

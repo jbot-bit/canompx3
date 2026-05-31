@@ -21,11 +21,13 @@ Use this file for durable accepted decisions that should survive handoff churn.
 - `live-preflight-zero-warn-promotion-gate-2026-05-31` - Real-money live
   launch preflight is stricter than the report-only readiness summary. For
   `--live`, `scripts/run_live_session.py --preflight` blocks when the checkout
-  is dirty, ahead, or behind `origin`, when `live_readiness_report` has any
-  strict blockers or warnings, or when `project_pulse --fast --format json`
-  reports a broken/high live-control item or blocked capital recommendation.
-  Demo and signal-only remain evidence-accrual paths; this gate is for live
-  promotion safety, not strategy research or lane expansion.
+  is dirty, ahead, or behind `origin`, when `live_readiness_report` has strict
+  blockers or non-advisory warnings, or when `project_pulse --fast --format
+  json` reports a broken/high live-control item or blocked capital
+  recommendation. Express/funded profile telemetry maturity warnings remain
+  advisory and do not block the single-copy live pilot. Demo and signal-only
+  remain evidence-accrual paths; this gate is for live promotion safety, not
+  strategy research or lane expansion.
 
 - `track-d-gate0-runner-table-contract-2026-05-29` - Track D Gate 0 design
   blocker is closed at the contract level. Current checkout was refreshed
