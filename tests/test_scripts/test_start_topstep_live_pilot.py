@@ -76,7 +76,10 @@ def test_preflight_only_does_not_launch(monkeypatch):
 
     assert rc == 0
     assert len(calls) == 3
-    assert all("--preflight" in call or call[1].endswith(("refresh_control_state.py", "live_readiness_report.py")) for call in calls)
+    assert all(
+        "--preflight" in call or call[1].endswith(("refresh_control_state.py", "live_readiness_report.py"))
+        for call in calls
+    )
 
 
 def test_dry_run_never_invokes_subprocess(monkeypatch, capsys):
