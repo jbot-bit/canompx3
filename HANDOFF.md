@@ -22,6 +22,7 @@
 - **CI follow-up:** PR #350 first CI run timed out in `Tests with coverage (tools and research)` while `tests/test_tools/test_fast_lane_status.py` was running. Fixed `fast_lane_status` to extract `scope.strategy_id` and `metadata.template_version` with narrow scalar scans instead of full PyYAML loads; live status build dropped from ~24s to ~0.5s locally. Targeted EV/status tests passed 56 tests.
 - **CI follow-up 2:** Second PR #350 CI run completed the tools/research shard but failed `tests/test_tools/test_git_hooks_env.py::test_pre_commit_prefers_wsl_venv_before_windows_venv_on_posix_shells` and ended at the 10-minute shard cap. Fixed pre-commit commit-lock Python selection to prefer `.venv-wsl` on POSIX and raised only the tools/research shard timeout to 15 minutes. `python -m pytest tests/test_tools/test_git_hooks_env.py tests/test_tools/test_fast_lane_status.py -q` passed 24 tests.
 - **CI follow-up 3:** Third PR #350 CI run passed tools/research and failed fast-lane drift shard on `test_drift_check_fails_on_unrevoked_pooling_artifact`. Fixed `check_fast_lane_promote_orphans()` to flag any `pooling_artifact` with no revocation sidecar regardless of scanner terminal status. Exact failing test now passes locally.
+- **CI follow-up 4:** Fourth PR #350 CI run passed the dedicated fast-lane drift shard, then timed out in `pipeline core` because that shard duplicated `test_check_drift_fast_lane*.py`. Updated CI pipeline-core shard to ignore the fast-lane files already covered by the dedicated shard.
 
 ## Last Session
 - **Tool:** Claude Code
