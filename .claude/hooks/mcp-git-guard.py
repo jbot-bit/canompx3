@@ -88,7 +88,13 @@ def main() -> None:
     if tool_name not in WRITE_TOOLS:
         sys.exit(0)
 
-    git_dir = _branch_state.git_dir()
+    # Scope to the worktree the MCP git tool ran in, not the hook process's
+    # cwd (always the main checkout). Critical here: this guard HARD-BLOCKS
+    # (exit 2) and is the only commit-safety layer for mcp__git__git_commit,
+    # so a cross-worktree false-fire would block a legitimate commit.
+    cwd = _branch_state.invoking_cwd(event)
+
+    git_dir = _branch_state.git_dir(cwd)
     if git_dir is None:
         sys.exit(0)  # fail-safe: not in a git repo -> pass
 
@@ -100,7 +106,7 @@ def main() -> None:
     if not branch_at_start:
         sys.exit(0)  # fail-safe: corrupted/empty lock -> pass
 
-    current = _branch_state.current_branch()
+    current = _branch_state.current_branch(cwd)
     if current is None:
         sys.exit(0)  # fail-safe: detached HEAD / git failure -> pass
 

@@ -64,6 +64,32 @@ class TestGitDir:
         assert result is None
 
 
+class TestGitDirCwd:
+    """`cwd` selects the worktree to inspect — the F4-A scoping fix."""
+
+    def test_cwd_selects_repo_regardless_of_process_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mod = _load_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _init_git(repo)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        # Process cwd is OUTSIDE the repo; cwd= points INTO it.
+        monkeypatch.chdir(outside)
+        monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+        result = mod.git_dir(str(repo))
+        assert result is not None
+        assert result.name == ".git"
+        assert result.exists()
+
+    def test_cwd_none_falls_back_to_process_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mod = _load_module()
+        _init_git(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        # Default (no cwd) == historical behavior == process cwd.
+        assert mod.git_dir() == mod.git_dir(str(tmp_path))
+
+
 class TestCurrentBranch:
     def test_inside_repo_returns_branch(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         mod = _load_module()
@@ -72,12 +98,38 @@ class TestCurrentBranch:
         result = mod.current_branch()
         assert result == "main"
 
+    def test_cwd_selects_branch_of_target_repo(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mod = _load_module()
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _init_git(repo, branch="feature/x")
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        monkeypatch.chdir(outside)
+        monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+        assert mod.current_branch(str(repo)) == "feature/x"
+
     def test_outside_repo_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         mod = _load_module()
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
         result = mod.current_branch()
         assert result is None
+
+
+class TestInvokingCwd:
+    def test_reads_event_cwd(self, tmp_path: Path) -> None:
+        mod = _load_module()
+        result = mod.invoking_cwd({"cwd": str(tmp_path)})
+        assert result == str(tmp_path.resolve())
+
+    def test_missing_cwd_returns_none(self) -> None:
+        mod = _load_module()
+        assert mod.invoking_cwd({}) is None
+
+    def test_empty_cwd_returns_none(self) -> None:
+        mod = _load_module()
+        assert mod.invoking_cwd({"cwd": "   "}) is None
 
 
 class TestBranchAtStart:
