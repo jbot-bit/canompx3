@@ -1095,7 +1095,11 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Pre-compute ORB outcomes for all RR targets x confirm_bars")
-    parser.add_argument("--instrument", default="MGC", help="Instrument symbol")
+    parser.add_argument(
+        "--instrument",
+        required=True,
+        help="Instrument symbol (e.g. MGC, MNQ, MES). No default — omitting silently processes the wrong instrument.",
+    )
     parser.add_argument("--start", type=date.fromisoformat, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end", type=date.fromisoformat, help="End date (YYYY-MM-DD)")
     parser.add_argument("--orb-minutes", type=int, default=5, help="ORB duration in minutes")
