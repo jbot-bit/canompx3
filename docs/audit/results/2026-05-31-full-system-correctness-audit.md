@@ -143,4 +143,62 @@ Orphan sweep: **848 active rows scanned, 0 integrity violations.**
 
 **Phase 3 net: zero deletions.** Both flagship candidates (rolling_correlation, lane_allocation) are alive/intentional. This is a correct outcome — the method's job is to PREVENT the v1-style wrong deletion, and it did.
 
-_(Phase 4+ appended below.)_
+### Phase 5 — Cross-AI coordination (audit + classify; PRUNE is a separate reviewed step)
+
+**Inventory:** 19 worktrees, 41 local + 51 remote branches, 3 open PRs (was 2 at Phase 0 — Codex opened **#349** on `codex/start-bot-dashboard-live-pilot-ux` during this audit, the live task I isolated from. Isolation decision validated: its work is now in the proper review channel).
+
+**Open PRs (active — DO NOT prune):**
+| PR | Branch | Status |
+|---|---|---|
+| #349 | codex/start-bot-dashboard-live-pilot-ux | ACTIVE (Codex live task, dashboard START_BOT) |
+| #348 | session/joshd-grounding-integrity | ACTIVE (grounding-integrity, ahead=3) |
+| #345 | session/push-hookfix | ACTIVE (post-compaction hook, ahead=2) |
+
+**Branch classification (`git merge-base --is-ancestor origin/$b origin/main`):**
+- **MERGED (ahead=0) — prunable remote branches (9):** `codex/chordia-lane-bench-automation`, `session/joshd-allocation-intel-cli`, `session/joshd-auto-memory-capture`, `session/joshd-canary-harness`, `session/joshd-ehr-validation-mode`, `session/joshd-lane-allocator-strict-live-clean`, `session/joshd-live-readiness-gates-clean`, `session/joshd-mffu-layerc`, `session/self-funded-sizing-guard-clean`. These are fully in main → safe to delete remote+local+worktree.
+- **UNMERGED, ahead≥1 (≈28):** mix of (a) open-PR heads (#348/#345 above — keep), (b) genuine in-flight work (e.g. `ralph-10x-iterations` ahead=11, `ci-format-fix` ahead=6), and (c) **possible superseded-by-content** — memory warns `merge-base` falsely flags content-superseded branches as "unmerged" (a cherry-picked/squashed delta shows ahead≥1 but is already in main by content). **Per-branch content-diff adjudication is the PRUNE step — deferred, NOT done here** (sweeping in-flight peer work has bitten before; `feedback_orphan_merged_by_content_not_commit`).
+- **Worktrees on MERGED branches → prunable (8):** `canompx3-{adaptive-stops-audit,adaptive-stops-h0,adaptive-stops-h4,canary-harness,heartbeat,self-funded-guard,worktree-lease-fix,grounding}` — their branches are ahead but most map to merged/PR'd work. Worktree pruning requires per-tree dirty-state check (`git -C <wt> status`) before removal — also deferred to the reviewed prune step.
+
+**MEMORY.md vs .codex/MEMORY.md duplication:** flagged for the "link don't mirror" resolution in Phase 4 (checked below).
+
+**Decision:** classification complete; **pruning surfaced as a separate reviewed action** (see Phase 6 / surfaced decisions). No branches/worktrees deleted in this pass.
+
+### Phase 4 — The self-improving loop (the "keeps learning" deliverable)
+
+**4a · Findings → memory wiring (architecture confirmed).** Repo `memory/` is **gitignored** (`.gitignore:110`); the durable corpus is **user-private** at `~/.claude/projects/.../memory/` (**221 feedback files**, 108KB `MEMORY.md` index). `.codex/MEMORY.md` is a **policy pointer** ("Codex uses the shared workspace memory files; long-term = `MEMORY.md` in main session") — **not a mirror**, so the plan's "MEMORY.md vs .codex duplication" concern is already resolved by the existing link-don't-mirror design. **WORKS.** The loop = finding → user-private `memory/*.md` → `MEMORY.md` index → auto-loaded next session (survives `/clear` via auto-memory-capture hook). This audit writes recurrence-risk findings into that store (done in 4d).
+
+**4b · Recurrence mining (evidence-driven, n≥2 only).** Clustered all 221 feedback files by failure class:
+| n | Failure class |
+|---|---|
+| **13** | **worktree / lease / branch-flip / concurrent-session** ← dominant |
+| 7 | stale-summary / SHA / baton-drift |
+| 7 | MCP / process-accumulation |
+| 6 | pre-commit / lock / gold.db-contention |
+| 5 | CRLF / encoding / diff-renderer |
+| 1 | wired-but-dead-until-merged |
+
+The **worktree/branch-flip/concurrent-session class (n=13)** is the clear recurrence winner — and it **fired 3× live in this very session**: (1) stale-lease force-release nearly colliding with the live Codex task, (2) shared-state-guard self-reference false positive, (3) **branch-flip-guard false-positive on every Bash call** (~20×). This is the n≥2 trigger for a targeted improvement.
+
+**F4-A · branch-flip-guard false-fires across the AI/worktree boundary · none (friction, not capital) · HALF-WORKS.**
+- **Mechanism (traced):** `settings.json` hardcodes the hook command to the **main-checkout** path (`feedback_worktree_hooks_resolve_to_main_checkout_path`). So a Bash call in *my isolated audit worktree* invokes the **main checkout's** `branch-flip-guard.py`, which reads the **main checkout's** `.claude.pid` (records `main`) and the **main checkout's** current branch (= `codex/start-bot-...`, because the live Codex task flipped it). They differ → BLOCK fires, **falsely attributing Codex's legitimate branch to my session.** Advisory-only (never blocked a commit), but ~20× noise/session and it masks any *real* flip.
+- **Proposed fix (NOT applied — guardrail path, and the main-checkout hook is in use by the live Codex session):** the guard should compare the branch of the **worktree the Bash command actually ran in** (resolvable from `tool_input.command`'s `-C <path>` / cwd or `CLAUDE_PROJECT_DIR`) against *that worktree's* `.claude.pid`, not blindly the main-checkout lock. Alternatively, scope the guard to no-op when the invoking cwd's git-common-dir ≠ the lock's worktree. **Surfaced for sign-off** (modifying a safety hook the live peer depends on is Tier-B-adjacent; do it deliberately, not mid-audit).
+- Decision: log to memory + action-queue (done 4d); fix gated on operator review.
+
+**F4-B · stale-MCP-restart warning hook is NOT in `origin/main` (wired-but-dead-until-merged) · none · DEAD-until-merged.**
+- **Evidence:** the "warn when a running MCP server's committed code is newer than its process" hook (memory: committed `92e71d7b`) is **absent from main** (`grep "newer than" .claude/hooks/session-start.py` → empty in this main-based worktree); it lives only on `session/joshd-grounding-integrity` (**PR #348, OPEN**). The auto-memory-capture loop **IS** in main (3 hook registrations in `settings.json`). So of the two hooks the plan asked to confirm live: auto-memory-capture = **LIVE**, stale-MCP-restart-warn = **DEAD until #348 merges.**
+- Decision: surfaced — merging #348 activates it. No code change here.
+
+**4c · Wire audit output into action-queue (done).** Added a tracked item for the F2-A capital fix + F4-A guard fix so they don't fall through between assistants (see `docs/runtime/action-queue.yaml`).
+
+**4d · Findings → durable memory (done).** Wrote `project_full_system_correctness_audit_2026_05_31.md` to the user-private memory store + indexed in `MEMORY.md`, capturing: the audit verdict, F2-A (capital, gated), F4-A (guard false-fire + fix), F4-B (#348 activates stale-MCP-warn), and the method-win (rolling_correlation DEAD-verdict overturn = full-probe-set discipline).
+
+**Phase 4 net:** the loop is wired to *accumulate* (memory) and *propose* (action-queue + this ledger), evidence-driven (n=13 recurrence → one targeted guard fix proposed, not speculative new gates). No new blocking checks added — per the plan, "keeps learning ≠ more gates."
+
+---
+
+## Surfaced decisions (Tier-B — require operator sign-off)
+
+1. **F2-A — self_funded prop-cap leak (capital).** Add a firm-aware sizing branch to `prop_portfolio.build_book` so `self_funded` books are bound by risk, not `tier.max_contracts_micro`. Behavioral test already pins the gap (`xfail(strict=True)`). Adversarial-audit gated.
+2. **F4-A — branch-flip-guard false-fire fix (guardrail hook).** Scope the guard to the invoking worktree, not the main-checkout lock. Touches a safety hook the live Codex session uses — do deliberately.
+3. **Phase 5 pruning (cross-AI).** 9 MERGED remote branches + ~8 worktrees on merged/PR'd work are prunable; execute as a **separate reviewed step** with per-tree dirty checks (sweeping in-flight peer work has bitten before).
+4. **PR #348 merge** activates the stale-MCP-restart warning (F4-B) on main.

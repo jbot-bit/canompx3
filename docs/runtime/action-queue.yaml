@@ -1048,3 +1048,76 @@ items:
       Routed to PARK by the promote-queue scanner's
       REJECTED_OOS_UNPOWERED disposition. No revocation sidecar:
       the IS edge is not refuted, the cell is unvalidatable.
+  - id: correctness_audit_f2a_self_funded_prop_cap_leak_2026_05_31
+    title: F2-A — add firm-aware sizing branch so self_funded books are risk-bound, not prop-cap-bound
+    class: capital
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: operator-signoff-required
+    last_verified_at: 2026-05-31
+    freshness_sla_days: 30
+    next_action: |
+      TIER-B CAPITAL — needs operator sign-off + adversarial-audit gate.
+      prop_portfolio.build_book has NO firm branch: contract_budget =
+      tier.max_contracts_micro applies to self_funded books exactly as to
+      prop firms. Reproduced: self_funded_tradovate ($30k, micro-cap=12)
+      book throttled to 12/12 micro with 18 "Contract cap reached"
+      exclusions. Violates self-funded-sizing-doctrine ("prop caps NEVER
+      bound personal-capital earnings"). Fix = firm-aware sizing branch in
+      build_book bounding self_funded by risk (DD/vol-target/margin), not by
+      the prop micro cap. Behavioral test already PINS the gap as
+      xfail(strict=True) in tests/test_trading_app/test_prop_portfolio.py
+      (test_self_funded_book_not_bound_by_prop_contract_cap) — remove the
+      xfail marker when the fix lands; strict=True auto-fails if fixed-but-
+      not-unmarked.
+    exit_criteria: |
+      build_book binds self_funded contract budget on risk, not
+      tier.max_contracts_micro. xfail marker removed; test passes green as a
+      live regression guard. Adversarial-audit gate passed. Drift green.
+    blocked_by: []
+    decision_refs:
+      - .claude/rules/self-funded-sizing-doctrine.md
+      - .claude/rules/adversarial-audit-gate.md
+      - docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+    evidence_refs:
+      - docs/audit/results/2026-05-31-full-system-correctness-audit.md
+      - tests/test_trading_app/test_prop_portfolio.py
+      - trading_app/prop_portfolio.py
+    notes_ref: docs/audit/results/2026-05-31-full-system-correctness-audit.md
+  - id: correctness_audit_f4a_branch_flip_guard_crossworktree_falsefire_2026_05_31
+    title: F4-A — scope branch-flip-guard to the invoking worktree (stop cross-AI false-fires)
+    class: tooling
+    status: open
+    priority: P3
+    close_before_new_work: false
+    owner_hint: claude-with-care
+    last_verified_at: 2026-05-31
+    freshness_sla_days: 30
+    next_action: |
+      branch-flip-guard.py false-fires ~20x/session when work runs in an
+      isolated worktree but settings.json routes the hook to the
+      main-checkout copy, which reads main's .claude.pid (records main) vs
+      main's current branch (= whatever a peer Codex task flipped it to).
+      Advisory-only (never blocks commits) but masks real flips and is noise.
+      Fix: resolve the branch of the INVOKING worktree (cwd / -C <path> /
+      CLAUDE_PROJECT_DIR) and compare against THAT worktree's .claude.pid;
+      no-op when the invoking git-common-dir != the lock's worktree. CARE:
+      this is a safety guard the live peer depends on — behavior-preserving,
+      keep the test contract (tests/test_hooks/test_branch_flip_guard.py
+      monkeypatches _git_dir/_current_branch). n>=2 recurrence (worktree/
+      branch-flip class = 13 feedback files; bit 3x live 2026-05-31).
+    exit_criteria: |
+      Guard fires ONLY when the invoking worktree's own branch differs from
+      its own branch_at_start. No false-fire from a sibling worktree's flip.
+      Existing test_branch_flip_guard tests still pass; a new test covers the
+      cross-worktree no-op. Drift green.
+    blocked_by: []
+    decision_refs:
+      - .claude/rules/branch-flip-protection.md
+    evidence_refs:
+      - docs/audit/results/2026-05-31-full-system-correctness-audit.md
+      - .claude/hooks/branch-flip-guard.py
+      - .claude/hooks/_branch_state.py
+      - memory/feedback_worktree_hooks_resolve_to_main_checkout_path_2026_05_31.md
+    notes_ref: docs/audit/results/2026-05-31-full-system-correctness-audit.md
