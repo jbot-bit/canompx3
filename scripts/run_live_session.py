@@ -1155,6 +1155,9 @@ def main() -> None:
                 profile_id=args.profile,
                 mode=_mode_label,
                 source="CLI",
+                copies=args.copies or None,
+                instruments=[args.instrument] if args.instrument else None,
+                broker_accounts_count=args.copies or None,
             )
         except Exception as _e:  # noqa: BLE001 — never block the launch on a UI surface
             log.warning("planned_launch write failed: %s", _e)

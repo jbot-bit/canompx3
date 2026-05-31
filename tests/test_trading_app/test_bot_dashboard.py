@@ -661,6 +661,64 @@ def test_action_start_blocks_when_no_broker_connection(monkeypatch):
     assert result["connection_readiness"]["action"] == "open_connections"
 
 
+def test_action_start_pins_single_copy_live_pilot_command(monkeypatch, tmp_path):
+    bot_dashboard._clear_handoff()
+    bot_dashboard._bg_processes.pop("session", None)
+    bot_dashboard._bg_processes.pop("_session_logfile", None)
+    captured: dict[str, list[str]] = {}
+
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "STOPPED",
+            "heartbeat_age_s": 9999.0,
+            "profile": None,
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_data_status",
+        lambda: {"status": "ok", "any_stale": False, "instruments": {}},
+    )
+    monkeypatch.setattr(bot_dashboard, "_collect_broker_status", lambda: dict(_CONNECTED_BROKER_SUMMARY))
+    async def fake_prepare(profile, mode="live"):
+        return {"status": "pass", "output": "preflight ok"}
+
+    monkeypatch.setattr(bot_dashboard, "_prepare_profile_for_start", fake_prepare)
+    monkeypatch.setattr(bot_dashboard, "_ensure_log_dir", lambda: tmp_path)
+
+    class FakePopen:
+        pid = 4242
+
+        def __init__(self, cmd, **_kw):
+            captured["cmd"] = list(cmd)
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(bot_dashboard.subprocess, "Popen", FakePopen)
+
+    result = asyncio.run(bot_dashboard.action_start(profile="topstep_50k_mnq_auto", mode="live"))
+
+    assert result["status"] == "started"
+    assert "--live" in captured["cmd"]
+    assert "--auto-confirm" in captured["cmd"]
+    assert "--instrument" in captured["cmd"]
+    assert "MNQ" in captured["cmd"]
+    assert "--copies" in captured["cmd"]
+    assert "1" in captured["cmd"]
+    assert "--signal-only" not in captured["cmd"]
+
+    log_file = bot_dashboard._bg_processes.pop("_session_logfile", None)
+    if log_file is not None:
+        log_file.close()
+    bot_dashboard._bg_processes.pop("session", None)
+
+
 def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
     """Exercise _handoff_snapshot through every transition of the state machine.
 
@@ -808,15 +866,8 @@ def test_preflight_helper_opens_no_duckdb_connection(monkeypatch):
     assert results["fill_poller"] is True
 
 
-def test_run_preflight_subprocess_omits_signal_only_in_live_mode(monkeypatch):
-    """Live preflight (default) must not pass --signal-only to the subprocess.
-
-    The dashboard's Start Live path and the ad-hoc Preflight button both rely
-    on live-mode preflight that exercises the full telemetry-maturity gate
-    (run_live_session.py:369-378). A regression that injects --signal-only
-    into live preflight would silently auto-pass that gate and break the
-    capital-class invariant the gate was added to enforce.
-    """
+def test_run_preflight_subprocess_pins_single_copy_live_pilot(monkeypatch):
+    """Live preflight must use the same effective config as dashboard launch."""
     captured: dict[str, list[str]] = {}
 
     def fake_run(cmd, **_kw):
@@ -829,6 +880,11 @@ def test_run_preflight_subprocess_omits_signal_only_in_live_mode(monkeypatch):
 
     assert result["returncode"] == 0
     assert "--signal-only" not in captured["cmd"]
+    assert "--live" in captured["cmd"]
+    assert "--instrument" in captured["cmd"]
+    assert "MNQ" in captured["cmd"]
+    assert "--copies" in captured["cmd"]
+    assert "1" in captured["cmd"]
     assert "--preflight" in captured["cmd"]
     assert "topstep_50k_mnq_auto" in captured["cmd"]
 
@@ -886,6 +942,16 @@ def test_prepare_profile_for_start_propagates_mode_to_subprocess(monkeypatch):
     assert captured["profile"] == "topstep_50k_mnq_auto"
     assert captured["mode"] == "signal"
     assert result["status"] != "error"
+
+
+def test_dashboard_live_pilot_copy_is_explicit_and_professional():
+    html = (bot_dashboard.PROJECT_ROOT / "trading_app" / "live" / "bot_dashboard.html").read_text(encoding="utf-8")
+
+    assert "HOLD TO GO LIVE" in html
+    assert "Topstep MNQ &middot; 1 copy &middot; real orders &middot; gates run first" in html
+    assert "Live pilot: <b>MNQ</b> &middot; 3 lanes &middot; 1 copy &middot; NYSE: parked" in html
+    assert "Combine" not in html
+    assert "🔒" not in html
 
 
 # --- live_health dashboard reader (Phase 2 read-only operator visibility) ---------------

@@ -17,10 +17,10 @@ Status: NO-GO until live preflight is green with no blocking strict readiness wa
 Primary operator entrypoint on Windows:
 
 ```bat
-START_LIVE_PILOT.bat
+START_BOT.bat
 ```
 
-That launcher pins `topstep_50k_mnq_auto`, `MNQ`, and `--copies 1`; refreshes C11/C12 control state; runs strict readiness; runs the live-session preflight; and only then hands off to the canonical live runner. The final runner still requires typing `CONFIRM` before real-money order routing arms.
+That launcher starts the dashboard/control-room in signal-only mode. Real-money launch is only from the dashboard's hold-to-confirm `HOLD TO GO LIVE` control. The dashboard server pins the effective pilot to `topstep_50k_mnq_auto`, `MNQ`, and `--copies 1`; runs control refresh and live-session preflight before spawning the canonical live runner; and uses the hold gesture as the final operator confirmation.
 
 Underlying gates, for audit/debug:
 

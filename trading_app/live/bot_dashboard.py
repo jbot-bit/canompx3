@@ -48,6 +48,9 @@ BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
 # Rationale: 2x the ~60s bar cadence (SessionOrchestrator._publish_state runs
 # once per 1m bar) — two consecutive missed writes flips the dashboard to STALE.
 HEARTBEAT_STALE_AFTER_S = 120
+LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto"
+LIVE_PILOT_INSTRUMENT = "MNQ"
+LIVE_PILOT_COPIES = 1
 
 
 def _as_mapping(value: object) -> dict[str, object]:
@@ -675,6 +678,13 @@ def _cache_preflight_entry(profile: str, cache_entry: dict[str, object]) -> None
         _preflight_cache[profile] = cache_entry
 
 
+def _live_pilot_cli_args(profile: str) -> list[str]:
+    """Return server-side live pilot routing args for the funded MNQ pilot."""
+    if profile != LIVE_PILOT_PROFILE:
+        return []
+    return ["--instrument", LIVE_PILOT_INSTRUMENT, "--copies", str(LIVE_PILOT_COPIES)]
+
+
 def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, object]:
     cmd = [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"]
     # Match preflight mode to the requested session mode so signal-only's
@@ -683,6 +693,9 @@ def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, obj
     # is meant to clear.
     if mode == "signal":
         cmd.append("--signal-only")
+    elif mode == "live":
+        cmd.append("--live")
+        cmd.extend(_live_pilot_cli_args(profile))
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -2542,6 +2555,7 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
             mode_label = "DEMO"
         else:  # live
             cmd.extend(["--live", "--auto-confirm"])
+            cmd.extend(_live_pilot_cli_args(profile))
             mode_label = "LIVE"
 
         log_file = None

@@ -501,15 +501,16 @@
     position: relative; z-index: 1;
     background: linear-gradient(180deg, #ff3838 0%, #c40000 100%);
     color: #fff; border: 2px solid #ff5c5c;
-    border-radius: 8px; padding: 14px 32px;
-    font: 800 14px/1 var(--mono); letter-spacing: 0.12em;
+    border-radius: 8px; padding: 14px 28px;
+    font: 800 13px/1 var(--mono); letter-spacing: 0.06em;
     cursor: pointer; text-transform: uppercase;
     box-shadow: 0 2px 8px rgba(196,0,0,0.4);
     user-select: none; -webkit-user-select: none;
     touch-action: none;
   }
   .go-live-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .go-live-btn .lock { margin-right: 8px; }
+  .go-live-btn .lock { display: inline-flex; width: 15px; height: 15px; margin-right: 8px; vertical-align: -2px; }
+  .go-live-btn .lock svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .go-live-ring {
     position: absolute; inset: -4px;
     border-radius: 12px;
@@ -3268,11 +3269,11 @@ function renderAccounts(accounts) {
       } else {
         const ar = document.createElement("div"); ar.className = "actions-row";
         ar.innerHTML =
-          '<button class="pf-btn signal" title="Bot watches the market and sends Telegram alerts when a lane fires. You place orders manually on the TopStep platform. No orders are sent. Safe to run anytime — no money, no Combine impact.">' +
+          '<button class="pf-btn signal" title="Bot watches the market and sends Telegram alerts when a lane fires. You place orders manually on the Topstep platform. No orders are sent. Safe to run anytime.">' +
             '<span class="btn-title">Alerts</span><span class="btn-sub">Telegram only</span>' +
           '</button>' +
-          '<button class="pf-btn demo" title="Bot places PRACTICE orders on a separate ProjectX demo/sandbox account. No real money. Does NOT trade your Combine — use this only to rehearse the full order round-trip.">' +
-            '<span class="btn-title">Paper</span><span class="btn-sub">Practice, no $$</span>' +
+          '<button class="pf-btn demo" title="Bot places practice orders on a separate ProjectX demo/sandbox account. No real money. Use this only to rehearse the full order round-trip.">' +
+            '<span class="btn-title">Paper</span><span class="btn-sub">Practice only</span>' +
           '</button>';
         const [bs, bd] = ar.querySelectorAll("button");
         const signalBlocked = blockedActionReason("start_signal");
@@ -3286,22 +3287,26 @@ function renderAccounts(accounts) {
 
         const legend = document.createElement("div"); legend.className = "mode-legend";
         legend.innerHTML =
-          '<div><b class="lg-signal">Alerts</b> — Telegram only. You trade manually. <em>Zero risk.</em></div>' +
-          '<div><b class="lg-demo">Paper</b> — fake orders on a practice account. Rehearses the bot without touching your Combine.</div>' +
-          '<div><b class="lg-live">Live</b> — real orders on your Combine. <b>Hold the red button 2 seconds to fire.</b></div>';
+          '<div><b class="lg-signal">Alerts</b> - Telegram only. You trade manually. <em>No broker orders.</em></div>' +
+          '<div><b class="lg-demo">Paper</b> - practice orders on the demo account.</div>' +
+          '<div><b class="lg-live">Live</b> - Topstep MNQ, 1 copy, real orders. Gates run first.</div>';
         card.appendChild(legend);
 
         // Hold-to-confirm GO LIVE button (replaces type-LIVE-then-click gate).
         const wrap = document.createElement("div"); wrap.className = "go-live-wrap";
         wrap.innerHTML =
           '<div class="go-live-ring"></div>' +
-          '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch REAL orders on this Combine account.">' +
-            '<span class="lock">🔒</span>GO LIVE — HOLD 2s' +
+          '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch real Topstep MNQ orders on one protected primary account.">' +
+            '<span class="lock" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>HOLD TO GO LIVE' +
           '</button>' +
-          '<span class="go-live-hint">Real Combine $$ — press AND HOLD for 2 seconds</span>';
+          '<span class="go-live-hint">Topstep MNQ &middot; 1 copy &middot; real orders &middot; gates run first</span>';
         const goLiveBtn = wrap.querySelector("button");
         const goLiveRing = wrap.querySelector(".go-live-ring");
-        if (liveBlocked) { goLiveBtn.disabled = true; goLiveBtn.title = liveBlocked; }
+        if (liveBlocked) {
+          goLiveBtn.disabled = true;
+          goLiveBtn.title = liveBlocked;
+          wrap.querySelector(".go-live-hint").textContent = `Blocked: ${liveBlocked}`;
+        }
         else { window.attachHoldToFireLive(goLiveBtn, goLiveRing, wrap, acct); }
         card.appendChild(wrap);
       }
@@ -4058,15 +4063,18 @@ function renderPlannedLaunchBanner() {
   const instr = (Array.isArray(p.instruments) && p.instruments.length) ? p.instruments.join("+") : "ALL";
   const copies = Number(p.broker_accounts_count || p.copies || 1);
   const acctTxt = copies > 1 ? `${copies} broker accounts` : `1 broker account`;
-  const realMoney = mode === "LIVE" ? " · REAL MONEY" : "";
-  const sourceTxt = p.source ? ` · src:${escapeHtml(p.source)}` : "";
+  const sourceTxt = p.source ? ` &middot; src:${escapeHtml(p.source)}` : "";
+  const pilotTxt = profile === "topstep_50k_mnq_auto"
+    ? " &middot; Live pilot: <b>MNQ</b> &middot; 3 lanes &middot; 1 copy &middot; NYSE: parked"
+    : "";
   if (p.status === "stale") {
     el.className = "planned-launch-banner stale";
-    el.innerHTML = `Next launch: <b>STALE</b> — last set as <b>${escapeHtml(mode)}</b> · ${escapeHtml(profile)} · ${escapeHtml(instr)} · ${acctTxt}${sourceTxt} · re-run START_BOT.bat`;
+    el.innerHTML = `Current: <b>STALE</b> - last set as <b>${escapeHtml(mode)}</b> &middot; ${escapeHtml(profile)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}${sourceTxt} &middot; re-run START_BOT.bat`;
     return;
   }
   el.className = `planned-launch-banner ${cls}`;
-  el.innerHTML = `Next launch: <b>${escapeHtml(mode)}</b> · ${escapeHtml(profile)} · ${escapeHtml(instr)} · ${acctTxt}${realMoney}${sourceTxt}`;
+  const current = mode === "SIGNAL" ? "Signal-only" : mode === "DEMO" ? "Demo" : "Live";
+  el.innerHTML = `Current: <b>${escapeHtml(current)}</b> &middot; ${escapeHtml(profile)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}${pilotTxt}${sourceTxt}`;
 }
 
 /* Tier 1.1 — primary CTA in topbar (Start / Stop context-aware) */
@@ -4149,6 +4157,12 @@ function updatePrimaryCta() {
     const planProfile = planned.profile_id || acct.profile_id;
     const copies = Number(planned.broker_accounts_count || planned.copies || 1);
     const acctSub = copies > 1 ? `${escapeHtml(planProfile)} · ${copies} accts` : escapeHtml(planProfile);
+    if (planMode === "LIVE") {
+      btn.disabled = true;
+      btn.innerHTML = `LIVE ARMED <span class="cta-sub">use HOLD TO GO LIVE</span>`;
+      btn.onclick = null;
+      return;
+    }
     btn.innerHTML = `${modeLabel} <span class="cta-sub">${acctSub}</span>`;
     btn.onclick = () => {
       if (_primaryCtaBusy) return;
@@ -4933,7 +4947,7 @@ async function launchSession(pid, firm, instr, mode, opts) {
 
 // Used by the chart "START FEED" button. Resolves the currently-selected
 // account (localStorage key set by the Dashboard tab) and launches signal
-// mode — no orders, no money, no Combine impact.
+// mode - no orders and no real-capital routing.
 window.startSignalForSelected = function() {
   const accts = Array.isArray(lastAccountsData) ? lastAccountsData : [];
   // Prefer an active+auto account; fall back to any active account; final fallback = first.

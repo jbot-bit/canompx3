@@ -41,13 +41,10 @@ if "%MKT%"=="CLOSED" (
 :: See trading_app/prop_profiles.py ACCOUNT_PROFILES for the registry.
 set ACTIVE_PROFILE=topstep_50k_mnq_auto
 
-:: Default mode is SIGNAL (no broker orders). For demo/live, edit BOT_MODE_FLAGS.
-:: Multi-instrument profile + --demo/--live is rejected by run_live_session.py.
-:: 2026-05-28: --demo for Stage 4 NYSE_OPEN order-path smoke (TopstepX practice
-:: endpoint, ZERO real capital). After smoke green, revert to --signal-only
-:: until Stage 5 explicitly flips to --live. See
-:: docs/runtime/stages/2026-05-28-live-golive-stage4-demo-smoke.md.
-set BOT_MODE_FLAGS=--demo
+:: Default mode is SIGNAL (no broker orders). START_BOT is the control-room
+:: entrypoint; demo/live starts are initiated from the dashboard after gates
+:: run. Do not set --live here.
+set BOT_MODE_FLAGS=--signal-only
 
 :: Step 1: Clean up stale lock + stop files (don't kill python — other terminals may be running)
 ::   The .stop file triggers graceful-shutdown on the next feed scan; a stale one
@@ -70,7 +67,7 @@ if /i "%BOT_MODE_FLAGS%"=="--signal-only" set PLANNED_MODE=SIGNAL
 if /i "%BOT_MODE_FLAGS%"=="--demo" set PLANNED_MODE=DEMO
 if /i "%BOT_MODE_FLAGS%"=="--live" set PLANNED_MODE=LIVE
 if not defined PLANNED_MODE set PLANNED_MODE=SIGNAL
-.venv\Scripts\python.exe -m trading_app.live.planned_launch write --profile %ACTIVE_PROFILE% --mode %PLANNED_MODE% --source START_BOT.bat >nul
+.venv\Scripts\python.exe -m trading_app.live.planned_launch write --profile %ACTIVE_PROFILE% --mode %PLANNED_MODE% --source START_BOT.bat --copies 1 --instrument MNQ >nul
 
 :: Step 3: Data freshness check
 echo [3/5] Checking data freshness...
