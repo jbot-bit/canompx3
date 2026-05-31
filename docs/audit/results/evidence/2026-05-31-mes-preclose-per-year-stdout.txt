@@ -1,0 +1,38 @@
+
+=== H0 MFE/MAE SYMMETRY DIAGNOSTIC (K=0, read-only) ===
+IS boundary (HOLDOUT_SACRED_FROM): 2026-01-01
+Stop-multiplier grid: (0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1.0)
+N floor for verdict: 50
+
+--- MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8  [E1] ---
+    N_IS=219  N_OOS=8
+    median MFE/MAE ratio (IS, Howard symmetry): 0.4971
+    [existing 0.75 readout] IS mean pnl_r: 1.0=-0.0511  0.75=0.0433  delta=+0.0944
+    [existing 0.75 readout] OOS mean pnl_r: 1.0=-0.0664  0.75=0.0586  delta=+0.1250  power_tier=STATISTICALLY_USELESS
+    mean pnl_r by multiplier (IS): 0.5:+0.1149  0.6:+0.0938  0.7:+0.0548  0.75:+0.0433  0.8:+0.0175  0.9:-0.0098  1.0:-0.0511
+    winner-damage by multiplier (Howard §5.3.2): 0.5:11.8%  0.6:7.3%  0.7:5.5%  0.75:3.6%  0.8:3.6%  0.9:0.9%
+    stop-selectivity by multiplier (Howard §5.3.2): 0.5:89.3%  0.6:93.2%  0.7:94.8%  0.75:96.5%  0.8:96.5%  0.9:99.1%
+    per-year EV-delta @best-m (Howard §5.1 outlier check): 2019:-0.6789(n=2)  2020:+0.1151(n=41)  2021:+0.1905(n=21)  2022:+0.1595(n=63)  2023:+0.3182(n=11)  2024:+0.2137(n=24)  2025:+0.1809(n=57)
+    year-stability: CONSISTENT
+    VERDICT: PROCEED_H1_H3
+    tighter stop m=0.5 improves EV (+0.1149 > baseline -0.0511); H1/H3 LIVE. Measured mechanism: median MFE/MAE=0.497, winner-damage@0.75=3.6%, stop-selectivity@0.75=96.5%; year-stability=CONSISTENT.
+
+--- MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8  [E2] ---
+    N_IS=289  N_OOS=12
+    median MFE/MAE ratio (IS, Howard symmetry): 1.6251
+    [existing 0.75 readout] IS mean pnl_r: 1.0=0.1775  0.75=0.2421  delta=+0.0647
+    [existing 0.75 readout] OOS mean pnl_r: 1.0=0.0850  0.75=0.0524  delta=-0.0327  power_tier=STATISTICALLY_USELESS
+    mean pnl_r by multiplier (IS): 0.5:+0.2583  0.6:+0.2290  0.7:+0.2507  0.75:+0.2421  0.8:+0.2285  0.9:+0.2084  1.0:+0.1775
+    winner-damage by multiplier (Howard §5.3.2): 0.5:12.1%  0.6:10.4%  0.7:3.8%  0.75:2.7%  0.8:2.2%  0.9:0.5%
+    stop-selectivity by multiplier (Howard §5.3.2): 0.5:82.9%  0.6:84.9%  0.7:93.9%  0.75:95.5%  0.8:96.4%  0.9:99.1%
+    per-year EV-delta @best-m (Howard §5.1 outlier check): 2019:-0.6719(n=2)  2020:+0.0291(n=60)  2021:+0.0661(n=25)  2022:+0.0255(n=87)  2023:+0.2500(n=12)  2024:+0.1844(n=33)  2025:+0.1428(n=70)
+    year-stability: CONSISTENT
+    VERDICT: PROCEED_H1_H3
+    tighter stop m=0.5 improves EV (+0.2583 > baseline +0.1775); H1/H3 LIVE. Measured mechanism: median MFE/MAE=1.625, winner-damage@0.75=2.7%, stop-selectivity@0.75=95.5%; year-stability=CONSISTENT.
+
+--- MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8  [E3] ---
+    N_IS=0  N_OOS=0
+    VERDICT: INSUFFICIENT_N
+    no IS trades for this stratum (entry model may be absent on lane)
+
+Wrote per-stratum CSV: .claude/scratch/_t/mes_preclose_detail.csv
