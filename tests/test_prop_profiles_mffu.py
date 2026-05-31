@@ -16,10 +16,15 @@ from trading_app.prop_firm_policies import (
 from trading_app.prop_profiles import ACCOUNT_TIERS, get_firm_spec
 
 
-def test_existing_specs_unchanged_firm_specific_rules_defaults_none():
-    """The new optional field must not perturb any pre-existing spec."""
-    for firm in ("topstep", "mffu", "tradeify", "self_funded", "bulenox"):
+def test_non_mffu_specs_without_live_cap_rules_still_default_none():
+    """The new optional MFFU fields must not perturb unrelated specs."""
+    for firm in ("mffu", "tradeify", "self_funded", "bulenox"):
         assert get_firm_spec(firm).firm_specific_rules is None, firm
+
+
+def test_topstep_declares_live_account_cap_as_data():
+    """Topstep backs a live_funded policy, so its live-account cap is explicit data."""
+    assert get_firm_spec("topstep").firm_specific_rules == {"max_live_accounts": 1}
 
 
 def test_rapid_sim_funded_caps_match_verbatim():
