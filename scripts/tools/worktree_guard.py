@@ -82,6 +82,22 @@ LEASE_FILENAME = ".claude.worktree.lease.json"
 # determined.
 STALE_HEARTBEAT_SECONDS = 90
 
+# Cross-session heartbeat directory — written by `.claude/hooks/session-heartbeat.py`
+# (one `<session_id>.beat` file per live session, stamped on every tool call) and
+# read at startup by `_live_heartbeat_lines` in `.claude/hooks/session-start.py`.
+# We consult it here too: a fresh beat from a DIFFERENT session is a positive
+# liveness FACT that does not depend on the single lease sidecar's ppid. This is
+# the load-bearing Windows fix — `os.kill(ppid, 0)` / OpenProcess can momentarily
+# read a live peer's ppid as dead, which would let `acquire()` RECLAIM the single
+# lease (handing it session-to-session) instead of BLOCKing. A fresh peer beat
+# overrides that false-dead verdict so the block stands. Source of the writer's
+# constants: the two hook files above (this is the canonical READER for the gate).
+#
+# The directory lives under the git COMMON dir so every worktree of the repo
+# shares it; the live window matches the hooks' `_HEARTBEAT_LIVE_WINDOW_SECS`.
+HEARTBEAT_DIRNAME = ".claude-heartbeats"
+HEARTBEAT_LIVE_WINDOW_SECONDS = 10 * 60
+
 # Exit codes
 EXIT_OK = 0
 EXIT_BLOCKED = 2
@@ -90,6 +106,14 @@ EXIT_ERROR = 3
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _time_now() -> float:
+    """Wall-clock epoch seconds — wrapper so tests can monkeypatch liveness time
+    without touching ``datetime`` (heartbeat mtimes are epoch-based)."""
+    import time
+
+    return time.time()
 
 
 def _iso_age_seconds(iso: str) -> float | None:
@@ -348,13 +372,104 @@ def _same_session(existing: dict, session_id: str, pid: int) -> bool:
     return existing.get("pid") == pid
 
 
-def _peer_is_live(existing: dict) -> bool:
+def _git_common_dir(cwd: Path) -> Path | None:
+    """Resolve the repo's SHARED git dir from ``cwd`` (``--git-common-dir``).
+
+    Unlike ``resolve_git_dir`` (per-worktree), this resolves to the SAME path
+    for every worktree of the repo — the precondition for reading the shared
+    `.claude-heartbeats/` directory. Returns None on any error (callers treat
+    a missing common dir as "no heartbeat evidence", never as a hard failure).
+    """
+    rc, out = _run_git(["rev-parse", "--git-common-dir"], cwd)
+    if rc != 0 or not out:
+        return None
+    p = Path(out)
+    if not p.is_absolute():
+        p = (cwd / p).resolve()
+    return p
+
+
+def _fresh_peer_heartbeat(cwd: Path, exclude_session_id: str = "") -> bool:
+    """True iff a DIFFERENT live session has a fresh beat in this repo's tree.
+
+    Reads `<git-common-dir>/.claude-heartbeats/*.beat`. A beat counts as a live
+    peer when ALL hold:
+      - its `session_id` differs from ``exclude_session_id`` (never self-block),
+      - its `cwd` canonicalises to THIS worktree root (a beat from a sibling
+        worktree is sanctioned parallel work, not a same-tree collision),
+      - its file mtime is within ``HEARTBEAT_LIVE_WINDOW_SECONDS`` (older beats
+        are crashed/abandoned sessions).
+
+    Fail-CLOSED-to-safe means: any error → False (no heartbeat evidence). That is
+    the SAFE direction here because this function only ever STRENGTHENS the block
+    decision in ``_peer_is_live`` — a False return just falls back to the existing
+    ppid logic, it never forces a reclaim. Excluding our own session is essential:
+    a single live session beats constantly, and self-counting would false-block
+    every `/clear`-restart.
+    """
+    common = _git_common_dir(cwd)
+    if common is None:
+        return False
+    beat_dir = common / HEARTBEAT_DIRNAME
+    try:
+        if not beat_dir.is_dir():
+            return False
+        beat_files = list(beat_dir.glob("*.beat"))
+    except OSError:
+        return False
+
+    wt_root = resolve_worktree_root(cwd)
+    current_norm = str(wt_root).lower() if wt_root is not None else None
+
+    now = _time_now()
+    me = (exclude_session_id or "").strip()
+    for bf in beat_files:
+        try:
+            age = now - bf.stat().st_mtime
+        except OSError:
+            continue
+        # Reject clock-skew (future-dated beyond 60s) and beats outside the
+        # live window. Mirrors `_live_heartbeat_lines` in session-start.py.
+        if age < -60 or age > HEARTBEAT_LIVE_WINDOW_SECONDS:
+            continue
+        try:
+            beat = json.loads(bf.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, ValueError):
+            continue
+        if not isinstance(beat, dict):
+            continue
+        beat_sid = str(beat.get("session_id", "")).strip()
+        if beat_sid and me and beat_sid == me:
+            continue  # our own beat — not a peer
+        # Same-tree gate: only a beat in THIS worktree is a collision. A beat
+        # whose cwd canonicalises elsewhere is a sanctioned parallel worktree.
+        if current_norm is not None:
+            beat_cwd = str(beat.get("cwd", "")).strip()
+            try:
+                beat_norm = str(Path(beat_cwd).resolve()).lower() if beat_cwd else None
+            except (OSError, ValueError, RuntimeError):
+                beat_norm = beat_cwd.lower() if beat_cwd else None
+            if beat_norm != current_norm:
+                continue
+        return True  # a different session is beating in this tree, right now
+    return False
+
+
+def _peer_is_live(existing: dict, cwd: Path | None = None, exclude_session_id: str = "") -> bool:
     """True iff the existing lease is held by a still-live session.
 
-    Live = heartbeat fresh (< STALE_HEARTBEAT_SECONDS) AND recorded ppid alive.
-    A stale heartbeat OR a dead ppid means the holder is gone → reclaimable.
-    When the lease predates schema 2 (no ppid), fall back to heartbeat
-    freshness alone (conservative: a fresh legacy heartbeat still blocks).
+    Live = (recorded ppid alive) OR (a different session has a fresh beat in
+    this tree's `.claude-heartbeats/`). A stale heartbeat AND a dead ppid AND
+    no fresh peer beat means the holder is gone → reclaimable. When the lease
+    predates schema 2 (no ppid), fall back to heartbeat freshness alone
+    (conservative: a fresh legacy heartbeat still blocks).
+
+    The heartbeat-directory cross-check (``cwd`` provided) is the Windows fix:
+    ``os.kill``/OpenProcess can momentarily read a live peer's ppid as dead,
+    which without this would RECLAIM the single lease instead of blocking. A
+    fresh peer beat is an independent liveness FACT that keeps the block. When
+    ``cwd`` is None (legacy callers / tests), the heartbeat check is skipped and
+    behaviour is exactly the prior ppid-only logic — a pure superset.
     """
     ppid = existing.get("ppid")
     ppid_create_time = existing.get("ppid_create_time")  # schema 3+; None on older leases
@@ -372,14 +487,24 @@ def _peer_is_live(existing: dict) -> bool:
     if ppid is not None and _pid_is_alive(ppid, expected_create_time=ppid_create_time):
         return True
 
-    # ppid is dead (or absent). Now the heartbeat is the tiebreaker:
+    # ppid reads dead (or absent). Before falling back to the lease's own
+    # heartbeat timestamp, consult the shared `.claude-heartbeats/` directory:
+    # a fresh beat from a DIFFERENT session in this tree is an independent
+    # liveness FACT that the (unreliable on Windows) ppid probe just missed.
+    # This is what stops the single lease being reclaimed session-to-session
+    # while three terminals are genuinely live. Skipped when cwd is None
+    # (legacy callers / unit tests) — a pure superset of the prior logic.
+    if cwd is not None and _fresh_peer_heartbeat(cwd, exclude_session_id=exclude_session_id):
+        return True
+
+    # No fresh peer beat either. Now the lease's OWN heartbeat is the tiebreaker:
     #   - fresh heartbeat + no ppid  → legacy schema-1 lease; conservatively
     #     treat as live and block (we cannot prove the holder gone).
     #   - stale/unparseable heartbeat → holder is gone → reclaimable.
     hb = existing.get("iso_heartbeat") or existing.get("iso_started") or ""
     age = _iso_age_seconds(hb)
     if age is None or age >= STALE_HEARTBEAT_SECONDS:
-        return False  # ppid dead AND heartbeat stale → holder gone, reclaim
+        return False  # ppid dead AND heartbeat stale AND no peer beat → reclaim
     if ppid is None:
         return True  # legacy lease, fresh heartbeat, no ppid → block (cautious)
     return False  # ppid proven dead, even if heartbeat still fresh → reclaim
@@ -433,8 +558,10 @@ def acquire(
                 return "error", None, f"failed to refresh heartbeat: {exc}"
             return "refreshed", payload, f"refreshed lease for session {session_id or pid}"
 
-        # (b) Someone else's lease and it is LIVE → block.
-        if _peer_is_live(existing):
+        # (b) Someone else's lease and it is LIVE → block. Pass cwd + our own
+        # session_id so the heartbeat cross-check can see a fresh peer beat
+        # (Windows ppid-false-dead fix) while never counting our own beat.
+        if _peer_is_live(existing, cwd=cwd, exclude_session_id=session_id):
             peer_pid = existing.get("pid")
             peer_sid = existing.get("session_id")
             return (
@@ -567,7 +694,12 @@ def status(cwd: Path, pid: int | None = None) -> dict:
         "heartbeat_age_seconds": age_s,
         "sidecar_stale": sidecar_stale,
         "holder_ppid_alive": _pid_is_alive(holder_ppid) if holder_ppid is not None else None,
-        "peer_live": _peer_is_live(data),
+        # peer_live consults the heartbeat dir too (cwd passed) so --status
+        # reflects the real mutex truth even when the holder's ppid reads
+        # false-dead on Windows. No session excluded — status is an external
+        # observer, so any fresh same-tree beat counts as a live peer.
+        "peer_live": _peer_is_live(data, cwd=cwd),
+        "fresh_peer_heartbeat": _fresh_peer_heartbeat(cwd),
         "current_pid": pid,
         "current_is_holder": isinstance(holder_pid, int) and holder_pid == pid,
     }

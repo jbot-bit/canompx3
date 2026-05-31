@@ -23,7 +23,7 @@ from trading_app.derived_state import (
     get_git_head,
     validate_state_envelope,
 )
-from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM  # used at line 83
 from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

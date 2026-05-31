@@ -300,3 +300,129 @@ def test_schema3_ppid_create_time_written_on_windows(repo: Path) -> None:
     assert "ppid_create_time" in data, "ppid_create_time must be stored on Windows"
     assert isinstance(data["ppid_create_time"], int)
     assert data["ppid_create_time"] > 0
+
+
+# --------------------------------------------------------------------------- #
+# Heartbeat-marries-lease: a fresh peer BEAT overrides a false-dead ppid so the
+# single lease is BLOCKED, not reclaimed session-to-session. This is the Windows
+# concurrency-leak fix (3 live terminals slipping past the lease gate because
+# OpenProcess momentarily read the holder's ppid as dead).
+# --------------------------------------------------------------------------- #
+def _write_beat(repo: Path, session_id: str, *, cwd: Path | None = None, age_s: float = 0.0) -> Path:
+    """Stamp a `<session_id>.beat` into the repo's git-common-dir heartbeat dir,
+    mirroring `.claude/hooks/session-heartbeat.py`. `age_s` backdates the mtime."""
+    import time
+
+    common = wg._git_common_dir(repo)
+    assert common is not None
+    beat_dir = common / wg.HEARTBEAT_DIRNAME
+    beat_dir.mkdir(parents=True, exist_ok=True)
+    bf = beat_dir / f"{session_id}.beat"
+    bf.write_text(
+        json.dumps(
+            {
+                "session_id": session_id,
+                "cwd": str((cwd or repo).resolve()),
+                "branch": "main",
+                "pid": 4242,
+                "ts": time.time() - age_s,
+            }
+        ),
+        encoding="utf-8",
+    )
+    if age_s:
+        old = time.time() - age_s
+        os.utime(bf, (old, old))
+    return bf
+
+
+def test_fresh_peer_beat_blocks_reclaim_when_ppid_false_dead(repo: Path):
+    """THE FIX: holder ppid reads dead, but a DIFFERENT session is beating in
+    this tree right now → block, not reclaim. Without the heartbeat cross-check
+    this returned 'reclaimed' and three live sessions coexisted (the leak)."""
+    wg.acquire(repo, pid=99991, session_id="holderA", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead pid → ppid probe says holder gone
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    # A peer (NOT the caller) is heartbeating in this exact tree, seconds old.
+    _write_beat(repo, "holderA", cwd=repo, age_s=2.0)
+
+    status_str, payload, msg = wg.acquire(repo, pid=99992, session_id="callerB", ppid=os.getpid())
+    assert status_str == "blocked", msg
+    assert payload is not None and payload["session_id"] == "holderA"
+
+
+def test_self_beat_only_still_reclaims(repo: Path):
+    """No false self-block: if the ONLY fresh beat is the caller's own session,
+    a dead-ppid stale lease must still reclaim (the /clear-restart path)."""
+    wg.acquire(repo, pid=99991, session_id="oldSelf", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    # Only the CALLER's own beat exists — must be excluded, so reclaim proceeds.
+    _write_beat(repo, "freshSelf", cwd=repo, age_s=1.0)
+
+    status_str, _, msg = wg.acquire(repo, pid=99992, session_id="freshSelf", ppid=os.getpid())
+    assert status_str == "reclaimed", msg
+
+
+def test_stale_peer_beat_does_not_block_reclaim(repo: Path):
+    """A peer beat OLDER than the live window is a crashed session — it must not
+    keep the lease alive. Dead ppid + stale heartbeat + stale beat → reclaim."""
+    wg.acquire(repo, pid=99991, session_id="crashedPeer", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    _write_beat(repo, "crashedPeer", cwd=repo, age_s=wg.HEARTBEAT_LIVE_WINDOW_SECONDS + 120)
+
+    status_str, _, msg = wg.acquire(repo, pid=99992, session_id="newSession", ppid=os.getpid())
+    assert status_str == "reclaimed", msg
+
+
+def test_sibling_worktree_beat_does_not_block(repo: Path, tmp_path: Path):
+    """A fresh beat whose cwd is a DIFFERENT worktree is sanctioned parallel
+    work, not a same-tree collision — it must not block a reclaim here."""
+    wg.acquire(repo, pid=99991, session_id="holderC", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    sibling = tmp_path / "sibling-tree"
+    sibling.mkdir()
+    _write_beat(repo, "siblingPeer", cwd=sibling, age_s=2.0)  # fresh, but elsewhere
+
+    status_str, _, msg = wg.acquire(repo, pid=99992, session_id="newSession", ppid=os.getpid())
+    assert status_str == "reclaimed", msg
+
+
+def test_fresh_peer_beat_surfaces_in_status(repo: Path):
+    """status() must report peer_live=True from a fresh peer beat even when the
+    holder ppid reads dead — the exact signal that exposed the live leak."""
+    wg.acquire(repo, pid=99991, session_id="holderD", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead
+    ls.write_text(json.dumps(data), encoding="utf-8")
+    _write_beat(repo, "holderD", cwd=repo, age_s=2.0)
+
+    snap = wg.status(repo)
+    assert snap["fresh_peer_heartbeat"] is True
+    assert snap["peer_live"] is True

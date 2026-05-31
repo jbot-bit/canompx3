@@ -35,6 +35,33 @@ export PATH="$PATH:$_SAVED_PATH"
 echo "=== PRE-COMMIT CHECKS ==="
 echo ""
 
+# 0-serialize. Commit serialization — prevent two concurrent pre-commit runs in
+# the same repo from racing git's final ref write. The ~2-minute gate below
+# (CRG + ~172 drift checks + audit + tests) is long enough that a peer terminal
+# can advance HEAD mid-run, killing this commit with `cannot lock ref 'HEAD'`
+# and throwing away all the work. We acquire an O_EXCL lock for the duration of
+# THIS hook (released via trap on any exit) so the expensive window is serial.
+# `flock` is absent in this Git Bash, so the lock is a small Python helper.
+# Fail-open: if the helper errors it exits 0 (allow) — a serializer must never
+# wedge a legitimate commit. PRE_PYTHON is resolved later (line ~181); for this
+# early step use PATH python, which is sufficient to run the stdlib-only helper.
+COMMIT_LOCK_PY="python"
+[ -x "$SCRIPT_DIR/.venv/Scripts/python.exe" ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv/Scripts/python.exe"
+[ -x "$SCRIPT_DIR/.venv/bin/python" ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv/bin/python"
+[ -x "$SCRIPT_DIR/.venv-wsl/bin/python" ] && [ "$IS_WINDOWS_SHELL" -eq 0 ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv-wsl/bin/python"
+set +e
+"$COMMIT_LOCK_PY" "$SCRIPT_DIR/scripts/tools/commit_serialize.py" acquire
+COMMIT_LOCK_RC=$?
+set -e
+if [ "$COMMIT_LOCK_RC" -ne 0 ]; then
+    # Helper already printed a structured BLOCKED message to stderr.
+    exit 1
+fi
+# Release the serialization lock on ANY exit from here on (pass, fail, or signal)
+# so a crashed gate never wedges the next commit. The helper only removes a lock
+# it owns, so this is safe even if another step already exited non-zero.
+trap '"$COMMIT_LOCK_PY" "$SCRIPT_DIR/scripts/tools/commit_serialize.py" release >/dev/null 2>&1 || true' EXIT
+
 # 0c. Branch-flip guard — abort if HEAD branch != branch_at_start in session lock.
 # A mid-session `git checkout <other-branch>` would deposit this commit on the
 # wrong branch. Catch it here before any work is staged.
