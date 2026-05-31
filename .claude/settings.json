@@ -219,6 +219,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/session-heartbeat.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -364,6 +374,16 @@
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/memory-capture-advisory.py",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-compact-reinject.py",
+            "timeout": 15
           }
         ]
       }
