@@ -19,18 +19,16 @@
 - **Summary:** Live-pilot readiness rest pass on `main`: `topstep_50k_mnq_auto` is a 3-lane MNQ single-account pilot (`--copies 1`), NYSE_OPEN SR-alarm lane is paused/parked, funded telemetry maturity remains advisory, strict readiness is green, ProjectX preflight passed 14/14, phase 7 passed, targeted live readiness/preflight tests passed. Also fixed docs/audit drift: CLAUDE sample thresholds, TRADING_RULES `NYSE_PREOPEN`, `.claude/rules/large-file-reads.md` false old-session hit, regenerated `REPO_MAP.md`, and fixed Phase 3's REPO_MAP checker to call `gen_repo_map.py --check`. No live launch was started; `START_BOT.bat` remains `--demo`.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Unknown
 - **Date:** 2026-05-31
-- **Commit:** f9b2edab — Add auto-memory-capture 3-event hook loop (Scope A)
-- **Files changed:** 8 files
-  - `.claude/hooks/_memory_capture.py`
-  - `.claude/hooks/memory-capture-advisory.py`
-  - `.claude/hooks/memory-capture-sessionstart.py`
-  - `.claude/hooks/tests/test_memory_capture_advisory.py`
-  - `.claude/hooks/tests/test_memory_capture_sessionstart.py`
-  - `.claude/rules/auto-memory-capture.md`
-  - `.claude/settings.json`
-  - `ruff.toml`
+- **Commit:** 72efb375 — fix(audit): close live readiness doc drift
+- **Files changed:** 6 files
+  - `.claude/rules/large-file-reads.md`
+  - `CLAUDE.md`
+  - `HANDOFF.md`
+  - `REPO_MAP.md`
+  - `TRADING_RULES.md`
+  - `scripts/audits/phase_3_docs.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
