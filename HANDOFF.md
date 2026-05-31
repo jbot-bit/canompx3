@@ -17,6 +17,7 @@
 - **Tool:** Codex
 - **Date:** 2026-05-31
 - **Summary:** Live-pilot readiness rest pass on `main`: `topstep_50k_mnq_auto` is a 3-lane MNQ single-account pilot (`--copies 1`), NYSE_OPEN SR-alarm lane is paused/parked, funded telemetry maturity remains advisory, strict readiness is green, ProjectX preflight passed 14/14, phase 7 passed, targeted live readiness/preflight tests passed. Also fixed docs/audit drift: CLAUDE sample thresholds, TRADING_RULES `NYSE_PREOPEN`, `.claude/rules/large-file-reads.md` false old-session hit, regenerated `REPO_MAP.md`, and fixed Phase 3's REPO_MAP checker to call `gen_repo_map.py --check`. No live launch was started; `START_BOT.bat` remains `--demo`.
+- **Operator launcher:** Added `START_LIVE_PILOT.bat` plus `scripts/tools/start_topstep_live_pilot.py` so the human-facing live-pilot path is one Windows entrypoint. It pins `topstep_50k_mnq_auto` / `MNQ` / `--copies 1`, refreshes C11/C12, runs strict readiness and live preflight, then calls the canonical live runner. It does **not** use `--auto-confirm`; the canonical `CONFIRM` prompt remains the final capital gate.
 
 ## Last Session
 - **Tool:** Claude Code

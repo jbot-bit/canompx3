@@ -14,10 +14,19 @@ Status: NO-GO until live preflight is green with no blocking strict readiness wa
 
 ## Startup Gate
 
-Run these before any live start:
+Primary operator entrypoint on Windows:
+
+```bat
+START_LIVE_PILOT.bat
+```
+
+That launcher pins `topstep_50k_mnq_auto`, `MNQ`, and `--copies 1`; refreshes C11/C12 control state; runs strict readiness; runs the live-session preflight; and only then hands off to the canonical live runner. The final runner still requires typing `CONFIRM` before real-money order routing arms.
+
+Underlying gates, for audit/debug:
 
 ```bash
 git status --short --branch --ahead-behind
+python scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto
 python scripts/tools/live_readiness_report.py --profile topstep_50k_mnq_auto --copies 1 --strict-zero-warn
 python scripts/tools/project_pulse.py --fast --format json
 python scripts/audits/run_all.py --phase 7
