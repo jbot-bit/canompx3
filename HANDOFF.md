@@ -15,9 +15,10 @@
 
 ## Current Codex Follow-up
 - **Tool:** Codex
-- **Date:** 2026-05-31
-- **Summary:** Live-pilot readiness rest pass on `main`: `topstep_50k_mnq_auto` is a 3-lane MNQ single-account pilot (`--copies 1`), NYSE_OPEN SR-alarm lane is paused/parked, funded telemetry maturity remains advisory, strict readiness is green, ProjectX preflight passed 14/14, phase 7 passed, targeted live readiness/preflight tests passed. Also fixed docs/audit drift: CLAUDE sample thresholds, TRADING_RULES `NYSE_PREOPEN`, `.claude/rules/large-file-reads.md` false old-session hit, regenerated `REPO_MAP.md`, and fixed Phase 3's REPO_MAP checker to call `gen_repo_map.py --check`. No live launch was started; `START_BOT.bat` remains `--demo`.
-- **Operator launcher:** Added `START_LIVE_PILOT.bat` plus `scripts/tools/start_topstep_live_pilot.py` so the human-facing live-pilot path is one Windows entrypoint. It pins `topstep_50k_mnq_auto` / `MNQ` / `--copies 1`, refreshes C11/C12, runs strict readiness and live preflight, then calls the canonical live runner. It does **not** use `--auto-confirm`; the canonical `CONFIRM` prompt remains the final capital gate.
+- **Date:** 2026-06-01
+- **Summary:** Implemented the peer-parity EV proof-pack work on isolated branch `codex/ev-proof-pack-harness`: EV-1 bootstrap health artifact CLI (`scripts/tools/bootstrap_health_proof.py`), EV-2 `live_readiness_report.py` profile proof-pack schema/markdown section, and EV-3 bounded benchmark harness (`scripts/tools/bounded_benchmark_harness.py`). Durable artifacts are under `docs/audit/results/2026-06-01-*`.
+- **Runtime truth:** Current worktree preflight is not green: `codex-wsl` expected interpreter `.venv-wsl/bin/python` is missing, the tree is dirty before commit, and fast pulse reports 3 broken items. `live_readiness_report --strict-zero-warn` exits nonzero because current Criterion 11/12 evidence is not green. These are recorded in the committed proof JSONs instead of hidden.
+- **Verification:** `python -m pytest tests/test_tools/test_session_preflight.py tests/test_tools/test_project_pulse.py tests/test_tools/test_bootstrap_health_proof.py tests/test_tools/test_bounded_benchmark_harness.py tests/test_tools/test_live_readiness_report.py -q` passed 150 tests. `ruff check ... --quiet` and `git diff --check` passed.
 
 ## Last Session
 - **Tool:** Claude Code
