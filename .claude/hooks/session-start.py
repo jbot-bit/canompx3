@@ -1338,6 +1338,101 @@ def _worktree_lease_lines(session_id: str = "") -> tuple[list[str], bool]:
     return [], False  # skipped / error -> fail-open silently
 
 
+# MCP server name (as Claude addresses it) -> source file under scripts/tools/.
+# An MCP server loads its code ONCE at process start; editing+committing the file
+# does not take effect until the server restarts. We auto-detect that drift so
+# the operator never has to remember to restart after an MCP code change.
+_MCP_SERVER_FILES: dict[str, str] = {
+    "research-catalog": "scripts/tools/research_catalog_mcp_server.py",
+    "repo-state": "scripts/tools/repo_state_mcp_server.py",
+    "strategy-lab": "scripts/tools/strategy_lab_mcp_server.py",
+    "gold-db": "trading_app/mcp_server.py",
+}
+
+
+def _stale_mcp_servers(states: list[tuple[str, datetime | None, datetime | None]]) -> list[str]:
+    """Pure decision: given (name, process_started, code_committed) triples, return
+    the names whose committed code is NEWER than the running process — i.e. the
+    live server is serving stale code and needs a restart.
+
+    Fail-open per row: a missing process start (server not running) or an
+    unresolvable commit time is never flagged (None -> not stale).
+    """
+    stale: list[str] = []
+    for name, started, committed in states:
+        if started is None or committed is None:
+            continue
+        if committed > started:
+            stale.append(name)
+    return stale
+
+
+def _collect_mcp_server_states() -> list[tuple[str, datetime | None, datetime | None]]:  # pragma: no cover - OS/git boundary
+    """Gather (name, process_started, code_committed) for each known MCP server.
+
+    process_started: from the stale-process reaper's process enumeration (it
+    already lists MCP servers with an aware-UTC ``started``); None if not running.
+    code_committed: the file's last git commit time (aware UTC); None if git or
+    the file is unavailable. Uses committed time (not working-tree mtime) so a
+    dirty, uncommitted edit does not nag before it is even committed.
+    """
+    import importlib.util
+
+    reaper_path = PROJECT_ROOT / "scripts" / "tools" / "reap_stale_claude_processes.py"
+    spec = importlib.util.spec_from_file_location("_reaper_for_stale_mcp", reaper_path)
+    if spec is None or spec.loader is None:
+        return []
+    reaper = importlib.util.module_from_spec(spec)
+    # Register BEFORE exec so @dataclass(frozen=True) can resolve cls.__module__
+    # via sys.modules (omitting this makes dataclasses crash with NoneType.__dict__).
+    sys.modules["_reaper_for_stale_mcp"] = reaper
+    spec.loader.exec_module(reaper)
+    procs = reaper._enumerate_processes()
+
+    states: list[tuple[str, datetime | None, datetime | None]] = []
+    for name, rel in _MCP_SERVER_FILES.items():
+        stem = Path(rel).stem.lower()
+        started = None
+        for p in procs:
+            if stem in p.cmdline.lower():
+                started = p.started
+                break
+        committed = None
+        try:
+            r = subprocess.run(
+                ["git", "log", "-1", "--format=%cI", "--", rel],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                cwd=str(PROJECT_ROOT),
+            )
+            iso = r.stdout.strip()
+            if r.returncode == 0 and iso:
+                committed = datetime.fromisoformat(iso).astimezone(UTC)
+        except BaseException:
+            committed = None
+        states.append((name, started, committed))
+    return states
+
+
+def _stale_mcp_server_lines() -> list[str]:
+    """Warn (fail-open) when a running MCP server's committed code is newer than
+    its process — the "I edited the MCP but it didn't take effect" footgun. One
+    line per stale server with the restart cue. [] on any error or none stale.
+    """
+    try:
+        stale = _stale_mcp_servers(_collect_mcp_server_states())
+        lines: list[str] = []
+        for name in stale:
+            lines.append(
+                f"  WARNING: `{name}` MCP code changed since the running server loaded - "
+                "restart it to pick up the new code (its tools serve stale code until then)."
+            )
+        return lines
+    except BaseException:  # pragma: no cover - hook fallback path
+        return []
+
+
 def _stale_process_reaper_lines() -> list[str]:
     """Run the stale-process reaper in DRY-RUN and surface its summary line.
 
@@ -1475,6 +1570,7 @@ def main() -> None:
         lines.extend(_crg_context_lines())
         lines.extend(_literature_corpus_lines())
         lines.extend(_main_ci_status_lines())
+        lines.extend(_stale_mcp_server_lines())
         lines.extend(_handoff_next_step_line())
         if session_type == "startup":
             lines.extend(_stale_process_reaper_lines())
