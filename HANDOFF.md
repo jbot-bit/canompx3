@@ -18,14 +18,19 @@
 - **Date:** 2026-05-31
 - **Summary:** Live-pilot readiness rest pass on `main`: `topstep_50k_mnq_auto` is a 3-lane MNQ single-account pilot (`--copies 1`), NYSE_OPEN SR-alarm lane is paused/parked, funded telemetry maturity remains advisory, strict readiness is green, ProjectX preflight passed 14/14, phase 7 passed, targeted live readiness/preflight tests passed. Also fixed docs/audit drift: CLAUDE sample thresholds, TRADING_RULES `NYSE_PREOPEN`, `.claude/rules/large-file-reads.md` false old-session hit, regenerated `REPO_MAP.md`, and fixed Phase 3's REPO_MAP checker to call `gen_repo_map.py --check`. No live launch was started; `START_BOT.bat` remains `--demo`.
 
-## Last Session
-- **Tool:** Claude Code
+## Current Codex Research Follow-up
+- **Tool:** Codex
 - **Date:** 2026-05-31
-- **Commit:** 2408e56d — docs: holdout cut invariant, validation method is the pre-committed choice (Criterion 8 table); CPCV marked DOCTRINE-ONLY. Docs-only, no thresholds/code/holdout-date changes.
+- **Summary:** Completed the previously promised Phase 1 peer capability parity map in `docs/audit/results/2026-05-31-peer-capability-parity-map.md`. Fresh official peer docs were checked for LEAN, NautilusTrader, Freqtrade, VectorBT, and Backtrader. Finding: canompx3 is strongest on anti-bias/research doctrine but weaker on proof packaging and operator surfaces. Next worthwhile work is EV-2 profile proof-pack hardening, EV-1 bootstrap health proof artifact, and EV-3 bounded benchmark harness. No trading or live-launch authorization was made.
+
+## Last Session
+- **Tool:** Unknown
+- **Date:** 2026-05-31
+- **Commit:** 94da137c — docs(audit): add peer capability parity map
 - **Files changed:** 3 files
-  - `.claude/rules/backtesting-methodology.md`
   - `HANDOFF.md`
-  - `docs/institutional/pre_registered_criteria.md`
+  - `docs/audit/results/2026-05-02-competitive-landscape-canompx3.md`
+  - `docs/audit/results/2026-05-31-peer-capability-parity-map.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
