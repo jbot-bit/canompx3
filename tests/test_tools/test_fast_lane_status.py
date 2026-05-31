@@ -52,6 +52,27 @@ def test_collect_active_preregs_skips_template_placeholder(tmp_path: Path) -> No
     assert "MNQ_REAL_E1_RR1.0" in out
 
 
+def test_collect_active_preregs_reads_only_scope_strategy_id(tmp_path: Path) -> None:
+    paths = _fake_chain(tmp_path)
+    (paths["hyp"] / "quoted.yaml").write_text(
+        "\n".join(
+            [
+                "metadata:",
+                "  strategy_id: WRONG_METADATA_ID",
+                "scope:",
+                "  instrument: MNQ",
+                "  strategy_id: 'MNQ_SCOPE_ID'",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    out = collect_active_preregs(paths["hyp"])
+
+    assert "MNQ_SCOPE_ID" in out
+    assert "WRONG_METADATA_ID" not in out
+
+
 def test_collect_drafts_pairs_draft_with_grounded_sibling(tmp_path: Path) -> None:
     paths = _fake_chain(tmp_path)
     draft = paths["drafts"] / "2026-05-19-foo.draft.yaml"
@@ -209,6 +230,35 @@ def test_build_status_entries_active_fast_lane_prereg_has_fast_lane_lineage(tmp_
 
     assert len(entries) == 1
     assert entries[0].current_stage == "ACTIVE_PREREG"
+    assert entries[0].lineage_class == "FAST_LANE"
+
+
+def test_build_status_entries_fast_lane_lineage_uses_metadata_not_filename(tmp_path: Path) -> None:
+    paths = _fake_chain(tmp_path)
+    (paths["hyp"] / "2026-05-18-mnq-example.yaml").write_text(
+        "\n".join(
+            [
+                "metadata:",
+                "  template_version: 'fast_lane_v5.1'",
+                "scope:",
+                "  strategy_id: MNQ_METADATA_FAST_LANE",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    entries = build_status_entries(
+        hypotheses_dir=paths["hyp"],
+        drafts_dir=paths["drafts"],
+        results_dir=paths["results"],
+        runtime_dir=paths["runtime"],
+        queue_cache=paths["runtime"] / "promote_queue.yaml",
+        journal_path=paths["runtime"] / "cherry_pick_journal.yaml",
+        today=date(2026, 5, 22),
+    )
+
+    assert len(entries) == 1
+    assert entries[0].strategy_id == "MNQ_METADATA_FAST_LANE"
     assert entries[0].lineage_class == "FAST_LANE"
 
 
