@@ -83,4 +83,38 @@ Orphan sweep: **848 active rows scanned, 0 integrity violations.**
 - Cross-check vs `lane_allocation.json`: all 3 active lanes bind the **base sm100** `strategy_id`; **0** active lanes carry `_S075`; the 264 `_S075` rows are all in the **paused** pool. No double-routing.
 - Classification: **WORKS** (not a defect). Decision: no action. *Discipline note:* the raw 2-rows-per-lane reading would mis-classify as a duplicate-routing bug without the family_hash mechanism check — logged as a recurrence-guard candidate for Phase 4 (an active-lane → exactly-one-deployed-variant assertion would make this mechanically self-evident).
 
-_(Phase 2+ findings appended below.)_
+### Phase 2 — Behavioral correctness gap report ("does it actually work")
+
+**Method:** per feature area — *what observable output proves it works, and does a test assert it?* The ABSENCE of such a test is the finding. Highest-capital-risk gaps get a behavioral test (RED→GREEN; capital paths xfail-pinned, fix gated).
+
+**Existing behavioral spine (verified present & strong):**
+- `tests/test_integration/test_backtest_live_convergence.py` (549 L) — asserts backtest (`outcome_builder.compute_single_outcome` E2) == live (`ExecutionEngine`) produce BYTE-IDENTICAL E2 entry ts+price on a deterministic DST-spanning fixture corpus. Grounded in Chan 2013 Ch1 p4. Covers **entry-timing** correctness. Class: WORKS.
+- `scripts/tests/canary_suite.py` (649 L) — contamination-trap suite (every guard catches its trap). Class: WORKS.
+
+**Coverage-gap map** (capital-path module → observable output → is it asserted?):
+| Module | Observable output that proves correctness | Behavioral test asserting it? |
+|---|---|---|
+| `outcome_builder`/`execution_engine` (E2 entry) | backtest entry == live entry (ts+price) | ✅ `test_backtest_live_convergence` |
+| `account_survival` | sim survival/DD/MLL/contract-cap modelling | ✅ `test_account_survival.py` |
+| `prop_portfolio.build_book` (prop sizing) | prop contract cap binds prop book | ✅ `test_contract_cap` (tradeify) |
+| **`prop_portfolio.build_book` (self_funded sizing)** | **self_funded book bound by RISK, not prop cap** | ❌ **GAP → F2-A (defect, test added)** |
+| **`rebalance_lanes --strict-live-clean`** | **non-CONTINUE SR status → PAUSE before live alloc** | ❌ **GAP → F2-B (no defect, coverage gap)** |
+| `lane_allocator` | rebalance/feature-cache correctness | partial (7 test refs; no strict-live behavioral assert) |
+
+**F2-A · `build_book` binds a `self_funded` book on the prop-style contract cap · capital-path · HALF-WORKS.**
+- **Probe set:** (1) does `build_book` have a firm branch on `contract_budget`? (2) is there a live `self_funded` profile? (3) does building its book hit the prop micro-cap? (4) does any existing test assert the doctrine-correct behavior?
+- **Evidence (execution-traced):**
+  - `prop_portfolio.py:559` — `contract_budget = tier.max_contracts_micro` **unconditional**; the "Contract cap reached (N/{budget} micro)" exclusion (line ~584) fires regardless of `firm`. No `self_funded` branch (grep: only firm logic is `banned_instruments`).
+  - Live profile `self_funded_tradovate` (firm=self_funded, $30k) → tier `max_contracts_micro=12`.
+  - Reproduced: `select_for_profile(AccountProfile('sf','self_funded',30000,max_slots=30), 30 strats)` → **total_contracts=12, 18× "Contract cap reached (12/12 micro)"**. The prop cap bound a personal-capital book.
+  - No existing test asserts self_funded contract-cap behavior (`test_contract_cap` uses `tradeify`; self_funded tests assert slot/cognitive caps only).
+- **Doctrine violated:** `.claude/rules/self-funded-sizing-doctrine.md` — "prop caps NEVER bound personal-capital earnings; self_funded `max_contracts_*` is a margin/sanity guard, not an earnings ceiling." The marker drift-guard (`check_prop_caps_do_not_leak_into_self_funded`) is marker-presence only; the doctrine itself states the structural book-builder branch is an unbuilt "Tier-B follow-up."
+- **Decision: Tier-B — SURFACED, NOT FIXED.** Fix = a firm-aware sizing branch in `build_book` (capital-allocation path; adversarial-audit gated; needs operator sign-off). **Deliverable:** behavioral test `test_self_funded_book_not_bound_by_prop_contract_cap` added as `xfail(strict=True)` — it PINS the gap as an executable assertion and auto-fails (XPASS) the moment the fix lands, forcing conversion to a live regression guard. Verified: `48 passed, 1 xfailed`.
+- *Capital-impact nuance:* latent — binds only when a self_funded book has >12 deployable lanes; the deployed `topstep_50k_mnq_auto` profile (3 lanes) is unaffected. But `self_funded_tradovate` exists and would be throttled.
+
+**F2-B · `--strict-live-clean` live-safety gate has no behavioral test · capital-path · coverage-gap (no defect found).**
+- **Probe:** does the strict gate (force non-`CONTINUE` SR-status strategies to PAUSE before fresh live allocation, `rebalance_lanes.py:128-138`) have a test asserting that behavior?
+- **Evidence:** zero test files reference `strict_live_clean`/`strict-live-clean`. Traced the code: strict list is correctly threaded into both `apply_*_gate` (line 144) and `build_allocation` (line 156) via the reassigned `scoring_input` — **no logic hole found**. The gate behaves correctly; it is simply **unasserted**.
+- **Classification: WORKS (untested).** Decision: log as a coverage gap → Phase 4 recurrence candidate (this is a live-safety control on a recent-incident path; a behavioral test belongs here but writing it requires SR-scoring fixtures — queued, not a defect). No fix needed.
+
+_(Phase 3+ findings appended below.)_

@@ -138,6 +138,45 @@ class TestSelectForProfile:
         book = select_for_profile(profile, strats)
         assert book.total_contracts <= 40
 
+    @pytest.mark.xfail(
+        reason="KNOWN CAPITAL DEFECT (HALF-WORKS) surfaced by 2026-05-31 correctness audit "
+        "finding F2-A. build_book() has NO firm branch: it binds a self_funded book on "
+        "tier.max_contracts_micro (prop-style earnings ceiling) instead of on risk. This "
+        "violates .claude/rules/self-funded-sizing-doctrine.md ('prop caps NEVER bound "
+        "personal-capital earnings'). The structural fix is Tier-B (capital-allocation path, "
+        "adversarial-audit gated) and is NOT applied here. This xfail PINS the gap: when the "
+        "firm branch lands, remove the marker and this becomes a live regression guard. "
+        "Ledger: docs/audit/results/2026-05-31-full-system-correctness-audit.md F2-A.",
+        strict=True,
+    )
+    def test_self_funded_book_not_bound_by_prop_contract_cap(self):
+        """A self_funded book must be bounded by RISK (DD/slots), never by the prop-style
+        tier.max_contracts_micro earnings ceiling. self_funded_tradovate's tier carries
+        max_contracts_micro=12 as a *margin/sanity* guard, not an earnings cap. With ample
+        slots and many positive-EV candidates, the book should NOT be throttled to exactly
+        the prop micro-cap with 'Contract cap reached (N/12 micro)' exclusions.
+
+        CURRENT (leaky) behavior: total_contracts == 12, ~18 'Contract cap reached' exclusions.
+        DOCTRINE-CORRECT behavior (asserted here, currently xfail): the prop micro-cap does
+        NOT appear as the binding earnings constraint for a self_funded profile.
+        """
+        profile = AccountProfile("sf_test", "self_funded", 30_000, 1, 1.0, max_slots=30)
+        strats = [
+            _make_strategy(strategy_id=f"s{i}", instrument="MNQ", orb_label=f"SESSION_{i}")
+            for i in range(30)
+        ]
+        book = select_for_profile(profile, strats)
+        prop_cap_exclusions = [
+            e for e in book.excluded if "contract cap reached" in e.reason.lower()
+        ]
+        # Doctrine: a prop-style contract cap must never be the binding earnings constraint
+        # on a self_funded book. (xfail until build_book grows a firm-aware sizing branch.)
+        assert not prop_cap_exclusions, (
+            f"self_funded book throttled by prop micro-cap: "
+            f"{len(prop_cap_exclusions)} 'Contract cap reached' exclusions, "
+            f"total_contracts={book.total_contracts}"
+        )
+
     def test_empty_strategies(self):
         profile = AccountProfile("test", "topstep", 50_000)
         book = select_for_profile(profile, [])
