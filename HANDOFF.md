@@ -21,11 +21,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** eb84c46d — feat(skills): absorb superpowers techniques into project-native form
+- **Commit:** fd253018 — @ docs: clarify holdout cut is invariant, method is the pre-committed choice
 - **Files changed:** 3 files
-  - `.claude/rules/condition-based-waiting.md`
-  - `.claude/rules/plugin-routing.md`
-  - `.claude/skills/quant-debug/SKILL.md`
+  - `.claude/rules/backtesting-methodology.md`
+  - `HANDOFF.md`
+  - `docs/institutional/pre_registered_criteria.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

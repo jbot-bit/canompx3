@@ -175,6 +175,24 @@ Strategies with WFE > 0.95 on small OOS samples should be flagged as LEAKAGE_SUS
 
 **Rule:** For discovery runs using `--holdout-date 2026-01-01`, the held-out 2026 period must show positive ExpR and OOS ExpR ≥ 0.40 × IS ExpR (allowing for typical degradation).
 
+### Holdout cut is invariant; validation method is chosen by data shape (pre-registered) — added 2026-05-31, binding
+
+The sacred boundary `HOLDOUT_SACRED_FROM = 2026-01-01` (`trading_app.holdout_policy`) is **immutable for ALL discovery and selection** — for new strategies exactly as for grandfathered ones. A new idea is **NEVER** assigned a later holdout cut to obtain more OOS trades; that is Mode B, rescinded per Amendment 2.7. **Moving or re-choosing the holdout cut after seeing results is banned** (Chan 2013 Ch1 p.4 — `docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md`). The holdout cut is not a free parameter.
+
+Instead, every new pre-reg declares — **before any run** — which validation method gates its research status. The cut is fixed; the *method* is the pre-committed choice, selected by data shape:
+
+| Method | When to use | Status ceiling | Authority |
+|--------|-------------|----------------|-----------|
+| **(a) Forward-OOS** (`trading_day ≥ 2026-01-01`) | The deployment gate. Underpowered until ~2027+ on thin lanes per RULE 3.3. | **Required for deployment**; never demoted | Criterion 8; Amendment 2.7 |
+| **(b) DSR-fixed-universe** | New pre-reg with a strong pre-2026 IS edge; want research validation NOW on full clean history, no calendar wait. `criterion_5` block mandatory (reference_family, pre_2026_only, failures_and_siblings_included, effective_trials). | `DSR_FIXED_UNIV_CLEAR` — research-validation only, **never "OOS-clean," not deployment proof** | Criterion 5; Amendment 3.5 |
+| **(c) EHR pseudo-OOS** (`EARLY_HOLDOUT_BOUNDARY = 2025-01-01`) | Want an OOS-shaped robustness check without consuming 2026. IS = pre-2025; 2025 = pseudo-OOS measurement window. | `PSEUDO_OOS_ROBUSTNESS` → `RESEARCH_PROVISIONAL` ceiling; **never deployable on EHR evidence alone** | `trading_app.holdout_policy` EHR §; EHR PASS 2 plan (2026-05-17) |
+| **(d) CPCV** (Combinatorial Purged Cross-Validation) | OOS < ~20% of sample (the young-holdout case) — multi-path purged/embargoed backtest from full history. **SANCTIONED but DOCTRINE-ONLY / NOT-YET-IMPLEMENTED** — no code, no declared schema yet. A pre-reg may NOT cite CPCV as a gate until it is built. | Research-validation only (same tier as DSR), once implemented | RULE 3.3 (`backtesting-methodology.md`); AFML 2018 Ch 12 §12.4 |
+
+**Load-bearing distinctions:**
+- **DSR / EHR / CPCV are research-validation paths, NOT deployment proof.** They answer "is this edge real given the multiple-testing burden / is it robust out-of-window?" — which unblocks research ranking immediately — but they do **not** authorise capital. **Forward-OOS (method a) remains REQUIRED for deployment and is never demoted** (Amendment 3.5 §3).
+- A candidate may simultaneously be `DSR_FIXED_UNIV_CLEAR` and `FORWARD_OOS_PENDING`. Never describe such a candidate as "OOS-clean."
+- Choosing the method after seeing results — or switching methods to rescue a failed verdict — is the banned post-hoc move (selection bias, `literature/lopez_de_prado_bailey_2018_false_strategy.md`).
+
 ---
 
 ## Criterion 9 — Era stability (no dead era)
