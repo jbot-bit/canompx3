@@ -11236,6 +11236,11 @@ def check_fast_lane_promote_orphans() -> list[str]:
             violations.append(
                 f"FAST_LANE PROMOTE in ERROR state: {e.strategy_id} -> {e.error_reason} (file: {e.result_md})"
             )
+        if e.pooling_artifact and e.revocation_sidecar is None:
+            violations.append(
+                "FAST_LANE PROMOTE pooling artifact lacks revocation sidecar: "
+                f"{e.strategy_id} status={e.status} (file: {e.result_md})"
+            )
 
     if QUEUE_CACHE.exists():
         diff_lines = diff_against_cache(entries, QUEUE_CACHE)
