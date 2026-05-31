@@ -948,6 +948,8 @@ def test_dashboard_live_pilot_copy_is_explicit_and_professional():
     html = (bot_dashboard.PROJECT_ROOT / "trading_app" / "live" / "bot_dashboard.html").read_text(encoding="utf-8")
 
     assert "HOLD TO GO LIVE" in html
+    assert "pilot-contract" in html
+    assert "Topstep MNQ &middot; one protected primary account" in html
     assert "Topstep MNQ &middot; 1 copy &middot; real orders &middot; gates run first" in html
     assert "Live pilot: <b>MNQ</b> &middot; 3 lanes &middot; 1 copy &middot; NYSE: parked" in html
     assert "Combine" not in html

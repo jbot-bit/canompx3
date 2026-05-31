@@ -80,11 +80,11 @@
      Source: data/bot_planned_launch.json (canonical). When the bot is running, bot_state.json takes
      over and this banner hides. Fail-visible: unknown/stale states are explicitly labelled. */
   .planned-launch-banner {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 4px 10px; border-radius: 6px;
+    display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 5px 10px; border-radius: 6px;
     font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
     border: 1px solid var(--border); background: var(--surface); color: var(--muted);
-    max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 620px; overflow: hidden; text-overflow: ellipsis; white-space: normal;
   }
   .planned-launch-banner.signal { border-color: rgba(34,197,94,0.35); background: var(--green-soft); color: var(--green); }
   .planned-launch-banner.demo   { border-color: rgba(59,130,246,0.35); background: var(--blue-soft);  color: var(--blue);  }
@@ -92,6 +92,8 @@
   .planned-launch-banner.stale,
   .planned-launch-banner.unknown { border-color: rgba(255,193,7,0.35); background: var(--yellow-soft); color: var(--yellow); font-weight: 700; }
   .planned-launch-banner b { font-weight: 800; letter-spacing: 0.06em; }
+  .planned-launch-banner .plb-pilot { color: var(--text); border-left: 1px solid currentColor; padding-left: 10px; opacity: 0.92; }
+  .planned-launch-banner .plb-source { opacity: 0.66; }
   .topbar-spacer { flex: 1; }
   .topbar-btn {
     padding: 5px 12px; border-radius: var(--r); border: 1px solid var(--border);
@@ -210,9 +212,9 @@
   .lane-time { font-family: var(--mono); color: var(--cyan); font-weight: 600; font-size: 11px; }
   .lane-title { font-weight: 600; font-size: 11px; }
   .lane-subtitle { color: var(--muted); font-size: 10px; }
-  .actions-row { display: flex; gap: 5px; margin-top: 10px; }
+  .actions-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
   .pf-btn {
-    flex: 1; border-radius: var(--r); padding: 8px 6px; border: 1px solid var(--border);
+    min-height: 52px; border-radius: var(--r); padding: 8px 10px; border: 1px solid var(--border);
     cursor: pointer; font-weight: 700; font-size: 11px;
     background: var(--surface); color: var(--text); transition: all 0.12s;
     display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.15;
@@ -224,11 +226,20 @@
   .pf-btn.live { color: var(--red); border-color: rgba(255,92,92,0.20); }
   .pf-btn.stop { color: #fff; background: rgba(185,28,28,0.5); border-color: rgba(255,92,92,0.3); text-transform: uppercase; letter-spacing: 0.04em; }
   .pf-btn:disabled { cursor: not-allowed; opacity: 0.3; }
-  .mode-legend { margin-top: 8px; padding: 6px 8px; background: rgba(0,0,0,0.15); border-radius: 6px; font-size: 10px; color: var(--dim); line-height: 1.5; }
+  .mode-legend { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); font-size: 10px; color: var(--dim); line-height: 1.5; }
   .mode-legend b { color: var(--text); font-weight: 600; }
   .mode-legend .lg-signal { color: var(--green); }
   .mode-legend .lg-demo { color: var(--blue); }
   .mode-legend .lg-live { color: var(--red); }
+  .pilot-contract { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .pilot-contract-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .pilot-label { color: var(--text); font-size: 11px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase; }
+  .pilot-state { color: var(--yellow); font-size: 10px; font-family: var(--mono); }
+  .pilot-contract-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .pilot-contract-grid span { min-width: 0; border-left: 2px solid var(--border); padding-left: 8px; }
+  .pilot-contract-grid b { display: block; color: var(--text); font: 700 12px/1.2 var(--mono); }
+  .pilot-contract-grid em { display: block; margin-top: 2px; color: var(--dim); font-size: 9px; font-style: normal; letter-spacing: 0.06em; text-transform: uppercase; }
+  .pilot-exclusion { margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.35; }
   .live-gate { margin-top: 6px; }
   .live-gate label { display: block; font-size: 10px; color: var(--dim); margin-bottom: 3px; }
   .live-gate input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text); font-size: 11px; }
@@ -496,19 +507,29 @@
   #chart-fb-start:disabled { opacity: 0.5; cursor: not-allowed; animation: none; }
 
   /* ── GO LIVE hold-to-confirm button ──── */
-  .go-live-wrap { position: relative; display: inline-block; margin-top: 8px; }
+  .go-live-wrap { position: relative; display: block; margin-top: 12px; }
+  .go-live-copy {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-bottom: 7px; color: var(--muted); font-size: 10px; line-height: 1.2;
+  }
+  .go-live-copy strong {
+    color: var(--red); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  }
   .go-live-btn {
     position: relative; z-index: 1;
-    background: linear-gradient(180deg, #ff3838 0%, #c40000 100%);
-    color: #fff; border: 2px solid #ff5c5c;
-    border-radius: 8px; padding: 14px 28px;
+    width: 100%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, rgba(239,68,68,0.94) 0%, rgba(153,27,27,0.96) 100%);
+    color: #fff; border: 1px solid rgba(248,113,113,0.72);
+    border-radius: 8px; padding: 14px 20px;
     font: 800 13px/1 var(--mono); letter-spacing: 0.06em;
     cursor: pointer; text-transform: uppercase;
-    box-shadow: 0 2px 8px rgba(196,0,0,0.4);
+    box-shadow: 0 8px 22px rgba(127,29,29,0.24);
     user-select: none; -webkit-user-select: none;
     touch-action: none;
   }
-  .go-live-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .go-live-btn:hover:not(:disabled) { filter: brightness(1.06); }
+  .go-live-btn:disabled { opacity: 0.48; cursor: not-allowed; box-shadow: none; }
   .go-live-btn .lock { display: inline-flex; width: 15px; height: 15px; margin-right: 8px; vertical-align: -2px; }
   .go-live-btn .lock svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .go-live-ring {
@@ -520,7 +541,14 @@
     pointer-events: none;
   }
   .go-live-wrap.holding .go-live-ring { opacity: 1; }
-  .go-live-hint { display: block; font-size: 10px; color: var(--dim); margin-top: 6px; letter-spacing: 0.06em; text-align: center; }
+  .go-live-hint { display: block; font-size: 10px; color: var(--dim); margin-top: 7px; letter-spacing: 0.02em; text-align: center; }
+  .go-live-wrap.blocked .go-live-hint {
+    color: var(--yellow);
+    text-align: left;
+    padding: 6px 8px;
+    border-left: 2px solid var(--yellow);
+    background: rgba(245,158,11,0.08);
+  }
 
   /* ── P&L STRIP ──────────────────────── */
   .pnl-strip {
@@ -3288,14 +3316,25 @@ function renderAccounts(accounts) {
         const legend = document.createElement("div"); legend.className = "mode-legend";
         legend.innerHTML =
           '<div><b class="lg-signal">Alerts</b> - Telegram only. You trade manually. <em>No broker orders.</em></div>' +
-          '<div><b class="lg-demo">Paper</b> - practice orders on the demo account.</div>' +
-          '<div><b class="lg-live">Live</b> - Topstep MNQ, 1 copy, real orders. Gates run first.</div>';
+          '<div><b class="lg-demo">Paper</b> - practice orders on the demo account.</div>';
         card.appendChild(legend);
+
+        const pilot = document.createElement("div"); pilot.className = "pilot-contract";
+        pilot.innerHTML =
+          '<div class="pilot-contract-top"><span class="pilot-label">Live pilot</span><span class="pilot-state">Gates run first</span></div>' +
+          '<div class="pilot-contract-grid">' +
+            '<span><b>MNQ</b><em>Instrument</em></span>' +
+            '<span><b>3 lanes</b><em>Active book</em></span>' +
+            '<span><b>1 copy</b><em>Primary only</em></span>' +
+          '</div>' +
+          '<div class="pilot-exclusion">NYSE_OPEN parked for SR alarm; no replacement lane in this pilot.</div>';
+        card.appendChild(pilot);
 
         // Hold-to-confirm GO LIVE button (replaces type-LIVE-then-click gate).
         const wrap = document.createElement("div"); wrap.className = "go-live-wrap";
         wrap.innerHTML =
           '<div class="go-live-ring"></div>' +
+          '<div class="go-live-copy"><strong>Real orders</strong><span>Topstep MNQ &middot; one protected primary account</span></div>' +
           '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch real Topstep MNQ orders on one protected primary account.">' +
             '<span class="lock" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>HOLD TO GO LIVE' +
           '</button>' +
@@ -3305,6 +3344,7 @@ function renderAccounts(accounts) {
         if (liveBlocked) {
           goLiveBtn.disabled = true;
           goLiveBtn.title = liveBlocked;
+          wrap.classList.add("blocked");
           wrap.querySelector(".go-live-hint").textContent = `Blocked: ${liveBlocked}`;
         }
         else { window.attachHoldToFireLive(goLiveBtn, goLiveRing, wrap, acct); }
@@ -4063,18 +4103,18 @@ function renderPlannedLaunchBanner() {
   const instr = (Array.isArray(p.instruments) && p.instruments.length) ? p.instruments.join("+") : "ALL";
   const copies = Number(p.broker_accounts_count || p.copies || 1);
   const acctTxt = copies > 1 ? `${copies} broker accounts` : `1 broker account`;
-  const sourceTxt = p.source ? ` &middot; src:${escapeHtml(p.source)}` : "";
+  const sourceTxt = p.source ? `<span class="plb-source">src:${escapeHtml(p.source)}</span>` : "";
   const pilotTxt = profile === "topstep_50k_mnq_auto"
-    ? " &middot; Live pilot: <b>MNQ</b> &middot; 3 lanes &middot; 1 copy &middot; NYSE: parked"
+    ? '<span class="plb-pilot">Live pilot: <b>MNQ</b> &middot; 3 lanes &middot; 1 copy &middot; NYSE: parked</span>'
     : "";
   if (p.status === "stale") {
     el.className = "planned-launch-banner stale";
-    el.innerHTML = `Current: <b>STALE</b> - last set as <b>${escapeHtml(mode)}</b> &middot; ${escapeHtml(profile)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}${sourceTxt} &middot; re-run START_BOT.bat`;
+    el.innerHTML = `<span>Current: <b>STALE</b> - last set as <b>${escapeHtml(mode)}</b> &middot; ${escapeHtml(profile)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}</span>${sourceTxt}<span>re-run START_BOT.bat</span>`;
     return;
   }
   el.className = `planned-launch-banner ${cls}`;
   const current = mode === "SIGNAL" ? "Signal-only" : mode === "DEMO" ? "Demo" : "Live";
-  el.innerHTML = `Current: <b>${escapeHtml(current)}</b> &middot; ${escapeHtml(profile)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}${pilotTxt}${sourceTxt}`;
+  el.innerHTML = `<span>Current: <b>${escapeHtml(current)}</b> &middot; ${escapeHtml(profile)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}</span>${pilotTxt}${sourceTxt}`;
 }
 
 /* Tier 1.1 — primary CTA in topbar (Start / Stop context-aware) */
