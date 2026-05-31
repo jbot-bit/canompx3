@@ -27,6 +27,10 @@ ignore = [
 "tests/*" = ["F401", "F811"]  # unused imports + redefined names OK in tests (fixtures)
 "scripts/*" = ["E402"]        # scripts often manipulate sys.path before imports
 "research/*" = ["E402", "F401"]  # research scripts are experimental
+# Hooks insert their own dir on sys.path before importing the co-located
+# _memory_capture helper; isort would hoist the import above that line and break it.
+".claude/hooks/memory-capture-advisory.py" = ["I001"]
+".claude/hooks/memory-capture-sessionstart.py" = ["I001"]
 
 [lint.isort]
 known-first-party = ["pipeline", "trading_app", "ui"]
