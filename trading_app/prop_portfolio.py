@@ -555,8 +555,26 @@ def select_for_profile(
     # 4. Greedy fill
     dd_budget = tier.max_dd
     dd_per_slot = _compute_dd_per_contract(profile.stop_multiplier, firm_spec.dd_type)
-    contract_budget = tier.max_contracts_micro  # All our instruments are micro
     slot_budget = profile.max_slots
+
+    # Contract budget — FIRM-AWARE (audit finding F2-A, 2026-05-31).
+    # @margin-guard-not-earnings-cap
+    # HARD DOCTRINE (.claude/rules/self-funded-sizing-doctrine.md): a prop-firm
+    # contract cap must NEVER bound a self_funded (personal-capital) book's
+    # earnings. For prop firms tier.max_contracts_micro IS a rule/earnings cap and
+    # binds book selection here. For self_funded the same number is ONLY a
+    # BROKER / MARGIN / SANITY guard (enforced at the execution layer,
+    # execution_engine._compute_contracts) — it must not be a binding *selection*
+    # constraint. Personal-capital sizing is risk-first: the real selection bounds
+    # are drawdown tolerance (dd_budget) and the cognitive slot cap (slot_budget),
+    # both still enforced in the greedy fill below. So for self_funded the prop
+    # contract cap is disabled as a selection gate (None). Enforced by
+    # check_prop_caps_do_not_leak_into_self_funded in pipeline/check_drift.py.
+    contract_budget: int | None
+    if firm_spec.name == "self_funded":
+        contract_budget = None  # no prop earnings cap on personal capital
+    else:
+        contract_budget = tier.max_contracts_micro  # prop rule/earnings cap; All instruments micro
 
     entries: list[TradingBookEntry] = []
     dd_used = 0.0
@@ -581,8 +599,11 @@ def select_for_profile(
             )
             continue
 
-        # Contract cap check
-        if contracts_used + contracts > contract_budget:
+        # Contract cap check — only for firms where the contract cap is a real
+        # rule/earnings ceiling (prop). self_funded sets contract_budget=None so the
+        # prop micro-cap never gates a personal-capital book (F2-A); the slot cap
+        # below is the binding cognitive bound, the DD budget above the risk bound.
+        if contract_budget is not None and contracts_used + contracts > contract_budget:
             all_excluded.append(
                 ExcludedEntry(
                     s.strategy_id,
