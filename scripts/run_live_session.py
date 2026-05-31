@@ -467,7 +467,10 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     branch = lines[0] if lines else "## unknown"
     changes = lines[1:]
-    if "behind" in branch.lower():
+    branch_lower = branch.lower()
+    if "head (no branch)" in branch_lower or "detached" in branch_lower:
+        return CheckResult(False, f"FAILED: detached HEAD live launch blocked ({branch})")
+    if "behind" in branch_lower:
         return CheckResult(False, f"FAILED: repo behind origin ({branch})")
     if changes:
         return CheckResult(False, f"FAILED: repo dirty ({len(changes)} path(s)); clean or isolate live launch branch")

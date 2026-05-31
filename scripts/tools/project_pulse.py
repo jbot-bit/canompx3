@@ -2644,6 +2644,14 @@ def _queue_id_from_summary(summary: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _queue_claim_command(queue_id: str, *, platform_name: str | None = None) -> str:
+    repo_python = _preferred_repo_python()
+    python_cmd = str(repo_python) if repo_python is not None else "python"
+    platform = platform_name or os.name
+    script_path = "scripts\\tools\\work_queue.py" if platform == "nt" else "scripts/tools/work_queue.py"
+    return f"{python_cmd} {script_path} claim --item {queue_id} --tool codex"
+
+
 def _build_next_actions(items: list[PulseItem], *, limit: int = 5) -> list[NextAction]:
     """Return compact operator actions backed by queue IDs or exact commands."""
     actions: list[NextAction] = []
@@ -2667,7 +2675,7 @@ def _build_next_actions(items: list[PulseItem], *, limit: int = 5) -> list[NextA
                     kind="queue",
                     label=item.summary,
                     queue_id=queue_id,
-                    command=f".\\.venv\\Scripts\\python.exe scripts\\tools\\work_queue.py claim --item {queue_id} --tool codex",
+                    command=_queue_claim_command(queue_id),
                     source=item.source,
                 )
             )

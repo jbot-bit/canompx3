@@ -138,6 +138,13 @@ class TestSelectForProfile:
         book = select_for_profile(profile, strats)
         assert book.total_contracts <= 40
 
+    def test_self_funded_not_capped_by_prop_contract_budget(self):
+        profile = AccountProfile("test", "self_funded", 50_000, 1, 0.75, max_slots=25)
+        strats = [_make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}") for i in range(25)]
+        book = select_for_profile(profile, strats)
+        assert book.total_slots == 25
+        assert all("contract cap reached" not in entry.reason.lower() for entry in book.excluded)
+
     def test_empty_strategies(self):
         profile = AccountProfile("test", "topstep", 50_000)
         book = select_for_profile(profile, [])

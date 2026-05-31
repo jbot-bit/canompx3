@@ -6,7 +6,7 @@ import json
 import subprocess
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import MagicMock, patch
 
 import duckdb
@@ -1107,6 +1107,15 @@ class TestFollowupReconciliation:
         )
 
         assert collect_plan_reconciliation(tmp_path) == []
+
+    def test_build_next_actions_uses_repo_python_for_queue_claims(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            project_pulse, "_preferred_repo_python", lambda: PurePosixPath("/repo/.venv-wsl/bin/python")
+        )
+
+        command = project_pulse._queue_claim_command("abc123", platform_name="posix")
+
+        assert command == "/repo/.venv-wsl/bin/python scripts/tools/work_queue.py claim --item abc123 --tool codex"
 
 
 class TestCollectFollowupCoverage:

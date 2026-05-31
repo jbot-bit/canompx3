@@ -555,8 +555,12 @@ def select_for_profile(
     # 4. Greedy fill
     dd_budget = tier.max_dd
     dd_per_slot = _compute_dd_per_contract(profile.stop_multiplier, firm_spec.dd_type)
-    contract_budget = tier.max_contracts_micro  # All our instruments are micro
     slot_budget = profile.max_slots
+    # Self-funded sizing is bounded here by DD + slot discipline, not by a
+    # prop-style tier contract ceiling. The tier max remains a broker/margin
+    # sanity marker in prop_profiles, but it must not throttle personal-capital
+    # book-building inside this selector.
+    contract_budget = slot_budget if profile.firm == "self_funded" else tier.max_contracts_micro
 
     entries: list[TradingBookEntry] = []
     dd_used = 0.0

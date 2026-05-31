@@ -642,6 +642,22 @@ def test_repo_drift_gate_blocks_dirty_live_repo(monkeypatch):
     assert "repo dirty" in result.message
 
 
+def test_repo_drift_gate_blocks_detached_head(monkeypatch):
+    monkeypatch.setattr(
+        rls.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="## HEAD (no branch)\n",
+            stderr="",
+        ),
+    )
+    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
+    result = rls._check_repo_drift_for_live(ctx)
+    assert result.passed is False
+    assert "detached head" in result.message.lower()
+
+
 def test_dashboard_auto_launch_disabled_for_dashboard_origin(monkeypatch):
     monkeypatch.setenv("CANOMPX3_DASHBOARD_ORIGIN", "1")
     assert rls._should_launch_dashboard() is False
