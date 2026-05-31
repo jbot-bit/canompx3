@@ -21,7 +21,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** fd253018 — @ docs: clarify holdout cut is invariant, method is the pre-committed choice
+- **Commit:** 2408e56d — docs: holdout cut invariant, validation method is the pre-committed choice (Criterion 8 table); CPCV marked DOCTRINE-ONLY. Docs-only, no thresholds/code/holdout-date changes.
 - **Files changed:** 3 files
   - `.claude/rules/backtesting-methodology.md`
   - `HANDOFF.md`
