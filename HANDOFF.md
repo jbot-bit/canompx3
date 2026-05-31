@@ -21,15 +21,16 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** 4c3228b9 — @ docs(handoff): close-out — live-preflight landed, capital-path work rescued
-- **Files changed:** 7 files
-  - `HANDOFF.md`
-  - `docs/runtime/rescued/2026-05-30-RESCUE-MANIFEST.md`
-  - `docs/runtime/rescued/2026-05-30-lane-allocator-feature-cache-WIP.patch`
-  - `docs/runtime/rescued/2026-05-30-lane_allocation.STASHED.json`
-  - `docs/runtime/rescued/2026-05-30-topstep_50k_mnq_auto.STASHED.json`
-  - `docs/runtime/stages/2026-05-30-opus-48-effort-wiring.md`
-  - `docs/runtime/stages/2026-05-30-worktree-lease-real-mutex.md`
+- **Commit:** f9b2edab — Add auto-memory-capture 3-event hook loop (Scope A)
+- **Files changed:** 8 files
+  - `.claude/hooks/_memory_capture.py`
+  - `.claude/hooks/memory-capture-advisory.py`
+  - `.claude/hooks/memory-capture-sessionstart.py`
+  - `.claude/hooks/tests/test_memory_capture_advisory.py`
+  - `.claude/hooks/tests/test_memory_capture_sessionstart.py`
+  - `.claude/rules/auto-memory-capture.md`
+  - `.claude/settings.json`
+  - `ruff.toml`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

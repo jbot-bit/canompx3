@@ -345,6 +345,35 @@
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/session-start.py",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/memory-capture-sessionstart.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/memory-capture-advisory.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/memory-capture-advisory.py",
+            "timeout": 5
           }
         ]
       },
