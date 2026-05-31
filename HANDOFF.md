@@ -21,19 +21,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** 78d48eb1 — research(adaptive-stops): H4 time-based no-progress exit pre-reg DRAFT (K=1)
-- **This session:** human-reviewed + PROMOTED the H4 draft to LOCKED. Moved
-  `drafts/2026-05-31-...draft.yaml` → `docs/audit/hypotheses/2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1.yaml`,
-  status DRAFT→LOCKED. 3 reviewer_todo cleared: (1) Howard extract line-188
-  parameter (0.5R/120s) verified verbatim — flagged as the extract's "e.g."
-  illustrative pre-reg value, not a measured constant (honesty correction in
-  pre_committed_parameters); (2) K-budget evaluated PASS (N=1, MinBTL 0.00yr,
-  6.65yr headroom, fits cap) after adding `instruments: [MNQ, MES]`; (3) canonical-
-  delegation / READ-not-resimulate enforced via methodology_gates.
-  **NEXT:** write read-only `research/adaptive_stops_h4_time_exit_paired.py`
-  (paired-ΔR, reads orb_outcomes excursion, no DB write) — only after this
-  promotion commit lands (do_not_run_until_committed).
-- **Files changed:** HANDOFF.md + rename draft→locked H4 prereg.
+- **Commit:** 80c49130 — research(adaptive-stops): PROMOTE H4 time-exit pre-reg DRAFT -> LOCKED (K=1)
+- **Files changed:** 3 files
+  - `HANDOFF.md`
+  - `docs/audit/hypotheses/2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1.yaml`
+  - `docs/audit/hypotheses/drafts/2026-05-31-adaptive-stops-h4-time-based-exit-stack-v1.draft.yaml`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

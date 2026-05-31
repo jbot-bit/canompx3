@@ -54,8 +54,22 @@ metadata:
   depends_on:
     # Canonical modules H4 WILL CALL when run (it re-encodes NONE of them). The
     # no-progress-exit counterfactual util does NOT yet exist; building it is the
-    # FIRST implementation step after this draft is reviewed+locked. It must be a
-    # READ of the existing orb_outcomes excursion path, not a new sim engine.
+    # FIRST implementation step after this draft is reviewed+locked.
+    #
+    # AMENDMENT 2026-05-31 (data-contract correction, pre-run): the original
+    # wording ("READ of the existing orb_outcomes excursion path") was WRONG and
+    # is retracted. Verified against the live schema: orb_outcomes carries
+    # mfe_r/mae_r MAGNITUDES + entry_ts/exit_ts only — it has NO column for WHEN
+    # +0.5R MFE was first reached. apply_tight_stop (config.py:4146) likewise
+    # operates on the mae_r SCALAR and reads no path. Therefore the time-condition
+    # ("no 0.5R MFE within 120s") is NOT reconstructable from orb_outcomes alone.
+    # The counterfactual MUST read the intra-trade path from bars_1m (1-min OHLCV;
+    # 120s ≈ the first 2 bars after entry_ts). This remains a READ — no new sim
+    # engine, no DB write — but it is a bars_1m reconstruction, not an orb_outcomes
+    # reuse. The added correctness surface (E2 entry-bar alignment per
+    # backtesting-methodology §6.3) is called out in methodology_gates below.
+    - pipeline/  # bars_1m canonical OHLCV — the ONLY source of intra-trade MFE
+                 # timing. Read read_only; first-2-bars-post-entry_ts window.
     - trading_app/strategy_fitness.py  # _load_strategy_outcomes() — canonical
                                        # filtered-outcome loader (eligible days
                                        # only, ALL_FILTERS applied). Same loader
@@ -96,8 +110,10 @@ metadata:
                                     # any run until promoted to LOCKED.
   scope_note: >
     Pathway-B K=1 paired-deltaR. For each of the 7 deployed E2 lanes, score every
-    traded (post-filter) trade under TWO exit rules computed from the SAME
-    orb_outcomes excursion path: (A) the current price-based stop (baseline,
+    traded (post-filter) trade under TWO exit rules. Arm A reads orb_outcomes
+    directly; Arm B reconstructs the first-2-bars (≈120s) MFE from bars_1m (see
+    depends_on amendment — orb_outcomes has no MFE timing). The two rules are:
+    (A) the current price-based stop (baseline,
     opposite-ORB-boundary anchor), and (B) a time-based no-progress exit (exit if
     the trade has not reached +0.5R MFE within 120s wall-clock of entry; otherwise
     the trade's existing exit stands). Report per-lane and pooled realized mean
@@ -308,10 +324,24 @@ methodology_gates:
     rule: >
       institutional-rigor §4: H4 CALLS _load_strategy_outcomes,
       holdout_policy.HOLDOUT_SACRED_FROM, oos_power.power_verdict,
-      prop_profiles.ACCOUNT_PROFILES, cost_model.get_cost_spec. The no-progress-
-      exit counterfactual is computed by READING the existing orb_outcomes
-      excursion path (the same path apply_tight_stop reads), NOT by building a new
-      simulation engine. Re-encodes NONE of the canonical modules.
+      prop_profiles.ACCOUNT_PROFILES, cost_model.get_cost_spec. Re-encodes NONE of
+      the canonical modules. AMENDED 2026-05-31: the no-progress-exit counterfactual
+      reads the intra-trade path from bars_1m (1-min OHLCV), NOT from orb_outcomes
+      (which has no MFE timing) and NOT via apply_tight_stop (which reads only the
+      mae_r scalar). It is still a READ — no new simulation engine, no DB write —
+      but a bars_1m path read, not an orb_outcomes reuse. The bars window is the
+      first 2 bars at/after entry_ts (≈120s wall-clock).
+  e2_entry_bar_alignment:
+    # The added correctness surface introduced by the bars_1m amendment.
+    rule: >
+      E2 entry_ts is the stop-market fill, which can precede the daily_features
+      close-outside-ORB "break bar" (backtesting-methodology §6.3: ~41% of E2
+      trades). The 120s window MUST be anchored on orb_outcomes.entry_ts (the
+      actual fill), the bar containing entry_ts counted as bar 0, and MFE measured
+      from entry_price — NOT from any break-bar timestamp. The script asserts the
+      bar covering entry_ts exists in bars_1m for every scored trade and drops
+      (with a logged count) any trade whose first-2-bar window is incomplete; it
+      never silently treats a missing bar as "no progress."
   no_db_write:
     rule: "Read-only. DuckDB opened read_only=True. No INSERT/UPDATE/DELETE."
   cost_neutrality:
@@ -356,12 +386,15 @@ execution_gates:
         bar entry/exit timestamps (deterministic from bar size), not a tunable
         bar-count. The script must assert the realized bar mapping per lane and
         report it; no degrees of freedom are introduced.
-    - item: "Counterfactual READS orb_outcomes excursion, not re-simulate (institutional-rigor §4)."
+    - item: "Counterfactual READS the path, not re-simulate (institutional-rigor §4)."
       resolution: >
-        ENFORCED by methodology_gates.canonical_delegation: H4 calls
-        _load_strategy_outcomes and reads the existing excursion path
-        (same path apply_tight_stop reads). A new sim engine is forbidden; the
-        script will be reviewed against this clause before its run.
+        ENFORCED by methodology_gates.canonical_delegation (AMENDED 2026-05-31).
+        Pre-run schema check found orb_outcomes has NO MFE timing and apply_tight_stop
+        reads only mae_r — so the original "reads orb_outcomes excursion" claim was
+        retracted. The counterfactual reads the bars_1m intra-trade path (first 2
+        bars from entry_ts ≈120s). Still a READ, no sim engine, no DB write; the new
+        E2 entry-bar alignment correctness surface is gated by
+        methodology_gates.e2_entry_bar_alignment.
     - item: "K-budget PASS against the committed file."
       resolution: >
         VERIFIED 2026-05-31: estimate_k_budget parser extracts n_trials=1,
