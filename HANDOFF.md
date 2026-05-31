@@ -19,16 +19,13 @@
 - **Summary:** Live-pilot readiness rest pass on `main`: `topstep_50k_mnq_auto` is a 3-lane MNQ single-account pilot (`--copies 1`), NYSE_OPEN SR-alarm lane is paused/parked, funded telemetry maturity remains advisory, strict readiness is green, ProjectX preflight passed 14/14, phase 7 passed, targeted live readiness/preflight tests passed. Also fixed docs/audit drift: CLAUDE sample thresholds, TRADING_RULES `NYSE_PREOPEN`, `.claude/rules/large-file-reads.md` false old-session hit, regenerated `REPO_MAP.md`, and fixed Phase 3's REPO_MAP checker to call `gen_repo_map.py --check`. No live launch was started; `START_BOT.bat` remains `--demo`.
 
 ## Last Session
-- **Tool:** Unknown
+- **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** 72efb375 — fix(audit): close live readiness doc drift
-- **Files changed:** 6 files
-  - `.claude/rules/large-file-reads.md`
-  - `CLAUDE.md`
-  - `HANDOFF.md`
-  - `REPO_MAP.md`
-  - `TRADING_RULES.md`
-  - `scripts/audits/phase_3_docs.py`
+- **Commit:** eb84c46d — feat(skills): absorb superpowers techniques into project-native form
+- **Files changed:** 3 files
+  - `.claude/rules/condition-based-waiting.md`
+  - `.claude/rules/plugin-routing.md`
+  - `.claude/skills/quant-debug/SKILL.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
