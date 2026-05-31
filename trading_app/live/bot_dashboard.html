@@ -1791,6 +1791,44 @@
   .book-chip.next .time,
   .book-chip.armed .time { color: currentColor; opacity: 0.75; }
   .book-empty { color: var(--dim); font-size: var(--fs-small); font-style: italic; }
+  .hero-pilot {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: auto repeat(4, minmax(0, 1fr));
+    align-items: center;
+    gap: 8px;
+  }
+  .hero-pilot[hidden] { display: none; }
+  .hero-pilot-label {
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .hero-pilot-item {
+    min-width: 0;
+    color: var(--text-2);
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  .hero-pilot-item b {
+    display: block;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .hero-pilot-item span {
+    display: block;
+    color: var(--muted);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .hero-pilot-item.excluded b { color: var(--yellow); }
 
   /* default-collapse sections in cockpit mode */
   body.cockpit #profiles-section:not(.user-expanded),
@@ -2120,6 +2158,18 @@
     body.cockpit .topbar-brand {
       order: 1;
     }
+    body.cockpit #planned-launch-banner {
+      order: 0;
+      flex: 1 0 100%;
+      max-width: 100%;
+    }
+    body.cockpit #planned-launch-banner .plb-pilot {
+      border-left: 0;
+      padding-left: 0;
+    }
+    body.cockpit #planned-launch-banner .plb-source {
+      display: none;
+    }
     body.cockpit #acct-select {
       order: 2;
       flex: 1 1 220px;
@@ -2199,18 +2249,22 @@
     }
   }
 
-  @media (max-width: 430px) {
+  @media (max-width: 600px) {
     .shell {
       padding-left: 20px;
       padding-right: 20px;
     }
     body.cockpit #btn-trade-book,
     body.cockpit #btn-preflight,
-    body.cockpit #btn-refresh {
+    body.cockpit #btn-refresh,
+    body.cockpit #btn-kill {
       flex-basis: calc(50% - 6px);
     }
     body.cockpit #btn-kill {
-      flex-basis: 82px;
+      flex-grow: 1;
+    }
+    body.cockpit #header-mode-badge {
+      flex: 1 0 calc(100% - 28px);
     }
     body.cockpit .hero-metrics {
       grid-template-columns: 1fr 1fr;
@@ -2228,6 +2282,22 @@
     .hero-head { flex-direction: column; align-items: stretch; gap: 8px; }
     .hm-val { font-size: 22px; }
     .hero-book { flex-direction: column; align-items: stretch; gap: 8px; }
+    .hero-pilot { grid-template-columns: 1fr 1fr; }
+    .hero-pilot-label { grid-column: 1 / -1; }
+  }
+  @media (max-width: 600px) {
+    body.cockpit #header-mode-badge {
+      flex: 1 0 calc(100% - 28px);
+    }
+    body.cockpit #btn-trade-book,
+    body.cockpit #btn-preflight,
+    body.cockpit #btn-refresh,
+    body.cockpit #btn-kill {
+      flex-basis: calc(50% - 6px);
+    }
+    body.cockpit #btn-kill {
+      flex-grow: 1;
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -2662,6 +2732,17 @@
       white-space: nowrap;
     }
   }
+  @media (max-width: 600px) {
+    body.cockpit #header-mode-badge {
+      flex: 1 0 calc(100% - 28px);
+    }
+    body.cockpit #btn-trade-book,
+    body.cockpit #btn-preflight,
+    body.cockpit #btn-refresh,
+    body.cockpit #btn-kill {
+      flex: 1 1 calc(50% - 6px);
+    }
+  }
 </style>
 </head>
 <body>
@@ -2823,6 +2904,13 @@
     <div id="hero-book" class="hero-book">
       <div class="hero-book-label">Book</div>
       <div id="hero-book-lanes" class="hero-book-lanes"><span class="book-empty">Loading deployed lanes…</span></div>
+    </div>
+    <div id="hero-pilot" class="hero-pilot" hidden>
+      <div class="hero-pilot-label">Live pilot</div>
+      <div class="hero-pilot-item"><b>MNQ</b><span>Instrument</span></div>
+      <div class="hero-pilot-item"><b>3 lanes</b><span>Active book</span></div>
+      <div class="hero-pilot-item"><b>1 copy</b><span>Primary only</span></div>
+      <div class="hero-pilot-item excluded"><b>NYSE parked</b><span>SR alarm</span></div>
     </div>
   </section>
 
@@ -3639,6 +3727,9 @@ function renderOperatorState(data) {
       <div class="operator-check-detail">${escapeHtml(check.detail || "")}</div>
     </div>
   `).join("");
+  if (Array.isArray(lastAccountsData) && lastAccountsData.length) {
+    try { renderAccounts(lastAccountsData); } catch (_) {}
+  }
 }
 
 function renderConnectionReadiness(connection) {
@@ -4388,11 +4479,18 @@ function renderHero() {
   }
 
   renderHeroBook();
+  renderHeroPilot(acct);
 }
 
 /* Book row: show ONLY deployed lanes of the active profile, filtered to
    UPCOMING + IMMINENT sessions (past lanes hidden). Sorted by time-to-fire.
    Chip state: armed (≤30min — strong visual) / next (first upcoming) / default. */
+function renderHeroPilot(acct) {
+  const el = $("hero-pilot");
+  if (!el) return;
+  el.hidden = acct?.profile_id !== "topstep_50k_mnq_auto";
+}
+
 function renderHeroBook() {
   const el = $("hero-book-lanes");
   if (!el) return;
@@ -4810,7 +4908,7 @@ function updateMetricsFromEquity(data) {
   if (!acct) {
     balanceEl.textContent = "—";
     balanceEl.className = "metric-val muted";
-    balanceSubEl.textContent = "no tradeable accounts";
+    balanceSubEl.textContent = activeProfileData ? "broker account pending" : "no active profile";
     return;
   }
 
@@ -4842,7 +4940,7 @@ function renderAccountSelector(data) {
   const tradeable = getTradeableAccounts(data);
   sel.innerHTML = "";
   if (!tradeable.length) {
-    sel.innerHTML = '<option value="">No tradeable accounts</option>';
+    sel.innerHTML = '<option value="">Broker account pending</option>';
     return;
   }
   for (const a of tradeable) {

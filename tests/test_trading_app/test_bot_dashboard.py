@@ -685,6 +685,7 @@ def test_action_start_pins_single_copy_live_pilot_command(monkeypatch, tmp_path)
         lambda: {"status": "ok", "any_stale": False, "instruments": {}},
     )
     monkeypatch.setattr(bot_dashboard, "_collect_broker_status", lambda: dict(_CONNECTED_BROKER_SUMMARY))
+
     async def fake_prepare(profile, mode="live"):
         return {"status": "pass", "output": "preflight ok"}
 
@@ -949,9 +950,13 @@ def test_dashboard_live_pilot_copy_is_explicit_and_professional():
 
     assert "HOLD TO GO LIVE" in html
     assert "pilot-contract" in html
+    assert "hero-pilot" in html
+    assert "NYSE parked" in html
     assert "Topstep MNQ &middot; one protected primary account" in html
     assert "Topstep MNQ &middot; 1 copy &middot; real orders &middot; gates run first" in html
     assert "Live pilot: <b>MNQ</b> &middot; 3 lanes &middot; 1 copy &middot; NYSE: parked" in html
+    assert "Broker account pending" in html
+    assert "renderAccounts(lastAccountsData)" in html
     assert "Combine" not in html
     assert "🔒" not in html
 

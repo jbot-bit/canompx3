@@ -18,17 +18,16 @@
 - **Date:** 2026-05-31
 - **Summary:** Live-pilot readiness rest pass on `main`: `topstep_50k_mnq_auto` is a 3-lane MNQ single-account pilot (`--copies 1`), NYSE_OPEN SR-alarm lane is paused/parked, funded telemetry maturity remains advisory, strict readiness is green, ProjectX preflight passed 14/14, phase 7 passed, targeted live readiness/preflight tests passed. Also fixed docs/audit drift: CLAUDE sample thresholds, TRADING_RULES `NYSE_PREOPEN`, `.claude/rules/large-file-reads.md` false old-session hit, regenerated `REPO_MAP.md`, and fixed Phase 3's REPO_MAP checker to call `gen_repo_map.py --check`. No live launch was started.
 - **Operator launcher update (Codex, 2026-05-31):** `START_BOT.bat` is now the single operator entrypoint and defaults to signal-only control-room startup. The separate `START_LIVE_PILOT.bat` / `scripts/tools/start_topstep_live_pilot.py` path was removed. Dashboard live start pins `topstep_50k_mnq_auto` / `MNQ` / `--copies 1`, runs live-mode preflight with that effective config, and uses the hold-to-confirm UI as the operator gate before `--auto-confirm` is passed to the runner.
+- **Dashboard smoke polish (Codex, 2026-06-01):** Rendered dashboard smoke used a mocked localhost API surface to avoid broker auth/live side effects. Fixed first-viewport pilot visibility, broker-account pending copy, mobile topbar wrapping, and stale enabled HOLD TO GO LIVE state after operator blockers load. Live-safe checks remain: `live_readiness_report --copies 1 --strict-zero-warn` green; live preflight is expected to fail while the branch is dirty and should be rerun after commit.
 
 ## Last Session
-- **Tool:** Claude Code
-- **Date:** 2026-05-31
-- **Commit:** 2810fead — @ feat(prop): encode MFFU Builder + Flex specs/tiers/payouts; fix Rapid sim-cap leak
-- **Files changed:** 6 files
+- **Tool:** Unknown
+- **Date:** 2026-06-01
+- **Commit:** 060fc2d8 — style(live): smoke-polish dashboard pilot UX
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/audit/2026-05-31-mffu-forced-progression-live-cap-memo.md`
-  - `docs/runtime/stages/2026-05-31-mffu-builder-prop-rules-stage2.md`
-  - `tests/test_prop_profiles_mffu.py`
-  - `trading_app/prop_firm_policies.py`
+  - `tests/test_trading_app/test_bot_dashboard.py`
+  - `trading_app/live/bot_dashboard.html`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
