@@ -7333,8 +7333,9 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
     def _is_tier_micro_assign(stmt: ast.stmt) -> bool:
         if not isinstance(stmt, ast.Assign):
             return False
-        if not (len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name)
-                and stmt.targets[0].id == "contract_budget"):
+        if not (
+            len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name) and stmt.targets[0].id == "contract_budget"
+        ):
             return False
         val = stmt.value
         return (
@@ -7345,16 +7346,16 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
         )
 
     unconditional_leak = any(_is_tier_micro_assign(s) for s in func_node.body)
-    has_self_funded_branch = "self_funded" in port_text[
-        port_text.find("def select_for_profile"):
-    ].split("\ndef ", 1)[0]
+    has_self_funded_branch = (
+        "self_funded" in port_text[port_text.find("def select_for_profile") :].split("\ndef ", 1)[0]
+    )
 
     if unconditional_leak:
         violations.append(
             "  select_for_profile assigns `contract_budget = tier.max_contracts_micro` "
             "UNCONDITIONALLY (not inside a firm branch). This is the pre-F2-A leak — the "
             "prop contract cap would bound self_funded book-building. Restore the "
-            "`if firm_spec.name == \"self_funded\"` branch (self_funded -> no prop cap)."
+            '`if firm_spec.name == "self_funded"` branch (self_funded -> no prop cap).'
         )
     if not has_self_funded_branch:
         violations.append(

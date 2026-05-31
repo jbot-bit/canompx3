@@ -155,14 +155,9 @@ class TestSelectForProfile:
         Ledger: docs/audit/results/2026-05-31-full-system-correctness-audit.md F2-A.
         """
         profile = AccountProfile("sf_test", "self_funded", 30_000, 1, 1.0, max_slots=30)
-        strats = [
-            _make_strategy(strategy_id=f"s{i}", instrument="MNQ", orb_label=f"SESSION_{i}")
-            for i in range(30)
-        ]
+        strats = [_make_strategy(strategy_id=f"s{i}", instrument="MNQ", orb_label=f"SESSION_{i}") for i in range(30)]
         book = select_for_profile(profile, strats)
-        prop_cap_exclusions = [
-            e for e in book.excluded if "contract cap reached" in e.reason.lower()
-        ]
+        prop_cap_exclusions = [e for e in book.excluded if "contract cap reached" in e.reason.lower()]
         # Doctrine: a prop-style contract cap must never be the binding earnings constraint
         # on a self_funded book.
         assert not prop_cap_exclusions, (
@@ -191,9 +186,7 @@ class TestSelectForProfile:
         tier = get_account_tier("tradeify", 50_000)
         # Offer far more slots than the prop micro-cap: if the fix wrongly applied
         # slot_budget to a prop firm, the book could exceed the cap. It must not.
-        profile = AccountProfile(
-            "prop_test", "tradeify", 50_000, 1, 0.75, max_slots=tier.max_contracts_micro + 30
-        )
+        profile = AccountProfile("prop_test", "tradeify", 50_000, 1, 0.75, max_slots=tier.max_contracts_micro + 30)
         strats = [
             _make_strategy(strategy_id=f"p{i}", instrument="MNQ", orb_label=f"SESSION_{i}")
             for i in range(tier.max_contracts_micro + 30)

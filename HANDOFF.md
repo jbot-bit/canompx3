@@ -22,13 +22,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
-- **Commit:** 2810fead — @ feat(prop): encode MFFU Builder + Flex specs/tiers/payouts; fix Rapid sim-cap leak
-- **Files changed:** 6 files
-  - `HANDOFF.md`
-  - `docs/audit/2026-05-31-mffu-forced-progression-live-cap-memo.md`
-  - `docs/runtime/stages/2026-05-31-mffu-builder-prop-rules-stage2.md`
-  - `tests/test_prop_profiles_mffu.py`
-  - `trading_app/prop_firm_policies.py`
+- **Commit:** 8ae038c1 — fix(audit-response): F2-A adversarial-audit findings — test-infra + claim accuracy
+- **Files changed:** 2 files
+  - `tests/test_pipeline/test_check_drift_self_funded_sizing.py`
+  - `trading_app/prop_portfolio.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
