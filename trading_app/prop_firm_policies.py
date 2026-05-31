@@ -150,6 +150,61 @@ PAYOUT_POLICIES: dict[str, PayoutPolicy] = {
         profit_split_pct=1.00,
         notes="No payout gate. Account equity is fully owned capital.",
     ),
+    # ─── mffu_builder_sim ─────────────────────────────────────────────
+    # @canonical-source docs/research-input/mffu/mffu_builder_50k.md  (article 14290805, scraped 2026-05-31)
+    # @verbatim "flat $2,000 payout cap, up to 5 sim payouts, each paid at 80/20"
+    # @verbatim "The 50% consistency rule applies: your single largest profit day cannot
+    #            represent more than 50% of your total profits in the cycle."
+    # @verbatim "you must have traded on at least 2 trading days in the current cycle"
+    # @verbatim "you must have at least $500 in net profit"  "Minimum Payout Amount: $500"
+    # FORCED PROGRESSION: "After your 5th approved sim payout, you are eligible for promotion
+    # to a live funded account." Modeled as data here; the transition LOGIC + live max-1-account
+    # cap is layer C (deferred — see docs/audit/2026-05-31-mffu-forced-progression-live-cap-memo.md).
+    "mffu_builder_sim": PayoutPolicy(
+        policy_id="mffu_builder_sim",
+        firm="mffu_builder",
+        display_name="MFFU Builder Sim Funded",
+        stage="sim_funded",
+        profit_split_pct=0.80,
+        min_trading_days=2,
+        consistency_rule=0.50,
+        payout_cap_dollars=2_000.0,
+        min_payout_amount=500.0,
+        notes=(
+            "Builder sim: 80/20, $2K/cycle cap, 5 sim payouts MAX then FORCED live promotion, "
+            "50% payout consistency, 2 qualifying days/cycle, $500 net-profit minimum. "
+            "Forced-live trigger (5 payouts) + live max-1-account cap are layer C (deferred — "
+            "docs/audit/2026-05-31-mffu-forced-progression-live-cap-memo.md). "
+            "@canonical-source docs/research-input/mffu/mffu_builder_50k.md (article 14290805, 2026-05-31)."
+        ),
+    ),
+    # ─── mffu_flex_sim ────────────────────────────────────────────────
+    # @canonical-source docs/research-input/mffu/mffu_flex_50k.md
+    # @canonical-source docs/research-input/mffu/mffu_flex_25k.md  (scraped 2026-05-31)
+    # @verbatim "Profit split: 80/20 (you keep 80%)"  "Maximum payout per request: $2,000"
+    # @verbatim "You may withdraw up to 50% of total profits per payout"
+    # @verbatim "Consistency rule during payout stage: None"  "Maximum sim payouts: 5"
+    # @verbatim "Once you complete 5 qualifying winning days, you can submit a payout request"
+    # @verbatim (50k) "Minimum payout amount: $500"  (25k) "Minimum Payout of $250"
+    "mffu_flex_sim": PayoutPolicy(
+        policy_id="mffu_flex_sim",
+        firm="mffu_flex",
+        display_name="MFFU Flex Sim Funded",
+        stage="sim_funded",
+        profit_split_pct=0.80,
+        winning_days_required=5,
+        consistency_rule=None,  # payout stage = none; 50% consistency is EVAL-only (spec.firm_specific_rules)
+        payout_cap_balance_pct=0.50,  # up to 50% of total profits per payout
+        payout_cap_dollars=2_000.0,
+        min_payout_amount=500.0,  # 50k; 25k = $250 (size-specific, see prop_profiles firm_specific_rules.by_size)
+        notes=(
+            "Flex sim: 80/20, 50%-of-profits per payout capped at $2K, 5 sim payouts ($100K total "
+            "cap), 5 winning days required, payout-stage consistency NONE (50% is eval-only). "
+            "min_payout_amount=$500 for 50k; 25k uses $250 (size-specific). "
+            "@canonical-source docs/research-input/mffu/mffu_flex_25k.md "
+            "@canonical-source docs/research-input/mffu/mffu_flex_50k.md (scraped 2026-05-31)."
+        ),
+    ),
 }
 
 
@@ -157,6 +212,8 @@ DEFAULT_PAYOUT_POLICY_BY_FIRM: dict[str, str] = {
     "topstep": "topstep_express_standard",
     "tradeify": "tradeify_select_funded",
     "self_funded": "self_funded",
+    "mffu_builder": "mffu_builder_sim",
+    "mffu_flex": "mffu_flex_sim",
 }
 
 

@@ -26,6 +26,7 @@ Examples:
 import argparse
 import asyncio
 import io
+import json
 import logging
 import os
 import subprocess
@@ -47,6 +48,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 log = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.tools import sweep_orphan_rings
 from trading_app.live.instance_lock import acquire_instance_lock, release_instance_lock
@@ -448,7 +453,7 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
     if ctx.demo:
         return CheckResult(True, "SKIPPED (demo)")
 
-    root = Path(__file__).resolve().parents[1]
+    root = PROJECT_ROOT
     try:
         result = subprocess.run(
             ["git", "status", "--short", "--branch"],
@@ -469,6 +474,8 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
     changes = lines[1:]
     if "behind" in branch.lower():
         return CheckResult(False, f"FAILED: repo behind origin ({branch})")
+    if "ahead" in branch.lower():
+        return CheckResult(False, f"FAILED: repo ahead of origin ({branch}); push or isolate before live launch")
     if changes:
         return CheckResult(False, f"FAILED: repo dirty ({len(changes)} path(s)); clean or isolate live launch branch")
     return CheckResult(True, f"OK ({branch})")
@@ -565,12 +572,18 @@ def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, "FAILED: live launch requires --profile for strict readiness")
 
     try:
-        from scripts.tools.live_readiness_report import build_live_readiness_report
+        from scripts.tools.live_readiness_report import build_live_readiness_report, launch_blocking_strict_warnings
 
         report = build_live_readiness_report(profile_id=ctx.profile_id, effective_copies=ctx.requested_copies)
         strict = report.get("strict_zero_warn") or {}
         blockers = list(strict.get("blockers") or [])
+        blocking_warnings = launch_blocking_strict_warnings(strict)
         if strict.get("green") is True:
+            if not ctx.demo and blocking_warnings:
+                msg = "; ".join(str(warning) for warning in blocking_warnings[:3])
+                if len(blocking_warnings) > 3:
+                    msg += f"; +{len(blocking_warnings) - 3} more"
+                return CheckResult(False, f"FAILED: live readiness has blocking strict warnings ({msg})")
             return CheckResult(True, "OK (strict_zero_warn green)")
         msg = "; ".join(str(blocker) for blocker in blockers[:3])
         if len(blockers) > 3:
@@ -582,6 +595,68 @@ def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
         if ctx.demo:
             return CheckResult(True, f"WARN: live readiness report unavailable in demo ({e})")
         return CheckResult(False, f"FAILED: live readiness report unavailable ({e})")
+
+
+def _check_project_pulse_for_live(ctx: PreflightContext) -> CheckResult:
+    """Project pulse launch blocker for live mode.
+
+    Demo and signal-only are evidence-accrual paths. Real-money launch must
+    fail closed when the operator pulse still reports broken/high live-control
+    findings or an explicit capital recommendation block.
+    """
+    if ctx.signal_only:
+        return CheckResult(True, "SKIPPED (signal-only)")
+    if ctx.demo:
+        return CheckResult(True, "SKIPPED (demo)")
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/tools/project_pulse.py",
+                "--fast",
+                "--format",
+                "json",
+                "--no-cache",
+            ],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return CheckResult(False, f"FAILED: project_pulse unavailable ({exc})")
+
+    stdout = result.stdout.strip()
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        detail = (result.stderr or stdout or str(result.returncode)).strip().splitlines()[-1:]
+        suffix = f": {detail[0]}" if detail else ""
+        return CheckResult(False, f"FAILED: project_pulse JSON parse failed ({exc}){suffix}")
+
+    capital_recommendation = str(payload.get("capital_recommendation") or "")
+    if "blocked" in capital_recommendation.lower():
+        return CheckResult(False, f"FAILED: {capital_recommendation}")
+
+    blocking_items = [
+        item
+        for item in payload.get("items", [])
+        if isinstance(item, dict)
+        and item.get("category") == "broken"
+        and str(item.get("severity") or "").lower() in {"critical", "high"}
+    ]
+    if blocking_items:
+        summaries = "; ".join(str(item.get("summary") or "unknown") for item in blocking_items[:3])
+        if len(blocking_items) > 3:
+            summaries += f"; +{len(blocking_items) - 3} more"
+        return CheckResult(False, f"FAILED: project_pulse blocker(s): {summaries}")
+
+    if result.returncode != 0:
+        return CheckResult(False, f"FAILED: project_pulse exited {result.returncode}")
+
+    return CheckResult(True, "OK (project_pulse no live blockers)")
 
 
 def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
@@ -670,6 +745,7 @@ PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_repo_drift_for_live,
     _check_telemetry_maturity,
     _check_live_readiness_report,
+    _check_project_pulse_for_live,
     _check_copy_trading_accounts,
     _check_shadow_copy_loss_protection,
 ]

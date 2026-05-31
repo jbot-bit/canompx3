@@ -1,14 +1,18 @@
-"""Tests for `.claude/hooks/worktree_guard.py` (PreToolUse hook).
+"""End-to-end regression tests for the worktree-guard PreToolUse hook.
 
-We do NOT acquire a real OS-level FileLock in these tests — the WORKTREE_GUARD_BYPASS
-env var short-circuits the hook for tests that only need to validate event-handling
-and matcher behaviour. For the actual blocking path we run the hook subprocess with
-a synthetic acquire() that returns "blocked" via monkeypatching.
+These exercise the ACTUAL hook as Claude Code invokes it — a fresh `python`
+subprocess with the event JSON on stdin and cwd set to the repo. This is the
+path that failed twice (n=2, 2026-05-29/30): the old OS-lock model never blocked
+a second session because the lock holder was the ephemeral hook subprocess
+itself. The new (session_id, ppid)+heartbeat model blocks on pure state
+inspection, which survives the subprocess boundary.
+
+Strategy: every test runs against a synthetic git worktree under tmp_path so the
+developer's real lease is never touched.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import subprocess
@@ -18,180 +22,99 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-HOOK_PATH = PROJECT_ROOT / ".claude" / "hooks" / "worktree_guard.py"
+HOOK = PROJECT_ROOT / ".claude" / "hooks" / "worktree_guard.py"
+CANONICAL_DIR = PROJECT_ROOT / "scripts" / "tools"
+sys.path.insert(0, str(CANONICAL_DIR))
+
+import worktree_guard as wg  # noqa: E402  # type: ignore[import-not-found]
 
 
-def _load_hook():
-    spec = importlib.util.spec_from_file_location("worktree_guard_hook", HOOK_PATH)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+def _python() -> str:
+    """The repo venv python if present, else the current interpreter."""
+    if os.name == "nt":
+        cand = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    else:
+        cand = PROJECT_ROOT / ".venv-wsl" / "bin" / "python"
+    return str(cand) if cand.exists() else sys.executable
 
 
-def _run_hook(event: dict, env: dict | None = None) -> tuple[int, str, str]:
-    """Run the hook in a subprocess feeding `event` on stdin."""
-    full_env = os.environ.copy()
-    if env:
-        full_env.update(env)
-    proc = subprocess.run(
-        [sys.executable, str(HOOK_PATH)],
-        input=json.dumps(event),
+@pytest.fixture
+def repo(tmp_path: Path):
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    yield tmp_path
+    try:
+        wg.release(tmp_path, force=True)
+    except OSError:
+        pass
+
+
+def _run_hook(repo: Path, session_id: str, tool: str = "Bash") -> subprocess.CompletedProcess:
+    event = json.dumps({"tool_name": tool, "session_id": session_id})
+    # Scrub the bypass seam from the child env so these tests are deterministic
+    # regardless of an ambient WORKTREE_GUARD_BYPASS set by the dev shell or CI
+    # (the bypass would make the hook return 0 unconditionally, masking a real
+    # block-path regression — caught 2026-05-30 when the verification shell had
+    # it exported globally).
+    env = {k: v for k, v in os.environ.items() if k != "WORKTREE_GUARD_BYPASS"}
+    return subprocess.run(
+        [_python(), str(HOOK)],
+        input=event,
         capture_output=True,
         text=True,
-        env=full_env,
-        timeout=10,
-    )
-    return proc.returncode, proc.stdout, proc.stderr
-
-
-def test_bypass_env_var_allows_unconditionally():
-    rc, _, stderr = _run_hook(
-        {"tool_name": "Bash", "tool_input": {"command": "echo hi"}},
-        env={"WORKTREE_GUARD_BYPASS": "1"},
-    )
-    assert rc == 0, stderr
-
-
-def test_unmatched_tool_passes_through():
-    """The settings.json matcher already filters, but the hook is defensive."""
-    rc, _, _ = _run_hook(
-        {"tool_name": "Read", "tool_input": {"file_path": "foo"}},
-    )
-    assert rc == 0  # Read isn't in {Edit, Write, MultiEdit, Bash}
-
-
-def test_malformed_event_fails_open():
-    """JSON parse error -> exit 0 (fail-open)."""
-    proc = subprocess.run(
-        [sys.executable, str(HOOK_PATH)],
-        input="this is not json",
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert proc.returncode == 0
-
-
-def test_blocks_when_acquire_returns_blocked(monkeypatch: pytest.MonkeyPatch):
-    """Directly invoke main() with a monkeypatched canonical module."""
-    mod = _load_hook()
-
-    fake_lease = {
-        "pid": 99999,
-        "worktree": "/tmp/peer",
-        "branch": "feature/x",
-        "iso_started": "2026-05-23T00:00:00+00:00",
-        "iso_heartbeat": "2026-05-23T00:25:00+00:00",
-    }
-
-    class _FakeCanonical:
-        @staticmethod
-        def acquire(_cwd):  # noqa: ARG004
-            del _cwd
-            return "blocked", fake_lease, "peer holds OS lock"
-
-        @staticmethod
-        def lease_path(_cwd):  # noqa: ARG004
-            del _cwd
-            return Path("/tmp/peer/.git/.claude.worktree.lease.json")
-
-        @staticmethod
-        def lock_path(_cwd):  # noqa: ARG004
-            del _cwd
-            return Path("/tmp/peer/.git/.claude.worktree.lock")
-
-    monkeypatch.setattr(mod, "_load_canonical", lambda: _FakeCanonical)
-    monkeypatch.setattr(
-        "sys.stdin",
-        _StdinReplay(json.dumps({"tool_name": "Edit", "tool_input": {}})),
+        cwd=str(repo),
+        env=env,
     )
 
-    rc = mod.main()
-    assert rc == 2
+
+def test_hook_blocks_second_live_session(repo: Path):
+    # Session A holds a live lease (ppid pinned to this live test process).
+    wg.acquire(repo, pid=1001, session_id="A", ppid=os.getpid())
+    # Session B's hook must BLOCK (exit 2) and name the peer.
+    r = _run_hook(repo, session_id="B")
+    assert r.returncode == 2, r.stderr
+    assert "BLOCKED" in r.stderr
+    assert "A" in r.stderr  # peer session id surfaced
 
 
-def test_allows_when_acquire_returns_acquired(monkeypatch: pytest.MonkeyPatch):
-    mod = _load_hook()
+def test_hook_allows_same_session_refresh(repo: Path):
+    wg.acquire(repo, pid=1001, session_id="A", ppid=os.getpid())
+    # The SAME session re-acting must be allowed (refresh, exit 0).
+    r = _run_hook(repo, session_id="A")
+    assert r.returncode == 0, r.stderr
 
-    class _FakeCanonical:
-        @staticmethod
-        def acquire(_cwd):  # noqa: ARG004
-            del _cwd
-            return "acquired", {"pid": os.getpid()}, "acquired"
 
-        @staticmethod
-        def lease_path(_cwd):  # noqa: ARG004
-            del _cwd
-            return Path("/tmp/x/.git/.claude.worktree.lease.json")
+def test_hook_allows_when_no_peer(repo: Path):
+    r = _run_hook(repo, session_id="solo")
+    assert r.returncode == 0, r.stderr
 
-        @staticmethod
-        def lock_path(_cwd):  # noqa: ARG004
-            del _cwd
-            return Path("/tmp/x/.git/.claude.worktree.lock")
 
-    monkeypatch.setattr(mod, "_load_canonical", lambda: _FakeCanonical)
-    monkeypatch.setattr(
-        "sys.stdin",
-        _StdinReplay(json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}})),
+def test_hook_reclaims_dead_peer(repo: Path):
+    # A peer whose ppid is dead must be reclaimable → second session allowed.
+    wg.acquire(repo, pid=1001, session_id="deadA", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # no real process holds this
+    ls.write_text(json.dumps(data), encoding="utf-8")
+    r = _run_hook(repo, session_id="fresh")
+    assert r.returncode == 0, r.stderr
+
+
+def test_hook_fails_open_on_non_git(tmp_path: Path):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    event = json.dumps({"tool_name": "Bash", "session_id": "x"})
+    r = subprocess.run(
+        [_python(), str(HOOK)], input=event, capture_output=True, text=True, cwd=str(plain)
     )
-
-    rc = mod.main()
-    assert rc == 0
+    assert r.returncode == 0  # not a git repo → fail-open (allow)
 
 
-def test_allows_when_canonical_module_unavailable(monkeypatch: pytest.MonkeyPatch):
-    """If _load_canonical returns None, fail-open."""
-    mod = _load_hook()
-    monkeypatch.setattr(mod, "_load_canonical", lambda: None)
-    monkeypatch.setattr(
-        "sys.stdin",
-        _StdinReplay(json.dumps({"tool_name": "Edit", "tool_input": {}})),
+def test_hook_bypass_env_seam(repo: Path):
+    wg.acquire(repo, pid=1001, session_id="A", ppid=os.getpid())
+    env = dict(os.environ, WORKTREE_GUARD_BYPASS="1")
+    event = json.dumps({"tool_name": "Bash", "session_id": "B"})
+    r = subprocess.run(
+        [_python(), str(HOOK)], input=event, capture_output=True, text=True, cwd=str(repo), env=env
     )
-    rc = mod.main()
-    assert rc == 0
-
-
-def test_allows_when_acquire_raises(monkeypatch: pytest.MonkeyPatch):
-    mod = _load_hook()
-
-    class _BoomCanonical:
-        @staticmethod
-        def acquire(_cwd):  # noqa: ARG004
-            del _cwd
-            raise RuntimeError("synthetic failure")
-
-        @staticmethod
-        def lease_path(_cwd):  # noqa: ARG004
-            del _cwd
-            return None
-
-        @staticmethod
-        def lock_path(_cwd):  # noqa: ARG004
-            del _cwd
-            return None
-
-    monkeypatch.setattr(mod, "_load_canonical", lambda: _BoomCanonical)
-    monkeypatch.setattr(
-        "sys.stdin",
-        _StdinReplay(json.dumps({"tool_name": "Edit", "tool_input": {}})),
-    )
-    rc = mod.main()
-    assert rc == 0
-
-
-class _StdinReplay:
-    """Minimal stdin replacement that satisfies json.load + isatty False."""
-
-    def __init__(self, payload: str):
-        self._payload = payload
-        self._consumed = False
-
-    def read(self) -> str:
-        if self._consumed:
-            return ""
-        self._consumed = True
-        return self._payload
-
-    def isatty(self) -> bool:
-        return False
+    assert r.returncode == 0  # bypass seam → allow even with a live peer

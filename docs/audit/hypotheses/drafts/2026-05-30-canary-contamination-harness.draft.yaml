@@ -1,0 +1,197 @@
+# Canary Contamination-Detection Harness — design prereg (DOCUMENTARY)
+#
+# This is NOT a discovery scan prereg. It tests no trading edge, writes nothing
+# to validated_setups / experimental_strategies, and enumerates no parameter
+# grid. It is a NEGATIVE-CONTROL / guard-efficacy harness: it injects KNOWN
+# contamination and asserts the canonical guard meant to catch it actually
+# fires. K-budget is documentary (no edge is being discovered — Bailey 2013
+# MinBTL does not apply to a harness that asserts ZERO survivors by construction).
+#
+# It lives in drafts/ (author-owned, loader-exempt) deliberately: the strict
+# discovery-schema loader (trading_app/hypothesis_loader.py) requires
+# total_expected_trials / holdout_date / theory_grant / a non-empty hypotheses
+# list with citations — all category errors for a negative-control harness.
+# Placing it under docs/audit/hypotheses/*.yaml would force-fail that loader.
+# Drafts/ is excluded by construction (pipeline/check_drift.py glob does not
+# descend into drafts/), and this file carries no `triage_provenance` block so
+# the drafts-provenance check does not apply either.
+#
+# Companion implementation:
+#   - scripts/tests/canary_suite.py            (Tier-1 canaries + runner)
+#   - tests/test_canary/test_canary_suite.py   (per-canary detect + clean control)
+#   - scripts/tools/canary_guard_coverage.py   (meta static-scanner, Stage 2)
+#   - pipeline/check_drift.py                   (check_canary_suite_green, Stage 3)
+#   - scripts/tools/canary_report.py           (CAPITAL_READY verdict, Stage 3)
+
+document_type: negative_control_harness_spec
+slug: canary-contamination-harness
+date: "2026-05-30"
+status: draft
+
+purpose: >
+  Prove the canompx3 research pipeline can reliably REJECT fake edge. Inject
+  deliberate contamination that SHOULD fail, and assert the pipeline's guards
+  catch it. If the pipeline cannot kill fake edge on synthetic traps, the
+  research process is not capital-ready. This COMPLEMENTS the existing null
+  harness (scripts/tests/test_synthetic_null.py), which owns the "noise->edge"
+  regime; this harness owns the orthogonal "does the specific guard fire?"
+  (guard-efficacy) regime that the null test cannot reach — random-walk bars
+  have no look-ahead structure to exploit, so a disabled look-ahead guard or a
+  bypassed holdout check passes the null test silently.
+
+design_principle: >
+  Each canary returns CanaryResult(name, fired, signature, guard, detail).
+  fired=True means the guard CAUGHT the contamination (the DESIRED outcome).
+  The drift gate (check_canary_suite_green) blocks when any canary reports
+  fired=False. Every canary carries a positive control: it must prove it can
+  BOTH detect the trap AND pass clean data — a canary that always says "caught"
+  is useless.
+
+# ── Literature grounding (the methodology, not just the guards) ──────────────
+# Every threshold below points at a real extract in docs/institutional/literature/.
+# No training-memory thresholds (institutional-rigor.md §7). MCP server was down
+# this session; extracts were read from disk (tracked files). Raw PDFs are
+# local-PC assets, not re-verified here.
+literature_grounding:
+  - id: aronson_ch5_mcp
+    extract: docs/institutional/literature/aronson_2007_ebta_data_snooping.md
+    claim: >
+      Monte Carlo Permutation (MCP / Masters) method — generate the sampling
+      distribution of a rule with NO predictive power by permuting/decoupling
+      the rule output from realised returns. This IS the formal basis for
+      canaries 1 (random direction) and 2 (day-shuffle): they are MCP null draws.
+  - id: aronson_ch8_9_precedent
+    extract: docs/institutional/literature/aronson_2007_ebta_data_snooping.md
+    claim: >
+      6,402 S&P rules; naive testing would flag ~320; ZERO survive WRC/MCP. A
+      correct pipeline kills fake edge at scale — this harness asserts canompx3
+      reproduces that property on demand.
+  - id: fst_eq1
+    extract: docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md
+    claim: >
+      False Strategy Theorem — the random-filter canary (6) must clear a
+      multiple-testing-aware bar, not raw t.
+  - id: dsr_eq1_2
+    extract: docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md
+    claim: >
+      DSR — combined with Amendment 3.5 (pre_registered_criteria.md): the V[SR]
+      reference universe is a known free parameter; the same candidate scored
+      DSR 0.000<->0.982 by universe choice alone. Grounds canary 10.
+  - id: chan_ch1_lookahead
+    extract: docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md
+    claim: >
+      Look-ahead = using future information to make a prediction at the current
+      time (e.g. a day's high/low to decide same-day entry). Grounds canaries 5
+      and 7 (future-looking / post-entry-as-pre-entry) and the holdout/OOS
+      discipline (canary 8).
+  - id: bh_chordia_fdr
+    extract: docs/institutional/literature/benjamini_hochberg_1995_fdr.md
+    secondary_extract: docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
+    claim: >
+      FDR layer. IMPORTANT SILENCE flagged in the Aronson extract itself:
+      Aronson is FAMILY-WISE (WRC/MCP), NOT FDR. Canaries 1/2/6 therefore assert
+      BOTH the permutation null (Aronson) AND BH-FDR survival = 0 (Chordia/BH).
+      Belt and suspenders; neither alone.
+
+# ── The 10 canaries: injection / expected-fire signature / guard ─────────────
+canaries:
+  - n: 1
+    name: randomized_entry_direction
+    injection: MCP draw — random break_dir decoupled from realised pnl_r sign (Aronson Ch5).
+    expected_signature: "|t|->~0; power_verdict->STATISTICALLY_USELESS; one-sided perm-p > 0.05"
+    guard: research.oos_power.one_sample_tstat/power_verdict + moving_block_bootstrap_p
+  - n: 2
+    name: shuffled_trading_days
+    injection: MCP draw — permute trading_day under features (Aronson Ch5).
+    expected_signature: "IS edge destroyed -> |t|~0; perm-p > 0.05"
+    guard: moving_block_bootstrap_p + one_sample_tstat
+  - n: 3
+    name: permuted_session_labels
+    injection: Relabel a later-session feature onto an earlier session (matches _SESSION_COL_RE).
+    expected_signature: "is_feature_safe(col, early_session) -> False"
+    guard: pipeline.session_guard.is_feature_safe
+  - n: 4
+    name: lagged_vs_leaked_features
+    injection: (a) prev-day value = safe; (b) same-day later-session read = leak; + triple-join omission.
+    expected_signature: "is_feature_safe(lag)=True, is_feature_safe(leak)=False; join-omission t inflates ~sqrt(3)=1.73"
+    guard: pipeline.session_guard.is_feature_safe + daily-features-joins triple-join
+  - n: 5
+    name: synthetic_future_looking_feature
+    injection: E2 break-bar filter (VOL_RV*) + a never-safe daily_high predictor.
+    expected_signature: "_e2_look_ahead_reason non-None; is_e2_lookahead_filter->True; is_feature_safe('daily_high')->False"
+    guard: trading_app.config E2 exclusions + pipeline.session_guard._NEVER_SAFE
+  - n: 6
+    name: random_filter_real_sparsity
+    injection: Random 0/1 filter at a realistic deployed fire-rate.
+    expected_signature: "block-bootstrap perm-p > 0.05; extreme_fire if <5%/>95%"
+    guard: moving_block_bootstrap_p (FST-aware null) + RULE 8.1 extreme-fire
+  - n: 7
+    name: post_entry_disguised_as_pre_entry
+    injection: >
+      Two variants — (a) NEUTRAL name feat_x <- pnl_r; (b) CAMOUFLAGE name
+      prev_day_close <- a sign-correlated post-entry outcome leak.
+    expected_signature: >
+      (a) T0 tautology |corr(feat_x, pnl_r)| > 0.70 fires; unknown name -> session
+      guard fail-closed. (b) SILENCE: prev_day_close is _ALWAYS_SAFE -> name-guard
+      returns True (DEFEATED); ONLY the value-based T0 correlation catches it.
+    guard: research...t0_correlation (LOAD-BEARING) + session_guard (secondary, defeatable by rename)
+    documented_silence: >
+      Name-based guards are defeatable by renaming a post-entry field to an
+      _ALWAYS_SAFE name. The value-based T0 tautology is the load-bearing catch.
+      A magnitude-only post-entry feature (mae_r, which is NOT sign-correlated
+      with pnl_r) would slip past T0 as well — a separate, narrower silence, out
+      of scope for canary 7.
+  - n: 8
+    name: holdout_2026_contamination
+    injection: enforce_holdout_date(date(2026,6,1)).
+    expected_signature: "raises ValueError (Amendment 2.7). Positive control: override_token='3656' returns date + warning."
+    guard: trading_app.holdout_policy.enforce_holdout_date
+  - n: 9
+    name: derived_table_only_claim
+    injection: Cite edge from validated_setups/edge_families only, no canonical reproduction.
+    expected_signature: >
+      meta-check flags DERIVED-layer read w/o orb_outcomes/daily_features
+      reproduction; recompute from canonical -> |t|~0.
+    guard: layer discipline (RESEARCH_RULES) + meta-check (check_research_scans_call_guards)
+  - n: 10
+    name: dsr_universe_gaming
+    injection: Compute DSR on a winners-only V[SR] reference set instead of the pinned prereg family.
+    expected_signature: >
+      winner-filtered V[SR] collapses cross-trial variance -> divergence vs
+      full family flagged DSR_UNIVERSE_UNPINNED.
+    guard: Amendment 3.5 universe-pin (V[SR] = pinned family, pre-2026, all siblings+failures)
+
+# ── Gaps & silences (adversarial self-audit) ─────────────────────────────────
+gaps_and_silences:
+  - id: tier1_not_live_flow
+    note: >
+      Tier-1 calls guards at their API boundary; it proves the guard FUNCTION
+      fires, NOT that every scan ROUTES through it. The meta-check (deliverable
+      #3) covers that routing gap structurally; Tier-2 (deferred) would cover it
+      dynamically. A guard that works but is never called is still a hole.
+  - id: name_guards_defeatable
+    note: Canary 7 silence — documented and mitigated via the value-based T0 catch.
+  - id: perm_null_budget
+    note: >
+      MCP canaries (1,2,6) reuse the canonical block-bootstrap default budget
+      (B=10,000); we do NOT hand-roll a smaller one. Seed-stability is asserted
+      in tests (verdict invariant under a seed shift).
+  - id: fdr_vs_family_wise
+    note: Aronson is family-wise (WRC/MCP); canaries assert BOTH that AND BH-FDR=0.
+  - id: dsr_onc_approximate
+    note: >
+      Canary 10 checks the universe is PINNED, not that N-hat uses Lopez de
+      Prado ONC clustering (Amendment 3.5 ONC_PENDING). Pinning is the
+      load-bearing fix; ONC is a queued upgrade, out of scope here.
+  - id: null_harness_owns_noise_regime
+    note: >
+      The null harness already owns the noise->edge regime; this harness does
+      NOT re-test that. The two are complementary.
+  - id: canary6_sparsity_match
+    note: >
+      Canary 6 uses a realistic deployed-filter fire-rate band; a guessed
+      sparsity would weaken the control below what it claims.
+
+scope:
+  built: ["Tier-1 spine (canaries 1-10)", "meta static-scanner + blocking drift gate", "CAPITAL_READY verdict"]
+  deferred: ["Tier-2 end-to-end injection through real scan/validator subprocess + batch runner"]

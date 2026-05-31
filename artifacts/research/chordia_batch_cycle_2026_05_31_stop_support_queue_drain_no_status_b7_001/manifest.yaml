@@ -1,0 +1,11 @@
+generated_at: '2026-05-31T02:37:05.741098+00:00'
+plan_count: 18
+bridge_status_counts:
+  READY_TO_ACTIVATE: 18
+strict_replay_execution: true
+strict_replay_returncode_counts:
+  0: 18
+proposal_count: 18
+chordia_log_mutation: false
+live_mutation: false
+validated_setups_mutation: false

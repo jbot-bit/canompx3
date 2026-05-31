@@ -33,8 +33,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-import duckdb
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from pipeline.db_connect import open_read_only_with_retry, open_writer_with_retry
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.validation_provenance import StrategyTradeWindowResolver
@@ -56,7 +58,20 @@ def refresh_validated_trade_windows(
     strategy_id: str | None = None,
     dry_run: bool = False,
 ) -> RefreshReport:
-    con = duckdb.connect(str(db_path), read_only=dry_run)
+    # PHASE 1 — read-only drift probe.
+    #
+    # Open read-only FIRST so this healer coexists with sibling terminals.
+    # Native DuckDB is single-writer-XOR-many-readers ACROSS processes (official
+    # docs: connect/concurrency.md — "read-write mode, where one process can read
+    # and write" vs "read-only mode, where multiple processes can read but no
+    # process can write"). Acquiring the write lock up front — as the previous
+    # `read_only=dry_run` open did — locked every other terminal out of gold.db
+    # for the duration of EVERY commit, even though a write is almost never
+    # needed (drift is usually 0). The StrategyTradeWindowResolver path is pure
+    # SELECT + in-process caching (no temp tables / writes), so the read-only
+    # handle is sufficient to compute drift. `open_read_only_with_retry` waits
+    # out transient peer locks instead of failing the commit.
+    con = open_read_only_with_retry(db_path)
     try:
         where = [
             "status = 'active'",
@@ -122,9 +137,21 @@ def refresh_validated_trade_windows(
                 f"  {sid}: ({first_day}, {last_day}, N={trade_day_count}) -> "
                 f"({canonical.first_trade_day}, {canonical.last_trade_day}, N={canonical.trade_day_count})"
             )
+        inspected = len(rows)
+    finally:
+        con.close()
 
-        updated = 0
-        if drifted and not dry_run:
+    # PHASE 2 — write only when there is drift AND we are not in dry-run.
+    #
+    # The write lock is acquired here, AFTER the read handle is closed, and ONLY
+    # on the rare commit that actually has drift to heal — exactly when a write
+    # genuinely must happen. The retry-backed writer waits out peer locks rather
+    # than bubbling a spurious rc=1 that would block the commit. No-op commits
+    # (drifted == 0) never reach this branch, so they never take a write lock.
+    updated = 0
+    if drifted and not dry_run:
+        con = open_writer_with_retry(db_path)
+        try:
             for sid, first_day, last_day, n in drifted:
                 con.execute(
                     """
@@ -138,15 +165,15 @@ def refresh_validated_trade_windows(
                 )
                 updated += 1
             con.commit()
+        finally:
+            con.close()
 
-        return RefreshReport(
-            inspected=len(rows),
-            drifted=len(drifted),
-            updated=updated,
-            details=details,
-        )
-    finally:
-        con.close()
+    return RefreshReport(
+        inspected=inspected,
+        drifted=len(drifted),
+        updated=updated,
+        details=details,
+    )
 
 
 def main() -> int:

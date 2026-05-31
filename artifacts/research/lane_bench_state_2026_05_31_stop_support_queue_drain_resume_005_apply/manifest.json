@@ -1,0 +1,38 @@
+{
+  "args": {
+    "db_path": null,
+    "family_hints_csv": "artifacts\\research\\lane_bench_state_2026_05_30\\bench.csv",
+    "format": "text",
+    "inventory_cells": null,
+    "output_dir": "artifacts\\research\\lane_bench_state_2026_05_31_stop_support_queue_drain_resume_005_apply",
+    "profile": "topstep_50k_mnq_auto",
+    "rebalance_date": "2026-05-31"
+  },
+  "blocker_counts": {
+    "C8_OOS": 19,
+    "CHORDIA_FAIL": 294,
+    "CHORDIA_PARK": 16,
+    "MISSING_CHORDIA": 348,
+    "NEGATIVE_CURRENT_EDGE": 23,
+    "NONE": 85,
+    "PROFILE_INSTRUMENT": 61,
+    "PROFILE_SESSION": 2
+  },
+  "chordia_log_mutation": false,
+  "generated_at": "2026-05-31T01:36:20.707194+00:00",
+  "live_mutation": false,
+  "profile_id": "topstep_50k_mnq_auto",
+  "row_count": 848,
+  "source_notes": [
+    "rebalance_date=2026-05-31",
+    "family_hints_csv=artifacts\\research\\lane_bench_state_2026_05_30\\bench.csv"
+  ],
+  "state_counts": {
+    "ALLOCATOR_ELIGIBLE_BENCH": 82,
+    "EXACT_LANE_READY_FOR_REPLAY": 348,
+    "KILLED": 294,
+    "LIVE_ACTIVE": 3,
+    "PARKED": 121
+  },
+  "validated_setups_mutation": false
+}

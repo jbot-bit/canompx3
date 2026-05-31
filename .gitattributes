@@ -44,3 +44,10 @@ docs/audit/hypotheses/2026-04-22-mnq-usdata1000-near-pivot-50-avoid-v1.yaml   te
 docs/audit/hypotheses/2026-04-22-mnq-usdata1000-positive-context-union-v1.yaml      text eol=lf
 docs/audit/hypotheses/2026-04-22-mnq-usdata1000-rr15-positive-context-union-v1.yaml text eol=lf
 docs/audit/hypotheses/2026-04-24-mnq-usdata1000-f5-below-pdl-rr15-v1.yaml     text eol=lf
+
+# Windows batch launchers MUST be CRLF — cmd.exe mis-parses LF-only .bat files
+# (drops the first byte of each line: "setlocal" -> "etlocal"). Pinned per-file
+# in the CRLF direction so a fresh checkout / CI runner with core.autocrlf can
+# never renormalize it to LF. Mirrors the existing CRLF blob of claude.bat.
+# Origin: START_WORKTREE.bat (auto-memory-capture Scope B, 2026-05-31).
+START_WORKTREE.bat text eol=crlf

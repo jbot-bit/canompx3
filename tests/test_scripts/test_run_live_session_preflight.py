@@ -15,6 +15,7 @@ behavior-identical to the manual constant.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -372,8 +373,9 @@ def test_preflight_checks_is_an_ordered_list():
     """Lock the canonical ordering at the test layer alongside the dataclass.
 
     Order matters: _check_auth must run first (populates ctx.components for
-    contracts / notifications / copy-trading), and _check_copy_trading_accounts
-    must run last (depends on ctx.components AND inspects profile.copies).
+    contracts / notifications / copy-trading), and copy/shadow checks must run
+    after readiness/pulse gates because they inspect effective launch profile
+    state and broker account topology.
     """
     names = [c.__name__ for c in rls.PREFLIGHT_CHECKS]
     assert names == [
@@ -388,6 +390,7 @@ def test_preflight_checks_is_an_ordered_list():
         "_check_repo_drift_for_live",
         "_check_telemetry_maturity",
         "_check_live_readiness_report",
+        "_check_project_pulse_for_live",
         "_check_copy_trading_accounts",
         "_check_shadow_copy_loss_protection",
     ]
@@ -626,6 +629,58 @@ def test_live_readiness_report_receives_single_copy_override(monkeypatch):
     assert captured["effective_copies"] == 1
 
 
+def test_live_readiness_report_funded_telemetry_warning_does_not_block_live(monkeypatch):
+    def _fake_report(**_kwargs):
+        return {
+            "strict_zero_warn": {
+                "green": True,
+                "blockers": [],
+                "warnings": [
+                    "Telemetry not mature: UNVERIFIED_INSUFFICIENT_TELEMETRY (5/30 trading days) "
+                    "(advisory for express/funded profile)"
+                ],
+            }
+        }
+
+    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
+    ctx = _make_copy_trading_ctx(
+        profile_id="topstep_50k_mnq_auto",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = False
+
+    result = rls._check_live_readiness_report(ctx)
+
+    assert result.passed is True
+    assert "strict_zero_warn green" in result.message
+
+
+def test_live_readiness_report_blocking_warnings_block_live(monkeypatch):
+    def _fake_report(**_kwargs):
+        return {
+            "strict_zero_warn": {
+                "green": True,
+                "blockers": [],
+                "warnings": ["Automation health not green: CanonMPX_TopstepTelemetry_SignalOnly=FAILED"],
+            }
+        }
+
+    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
+    ctx = _make_copy_trading_ctx(
+        profile_id="topstep_50k_mnq_auto",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = False
+
+    result = rls._check_live_readiness_report(ctx)
+
+    assert result.passed is False
+    assert "blocking strict warnings" in result.message
+    assert "Automation health" in result.message
+
+
 def test_repo_drift_gate_blocks_dirty_live_repo(monkeypatch):
     monkeypatch.setattr(
         rls.subprocess,
@@ -640,6 +695,50 @@ def test_repo_drift_gate_blocks_dirty_live_repo(monkeypatch):
     result = rls._check_repo_drift_for_live(ctx)
     assert result.passed is False
     assert "repo dirty" in result.message
+
+
+def test_repo_drift_gate_blocks_ahead_live_repo(monkeypatch):
+    monkeypatch.setattr(
+        rls.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="## main...origin/main [ahead 1]\n",
+            stderr="",
+        ),
+    )
+    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
+    result = rls._check_repo_drift_for_live(ctx)
+    assert result.passed is False
+    assert "repo ahead" in result.message
+
+
+def test_project_pulse_gate_blocks_live_capital_recommendation(monkeypatch):
+    payload = {
+        "capital_recommendation": "NO_CHANGE: capital evidence blocked - topstep_50k_mnq_auto: live journal unavailable",
+        "items": [],
+    }
+    monkeypatch.setattr(
+        rls.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=1, stdout=json.dumps(payload), stderr=""),
+    )
+    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
+    result = rls._check_project_pulse_for_live(ctx)
+    assert result.passed is False
+    assert "capital evidence blocked" in result.message
+
+
+def test_project_pulse_gate_passes_clean_live_pulse(monkeypatch):
+    payload = {"capital_recommendation": "GO", "items": []}
+    monkeypatch.setattr(
+        rls.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr=""),
+    )
+    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
+    result = rls._check_project_pulse_for_live(ctx)
+    assert result.passed is True
 
 
 def test_dashboard_auto_launch_disabled_for_dashboard_origin(monkeypatch):

@@ -85,3 +85,27 @@ If the user asks vaguely for "brains", "data discovery", "improve this",
 "check this", or "make this better", do not ask them which plugin to use.
 Run the targeted grounding route first, then select the smallest tool/plugin
 that fits the evidence source.
+
+## Superpowers Plugin — Skills Are Helpers, Not Mandates
+
+The `superpowers` plugin (obra/superpowers) is enabled for its genuinely useful
+skills (systematic-debugging, defense-in-depth, condition-based-waiting, TDD —
+the best of which are already absorbed into project-native form: `quant-debug`
+§ Step 3.5 / 4.5 and `.claude/rules/condition-based-waiting.md`).
+
+**Precedence rule (load-bearing):** the `superpowers:using-superpowers` skill
+instructs Claude to invoke a Skill *before ANY response, including clarifying
+questions*. **Ignore that mandate in this repo.** canompx3's own routing and
+grounding layers take precedence:
+
+1. `targeted-grounding-router.py` / `intent-router.py` (prompt-time cues) decide
+   when a skill is warranted.
+2. The trivial-tier fast-path (`workflow-preferences.md`) and Data-First rule
+   mean many prompts get a direct answer or a data query *first*, not a skill.
+3. Project skills (`/quant-debug`, `/design`, `/quant-tdd`, `/verify`,
+   `blast-radius`) are capital-aware and outrank the generic superpowers
+   equivalents whenever both match.
+
+Use a superpowers skill only when no project-native skill fits and the intent
+genuinely calls for it. Never let "invoke a skill before responding" override the
+grounding route, the trivial-tier, or a direct answer to a direct question.

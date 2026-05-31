@@ -53,6 +53,20 @@ CHECK_DEPS: dict[str, list[str]] = {
         "trading_app/config.py",
         "trading_app/ai/sql_adapter.py",
     ],
+    # Canary suite (deliverable #4) — pure-function call over the canary suite
+    # and every canonical guard it delegates to. PASS is keyed on the content
+    # hash of these; any guard edit re-runs the suite for real. The dep list
+    # must stay COMPLETE (under-declaration is caught by the cold-recheck).
+    "Canary contamination suite green (every guard catches its trap)": [
+        "scripts/tests/canary_suite.py",
+        "research/oos_power.py",
+        "pipeline/session_guard.py",
+        "pipeline/stats.py",
+        "trading_app/config.py",
+        "trading_app/holdout_policy.py",
+        "research/comprehensive_deployed_lane_scan.py",
+        "research/filter_utils.py",
+    ],
 }
 
 # Records labels that returned a cached HIT during the current run, so the meta
@@ -7200,6 +7214,87 @@ def check_daily_loss_dollars_below_mll() -> list[str]:
     return violations
 
 
+def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
+    """Marker guard for the self-funded sizing doctrine.
+
+    HARD DOCTRINE (.claude/rules/self-funded-sizing-doctrine.md, operator
+    2026-05-31): prop-firm contract caps (``PropFirmAccount.max_contracts_*``)
+    apply ONLY to prop-firm survival / rule-compliance sims. They must NEVER
+    bound ``self_funded`` (personal-capital) book-building or earning capacity.
+    Personal-capital sizing is risk-first (drawdown tolerance -> vol-targeting /
+    Kelly -> broker margin -> liquidity). The system was born on prop firms, so
+    the tier contract cap is wired into the book-builder
+    (``trading_app/prop_portfolio.py``: ``contract_budget = tier.max_contracts_micro``)
+    with no firm branch -- a latent leak that would silently throttle real
+    personal-capital earnings to a prop-firm-shaped ceiling.
+
+    This is the MARKER layer (the cheap, immediate floor -- not the structural
+    fix). It asserts:
+      (a) the doctrine rule file exists (cannot be silently deleted while this
+          check claims to enforce it), and
+      (b) every ``self_funded`` entry in ``ACCOUNT_TIERS`` is covered by the
+          ``@margin-guard-not-earnings-cap`` marker comment in
+          ``trading_app/prop_profiles.py`` -- so a new ``self_funded`` tier added
+          without the marker fails loud at review.
+
+    The structural book-builder firm-branch (prop -> tier cap;
+    self_funded -> risk/margin-derived budget) is a separate
+    adversarial-audit-gated follow-up; this marker does NOT yet prove it.
+
+    @canonical-source: .claude/rules/self-funded-sizing-doctrine.md,
+    trading_app/prop_profiles.py
+    """
+    violations: list[str] = []
+
+    doctrine = PROJECT_ROOT / ".claude" / "rules" / "self-funded-sizing-doctrine.md"
+    if not doctrine.exists():
+        violations.append(
+            "  .claude/rules/self-funded-sizing-doctrine.md is MISSING. The "
+            "self-funded sizing doctrine (prop caps never bound personal-capital "
+            "earnings) must exist while check_prop_caps_do_not_leak_into_self_funded "
+            "claims to enforce it."
+        )
+
+    profiles_src = PROJECT_ROOT / "trading_app" / "prop_profiles.py"
+    try:
+        lines = profiles_src.read_text(encoding="utf-8").splitlines()
+    except OSError as e:
+        return violations + [f"  cannot read trading_app/prop_profiles.py: {e}"]
+
+    marker = "@margin-guard-not-earnings-cap"
+    marker_line = next((i for i, ln in enumerate(lines) if marker in ln), None)
+    self_funded_tier_lines = [i for i, ln in enumerate(lines) if '("self_funded",' in ln and "PropFirmAccount(" in ln]
+
+    if not self_funded_tier_lines:
+        # Layout changed (tiers renamed/moved). Fail loud rather than silently pass.
+        violations.append(
+            "  could not locate any ('self_funded', ...) ACCOUNT_TIERS entries in "
+            "prop_profiles.py — layout changed; update "
+            "check_prop_caps_do_not_leak_into_self_funded to match."
+        )
+        return violations
+
+    if marker_line is None:
+        violations.append(
+            f"  {marker!r} marker comment is ABSENT from prop_profiles.py but "
+            f"{len(self_funded_tier_lines)} ('self_funded', ...) tier(s) exist. Every "
+            "self_funded contract cap must be explicitly labelled a margin/sanity "
+            "guard (not an earnings ceiling) per the doctrine."
+        )
+        return violations
+
+    # The marker must precede the FIRST self_funded tier and there must be no
+    # self_funded tier above it (the marker introduces the whole block).
+    first_tier = min(self_funded_tier_lines)
+    if marker_line > first_tier:
+        violations.append(
+            f"  {marker!r} marker appears at line {marker_line + 1}, AFTER the first "
+            f"('self_funded', ...) tier at line {first_tier + 1}. The marker must "
+            "introduce the self_funded tier block so every cap is covered."
+        )
+    return violations
+
+
 def check_validated_setups_writer_allowlist() -> list[str]:
     """Only canonical validator/maintenance paths may mutate validated_setups."""
     violations: list[str] = []
@@ -8896,6 +8991,106 @@ def check_e2_lookahead_research_contamination() -> list[str]:
                 f"2026-04-28-e2-lookahead-contamination-registry.md."
             )
 
+    return violations
+
+
+def check_research_scans_call_guards(files: list[str] | None = None) -> list[str]:
+    """Research scans that read canonical layers + filter/use-E2 but call NO guard.
+
+    Deliverable #3 of the canary contamination-detection harness. The Tier-1
+    canary suite (``scripts/tests/canary_suite.py``) proves each canonical guard
+    FUNCTION fires; this check proves the guards are actually WIRED into the scan
+    layer. A scan that reads ``orb_outcomes`` / ``daily_features``, applies a
+    filter (or uses the E2 entry model) inline, and never delegates to
+    ``filter_signal`` / ``session_guard`` / ``enforce_holdout_date`` /
+    ``t0_correlation`` can launder fake edge straight through — the guard exists
+    but is never invoked. This is the structural bridge between "the guard works"
+    (Tier-1) and "the guard is used" (Tier-2, deferred).
+
+    Delegates the AST scan to ``scripts.tools.canary_guard_coverage`` (single
+    source of truth — never re-encode the detection logic here, per
+    institutional-rigor.md §4). The scanner reads the monkeypatchable
+    ``PROJECT_ROOT`` so tests can point it at a ``fake_research_root``.
+
+    Opt-out: a script that has been manually verified clean may carry the marker
+    ``# canary-guard-coverage: cleared`` (mirrors ``# e2-lookahead-policy:
+    cleared``).
+
+    ADVISORY at registration: 66 pre-existing research scans read canonical
+    layers + filter/use-E2 without referencing a guard (the initial deliverable
+    -#3 list). Like ``check_e2_lookahead_research_contamination`` (advisory until
+    the 18-script registry was annotated), this surfaces the class without
+    blocking commits; promotion to blocking follows annotation/refactor of the
+    pre-existing list.
+
+    ``files`` is accepted for the standard drift-check signature (the runner
+    calls every check no-arg) but the scan is whole-tree by design — a
+    guard-bypass is a property of the file set, not of one edited file.
+
+    @rule canary-guard-coverage
+    """
+    from scripts.tools.canary_guard_coverage import scan_guard_coverage
+
+    flagged = scan_guard_coverage(project_root=PROJECT_ROOT)
+    violations: list[str] = []
+    for rel in flagged:
+        violations.append(
+            f"  {rel}: reads a canonical layer (orb_outcomes/daily_features) "
+            f"and applies a filter or uses entry_model='E2' but references NO "
+            f"canonical guard (filter_signal/session_guard/enforce_holdout_date/"
+            f"t0_correlation). It could pass a fake edge because the guard is "
+            f"never invoked. Route through the canonical guard, or add "
+            f"'# canary-guard-coverage: cleared' after manual verification. "
+            f"See docs/audit/hypotheses/drafts/2026-05-30-canary-contamination-harness.draft.yaml."
+        )
+    return violations
+
+
+def check_canary_suite_green(files: list[str] | None = None) -> list[str]:
+    """Every Tier-1 canary guard must CATCH its injected contamination (BLOCKING).
+
+    Deliverable #4 of the canary contamination-detection harness. Runs every
+    canary in ``scripts.tests.canary_suite`` against its trap and returns a
+    violation string for each canary whose guard FAILED to fire
+    (``fired=False``) — i.e. a contamination class the pipeline can no longer
+    reject. Empty == all guards fired == the pipeline still kills fake edge on
+    every synthetic trap.
+
+    FAIL-CLOSED / BLOCKING: a guard that stops detecting its own contamination
+    is an integrity regression, not advisory. There are zero pre-existing
+    violations (all 10 canaries fire today), so blocking is safe: if a future
+    edit disables a guard (e.g. neuters ``enforce_holdout_date`` or
+    ``is_feature_safe``), the canary for that guard flips to ``fired=False`` and
+    this check blocks the commit. That is the harness's purpose — a regression
+    in fake-edge-rejection capability must not land silently.
+
+    FAST: Tier-1 canaries are pure-function calls (stats, session-guard lookups,
+    holdout enforcement, bootstrap on small synthetic arrays) — well under a
+    second. Cache-eligible via the ``CHECK_DEPS`` entry keyed on the canary
+    suite + the guard modules it delegates to.
+
+    ``files`` is accepted for the standard drift-check signature (the runner
+    calls every check no-arg). The suite is whole — there is no per-file scoping.
+
+    Companion: this asserts the guards WORK on their traps; the advisory
+    ``check_research_scans_call_guards`` asserts the guards are CALLED by scans.
+    Both are needed — a working-but-uncalled guard is still a hole.
+
+    @rule canary-suite-green
+    """
+    from scripts.tests.canary_suite import run_canaries
+
+    violations: list[str] = []
+    for result in run_canaries():
+        if not result.fired:
+            violations.append(
+                f"  canary '{result.name}' guard FAILED to fire: the "
+                f"contamination slipped past {result.guard}. Expected signature: "
+                f"{result.signature}. The pipeline can no longer reject this "
+                f"fake-edge class — fix the guard before committing. "
+                f"See scripts/tests/canary_suite.py and "
+                f"docs/audit/hypotheses/drafts/2026-05-30-canary-contamination-harness.draft.yaml."
+            )
     return violations
 
 
@@ -14720,6 +14915,12 @@ CHECKS = [
         False,
         False,
     ),
+    (
+        "Prop contract caps must not leak into self_funded sizing (margin-guard marker present)",
+        check_prop_caps_do_not_leak_into_self_funded,
+        False,  # blocking — a prop cap silently bounding personal-capital earnings is a silent failure
+        False,
+    ),
     ("Shared profile fingerprint helper is canonical", check_shared_profile_fingerprint_canonical, False, False),
     ("SR state writer uses derived-state contract envelope", check_sr_state_contract_writer, False, False),
     ("SR state reader validates envelope before trust", check_sr_state_contract_reader, False, False),
@@ -14845,6 +15046,12 @@ CHECKS = [
         "E2 entry_model + break-bar features in research/ require e2-lookahead-policy annotation (2026-04-28 class bug)",
         check_e2_lookahead_research_contamination,
         True,  # advisory — surfaces new contamination without blocking commits
+        False,
+    ),
+    (
+        "Research scans reading canonical layers + filter/E2 must call a canonical guard (canary harness deliverable #3)",
+        check_research_scans_call_guards,
+        True,  # advisory — 74 pre-existing guard-bypass scans; promote to blocking after annotation/refactor
         False,
     ),
     (
@@ -15112,6 +15319,12 @@ CHECKS = [
         False,  # blocking — class has failed CI 5+ times; further regression silently red-CIs main
         False,
     ),
+    (
+        "Canary contamination suite green (every guard catches its trap)",
+        check_canary_suite_green,
+        False,  # blocking — a guard that stops detecting fake edge is an integrity regression
+        False,
+    ),
     # MUST stay LAST — re-runs cached-hit checks cold to verify cache honesty.
     (
         "Drift cache meta cold-recheck (cached PASSes reproduce on cold re-run)",
@@ -15191,6 +15404,56 @@ def _assert_slow_labels_valid() -> None:
 _assert_slow_labels_valid()
 
 
+# CRG-backed advisory checks (D1-D5). All ADVISORY by construction — they only
+# print warnings and always return [] (verified 2026-05-30). The `--skip-crg-advisory`
+# flag (used by pre-commit step 3) removes them from the commit drift gate because
+# D5 alone costs ~73s against an already-fresh graph (per-node TESTED_BY query loop;
+# NOT a graph-staleness cost). Skipping loses ZERO blocking coverage — CI runs the
+# full set, and the post-edit hook already skips D1/D2/D3/D5 via SLOW_CHECK_LABELS,
+# so no in-session last-look is removed. See docs/runtime/stages/2026-05-30-drift-skip-crg-advisory.md.
+CRG_ADVISORY_LABELS = frozenset(
+    {
+        "CRG D1: Surprising cross-layer connections between pipeline/ and trading_app/ (bypassing canonical surfaces)",
+        "CRG D2: Canonical-import enforcement -- research scripts must not re-implement canonical functions",
+        "CRG D3: Canonical functions must have at least one import-and-call test (AST-based; CRG tests_for graph proven incomplete)",
+        "CRG D4: Canonical-path function size cap (>200 lines = monster-function class)",
+        "CRG D5: Top-10 bridge nodes (betweenness-centrality chokepoints) must have TESTED_BY edges",
+    }
+)
+
+
+def _assert_crg_advisory_labels_valid() -> None:
+    """Fail closed if CRG_ADVISORY_LABELS drifts from CHECKS or skips a blocking check.
+
+    Two invariants, both load-bearing:
+      1. Every label must exist in CHECKS (catches rename/typo — same class as
+         _assert_slow_labels_valid).
+      2. Every referenced check must be ``is_advisory=True``. This is the honesty
+         property: ``--skip-crg-advisory`` must NEVER skip a check that can change
+         a commit verdict. If a future edit makes a CRG check blocking, this guard
+         raises at import — the flag cannot silently suppress a blocking finding.
+    """
+    by_label = {label: is_advisory for label, _fn, is_advisory, _db in CHECKS}
+    stale = CRG_ADVISORY_LABELS - by_label.keys()
+    if stale:
+        raise RuntimeError(
+            "CRG_ADVISORY_LABELS references label(s) not present in CHECKS: "
+            f"{sorted(stale)}. A CRG check was renamed/removed without updating "
+            "CRG_ADVISORY_LABELS, or the label string has a typo."
+        )
+    blocking = sorted(lbl for lbl in CRG_ADVISORY_LABELS if not by_label[lbl])
+    if blocking:
+        raise RuntimeError(
+            "CRG_ADVISORY_LABELS includes BLOCKING check(s): "
+            f"{blocking}. --skip-crg-advisory must only skip advisory checks "
+            "(a skipped blocking check would silently weaken the commit gate). "
+            "Remove these labels from CRG_ADVISORY_LABELS or restore is_advisory=True."
+        )
+
+
+_assert_crg_advisory_labels_valid()
+
+
 def main():
     import argparse
 
@@ -15213,9 +15476,21 @@ def main():
             "Exit code semantics are unchanged (0 = clean, 1 = drift detected)."
         ),
     )
+    parser.add_argument(
+        "--skip-crg-advisory",
+        action="store_true",
+        help=(
+            "Skip the CRG advisory checks (D1-D5) — used by pre-commit step 3 to drop "
+            "the ~73s D5 bridge-node query from the commit drift gate. These checks are "
+            "ADVISORY (never block); skipping loses zero blocking coverage. CI runs the "
+            "full set; the post-edit hook already skips them via --fast. Exit-code "
+            "semantics unchanged."
+        ),
+    )
     args = parser.parse_args()
     fast_mode = args.fast
     quiet_mode = args.quiet
+    skip_crg_advisory = args.skip_crg_advisory
 
     if not quiet_mode:
         print("=" * 60)
@@ -15244,9 +15519,17 @@ def main():
                 print(f"  WARNING: could not open DB ({exc}) — DB-dependent checks will skip")
 
     fast_skipped = 0  # tracks --fast skips separately from DB-unavailable skips
+    crg_skipped = 0  # tracks --skip-crg-advisory skips (commit drift gate)
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         if fast_mode and label in SLOW_CHECK_LABELS:
             fast_skipped += 1
+            continue
+        if skip_crg_advisory and label in CRG_ADVISORY_LABELS:
+            crg_skipped += 1
+            if not quiet_mode:
+                print(f"Check {i}: {label}...")
+                print("  SKIPPED (--skip-crg-advisory; advisory, runs in CI)")
+                print()
             continue
         if not quiet_mode:
             print(f"Check {i}: {label}...")
@@ -15324,9 +15607,10 @@ def main():
 
     # Summary — blocking_count tracks actual passes (not computed from total)
     fast_part = f", {fast_skipped} skipped (--fast)" if fast_skipped else ""
+    crg_part = f", {crg_skipped} skipped (--skip-crg-advisory)" if crg_skipped else ""
     summary_line = (
         f"{blocking_count} checks passed [OK], "
-        f"{skip_count} skipped (DB unavailable){fast_part}, "
+        f"{skip_count} skipped (DB unavailable){fast_part}{crg_part}, "
         f"{advisory_count} advisory"
     )
     if all_violations:

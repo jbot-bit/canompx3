@@ -1,0 +1,226 @@
+strategy_id,hypothesis_path,result_md_path,returncode,stdout_tail,stderr_tail
+MNQ_US_DATA_1000_E1_RR1.0_CB4_VWAP_MID_ALIGNED_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e1-rr1-0-cb4-vwap-mid-aligned-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e1-rr1-0-cb4-vwap-mid-aligned-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E1_RR1.0_CB4_VWAP_MID_ALIGNED_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e1-rr1-0-cb4-vwap-mid-aligned-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.181 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e1-rr1-0-cb4-vwap-mid-aligned-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e1-rr1-0-cb4-vwap-mid-aligned-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e1-rr1-0-cb4-vwap-mid-aligned-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08_S075,docs/audit/hypotheses/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt08-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt08-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt08-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=917 and ExpR=0.1361; OOS sign matches at N_OOS=65.
+Result MD: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt08-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt08-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt08-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_CME_PRECLOSE_E2_RR1.5_CB1_ORB_VOL_4K_S075,docs/audit/hypotheses/2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-orb-vol-4k-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-orb-vol-4k-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_CME_PRECLOSE_E2_RR1.5_CB1_ORB_VOL_4K_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-orb-vol-4k-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PARK
+Heavyweight reason: IS gates clear but OOS sign opposes IS once N_OOS=83 >= 30.
+Result MD: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-orb-vol-4k-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-orb-vol-4k-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-orb-vol-4k-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT15_S075,docs/audit/hypotheses/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=1432 and ExpR=0.0963; OOS sign matches at N_OOS=83.
+Result MD: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-cost-lt15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8_S075,docs/audit/hypotheses/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-g8-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-g8-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-g8-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=1444 and ExpR=0.0953; OOS sign matches at N_OOS=83.
+Result MD: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-g8-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-g8-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-g8-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_COST_LT15,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt15-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt15-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_COST_LT15
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt15-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=1518 and ExpR=0.0926; OOS sign matches at N_OOS=86.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt15-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt15-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt15-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_G6,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g6-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g6-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_G6
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g6-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.782 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g6-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g6-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g6-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_G8,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g8-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g8-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_G8
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g8-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=1523 and ExpR=0.0935; OOS sign matches at N_OOS=86.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g8-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g8-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-g8-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_2K,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-2k-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-2k-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_2K
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-2k-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.781 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-2k-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-2k-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-2k-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR2.0_CB1_VWAP_MID_ALIGNED_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR2.0_CB1_VWAP_MID_ALIGNED_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=806 and ExpR=0.2012; OOS sign matches at N_OOS=54.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G8,docs/audit/hypotheses/2026-05-31-mnq-tokyo-open-e2-rr1-5-cb1-orb-g8-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-tokyo-open-e2-rr1-5-cb1-orb-g8-chordia-unlock-v1.md,0,"Strategy: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G8
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-tokyo-open-e2-rr1-5-cb1-orb-g8-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.188 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-tokyo-open-e2-rr1-5-cb1-orb-g8-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-tokyo-open-e2-rr1-5-cb1-orb-g8-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-tokyo-open-e2-rr1-5-cb1-orb-g8-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_100,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-ovnrng-100-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-ovnrng-100-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_100
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-ovnrng-100-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.871 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-ovnrng-100-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-ovnrng-100-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-ovnrng-100-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_16K_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_16K_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=1461 and ExpR=0.0826; OOS sign matches at N_OOS=85.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_16K,docs/audit/hypotheses/2026-05-31-mnq-comex-settle-e2-rr1-5-cb1-orb-vol-16k-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-comex-settle-e2-rr1-5-cb1-orb-vol-16k-chordia-unlock-v1.md,0,"Strategy: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_16K
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-comex-settle-e2-rr1-5-cb1-orb-vol-16k-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.310 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-comex-settle-e2-rr1-5-cb1-orb-vol-16k-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-comex-settle-e2-rr1-5-cb1-orb-vol-16k-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-comex-settle-e2-rr1-5-cb1-orb-vol-16k-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-vwap-mid-aligned-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-vwap-mid-aligned-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-vwap-mid-aligned-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.732 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-vwap-mid-aligned-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-vwap-mid-aligned-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-vwap-mid-aligned-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_COST_LT08,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_COST_LT08
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=1417 and ExpR=0.1039; OOS sign matches at N_OOS=86.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR2.0_CB1_VWAP_MID_ALIGNED_O15,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR2.0_CB1_VWAP_MID_ALIGNED_O15
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=806 and ExpR=0.2464; OOS sign matches at N_OOS=54.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr2-0-cb1-vwap-mid-aligned-o15-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_CROSS_NYSE_MOMENTUM_O30,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cross-nyse-momentum-o30-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cross-nyse-momentum-o30-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_CROSS_NYSE_MOMENTUM_O30
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cross-nyse-momentum-o30-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.912 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cross-nyse-momentum-o30-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cross-nyse-momentum-o30-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cross-nyse-momentum-o30-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E1_RR1.0_CB1_X_MGC_ATR70_O15,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e1-rr1-0-cb1-x-mgc-atr70-o15-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e1-rr1-0-cb1-x-mgc-atr70-o15-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E1_RR1.0_CB1_X_MGC_ATR70_O15
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e1-rr1-0-cb1-x-mgc-atr70-o15-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.178 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e1-rr1-0-cb1-x-mgc-atr70-o15-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e1-rr1-0-cb1-x-mgc-atr70-o15-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e1-rr1-0-cb1-x-mgc-atr70-o15-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_ATR_P50_S075,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-atr-p50-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-atr-p50-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_ATR_P50_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-atr-p50-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.264 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-atr-p50-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-atr-p50-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-atr-p50-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR70,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-x-mes-atr70-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-x-mes-atr70-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR70
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-x-mes-atr70-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.437 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-x-mes-atr70-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-x-mes-atr70-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-x-mes-atr70-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=1512 and ExpR=0.0852; OOS sign matches at N_OOS=85.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_COST_LT08_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_COST_LT08_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=1505 and ExpR=0.0860; OOS sign matches at N_OOS=85.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt08-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_COST_LT10_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_COST_LT10_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=1522 and ExpR=0.0829; OOS sign matches at N_OOS=85.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_16K_S075,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_16K_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.775 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"

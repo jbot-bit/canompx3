@@ -577,18 +577,61 @@ def _session_lock_lines() -> tuple[list[str], bool]:
         # we're trying to prevent.
         return ([f"  WARNING: could not write Claude session lock at {lock_path}: {e}"], False)
 
-    # Conflict path: read existing lock for the BLOCK message. Tolerate
-    # corruption (treat as "unknown other session" — still safer to BLOCK).
+    # Conflict path: read existing lock for the BLOCK message.
+    #
+    # Two distinct failure modes converge here and DESERVE distinct messages:
+    #   (a) the lock parses → a real (possibly live) concurrent session.
+    #   (b) the lock is present but UNPARSEABLE (malformed JSON) → almost
+    #       always a stale/corrupt lock, NOT a concurrent session. The live
+    #       2026-05-24 incident was an older writer emitting unescaped Windows
+    #       backslashes (`"worktree": "C:\Users\..."` → invalid \U \j \c
+    #       escapes), which `json.loads` rejects. Critically, a malformed lock
+    #       also SILENTLY disables the per-tool branch-flip / head-flip guards
+    #       (they read `branch_at_start` / `head_at_start` via `_branch_state`,
+    #       which return None on parse failure and exit 0). The operator must
+    #       be told the guards are inactive — the old "Another session is
+    #       active" framing sent them chasing a phantom concurrent session.
+    #
+    # We still BLOCK in BOTH cases: a corrupt lock cannot prove no live session
+    # exists, and blocking-conservatively is the mutex contract
+    # (`test_corrupted_lock_still_blocks_and_degrades_gracefully`). The fix is
+    # message ACCURACY, not the block decision.
     try:
         existing = json.loads(lock_path.read_text(encoding="utf-8"))
-        other_pid = existing.get("pid", "?")
-        other_started = existing.get("iso_started", "?")
-        other_worktree = existing.get("worktree", "?")
+        lock_malformed = False
     except (json.JSONDecodeError, OSError, ValueError):
-        other_pid = "(corrupted lock file)"
-        other_started = "?"
-        other_worktree = "?"
+        existing = {}
+        lock_malformed = True
 
+    if lock_malformed:
+        return (
+            [
+                "",
+                "  ====================================================================",
+                "  BLOCKED: session lock is malformed (unparseable JSON).",
+                "  --------------------------------------------------------------------",
+                "  Branch-flip and head-flip guards are INACTIVE — they read",
+                "  branch_at_start / head_at_start from this lock and fail open on",
+                "  a parse error. No live session could be confirmed; this is almost",
+                "  certainly a stale/corrupt lock, NOT a concurrent session.",
+                f"  Lock file:    {lock_path}",
+                "  --------------------------------------------------------------------",
+                "  Common cause: an older writer emitted unescaped Windows paths",
+                "  (e.g. \"worktree\": \"C:\\Users\\...\") — invalid JSON escapes.",
+                "",
+                "  Recover (restores guards):",
+                f"    1. rm '{lock_path}'",
+                "    2. Restart this session — session-start rewrites a clean,",
+                "       properly-escaped lock and re-enables the guards.",
+                "  ====================================================================",
+                "",
+            ],
+            True,
+        )
+
+    other_pid = existing.get("pid", "?")
+    other_started = existing.get("iso_started", "?")
+    other_worktree = existing.get("worktree", "?")
     return (
         [
             "",
@@ -625,6 +668,38 @@ def _session_lock_lines() -> tuple[list[str], bool]:
 # ago in a dirty tree is an unambiguous live editor. Stale dirty worktrees
 # abandoned hours/days ago fall outside the window and never trip the block.
 _ACTIVE_SIBLING_WINDOW_SECS = 15 * 60
+
+# A heartbeat (.beat) file counts as "a session is live HERE right now" only if
+# stamped within this window. Wider than a single tool-call gap so a session
+# that pauses to read/think for several minutes still reads as live; tighter
+# than _ACTIVE_SIBLING_WINDOW_SECS because a heartbeat is a deliberate liveness
+# stamp, not an incidental file edit.
+_HEARTBEAT_LIVE_WINDOW_SECS = 10 * 60
+# Beats older than this are dead-session litter; the reader prunes them while
+# scanning so the directory self-cleans without a separate reaper.
+_HEARTBEAT_PRUNE_SECS = 60 * 60
+_HEARTBEAT_DIRNAME = ".claude-heartbeats"
+
+
+def _canon_path(raw: str) -> str | None:
+    """Canonicalise a path for same-tree comparison.
+
+    `os.path.normpath`+`normcase` alone do NOT collapse 8.3 short names or
+    junction/symlink indirection, so a writer that stamped an 8.3 or junction
+    `cwd` would compare unequal to `git rev-parse --show-toplevel`'s canonical
+    long path — making a SAME-tree peer look like a sibling and SILENTLY
+    dropping the loud warning (the exact failure this feature exists to fix).
+    `Path.resolve()` resolves both forms; normcase then folds Windows casing.
+    Returns None on empty/unresolvable input.
+    """
+    if not raw:
+        return None
+    try:
+        return os.path.normcase(str(Path(raw).resolve()))
+    except (OSError, ValueError, RuntimeError):
+        # resolve() can raise on some Windows paths — fall back to normpath so
+        # we still get a best-effort comparison rather than crashing.
+        return os.path.normcase(os.path.normpath(raw))
 
 
 def _most_recent_tracked_mtime(wt_path: str, dirty_rel_paths: list[str]) -> float | None:
@@ -783,6 +858,127 @@ def _active_sibling_lines(now_epoch: float | None = None) -> tuple[list[str], bo
         return lines, False
 
     return [], False
+
+
+def _live_heartbeat_lines(my_session_id: str = "", now_epoch: float | None = None) -> list[str]:
+    """Warn (never block) when ANOTHER session is heartbeating right now.
+
+    Complements `_session_lock_lines` (PID — unreliable on Windows) and
+    `_active_sibling_lines` (start-only, infers liveness from tracked-file
+    edits and so misses idle/reading sessions). The heartbeat is a positive
+    liveness FACT: every live session stamps
+    `<git-common-dir>/.claude-heartbeats/<session_id>.beat` on each tool call
+    (`session-heartbeat.py`). Here we read those beats once at startup.
+
+    Classification:
+      - SAME worktree, beat < _HEARTBEAT_LIVE_WINDOW_SECS old  -> LOUD warning
+        (two sessions in one tree is the corruption/redundant-work case).
+      - DIFFERENT worktree, fresh beat                         -> soft note
+        (sanctioned parallel pattern — inform, don't alarm).
+
+    WARN-only by design: the operator chose to stay in control. We never exit 2
+    from this path; the caller appends these lines to the stderr brief, which
+    reaches both the operator (terminal) and Claude (context).
+
+    Self/expiry/skew handling:
+      - Skips this session's own beat (`my_session_id`) — no self-alarm on
+        /clear or resume.
+      - Ignores beats older than _HEARTBEAT_LIVE_WINDOW_SECS (crashed sessions).
+      - Ignores beats with a future mtime beyond 60s (clock skew / garbage).
+      - Prunes beats older than _HEARTBEAT_PRUNE_SECS opportunistically.
+
+    Fail-open: any error -> [] (never wedge startup).
+    """
+    common_dir = _git_common_dir()
+    if common_dir is None:
+        return []
+    beat_dir = common_dir / _HEARTBEAT_DIRNAME
+    try:
+        if not beat_dir.is_dir():
+            return []
+        beat_files = list(beat_dir.glob("*.beat"))
+    except OSError:
+        return []
+
+    if now_epoch is None:
+        now_epoch = time.time()
+
+    rc_pwd, current_path = _git(["rev-parse", "--show-toplevel"])
+    current_norm = (
+        _canon_path(current_path.strip()) if rc_pwd == 0 and current_path.strip() else None
+    )
+
+    my_norm = (my_session_id or "").strip()
+    same_tree: list[str] = []
+    other_tree: list[tuple[str, str]] = []  # (worktree, branch)
+
+    for bf in beat_files:
+        try:
+            mtime = bf.stat().st_mtime
+        except OSError:
+            continue
+        age = now_epoch - mtime
+        # Opportunistic prune of dead litter — best-effort, ignore failures.
+        if age > _HEARTBEAT_PRUNE_SECS:
+            try:
+                bf.unlink()
+            except OSError:
+                pass
+            continue
+        # Reject clock-skew (future-dated) and beats outside the live window.
+        if age < -60 or age > _HEARTBEAT_LIVE_WINDOW_SECS:
+            continue
+        try:
+            beat = json.loads(bf.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, ValueError):
+            continue
+        if not isinstance(beat, dict):
+            continue
+        beat_sid = str(beat.get("session_id", "")).strip()
+        if beat_sid and my_norm and beat_sid == my_norm:
+            continue  # our own beat — not a peer
+        beat_cwd = str(beat.get("cwd", "")).strip()
+        beat_branch = str(beat.get("branch", "")).strip() or "?"
+        beat_norm = _canon_path(beat_cwd)
+        if current_norm is not None and beat_norm == current_norm:
+            same_tree.append(beat_branch)
+        else:
+            other_tree.append((beat_cwd or "?", beat_branch))
+
+    lines: list[str] = []
+    if same_tree:
+        lines.extend(
+            [
+                "",
+                "  ====================================================================",
+                "  WARNING: ANOTHER CLAUDE SESSION IS LIVE IN THIS WORKTREE RIGHT NOW.",
+                "  --------------------------------------------------------------------",
+                f"  A peer session (branch `{same_tree[0]}`) heartbeat is seconds old in",
+                "  THIS folder. Two sessions in one tree step on each other: corrupted",
+                "  git index mid-commit, lost stashes, and DUPLICATED WORK (you redo what",
+                "  the other terminal already finished).",
+                "",
+                "  Before you start working here, do ONE of:",
+                "    1. Switch to the other terminal and continue the work there.",
+                "    2. If that terminal is truly idle/abandoned, close it first.",
+                "    3. Work in your own tree:  scripts/tools/new_session.sh",
+                "  ====================================================================",
+                "",
+            ]
+        )
+    if other_tree:
+        lines.append(
+            f"  NOTE: {len(other_tree)} other live session(s) heartbeating in parallel "
+            f"worktree(s) — sanctioned, just don't open a 2nd in any one tree:"
+        )
+        seen: set[str] = set()
+        for wt, br in other_tree[:4]:
+            key = f"{wt}|{br}"
+            if key in seen:
+                continue
+            seen.add(key)
+            lines.append(f"    - {wt}  (branch `{br}`)")
+    return lines
 
 
 def _action_queue_ready_lines() -> list[str]:
@@ -1087,16 +1283,22 @@ def _crg_context_lines() -> list[str]:
         return []
 
 
-def _worktree_lease_lines() -> tuple[list[str], bool]:
+def _worktree_lease_lines(session_id: str = "") -> tuple[list[str], bool]:
     """Acquire (or detect peer hold of) the worktree concurrency lease.
 
     Delegates entirely to `scripts/tools/worktree_guard.py` — institutional-
     rigor §4 (no inline copies). Returns (lines, should_block).
 
-    This is the SHORT-threshold (30 min heartbeat) lease enforced PreToolUse
-    by `.claude/hooks/worktree_guard.py`. The 12h `_session_lock_lines()`
-    mutex remains as a separate safety net for the longer-lived dead-lock
-    incident class. Both can coexist; they target different failure modes.
+    The lease is now keyed on (session_id, ppid)+heartbeat, NOT an OS file-lock
+    (the old lock was held by an ephemeral hook subprocess and provided no
+    mutual exclusion — see the canonical module docstring, n=2 incident
+    2026-05-29/30). Passing `session_id` here is what lets a SECOND session in
+    this worktree be recognised as a different owner and BLOCKED at startup,
+    even when the peer's working tree is clean (e.g. mid git-surgery after a
+    stash) — the exact case `_active_sibling_lines()`'s mtime signal misses.
+
+    The 12h `_session_lock_lines()` PID mutex remains as a separate safety net
+    for the longer-lived dead-lock incident class. Both coexist intentionally.
     Fail-open on any error.
     """
     try:
@@ -1110,19 +1312,20 @@ def _worktree_lease_lines() -> tuple[list[str], bool]:
             return [], False
         mod = _ilu.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        status_str, payload, msg = mod.acquire(PROJECT_ROOT)
+        status_str, payload, msg = mod.acquire(PROJECT_ROOT, session_id=session_id)
     except BaseException:
         return [], False
 
     if status_str == "blocked":
         pl: dict = payload if isinstance(payload, dict) else {}
         pid = pl.get("pid", "?")
+        sid = pl.get("session_id", "?")
         wt = pl.get("worktree", "?")
         lines = [
             "",
             "  ====================================================================",
             "  BLOCKED: another Claude session holds the worktree concurrency lease.",
-            f"  Peer PID {pid} on worktree {wt}",
+            f"  Peer session {sid} (PID {pid}) on worktree {wt}",
             "  Recovery (after confirming peer is truly gone):",
             "    python scripts/tools/worktree_guard.py --force-release",
             "  Or spawn a fresh worktree: scripts/tools/new_session.sh",
@@ -1130,7 +1333,7 @@ def _worktree_lease_lines() -> tuple[list[str], bool]:
             "",
         ]
         return lines, True
-    if status_str in ("acquired", "refreshed"):
+    if status_str in ("acquired", "refreshed", "reclaimed"):
         return [f"  Worktree lease: {status_str} ({msg})"], False
     return [], False  # skipped / error -> fail-open silently
 
@@ -1196,6 +1399,15 @@ def main() -> None:
         sys.exit(0)
 
     session_type = event.get("session_type", "startup")
+    # Fallback order MUST match session-heartbeat.py's writer (CLAUDE_CODE_SESSION_ID
+    # before CLAUDE_SESSION_ID): if stdin lacks session_id (older harness on
+    # /clear/resume) and the two env vars differ, a mismatched fallback would make
+    # _live_heartbeat_lines fail to skip our OWN beat -> false self-alarm.
+    session_id = (
+        event.get("session_id", "")
+        or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+        or os.environ.get("CLAUDE_SESSION_ID", "")
+    )
     lines: list[str] = []
     task_route_lines = _task_route_lines()
 
@@ -1207,10 +1419,13 @@ def main() -> None:
         if should_block:
             print("\n".join(block_lines), file=sys.stderr)
             sys.exit(2)
-        # Short-threshold (30 min) lease for PreToolUse enforcement. Separate
-        # from the 12h PID lock above. Acquires (or refreshes) for this PID
-        # so the PreToolUse hook recognises this session as the holder.
-        lease_lines, lease_block = _worktree_lease_lines()
+        # (session_id, ppid)+heartbeat lease — the real worktree mutex, also
+        # enforced PreToolUse by `.claude/hooks/worktree_guard.py`. Passing this
+        # session's id lets the canonical module recognise a DIFFERENT live
+        # session in this tree and BLOCK us at startup, even when the peer's
+        # tree is clean (mid git-surgery after a stash) — the case the
+        # mtime-based `_active_sibling_lines()` below structurally misses.
+        lease_lines, lease_block = _worktree_lease_lines(session_id)
         if lease_block:
             print("\n".join(lease_lines), file=sys.stderr)
             sys.exit(2)
@@ -1248,6 +1463,10 @@ def main() -> None:
             )
 
     if lines:
+        # Live-peer heartbeat check FIRST among the drift signals: a concurrent
+        # session in THIS tree is the highest-priority "stop and look" warning
+        # (corruption + redundant-work risk). Warn-only — never blocks.
+        lines.extend(_live_heartbeat_lines(session_id))
         lines.extend(_origin_drift_lines())
         lines.extend(_env_drift_lines())
         lines.extend(_action_queue_ready_lines())

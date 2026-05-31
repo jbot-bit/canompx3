@@ -1,41 +1,60 @@
 #!/usr/bin/env python3
-"""Per-worktree concurrent-session lease backed by the `filelock` library.
+"""Per-worktree concurrent-session mutex backed by (session_id, ppid) + heartbeat.
 
 Canonical lease I/O lives here. The PreToolUse hook
 (`.claude/hooks/worktree_guard.py`) imports from this module so there is a
-single source of truth for path resolution, schema, and reclaim predicates
+single source of truth for path resolution, schema, and ownership predicates
 (institutional-rigor §4 — no inline copies).
 
-## Lock primitive
+## Why this is NOT an OS file-lock anymore (n=2 incident 2026-05-29/30)
 
-`filelock.FileLock` (https://py-filelock.readthedocs.io/) — used by pip, uv,
-poetry, black. Cross-platform mutex via `msvcrt.locking(fd, LK_NBLCK, 1)` on
-Windows (Microsoft Learn: `_locking` — locks bytes of a file) and `fcntl.flock`
-on POSIX. The OS releases the lock automatically when the holding process
-exits, which is the property we need against the "peer terminal vanished"
-failure mode.
+The previous design held a `filelock.FileLock` for the worktree. That provided
+ZERO mutual exclusion in practice: the PreToolUse hook runs as a NEW `python`
+subprocess per tool call, so the lock holder was an ephemeral subprocess that
+exited microseconds later — and `filelock` auto-releases the OS lock on holder
+process exit. Two concurrent Claude/Codex sessions therefore never contended;
+the sidecar merely recorded "whoever ran a tool last" (the rotating-PID storm
+seen during the incident). The mutex was theatre.
+
+The real holder we need to track is the long-lived **Claude session process**,
+which is the PARENT of every hook subprocess. So ownership is keyed on:
+
+  - `session_id` — the Claude session id from the hook event payload (stable
+    within one session; the transcript filename IS this id). A NEW id is minted
+    on every start including /clear & /compact, so it alone cannot be the key
+    (a /clear-restart would false-block itself against its own fresh sidecar).
+  - `ppid` — `os.getppid()` from the hook subprocess == the Claude session
+    process. Stable for one running session; reliable to liveness-probe because
+    it is the immediate parent (same user, same machine) — unlike an arbitrary
+    stored PID, which the old 12h mutex's own comments admit is unreliable on
+    Windows.
+
+A peer holds the worktree IFF the sidecar records a DIFFERENT session_id whose
+heartbeat is fresh (< STALE_HEARTBEAT_SECONDS) AND whose recorded ppid is still
+alive. Stale heartbeat OR dead ppid → reclaimable immediately (no 12h wait);
+this is what makes a /clear-restart safe: the prior session's Claude process is
+gone, so its ppid reads dead and we reclaim.
 
 ## Two files per worktree
 
-  - `<git-dir>/.claude.worktree.lock`   — the OS-level FileLock target. Empty.
-                                          Held for the lifetime of the Claude
-                                          session.
-  - `<git-dir>/.claude.worktree.lease.json` — informational sidecar (holder
-                                          PID, branch, heartbeat). Read by
-                                          `--status` and by the hook for the
-                                          stderr BLOCK message.
+  - `<git-dir>/.claude.worktree.lock`   — best-effort OS FileLock target. Empty.
+                                          Belt-and-braces only; the heartbeat +
+                                          ppid-liveness is the actual mutex.
+  - `<git-dir>/.claude.worktree.lease.json` — the authoritative ownership
+                                          record: holder session_id, ppid, pid,
+                                          branch, heartbeat. Read by `--status`
+                                          and by the hook for the BLOCK message.
 
-The mutex is the lock file (OS-enforced, dead-process-tolerant). The JSON is
-informational only. Stale-heartbeat reclaim applies ONLY to the sidecar — the
-underlying lock self-releases on process death.
+For linked worktrees `<git-dir>` is `.git/worktrees/<name>/`, so the lease is
+already worktree-isolated by git's own layout.
 
 ## Why not just the 12h `_session_lock_lines()` PID lock?
 
 `.claude/hooks/session-start.py:_session_lock_lines()` uses a hand-rolled
-`O_EXCL` + `os.kill(pid, 0)` pattern with a 12-hour staleness floor. That
-serves a different incident: 3-day-stale locks from dead PIDs. This module
-serves the actively-running-peer-terminal case (30-min ergonomic threshold
-on the heartbeat, PreToolUse enforcement). Both coexist intentionally.
+`O_EXCL` + `os.kill(pid, 0)` pattern with a 12-hour staleness floor. It serves
+a different, longer-lived incident class (3-day-stale dead-PID locks). This
+module serves the actively-running-peer case with a 90s ergonomic heartbeat and
+PreToolUse enforcement. Both coexist intentionally.
 """
 
 from __future__ import annotations
@@ -56,29 +75,17 @@ except ImportError as exc:  # pragma: no cover - guarded by drift check
 LOCK_FILENAME = ".claude.worktree.lock"
 LEASE_FILENAME = ".claude.worktree.lease.json"
 
-# Sidecar staleness: the OS releases the FileLock automatically when the
-# holder dies, but the *sidecar* JSON heartbeat is informational. A live peer
-# could in principle hold the lock without writing a heartbeat for >30 min
-# (e.g., long-running internal task). When the sidecar is stale we still
-# respect the OS lock — we only complain in --status output. The hook treats
-# stale-sidecar-but-locked as BLOCK.
-STALE_HEARTBEAT_SECONDS = 30 * 60
+# Heartbeat freshness window. A peer's lease is "live" only if its heartbeat is
+# newer than this AND its ppid is alive. 90s comfortably exceeds the gap between
+# a session's tool calls (each PreToolUse refreshes the heartbeat) while keeping
+# a /clear-restart's worst-case wait short if ppid-liveness somehow can't be
+# determined.
+STALE_HEARTBEAT_SECONDS = 90
 
 # Exit codes
 EXIT_OK = 0
 EXIT_BLOCKED = 2
 EXIT_ERROR = 3
-
-
-def _build_payload_dict(pid: int, worktree: str, iso_started: str, iso_heartbeat: str, branch: str) -> dict:
-    return {
-        "pid": pid,
-        "worktree": worktree,
-        "iso_started": iso_started,
-        "iso_heartbeat": iso_heartbeat,
-        "branch": branch,
-        "schema": 1,
-    }
 
 
 def _now_iso() -> str:
@@ -95,6 +102,144 @@ def _iso_age_seconds(iso: str) -> float | None:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=UTC)
     return (datetime.now(UTC) - ts).total_seconds()
+
+
+def _pid_is_alive(pid: int | None, expected_create_time: int | None = None) -> bool:
+    """Reliable cross-platform liveness for a recorded ppid.
+
+    Windows is the load-bearing case: ``os.kill(pid, 0)`` does NOT reliably
+    raise ``ProcessLookupError`` for a dead pid there — it commonly raises a
+    generic ``OSError`` (ERROR_INVALID_PARAMETER / ERROR_ACCESS_DENIED), which a
+    naive ``except OSError: return True`` would misread as "alive" and so NEVER
+    reclaim a dead session's lease — re-creating the exact wedge this fix
+    exists to remove (a /clear-restart would block on its own dead predecessor
+    forever). So on Windows we probe via ``OpenProcess`` and inspect the exit
+    code: a live process has exit code STILL_ACTIVE (259); a dead one has any
+    other value (or fails to open with a not-found error).
+
+    `expected_create_time` is the low-DWORD of the process's Windows FILETIME at
+    lease-write time. When provided, a mismatch proves PID reuse — the original
+    session is gone even if exit code says STILL_ACTIVE.
+
+    POSIX: ``os.kill(pid, 0)`` — ProcessLookupError = dead, PermissionError =
+    alive-but-other-user.
+
+    The ppid we probe is the hook subprocess's parent — the Claude session
+    process — so it is the SAME user on the SAME machine, which is why this
+    probe is trustworthy here (unlike the old code's probe of an arbitrary
+    stored PID across process trees).
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+
+    if os.name == "nt":
+        return _pid_is_alive_windows(pid, expected_create_time=expected_create_time)
+
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except (OSError, AttributeError):
+        return True  # POSIX: cannot prove dead → assume alive (no false reclaim)
+
+
+def _get_process_create_time_windows(pid: int) -> int | None:
+    """Return the Windows process creation time (FILETIME low DWORD) or None on failure.
+
+    Used to detect PID reuse: if the recorded creation time doesn't match the
+    live process's creation time, the PID was recycled and the old session is gone.
+    Returns None on any failure (caller falls back to exit-code check alone).
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return None
+        try:
+            creation = wintypes.FILETIME()
+            exit_ft = wintypes.FILETIME()
+            kernel_ft = wintypes.FILETIME()
+            user_ft = wintypes.FILETIME()
+            ok = kernel32.GetProcessTimes(
+                handle,
+                ctypes.byref(creation),
+                ctypes.byref(exit_ft),
+                ctypes.byref(kernel_ft),
+                ctypes.byref(user_ft),
+            )
+            if not ok:
+                return None
+            return creation.dwLowDateTime  # low 32 bits — sufficient for reuse detection
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception:
+        return None
+
+
+def _pid_is_alive_windows(pid: int, expected_create_time: int | None = None) -> bool:
+    """Windows liveness via OpenProcess + GetExitCodeProcess.
+
+    Returns False ONLY when we can positively prove the process is gone
+    (OpenProcess fails with ERROR_INVALID_PARAMETER == the pid doesn't exist,
+    or the process reports a non-STILL_ACTIVE exit code). Any ambiguity →
+    True (conservative: never false-reclaim a possibly-live session).
+
+    When `expected_create_time` is provided (from the lease sidecar), it is
+    cross-checked against the live process's creation time. A mismatch means
+    the PID was reused by a different process — the original session is gone.
+    This closes the Windows PID-reuse false-block (adversarial audit HIGH, 2026-05-30).
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        ERROR_INVALID_PARAMETER = 87
+        ERROR_ACCESS_DENIED = 5
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            err = kernel32.GetLastError()
+            if err == ERROR_INVALID_PARAMETER:
+                return False  # pid does not exist → dead
+            if err == ERROR_ACCESS_DENIED:
+                return True  # exists but not queryable → alive
+            return True  # any other open failure → assume alive
+        try:
+            exit_code = wintypes.DWORD()
+            ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
+            if not ok:
+                return True  # could not read exit code → assume alive
+            if exit_code.value != STILL_ACTIVE:
+                return False  # process has exited
+
+            # Process is running. Cross-check creation time to detect PID reuse.
+            if expected_create_time is not None:
+                live_create = _get_process_create_time_windows(pid)
+                if live_create is not None and live_create != expected_create_time:
+                    return False  # PID reused by a different process → original is gone
+
+            return True
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception:
+        # ctypes unavailable / unexpected — fall back to os.kill, then to alive.
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except OSError:
+            return True
 
 
 def _run_git(args: list[str], cwd: Path, timeout: float = 5.0) -> tuple[int, str]:
@@ -156,42 +301,114 @@ def read_lease(cwd: Path) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _write_lease(lease_file: Path, payload: dict) -> None:
-    """Plain write — the FileLock guards concurrent writers, so a temp+replace
-    dance is not load-bearing. Kept inside the locked section by callers.
-    """
-    lease_file.parent.mkdir(parents=True, exist_ok=True)
-    lease_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-
-def _build_payload(cwd: Path, pid: int) -> dict:
+def _build_payload(cwd: Path, pid: int, ppid: int, session_id: str, iso_started: str) -> dict:
     wt_root = resolve_worktree_root(cwd) or cwd
     rc_branch, branch = _run_git(["branch", "--show-current"], cwd)
     branch = branch if rc_branch == 0 else ""
-    now = _now_iso()
-    return _build_payload_dict(
-        pid=pid,
-        worktree=str(wt_root),
-        iso_started=now,
-        iso_heartbeat=now,
-        branch=branch,
-    )
+    payload: dict = {
+        "pid": pid,
+        "ppid": ppid,
+        "session_id": session_id,
+        "worktree": str(wt_root),
+        "iso_started": iso_started,
+        "iso_heartbeat": _now_iso(),
+        "branch": branch,
+        "schema": 3,
+    }
+    # Store ppid creation time for PID-reuse detection on Windows (schema 3+).
+    if os.name == "nt":
+        ct = _get_process_create_time_windows(ppid)
+        if ct is not None:
+            payload["ppid_create_time"] = ct
+    return payload
 
 
-def acquire(cwd: Path, pid: int | None = None) -> tuple[str, dict | None, str]:
-    """Acquire (or refresh) the worktree lease.
+def _write_lease(lease_file: Path, payload: dict) -> None:
+    lease_file.parent.mkdir(parents=True, exist_ok=True)
+    # Atomic write: write to a temp file then os.replace() so read_lease()
+    # never sees a partial JSON during a concurrent heartbeat refresh. This
+    # is the torn-read fix (adversarial audit CRITICAL, 2026-05-30).
+    tmp = lease_file.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.replace(tmp, lease_file)
+
+
+def _same_session(existing: dict, session_id: str, pid: int) -> bool:
+    """True iff the existing lease belongs to the caller's session.
+
+    Primary key is `session_id` (stable within a running session). When the
+    caller has no session_id (CLI invocation, or a hook event without the
+    field), fall back to the recorded pid — preserving the legacy CLI/test
+    contract where the same `pid` re-acquires its own lease as a refresh.
+    """
+    existing_sid = existing.get("session_id")
+    if session_id and existing_sid:
+        return existing_sid == session_id
+    # No session identity on one side → fall back to pid identity.
+    return existing.get("pid") == pid
+
+
+def _peer_is_live(existing: dict) -> bool:
+    """True iff the existing lease is held by a still-live session.
+
+    Live = heartbeat fresh (< STALE_HEARTBEAT_SECONDS) AND recorded ppid alive.
+    A stale heartbeat OR a dead ppid means the holder is gone → reclaimable.
+    When the lease predates schema 2 (no ppid), fall back to heartbeat
+    freshness alone (conservative: a fresh legacy heartbeat still blocks).
+    """
+    ppid = existing.get("ppid")
+    ppid_create_time = existing.get("ppid_create_time")  # schema 3+; None on older leases
+
+    # ppid-liveness is AUTHORITATIVE. A provably-alive Claude session process
+    # holds the worktree no matter how stale its heartbeat — because the
+    # heartbeat only refreshes on PreToolUse, and a single long-running tool
+    # call (e.g. `python pipeline/check_drift.py` at ~180s, well past the 90s
+    # window) legitimately stops refreshing it. Reclaiming on stale-heartbeat
+    # ALONE would steal a live session's lease mid-call and let two sessions
+    # write — the exact corruption this guard exists to prevent (adversarial
+    # audit MED finding, 2026-05-30). So: a live ppid always blocks.
+    # ppid_create_time cross-check prevents Windows PID-reuse false-blocks
+    # (adversarial audit HIGH, 2026-05-30).
+    if ppid is not None and _pid_is_alive(ppid, expected_create_time=ppid_create_time):
+        return True
+
+    # ppid is dead (or absent). Now the heartbeat is the tiebreaker:
+    #   - fresh heartbeat + no ppid  → legacy schema-1 lease; conservatively
+    #     treat as live and block (we cannot prove the holder gone).
+    #   - stale/unparseable heartbeat → holder is gone → reclaimable.
+    hb = existing.get("iso_heartbeat") or existing.get("iso_started") or ""
+    age = _iso_age_seconds(hb)
+    if age is None or age >= STALE_HEARTBEAT_SECONDS:
+        return False  # ppid dead AND heartbeat stale → holder gone, reclaim
+    if ppid is None:
+        return True  # legacy lease, fresh heartbeat, no ppid → block (cautious)
+    return False  # ppid proven dead, even if heartbeat still fresh → reclaim
+
+
+def acquire(
+    cwd: Path,
+    pid: int | None = None,
+    *,
+    session_id: str = "",
+    ppid: int | None = None,
+) -> tuple[str, dict | None, str]:
+    """Acquire (or refresh) the worktree lease using (session_id, ppid)+heartbeat.
 
     Returns (status, payload, message) where status is:
-      - "acquired":  lock obtained, sidecar written
-      - "refreshed": current PID already held the lock; sidecar heartbeat bumped
-      - "blocked":   a peer process holds the OS-level FileLock
+      - "acquired":  no existing lease; we wrote the sidecar as owner
+      - "refreshed": the lease already belongs to THIS session; heartbeat bumped
+      - "reclaimed": prior holder was stale/dead; we took ownership
+      - "blocked":   a DIFFERENT session holds a live lease (fresh hb + live ppid)
       - "skipped":   cwd is not inside a git repo (caller fails open)
       - "error":     transient FS error (caller fails open with WARN)
 
-    On "blocked", the returned payload is the peer's lease sidecar (best
-    effort — may be None if the sidecar is missing/corrupt).
+    On "blocked", the returned payload is the peer's lease sidecar.
+
+    `session_id` is the stable session identity; when empty (CLI/legacy) the
+    function falls back to `pid` identity so existing callers keep working.
     """
     pid = pid if pid is not None else os.getpid()
+    ppid = ppid if ppid is not None else os.getppid()
     lk = lock_path(cwd)
     ls = lease_path(cwd)
     if lk is None or ls is None:
@@ -199,76 +416,73 @@ def acquire(cwd: Path, pid: int | None = None) -> tuple[str, dict | None, str]:
 
     lk.parent.mkdir(parents=True, exist_ok=True)
 
-    # If we ALREADY hold a live FileLock for this path (same in-process
-    # registry) AND the sidecar says THIS PID owns it, that's a refresh.
-    # Skip re-acquiring the OS lock since msvcrt.locking on Windows is
-    # per-fd (not per-PID): re-acquiring via a fresh FileLock object from
-    # the same PID still collides at the kernel level.
     existing = read_lease(cwd)
-    already_held = str(lk) in _LIVE_LOCKS
-    if existing and existing.get("pid") == pid and existing.get("worktree") == str(resolve_worktree_root(cwd) or cwd):
-        existing["iso_heartbeat"] = _now_iso()
+    if existing is not None:
+        # (a) Our own lease → refresh heartbeat, keep started timestamp.
+        if _same_session(existing, session_id, pid):
+            payload = _build_payload(
+                cwd,
+                pid,
+                ppid,
+                session_id or str(existing.get("session_id") or ""),
+                existing.get("iso_started") or _now_iso(),
+            )
+            try:
+                _write_lease(ls, payload)
+            except OSError as exc:
+                return "error", None, f"failed to refresh heartbeat: {exc}"
+            return "refreshed", payload, f"refreshed lease for session {session_id or pid}"
+
+        # (b) Someone else's lease and it is LIVE → block.
+        if _peer_is_live(existing):
+            peer_pid = existing.get("pid")
+            peer_sid = existing.get("session_id")
+            return (
+                "blocked",
+                existing,
+                f"peer session {peer_sid or peer_pid} holds a live lease (ppid "
+                f"{existing.get('ppid')} alive, heartbeat fresh)",
+            )
+
+        # (c) Someone else's lease but it is STALE/DEAD → reclaim.
+        payload = _build_payload(cwd, pid, ppid, session_id, _now_iso())
         try:
-            _write_lease(ls, existing)
+            _write_lease(ls, payload)
         except OSError as exc:
-            return "error", None, f"failed to refresh heartbeat: {exc}"
-        if not already_held:
-            # We hold the sidecar but lost the in-process FileLock object
-            # (e.g., re-imported module). Don't try to grab the OS lock —
-            # we cannot re-enter it from the same PID on Windows. Trust the
-            # sidecar match as proof-of-ownership.
-            return "refreshed", existing, f"refreshed heartbeat for PID {pid}"
-        return "refreshed", existing, f"refreshed heartbeat for PID {pid}"
+            return "error", None, f"failed to reclaim stale lease: {exc}"
+        prior = existing.get("session_id") or existing.get("pid")
+        return "reclaimed", payload, f"reclaimed stale lease (was {prior})"
 
-    file_lock = FileLock(str(lk), timeout=0)  # non-blocking — fail fast
-    try:
-        file_lock.acquire()
-    except Timeout:
-        peer_lease = read_lease(cwd)
-        peer_pid = peer_lease.get("pid") if peer_lease else None
-        return (
-            "blocked",
-            peer_lease,
-            f"peer holds OS lock at {lk} (peer PID {peer_pid})",
-        )
-    except OSError as exc:
-        return "error", None, f"failed to acquire lock at {lk}: {exc}"
-
-    payload = _build_payload(cwd, pid)
+    # No existing lease → fresh acquire.
+    payload = _build_payload(cwd, pid, ppid, session_id, _now_iso())
     try:
         _write_lease(ls, payload)
     except OSError as exc:
-        file_lock.release()
         return "error", None, f"failed to write lease sidecar: {exc}"
 
-    # Note: we INTENTIONALLY do NOT release the FileLock here. The lock is
-    # meant to be held for the lifetime of the Claude session — OS-level
-    # auto-release on process death is the dead-peer-detection mechanism.
-    # `release(force=True)` in this module handles explicit release.
-    _LIVE_LOCKS[str(lk)] = file_lock  # keep a reference so the lock object
-    # is not garbage-collected mid-session (which would release the OS lock).
-    return "acquired", payload, f"acquired lease for PID {pid}"
+    # Best-effort belt: take the OS FileLock too. Not load-bearing (it releases
+    # when this process exits, which for a hook subprocess is immediate) — but
+    # harmless. Never fail on it.
+    try:
+        file_lock = FileLock(str(lk), timeout=0)
+        file_lock.acquire()
+        _LIVE_LOCKS[str(lk)] = file_lock
+    except (Timeout, OSError):
+        pass
+
+    return "acquired", payload, f"acquired lease for session {session_id or pid}"
 
 
-# Process-lifetime registry of held locks. The hook re-imports this module per
-# invocation, so this dict is empty on each call — that is intentional. The
-# OS-level lock on the file persists across re-imports because it is held by
-# the parent Claude process via the prior `acquire()` call's open file
-# descriptor (filelock keeps the fd open inside the FileLock instance).
-#
-# NOTE: when the hook re-acquires per call, it gets `blocked` if a peer holds
-# it (correct) or its OWN per-call re-acquire returns `acquired` (also fine —
-# msvcrt/fcntl locks are per-PID, so the same PID can re-lock its own file).
+# Process-lifetime registry of best-effort OS locks. Empty per hook-subprocess
+# invocation by design — the heartbeat sidecar, not this dict, is the mutex.
 _LIVE_LOCKS: dict[str, BaseFileLock] = {}
 
 
 def release(cwd: Path, pid: int | None = None, force: bool = False) -> tuple[str, str]:
-    """Explicit release of the lock + sidecar.
+    """Explicit release of the lease (+ best-effort OS lock).
 
-    Without `force`: refuses if the sidecar PID differs from current PID.
-    With `force`: removes the sidecar AND attempts to release the OS lock
-    held by this process. Cannot release locks held by other processes;
-    those rely on OS auto-release at process exit.
+    Without `force`: refuses if the sidecar belongs to a different PID.
+    With `force`: removes the sidecar unconditionally.
 
     Returns (status, message) where status ∈ {"released", "not-held",
     "refused", "skipped", "error"}.
@@ -286,11 +500,11 @@ def release(cwd: Path, pid: int | None = None, force: bool = False) -> tuple[str
     if not force and existing.get("pid") != pid:
         return (
             "refused",
-            f"lease sidecar says PID {existing.get('pid')} holds it "
-            f"(current PID {pid}); use --force-release to override",
+            f"lease sidecar says PID {existing.get('pid')} / session "
+            f"{existing.get('session_id')} holds it (current PID {pid}); "
+            f"use --force-release to override",
         )
 
-    # Release any FileLock this process holds for this path.
     held = _LIVE_LOCKS.pop(str(lk), None)
     if held is not None:
         try:
@@ -311,12 +525,11 @@ def release(cwd: Path, pid: int | None = None, force: bool = False) -> tuple[str
 
 
 def status(cwd: Path, pid: int | None = None) -> dict:
-    """Read-only inspection. Used by `--status` and by the hook BLOCK message.
+    """Read-only inspection. Used by `--status` and the hook BLOCK message.
 
-    `is_locked` reflects the OS-level FileLock state — TRUE means a process
-    (possibly this one) holds it. `current_is_holder` is True iff the sidecar
-    PID matches `pid`; it does NOT separately probe the OS lock since the OS
-    lock is per-PID and re-acquirable by the same PID without conflict.
+    `peer_live` reflects the real mutex semantics: a holder with a fresh
+    heartbeat and a live ppid. `current_is_holder` is True iff the sidecar
+    pid matches `pid` (CLI/legacy identity).
     """
     pid = pid if pid is not None else os.getpid()
     lk = lock_path(cwd)
@@ -325,27 +538,12 @@ def status(cwd: Path, pid: int | None = None) -> dict:
         return {"in_git_repo": False}
 
     data = read_lease(cwd)
-    # Probe lock state by trying a non-blocking acquire/release as a separate
-    # FileLock instance. If we can acquire, the OS lock was free.
-    is_locked = False
-    if lk.exists():
-        probe = FileLock(str(lk), timeout=0)
-        try:
-            probe.acquire()
-        except Timeout:
-            is_locked = True
-        except OSError:
-            is_locked = False
-        else:
-            probe.release(force=True)
-
     if data is None:
         return {
             "in_git_repo": True,
             "lock_path": str(lk),
             "lease_path": str(ls),
             "lease_present": False,
-            "is_locked": is_locked,
             "current_pid": pid,
         }
 
@@ -353,19 +551,23 @@ def status(cwd: Path, pid: int | None = None) -> dict:
     age_s = _iso_age_seconds(hb)
     sidecar_stale = age_s is not None and age_s >= STALE_HEARTBEAT_SECONDS
     holder_pid = data.get("pid")
+    holder_ppid = data.get("ppid")
     return {
         "in_git_repo": True,
         "lock_path": str(lk),
         "lease_path": str(ls),
         "lease_present": True,
-        "is_locked": is_locked,
         "holder_pid": holder_pid,
+        "holder_ppid": holder_ppid,
+        "holder_session_id": data.get("session_id"),
         "holder_worktree": data.get("worktree"),
         "holder_branch": data.get("branch"),
         "iso_started": data.get("iso_started"),
         "iso_heartbeat": hb,
         "heartbeat_age_seconds": age_s,
         "sidecar_stale": sidecar_stale,
+        "holder_ppid_alive": _pid_is_alive(holder_ppid) if holder_ppid is not None else None,
+        "peer_live": _peer_is_live(data),
         "current_pid": pid,
         "current_is_holder": isinstance(holder_pid, int) and holder_pid == pid,
     }
@@ -375,17 +577,17 @@ def _format_status_line(snap: dict) -> str:
     if not snap.get("in_git_repo"):
         return "worktree-guard: not in a git repo — no lease"
     if not snap.get("lease_present"):
-        if snap.get("is_locked"):
-            return f"worktree-guard: OS lock held but sidecar missing at {snap.get('lease_path')}"
         return f"worktree-guard: no lease at {snap.get('lease_path')}"
     age = snap.get("heartbeat_age_seconds")
     age_str = f"{age:.0f}s" if isinstance(age, (int, float)) else "unknown"
     parts = [
         f"holder PID {snap.get('holder_pid')}",
+        f"session {snap.get('holder_session_id') or '?'}",
+        f"ppid {snap.get('holder_ppid')} alive={snap.get('holder_ppid_alive')}",
         f"worktree {snap.get('holder_worktree')!r}",
         f"branch {snap.get('holder_branch') or '?'}",
         f"heartbeat {age_str}",
-        f"locked={snap.get('is_locked')}",
+        f"peer_live={snap.get('peer_live')}",
     ]
     if snap.get("sidecar_stale"):
         parts.append(f"SIDECAR_STALE (>{STALE_HEARTBEAT_SECONDS}s)")
@@ -402,26 +604,11 @@ def main(argv: list[str] | None = None) -> int:
     g = parser.add_mutually_exclusive_group()
     g.add_argument("--status", action="store_true", help="Print lease status (default)")
     g.add_argument("--release", action="store_true", help="Release lease iff held by current PID")
-    g.add_argument(
-        "--force-release",
-        action="store_true",
-        help="Release lease unconditionally",
-    )
-    g.add_argument(
-        "--acquire",
-        action="store_true",
-        help="Acquire (or refresh) the lease for the current PID",
-    )
-    parser.add_argument(
-        "--cwd",
-        default=".",
-        help="Working directory to resolve git-dir from (default: cwd)",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit machine-readable JSON instead of a one-liner",
-    )
+    g.add_argument("--force-release", action="store_true", help="Release lease unconditionally")
+    g.add_argument("--acquire", action="store_true", help="Acquire (or refresh) the lease for the current PID")
+    parser.add_argument("--cwd", default=".", help="Working directory to resolve git-dir from (default: cwd)")
+    parser.add_argument("--session-id", default="", help="Claude session id (identity key)")
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON instead of a one-liner")
     args = parser.parse_args(argv)
     cwd = Path(args.cwd).resolve()
 
@@ -434,18 +621,10 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_OK if status_str in ("released", "not-held") else EXIT_BLOCKED
 
     if args.acquire:
-        status_str, lease_data, msg = acquire(cwd)
+        status_str, lease_data, msg = acquire(cwd, session_id=args.session_id)
         if args.json:
             print(
-                json.dumps(
-                    {
-                        "action": "acquire",
-                        "status": status_str,
-                        "message": msg,
-                        "lease": lease_data,
-                    },
-                    indent=2,
-                )
+                json.dumps({"action": "acquire", "status": status_str, "message": msg, "lease": lease_data}, indent=2)
             )
         else:
             print(f"worktree-guard: {status_str} — {msg}")

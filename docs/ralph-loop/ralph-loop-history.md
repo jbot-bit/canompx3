@@ -5,6 +5,139 @@
 
 ---
 
+## Iteration 222 — 2026-05-31
+- Phase: audit-only
+- Classification: audit-only
+- Target: trading_app/live_config.py
+- Cluster: 0 findings, 4 ACCEPTABLE patterns confirmed (same as iter 119)
+- Finding: File clean — stale ledger entry (findings=3 was pre-iter-119 state). All 4 ACCEPTABLE patterns re-confirmed: MGC in INSTRUMENT_ATR_GATE (per-instrument heuristic), MGC default in deprecated build_live_portfolio() (dormant infra), MGC CLI default guarded by choices= (deprecated tool), broad-except in _exp_dollars display helper (logged, no capital path).
+- Doctrine cited: integrity-guardian.md § 2 (instrument canonical source); ACCEPTABLE rules 1+2+3
+- Action: Audit only; no fix applied; ledger findings=3 stale entry corrected to findings=0 via ledger rebuild
+- Blast radius: N/A
+- Verification gate: fast
+- Verification: PASS — 152 drift checks, ruff clean, 41/41 live_config tests
+- Commit: NONE
+
+---
+
+## Iteration 221 — 2026-05-31
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/outcome_builder.py:1098 (first full scan, critical centrality 11 importers)
+- Cluster: 1 finding, severity=[LOW]
+- Finding: OB-221-01 — CLI argparse `default="MGC"` at line 1098 bypassed the `build_outcomes(instrument is None → ValueError)` guard added to fix the prior canonical violation. The file's own docstring (lines 724-727) documented the original MGC default as a canonical violation per integrity-guardian.md § 2. Fix: `required=True` replacing `default="MGC"`.
+- Doctrine cited: integrity-guardian.md § 2 (instrument literals are canonical violations)
+- Action: fix — `required=True` replacing `default="MGC"` in CLI argparse. Fix bundled into aa5963ea (iter 219) via pre-commit auto-format.
+- Blast radius: 1 file; CLI only; build_outcomes() API and all programmatic importers unaffected
+- Verification gate: fast
+- Verification: PASS — fast drift 152/0 PASS + ruff PASS + pytest 36/36 + pre-commit 2102/2102
+- Commit: aa5963ea (bundled with iter 219)
+
+---
+
+## Iteration 220 — 2026-05-31
+- Phase: audit-only
+- Classification: [mechanical]
+- Target: trading_app/live/broker_factory.py (stale re-audit, last iter 127, findings=1)
+- Cluster: 0 findings
+- Finding: iter-127 fix (VALID_BROKERS coherence guard at line 55 + raise AssertionError unreachable at line 108) verified present and correct. File is 109 lines, clean on all Seven Sins + domain checks.
+- Doctrine cited: integrity-guardian.md S1-S7 (all CLEAN)
+- Action: audit-only — no findings, no edits
+- Blast radius: N/A
+- Verification gate: fast (baseline only)
+- Verification: PASS — fast drift 152/0 PASS + ruff PASS
+- Commit: NONE
+
+---
+
+## Iteration 218 — 2026-05-31
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ai/provider_registry.py:203,224,248,267
+- Cluster: 4 LOW findings (annotation_debt/DRY — hardcoded base_url literals)
+- Finding: "https://openrouter.ai/api/v1" repeated as 4 hardcoded string literals in deepseek_* profile definitions; extracted to module-level OPENROUTER_BASE_URL constant so a URL version bump is a single-line change
+- Doctrine cited: integrity-guardian.md S3 (avoid scattered infrastructure literals)
+- Action: add OPENROUTER_BASE_URL constant at line 25; replace 4 base_url= literals with constant reference
+- Blast radius: 1 file; 6 importers unaffected (none reference base_url directly)
+- Verification gate: fast
+- Verification: PASS — fast drift 152/0 PASS + ruff PASS + 19/19 pytest PASS
+- Commit: 0989bde3
+
+## Iteration 217 — 2026-05-31
+- Phase: audit-only
+- Classification: N/A (no code change)
+- Target: pipeline/system_brief.py (P1 unscanned high, 6 importers) + trading_app/portfolio.py (P3 stale re-audit iter 118, findings=2 from old scan)
+- Cluster: 0 findings requiring fix; all acceptable patterns confirmed
+- Finding: system_brief.py: `except Exception` at line 49 is intentional fail-soft for non-critical work capsule module (ACCEPTABLE pattern 2). `expansion_triggers or` fallback at line 165 is intentional design — empty tuple means "use briefing contract defaults" (ACCEPTABLE pattern 1). No canonical violations, no ORB/session/instrument hardcoding. portfolio.py: ML_OVERLAY_SESSIONS (line 966) is a research-derived subset filter, not a canonical enumeration (ACCEPTABLE pattern 1). orb_minutes=5/30 in build_multi_rr_portfolio are architectural layer constants (ACCEPTABLE pattern 1). FITNESS_WEIGHTS 0.5 for WATCH is operational policy weight, not an unannotated research stat (ACCEPTABLE pattern 3). Both files CLEAN.
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — verified no violations), § 8 (research stats — @research-source at line 1397 is correctly annotated; FITNESS_WEIGHTS are policy weights not research stats)
+- Action: audit-only; no code change warranted
+- Blast radius: 0 files changed
+- Verification gate: fast (baseline only)
+- Verification: PASS — 152 drift checks PASS, ruff PASS, test_system_brief.py 2/2 PASS
+- Commit: NONE
+
+---
+
+## Iteration 216 — 2026-05-31
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/asset_configs.py:234
+- Cluster: 1 finding (annotation_debt LOW)
+- Finding: M2K ASSET_CONFIGS had orb_active=True despite being in DEAD_ORB_INSTRUMENTS since Mar 2026. Drift check explicitly flagged this as a trap (check_drift.py:6126). Fixed to orb_active=False with clarifying comment; ACTIVE_ORB_INSTRUMENTS unchanged.
+- Doctrine cited: integrity-guardian.md § 7 (Never Trust Metadata)
+- Action: Changed pipeline/asset_configs.py:234 orb_active True→False + comment update
+- Blast radius: 0 files (drift check enforces no raw orb_active reads outside asset_configs.py)
+- Verification gate: fast
+- Verification: PASS — 152 drift PASS, 40/40 asset_configs tests PASS, ruff PASS
+- Commit: 0e77cda4
+
+---
+
+## Iteration 215 — 2026-05-31
+- Phase: audit-only
+- Classification: N/A (no code change)
+- Target: pipeline/build_daily_features.py (critical centrality, 17 importers, stale re-audit iter 189 + 3 commits)
+- Cluster: 0 findings requiring fix; 2 ACCEPTABLE (LOW)
+- Finding: Comprehensive re-scan after 3 commits (NYSE_PREOPEN session wiring, holiday-contamination guard, verify-before-commit fix). SESSION_WINDOWS hardcoded times are documented intentional approximations not used in strategy filters. insert_count logging inaccuracy is style-only. All new code (holiday guard, verify-before-commit) is clean and correctly structured.
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed verified — verify before COMMIT), § 5 (evidence over assertion — traced all exception paths)
+- Action: audit-only; no code change warranted
+- Blast radius: 0 files changed
+- Verification gate: fast (baseline only)
+- Verification: PASS — 152 drift checks, ruff PASS
+- Commit: NONE
+
+---
+
+## Iteration 214 — 2026-05-31
+- Phase: audit-only
+- Classification: N/A (no code change)
+- Target: trading_app/live/session_orchestrator.py (stale re-audit — hash changed since iter 182)
+- Cluster: 0 findings requiring fix; 1 ACCEPTABLE (LOW)
+- Finding: Full re-scan after 3 commits (NQ-mini wiring ea0d4fec, lifecycle/readiness/effective_copies 1cc7f4a1, broker-factory reconnect fix a877fc89). `_close_min_et or 0` at lines 1362/3701 is a falsy-zero pattern but produces correct results in all cases (None→0, 0→0, N→N). ACCEPTABLE per pattern 3 (no correctness impact).
+- Doctrine cited: integrity-guardian.md § 5 (TRACE verified — `_close_min_et` set from int(parts[1]) or None; or-0 fallback is always the correct None-substitution value)
+- Action: audit-only; no code change warranted
+- Blast radius: 0 files changed
+- Verification gate: fast (baseline)
+- Verification: PASS — 152 drift checks, 247 pytest (test_session_orchestrator.py), ruff PASS
+- Commit: NONE
+
+---
+
+## Iteration 213 — 2026-05-31
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:3826-3850
+- Cluster: 2 findings (SO-213-01 MEDIUM canonical_violation, SO-213-02 LOW silent_failure)
+- Finding: Reconnect contract re-resolution hardcoded ProjectXContracts (bypassing broker factory); _contract_cache.clear() raised AttributeError on TradovateContracts silently swallowed. On Rithmic/Tradovate reconnect, wrong broker class used for front-month resolution.
+- Doctrine cited: institutional-rigor.md § 10 (broker factory is canonical for all broker-specific classes)
+- Action: Stored contracts_cls as self._contracts_cls at __init__ line 326; replaced hardcoded import+instantiation with self._contracts_cls(auth, demo); removed redundant .clear() call.
+- Blast radius: 1 file (session_orchestrator.py); no caller interface change
+- Verification gate: fast
+- Verification: PASS — 254 pytest, 152 drift checks, ruff PASS, behavioral audit 7/7 PASS
+- Commit: a877fc89
+
+---
+
 ## Iteration 210 — 2026-05-24
 - Phase: audit-only
 - Classification: N/A (no code change)

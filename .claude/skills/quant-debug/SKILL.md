@@ -75,11 +75,32 @@ After implementing a fix:
 3. Run drift check: `python pipeline/check_drift.py`
 4. If the fix touches pipeline/ or trading_app/: run full test suite `python -m pytest tests/ -x -q`
 
+### Step 3.5: Fix-Attempt Circuit Breaker (STOP RULE)
+
+Count your fix attempts on THIS bug. If a fix doesn't make the reproduction pass:
+
+- **Attempt failed → return to Step 0** with the new evidence (re-reproduce, re-classify). Do NOT stack a second fix on top of the first. One hypothesis, one variable.
+- **2 attempts failed → re-read the canonical source** (`dst.py` / `cost_model.py` / `asset_configs.py` / schema). Most second-failures are an upstream-truth misread, not a code bug — apply the **Source-of-Truth Chain Rule** (audit upstream before patching downstream).
+- **3+ attempts failed → STOP. Do not attempt fix #4.** Three failures where each fix reveals a new break elsewhere is an *architecture* signal, not a hypothesis signal. This is exactly the `institutional-rigor` directive: **"refactor (don't patch) when cycles keep finding bugs."** Surface to the user with: (a) the 3 hypotheses tried + why each failed, (b) the suspected structural cause (shared state, wrong canonical source, coupled layers), (c) a refactor-vs-keep-patching question. Never silently grind a 4th band-aid.
+
+Capital/canonical paths: the stop-rule is firm at 3. Reversible doc/config paths: use judgment, but the re-read-canonical step at 2 still applies.
+
 ### Step 4: Check Blast Radius
 
 - Did the fix change any canonical source? If yes, check all importers.
 - Did the fix change a JOIN? Verify row counts before and after.
 - Did the fix change a calculation? Run `python scripts/tools/audit_integrity.py`.
+
+### Step 4.5: Defense-in-Depth (make the bug structurally impossible)
+
+A single check at the symptom site is bypassable by a different caller, a refactor, or a mock. After fixing at the source, ask whether the bad-data class should be **blocked at every layer it flows through** — so the bug cannot recur via a path you didn't think of. Add guards where they belong, not all at once:
+
+- **Entry layer** — reject invalid input at the API/CLI boundary (empty symbol, missing aperture, `orb_minutes` not in {5,15,30}). Fail-closed, raise — never return a default.
+- **Canonical-source layer** — if the value should come from `dst.py` / `cost_model.py` / `asset_configs.py`, assert it was *imported*, not hardcoded. This is where most contamination re-enters.
+- **Business-logic layer** — assert the invariant for the operation (`trade_days <= eligible_days`; JOIN carries `AND o.orb_minutes = d.orb_minutes`; no look-ahead column in a filter).
+- **Drift/test layer** — if the bug class is recurring, add a `check_drift.py` guard or a companion test so CI catches the next instance. A guard that catches its own trap > a comment saying "don't do this."
+
+Don't over-armor a one-off. Reserve full defense-in-depth for bugs that touch a canonical source, a capital path, or a class you've now seen more than once (n≥2 → guard it).
 
 ### NEVER Do This
 

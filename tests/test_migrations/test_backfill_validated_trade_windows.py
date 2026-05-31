@@ -181,6 +181,40 @@ class TestBackfillValidatedTradeWindows:
         # DRIFT_B should remain stale (out of scope)
         assert _read_row(db, "DRIFT_B") == (date(2019, 5, 8), date(2026, 4, 10), 1020)
 
+    def test_noop_commit_does_not_take_write_lock(self, tmp_path):
+        """Regression for the multi-terminal collision.
+
+        A commit with NO trade-window drift must NOT acquire a write lock, so a
+        sibling terminal holding a read-only handle is never blocked. We model
+        the sibling by holding an open read-only connection across the refresh
+        call. Pre-fix, `refresh_validated_trade_windows(dry_run=False)` opened
+        the file read-write up front and would raise a lock-class IOException
+        (or block) while the sibling reader was open. Post-fix, a no-op refresh
+        never opens a writer, so it completes cleanly.
+        """
+        db = _make_db(tmp_path)
+        # Heal first so the second run is a genuine no-op (drifted == 0).
+        migration.refresh_validated_trade_windows(db_path=db, dry_run=False)
+
+        sibling_reader = duckdb.connect(str(db), read_only=True)
+        try:
+            report = migration.refresh_validated_trade_windows(db_path=db, dry_run=False)
+            assert report.drifted == 0
+            assert report.updated == 0
+            # Sibling reader is still usable — it was never locked out.
+            count_row = sibling_reader.execute("SELECT COUNT(*) FROM validated_setups").fetchone()
+            assert count_row is not None and count_row[0] == 5
+        finally:
+            sibling_reader.close()
+
+    def test_drift_run_still_heals_with_writer(self, tmp_path):
+        """The rare real-drift path still writes (via the retry-backed writer)."""
+        db = _make_db(tmp_path)
+        report = migration.refresh_validated_trade_windows(db_path=db, dry_run=False)
+        assert report.drifted == 2
+        assert report.updated == 2
+        assert _read_row(db, "DRIFT_A") == (date(2019, 5, 8), date(2026, 4, 14), 1021)
+
     def test_main_exits_zero(self, tmp_path, monkeypatch, capsys):
         db = _make_db(tmp_path)
         monkeypatch.setattr(

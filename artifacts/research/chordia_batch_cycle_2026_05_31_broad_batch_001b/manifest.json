@@ -1,0 +1,16 @@
+{
+  "bridge_status_counts": {
+    "READY_TO_ACTIVATE": 11,
+    "SKIP_FACTORY_STATUS": 14
+  },
+  "chordia_log_mutation": false,
+  "generated_at": "2026-05-30T23:33:31.343383+00:00",
+  "live_mutation": false,
+  "plan_count": 25,
+  "proposal_count": 11,
+  "strict_replay_execution": true,
+  "strict_replay_returncode_counts": {
+    "0": 11
+  },
+  "validated_setups_mutation": false
+}

@@ -1,0 +1,19 @@
+{
+  "batch_count": 22,
+  "batch_size": 25,
+  "bench_csv": "artifacts/research/lane_bench_state_2026_05_31_stop_support_queue_drain_002_apply/bench.csv",
+  "chordia_log_mutation": false,
+  "factory_status_counts": {
+    "PREREG_DRAFT_READY": 548
+  },
+  "generated_at": "2026-05-31T00:44:03.347201+00:00",
+  "include_non_default_stop": false,
+  "live_mutation": false,
+  "max_family_priority": 5,
+  "proposal_count": 0,
+  "result_md_count": 0,
+  "strict_replay_execution": false,
+  "today": "2026-05-31",
+  "validated_setups_mutation": false,
+  "work_item_count": 548
+}

@@ -197,10 +197,7 @@ def _priority_for_inventory_row(row: dict[str, str], summary: FamilySummary | No
     session = (row.get("session") or "").upper()
     entry_model = (row.get("entry_model") or "").upper()
 
-    if not (
-        classification.startswith("DEPLOYABLE_CANDIDATE")
-        or classification.startswith("RESEARCH_PROVISIONAL")
-    ):
+    if not (classification.startswith("DEPLOYABLE_CANDIDATE") or classification.startswith("RESEARCH_PROVISIONAL")):
         return None
     if summary is not None:
         if (
@@ -271,12 +268,8 @@ def load_family_hints_from_cells(path: Path) -> dict[tuple[str, str, int, str, s
             priority = _priority_for_inventory_row(row, family_summary)
             if priority is None:
                 continue
-            median_exp_r = (
-                family_summary.median_exp_r if family_summary else _float_or_none(row.get("exp_r_is"))
-            )
-            median_oos = (
-                family_summary.median_oos if family_summary else _float_or_none(row.get("exp_r_oos"))
-            )
+            median_exp_r = family_summary.median_exp_r if family_summary else _float_or_none(row.get("exp_r_is"))
+            median_oos = family_summary.median_oos if family_summary else _float_or_none(row.get("exp_r_oos"))
             key = candidate_key(
                 instrument,
                 session,
@@ -440,9 +433,7 @@ def _active_strategy_ids(profile_id: str) -> frozenset[str]:
 
 def _allowed_profile_sets(profile_id: str) -> tuple[frozenset[str] | None, frozenset[str] | None]:
     profile = ACCOUNT_PROFILES[profile_id]
-    allowed_instruments = (
-        frozenset(profile.allowed_instruments) if profile.allowed_instruments is not None else None
-    )
+    allowed_instruments = frozenset(profile.allowed_instruments) if profile.allowed_instruments is not None else None
     allowed_sessions = frozenset(profile.allowed_sessions) if profile.allowed_sessions is not None else None
     return allowed_instruments, allowed_sessions
 
@@ -456,10 +447,7 @@ def _write_artifacts(
     args: argparse.Namespace,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    serializable_args = {
-        key: str(value) if isinstance(value, Path) else value
-        for key, value in vars(args).items()
-    }
+    serializable_args = {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}
     manifest = {
         "generated_at": datetime.now(UTC).isoformat(),
         "profile_id": profile_id,

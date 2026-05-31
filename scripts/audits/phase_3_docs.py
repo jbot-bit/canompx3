@@ -222,29 +222,27 @@ def _check_repo_map(audit: AuditPhase):
         audit.check_info("gen_repo_map.py not found — cannot verify REPO_MAP.md freshness")
         return
 
-    # Run gen_repo_map.py and compare
+    # Use the generator's check mode. Running without --check writes the file
+    # and prints only a status line, which is not comparable to the map body.
     r = subprocess.run(
-        [sys.executable, str(gen_script)],
+        [sys.executable, str(gen_script), "--check"],
         capture_output=True,
         text=True,
         cwd=str(PROJECT_ROOT),
         timeout=30,
     )
     if r.returncode == 0:
-        generated = r.stdout.strip()
-        current = repo_map.read_text(encoding="utf-8").strip()
-        if generated == current:
-            audit.check_passed("REPO_MAP.md is up to date")
-        else:
-            audit.check_failed("REPO_MAP.md is stale (differs from gen_repo_map.py output)")
-            audit.add_finding(
-                Severity.LOW,
-                "REPO_MAP_STALE",
-                claimed="REPO_MAP.md matches gen_repo_map.py output",
-                actual="Files differ",
-                evidence="python scripts/tools/gen_repo_map.py | diff - REPO_MAP.md",
-                fix_type="DOC_FIX",
-            )
+        audit.check_passed("REPO_MAP.md is up to date")
+    elif r.returncode == 1:
+        audit.check_failed("REPO_MAP.md is stale (differs from gen_repo_map.py output)")
+        audit.add_finding(
+            Severity.LOW,
+            "REPO_MAP_STALE",
+            claimed="REPO_MAP.md matches gen_repo_map.py output",
+            actual="Files differ",
+            evidence="python scripts/tools/gen_repo_map.py --check",
+            fix_type="DOC_FIX",
+        )
     else:
         audit.check_info("gen_repo_map.py failed to run — cannot verify")
 
