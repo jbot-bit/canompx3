@@ -61,5 +61,5 @@ def test_drift_check_fails_on_unrevoked_pooling_artifact(tmp_path, monkeypatch):
     monkeypatch.setattr(flpq, "QUEUE_CACHE", tmp_path / "no_cache.yaml")
     violations = check_fast_lane_promote_orphans()
     assert violations, "drift check did not detect unrevoked pooling artifact"
-    assert any("ERROR state" in v for v in violations)
+    assert any("pooling artifact lacks revocation sidecar" in v for v in violations)
     assert any("ORB_VOL_16K" in v for v in violations)

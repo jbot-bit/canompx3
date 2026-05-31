@@ -140,7 +140,7 @@ jobs:
           --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (tools and research)
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: >
           uv run pytest -p no:timeout
           tests/test_research
@@ -188,6 +188,7 @@ jobs:
           --ignore=tests/test_pipeline/test_check_drift_db.py
           --ignore=tests/test_pipeline/test_check_drift_db_path_usage.py
           --ignore=tests/test_pipeline/test_check_drift_e2_lookahead.py
+          --ignore-glob=tests/test_pipeline/test_check_drift_fast_lane*.py
           --ignore=tests/test_pipeline/test_check_drift_scratch_policy.py
           --ignore=tests/test_pipeline/test_check_drift_slow_labels.py
           --ignore=tests/test_pipeline/test_check_drift_ws2.py

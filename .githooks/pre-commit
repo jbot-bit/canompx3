@@ -46,9 +46,9 @@ echo ""
 # wedge a legitimate commit. PRE_PYTHON is resolved later (line ~181); for this
 # early step use PATH python, which is sufficient to run the stdlib-only helper.
 COMMIT_LOCK_PY="python"
-[ -x "$SCRIPT_DIR/.venv/Scripts/python.exe" ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv/Scripts/python.exe"
-[ -x "$SCRIPT_DIR/.venv/bin/python" ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv/bin/python"
 [ -x "$SCRIPT_DIR/.venv-wsl/bin/python" ] && [ "$IS_WINDOWS_SHELL" -eq 0 ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv-wsl/bin/python"
+[ "$COMMIT_LOCK_PY" = "python" ] && [ -x "$SCRIPT_DIR/.venv/bin/python" ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv/bin/python"
+[ -x "$SCRIPT_DIR/.venv/Scripts/python.exe" ] && [ "$IS_WINDOWS_SHELL" -eq 1 ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv/Scripts/python.exe"
 set +e
 "$COMMIT_LOCK_PY" "$SCRIPT_DIR/scripts/tools/commit_serialize.py" acquire
 COMMIT_LOCK_RC=$?
