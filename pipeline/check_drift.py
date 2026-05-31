@@ -12876,6 +12876,8 @@ def check_cherry_pick_journal_integrity(
         hp = qe.get("heavyweight_prereg")
         if not hp:
             continue
+        if qe.get("status") != "ESCALATED":
+            continue
         sid = qe.get("strategy_id")
         if not isinstance(sid, str):
             continue
