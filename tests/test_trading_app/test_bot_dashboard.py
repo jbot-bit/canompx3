@@ -1052,14 +1052,22 @@ def test_dashboard_live_pilot_copy_is_explicit_and_professional():
     assert "pilot-contract" in html
     assert "hero-pilot" in html
     assert "NYSE parked" in html
-    assert "Topstep XFA &middot; one protected primary account" in html
-    assert "Topstep XFA &middot; MNQ &middot; 1 copy &middot; gates run first" in html
-    assert "pilot 3L/1x" in html
+    assert "Topstep account &middot; one protected primary" in html
+    assert "Topstep account &middot; MNQ &middot; 1 copy &middot; real orders" in html
+    assert "Live pilot:</b> ${LIVE_PILOT_INSTRUMENT} &middot; 3 lanes" in html
+    assert "isLivePilotProfile(acct.profile_id)" in html
+    assert "not configured for this profile" in html
     assert "Broker account pending" in html
     assert "renderAccounts(lastAccountsData)" in html
     assert "Refreshing. Wait." in html
     assert "Show gate detail" in html
+    assert "Prop funded" in html
     assert "Prop sim" in html
+    assert "Prop live" in html
+    assert "Self-funded" in html
+    assert "chartInstrumentLabel" in html
+    assert 'id="ops-chart-sub"' in html
+    assert "a.name || a.broker_display" in html
     assert '<span class="btn-title">Demo</span><span class="btn-sub">Broker sandbox</span>' in html
     assert "Demo broker orders." in html
     assert "No chart data" in html
@@ -1067,6 +1075,7 @@ def test_dashboard_live_pilot_copy_is_explicit_and_professional():
     assert '<span class="btn-title">Paper</span>' not in html
     assert "Practice only" not in html
     assert "Combine" not in html
+    assert "Broker Accounts" not in html
     assert "🔒" not in html
 
 

@@ -2087,6 +2087,12 @@ def _lane_control_payload(profile: str) -> dict[str, object]:
         "enabled_count": enabled_count,
         "disabled_count": disabled_count,
         "parked_count": parked_count,
+        "counts": {
+            "active": len(active_specs),
+            "enabled": enabled_count,
+            "disabled": disabled_count,
+            "parked": parked_count,
+        },
         "session_running": bool(session.get("running")),
         "raw_mode": session.get("raw_mode"),
         "lanes": rows,
@@ -2635,6 +2641,15 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
         return JSONResponse(status_code=400, content={"status": "error", "message": f"Invalid mode: {mode}"})
 
     profile = profile or _resolve_profile()
+    if mode == "live" and profile != LIVE_PILOT_PROFILE:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "blocked",
+                "message": "Dashboard live launch is configured only for the approved Topstep MNQ pilot.",
+                "profile": profile,
+            },
+        )
     session = _session_snapshot()
     refresh = _refresh_snapshot()
     with _state_lock:
