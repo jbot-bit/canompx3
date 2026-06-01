@@ -693,7 +693,13 @@ def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
             return CheckResult(False, f"FAILED: profile {ctx.profile_id!r} not in ACCOUNT_PROFILES")
         n_copies = ctx.requested_copies if ctx.requested_copies > 0 else prof.copies
         if n_copies <= 1:
-            return CheckResult(True, f"SKIPPED (copies={n_copies})")
+            # Single-account pilot: copy-trading is genuinely not applicable, so
+            # this is a clean PASS — not a SKIP. The dashboard maps SKIPPED -> warn
+            # (_normalize_check_status), and the live-launch guard blocks on any
+            # warn under strict-zero-warn parity (bot_dashboard.py action_start),
+            # which would falsely block a single-account funded live launch. Emit
+            # OK so a copies=1 pilot is launchable via the dashboard CTA.
+            return CheckResult(True, f"OK (copies={n_copies}, single-account — copy-trading N/A)")
         if ctx.signal_only:
             return CheckResult(True, "SKIPPED (signal-only — no account resolution needed)")
         if ctx.components is None:

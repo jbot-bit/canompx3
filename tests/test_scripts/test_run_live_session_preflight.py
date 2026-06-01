@@ -448,8 +448,14 @@ def test_copy_trading_check_skipped_when_no_profile():
     assert "no profile" in result.message
 
 
-def test_copy_trading_check_skipped_when_copies_le_1(monkeypatch):
-    """Single-account profile → SKIPPED, no broker calls."""
+def test_copy_trading_check_ok_when_copies_le_1(monkeypatch):
+    """Single-account profile → clean OK (not SKIPPED), no broker calls.
+
+    SKIPPED maps to warn in the dashboard (_normalize_check_status) and the
+    live-launch guard blocks on any warn, which would falsely block a
+    single-account funded live launch. copies<=1 means copy-trading is genuinely
+    N/A — a pass, not a skip — so the gate emits OK.
+    """
     fake_profile = SimpleNamespace(copies=1)
     monkeypatch.setattr(
         "trading_app.prop_profiles.ACCOUNT_PROFILES",
@@ -458,7 +464,8 @@ def test_copy_trading_check_skipped_when_copies_le_1(monkeypatch):
     ctx = _make_copy_trading_ctx(profile_id="single_copy_profile", requested_account_id=None)
     result = rls._check_copy_trading_accounts(ctx)
     assert result.passed is True
-    assert "SKIPPED" in result.message
+    assert result.message.startswith("OK")
+    assert "SKIPPED" not in result.message
     assert "copies=1" in result.message
 
 
@@ -519,7 +526,8 @@ def test_copy_trading_check_honors_requested_single_copy(monkeypatch):
     )
     result = rls._check_copy_trading_accounts(ctx)
     assert result.passed is True
-    assert "SKIPPED" in result.message
+    assert result.message.startswith("OK")
+    assert "SKIPPED" not in result.message
     assert "copies=1" in result.message
 
 
