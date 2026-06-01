@@ -1216,3 +1216,103 @@ def test_write_then_read_live_health_round_trips(tmp_path, monkeypatch):
     assert result["fill_poller_probe"] is False
     assert result["fill_polls_failed"] == 1
     assert "snapshot_ts_utc" in result  # writer stamps it
+
+
+# ── /api/status authoritative is_running + dead-state self-heal ──────────────
+# Regression: a signal/live session that died WITHOUT a clean STOPPED write
+# leaves bot_state.mode=SIGNAL forever, which used to latch the dashboard's
+# runningProfile and hide the Alerts/Demo/GO-LIVE controls behind a permanent
+# "Stop Session" button (2026-06-02). /api/status now exposes is_running from
+# the canonical _session_snapshot truth, and self-heals definitely-dead state.
+
+
+def _status_state_signal():
+    return {
+        "mode": "SIGNAL",
+        "account_name": "profile_topstep_50k_mnq_auto",
+        "heartbeat_utc": "2026-06-01T14:14:00+00:00",
+        "lanes": {},
+        "lane_cards": [],
+        "bars_received": 5,
+    }
+
+
+def test_api_status_is_running_true_when_session_alive(monkeypatch):
+    monkeypatch.setattr(bot_dashboard, "read_state", _status_state_signal)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": True,
+            "raw_mode": "SIGNAL",
+            "heartbeat_age_s": 10.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": True,
+        },
+    )
+    cleared = {"called": False}
+    monkeypatch.setattr("trading_app.live.bot_state.clear_state", lambda: cleared.__setitem__("called", True))
+
+    result = asyncio.run(bot_dashboard.api_status())
+
+    assert result["is_running"] is True
+    assert cleared["called"] is False  # alive session never cleared
+
+
+def test_api_status_is_running_false_on_stale_but_not_dead(monkeypatch):
+    # 200s stale: past HEARTBEAT_STALE_AFTER_S (120, so not running / button
+    # hidden) but BELOW SESSION_DEFINITELY_DEAD_AFTER_S (300) — must NOT clear
+    # state. A briefly-unresponsive LIVE session must keep its state intact.
+    monkeypatch.setattr(bot_dashboard, "read_state", _status_state_signal)
+    monkeypatch.setattr(bot_dashboard, "_heartbeat_age_s", lambda _state: 200.0)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "SIGNAL",
+            "heartbeat_age_s": 200.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": False,
+        },
+    )
+    cleared = {"called": False}
+    monkeypatch.setattr("trading_app.live.bot_state.clear_state", lambda: cleared.__setitem__("called", True))
+
+    result = asyncio.run(bot_dashboard.api_status())
+
+    assert result["is_running"] is False  # controls re-appear
+    assert cleared["called"] is False  # but state preserved (not definitely dead)
+
+
+def test_api_status_self_heals_definitely_dead_state(monkeypatch):
+    # 466s stale + no tracked process = definitely dead → clear_state fires,
+    # and the post-clear read returns the STOPPED fallback with is_running False.
+    states = [_status_state_signal()]  # first read sees stale state, then cleared
+
+    def _read():
+        return states[0]
+
+    def _clear():
+        states[0] = {}  # simulate the file being unlinked
+
+    monkeypatch.setattr(bot_dashboard, "read_state", _read)
+    monkeypatch.setattr(bot_dashboard, "_heartbeat_age_s", lambda _state: 466.0)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "SIGNAL" if states[0] else "STOPPED",
+            "heartbeat_age_s": 466.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr("trading_app.live.bot_state.clear_state", _clear)
+
+    result = asyncio.run(bot_dashboard.api_status())
+
+    assert result["mode"] == "STOPPED"  # post-clear fallback
+    assert result["is_running"] is False
+    assert states[0] == {}  # state was actively cleared

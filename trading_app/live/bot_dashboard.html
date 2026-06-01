@@ -4369,7 +4369,17 @@ function updateStatus(state) {
 
   const acctName = state.account_name || "";
   const profileId = acctName.startsWith("profile_") ? acctName.slice(8) : null;
-  if (profileId !== runningProfile) { runningProfile = mode === "STOPPED" ? null : profileId; fetchAccounts(); fetchLaneControl(); }
+  // A session that died without a clean STOPPED write leaves mode=SIGNAL/LIVE
+  // forever, which used to latch runningProfile and hide the Alerts/Demo/GO-LIVE
+  // controls behind a permanent "Stop Session" button. Trust the server's
+  // authoritative is_running flag (canonical _session_snapshot truth) and, as a
+  // client-side guard against a missing flag, treat a stale heartbeat as
+  // not-running using the same STALE_AFTER_S the stale-banner already trusts.
+  const sessionAlive = state.is_running !== undefined
+    ? state.is_running === true
+    : (mode !== "STOPPED" && Number(state.heartbeat_age_s ?? 9999) < STALE_AFTER_S);
+  const nextRunning = sessionAlive ? profileId : null;
+  if (nextRunning !== runningProfile) { runningProfile = nextRunning; fetchAccounts(); fetchLaneControl(); }
   setText("running-profile", runningProfile || "Idle");
 
   $("mode-badge").className = `topbar-mode ${modeClass(mode)}`;

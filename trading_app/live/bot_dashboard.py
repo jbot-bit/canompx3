@@ -48,6 +48,12 @@ BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
 # Rationale: 2x the ~60s bar cadence (SessionOrchestrator._publish_state runs
 # once per 1m bar) — two consecutive missed writes flips the dashboard to STALE.
 HEARTBEAT_STALE_AFTER_S = 120
+# A session whose heartbeat is older than this is "definitely dead" — safe to
+# actively clear its bot_state, not merely hide its controls. Deliberately
+# higher than HEARTBEAT_STALE_AFTER_S: hiding launch buttons (120s) is reversible
+# and cheap; destroying a live session's state (300s) needs more certainty so a
+# briefly-unresponsive LIVE session (GC pause, slow tick) is never orphaned.
+SESSION_DEFINITELY_DEAD_AFTER_S = 300
 LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto"
 LIVE_PILOT_INSTRUMENT = "MNQ"
 LIVE_PILOT_COPIES = 1
@@ -105,7 +111,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
         if hb:
             try:
                 age = (datetime.now(UTC) - datetime.fromisoformat(hb)).total_seconds()
-                if age > 300:  # 5 minutes stale = definitely dead
+                if age > SESSION_DEFINITELY_DEAD_AFTER_S:  # definitely dead
                     clear_state()
                     log.info("Startup: cleared stale bot_state (heartbeat %ds old)", int(age))
             except Exception:
@@ -1521,10 +1527,31 @@ async def api_planned_launch():
 
 @app.get("/api/status")
 async def api_status():
-    """Read bot state from JSON file."""
+    """Read bot state from JSON file.
+
+    Exposes an authoritative ``is_running`` flag (the canonical
+    ``_session_snapshot()`` truth, which applies the HEARTBEAT_STALE_AFTER_S
+    rule) so the dashboard's running-profile latch never diverges from the
+    server's own notion of "is a session alive". A session that died without a
+    clean STOPPED write leaves ``mode`` mirroring its last value (SIGNAL/LIVE);
+    raw ``mode`` is preserved for back-compat consumers, but ``is_running``
+    tells the UI whether to show launch controls. When the session is
+    definitely dead (no tracked process AND heartbeat older than
+    SESSION_DEFINITELY_DEAD_AFTER_S), the stale state is actively cleared so it
+    stops latching the dashboard — mirroring the lifespan startup cleaner,
+    which only runs at server start.
+    """
+    from trading_app.live.bot_state import clear_state
+
+    snapshot = _session_snapshot()
+    age = _heartbeat_age_s(read_state())
+    if not snapshot["running"] and not snapshot["tracked_alive"] and age > SESSION_DEFINITELY_DEAD_AFTER_S:
+        clear_state()
+        log.info("api_status: cleared definitely-dead bot_state (heartbeat %ds old)", int(age))
+
     state = read_state()
     if not state:
-        return {"mode": "STOPPED", "lanes": {}, "lane_cards": [], "bars_received": 0}
+        return {"mode": "STOPPED", "lanes": {}, "lane_cards": [], "bars_received": 0, "is_running": False}
     # Check heartbeat staleness
     hb = state.get("heartbeat_utc")
     if hb:
@@ -1535,6 +1562,9 @@ async def api_status():
             state["heartbeat_age_s"] = 9999
     else:
         state["heartbeat_age_s"] = 9999
+    # Authoritative running flag — same canonical truth the operator-state and
+    # handoff logic use. The UI keys control visibility off this, not raw mode.
+    state["is_running"] = bool(_session_snapshot()["running"])
     trading_day = None
     raw_trading_day = state.get("trading_day")
     if isinstance(raw_trading_day, str):
