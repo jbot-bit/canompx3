@@ -495,11 +495,16 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
 
     - signal_only: OK (this is the path that accumulates the count).
     - demo: WARN (no real capital at risk).
-    - live + Express-Funded prop profile (is_express_funded=True): WARN
-      (e.g. Topstep XFA — funded-account wrapper insulates real capital).
+    - live + Express-Funded prop profile (is_express_funded=True): OK —
+      telemetry gate WAIVED. Operator decision 2026-06-01: the funded-account
+      wrapper (Topstep XFA / Tradeify / Bulenox) insulates real personal
+      capital, so the 30-day signal-maturity floor must NEVER block a funded
+      live launch. See docs/governance/decisions/ + .claude/rules/
+      telemetry-maturity-waiver.md.
     - live + real-capital broker (profile is_express_funded=False, unknown
-      profile, or no profile): FAIL — conservative default until the gate
-      is either promoted through proper doctrine or formally retired.
+      profile, or no profile): FAIL — conservative default. Real personal
+      capital still requires the maturity floor; the waiver above is
+      Express-Funded-only and does NOT relax this path.
 
     --all (no single instrument fixed): ctx.instrument may be a single
     symbol or a sentinel like "ALL"; evaluated against MNQ as the primary
@@ -552,11 +557,22 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
                 f"{target_instrument} trading_days; run --signal-only until {floor})",
             )
 
-        mode_label = "demo" if ctx.demo else f"funded profile={ctx.profile_id}"
+        # Express-Funded live (Topstep XFA et al.): telemetry gate WAIVED per
+        # operator decision 2026-06-01 — the funded-account wrapper insulates
+        # real personal capital, so the maturity floor must never block a
+        # funded live launch. Demo stays advisory WARN (no capital, but not a
+        # deliberate waiver). See .claude/rules/telemetry-maturity-waiver.md.
+        if ctx.demo:
+            return CheckResult(
+                True,
+                f"WARN: telemetry below floor ({n}/{floor} distinct {target_instrument} "
+                f"trading_days, demo — advisory; see telemetry_maturity.py module docstring)",
+            )
         return CheckResult(
             True,
-            f"WARN: telemetry below floor ({n}/{floor} distinct {target_instrument} "
-            f"trading_days, {mode_label} — advisory; see telemetry_maturity.py module docstring)",
+            f"OK (telemetry gate waived for Express-Funded profile={ctx.profile_id}; "
+            f"{n}/{floor} distinct {target_instrument} trading_days — funded wrapper "
+            f"insulates real capital, operator decision 2026-06-01)",
         )
     except Exception as e:
         return CheckResult(False, f"FAILED: {e}")
