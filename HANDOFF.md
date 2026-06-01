@@ -38,6 +38,14 @@
 - **Interpretation:** Current book is not too specific as a current practical baseline, but the best next hypothesis should test US_DATA_1000 RR1/RR1.5 as a book leg against RR2 under a fresh prereg, not silently alter the candidate. No deployment claim.
 - **Verification:** `python -m py_compile research\mnq_open_book_validation_v1.py`, `python -m pytest tests\test_research\test_mnq_open_book_validation_v1.py -q`, and `python research\mnq_open_book_validation_v1.py` passed/completed against shared canonical `C:\Users\joshd\canompx3\gold.db`.
 
+## Current Codex Follow-up - MNQ US_DATA RR Leg Choice
+- **Tool:** Codex
+- **Date:** 2026-06-01
+- **Summary:** Added no-theory conditional-role prereg `docs/audit/hypotheses/2026-06-01-mnq-usdata-rr-leg-choice-v1.yaml` plus runner `research/mnq_usdata_rr_leg_choice_v1.py`. This fixes the NYSE_OPEN anchor leg at `MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10` and only varies the US_DATA_1000 O15 E2 leg over RR {1.0, 1.5, 2.0} x filters {NO_FILTER, COST_LT08, COST_LT10, COST_LT12, COST_LT15}; K=15, 2026 frozen descriptive only.
+- **Result truth:** Canonical read-only front-door run wrote `docs/audit/results/2026-06-01-mnq-usdata-rr-leg-choice-v1.md` and `docs/audit/results/2026-06-01-mnq-usdata-rr-leg-choice-v1-books.csv`. Risk-adjusted winner is `NYOPEN_USDATA_RR1_NO_FILTER` (annual 58.52R, DD 13.95R, objective 4.193, t=5.70, WFE=1.115, 2026 descriptive mean 0.419). Annual-only winner is `NYOPEN_USDATA_RR2_NO_FILTER` (annual 68.50R, DD 24.42R, objective 2.805). Current comparison row `NYOPEN_USDATA_RR2_COST_LT10` remains annual 67.59R, DD 23.42R, objective 2.885.
+- **Interpretation:** The data says the next capital-aware book design should compare drawdown-budgeted RR1/RR1.5 US_DATA legs against the current RR2 leg, not deploy a silent replacement. All 15 rows are `NARROW`, 0 `CONTINUE`, 0 `KILL`; inherited broad-scan DSR remains the blocker despite family BH/DSR being strong.
+- **Verification:** Front door accepted and executed. `python -m pytest tests\test_research\test_mnq_usdata_rr_leg_choice_v1.py tests\test_research\test_mnq_open_book_validation_v1.py tests\test_research\test_best_own_strategy_scan_v1.py tests\test_research\test_orb_execution_variants_v1.py -q` passed 20 tests. Ruff, claim hygiene, and `git diff --check` passed.
+
 ## Current Codex Follow-up
 - **Tool:** Codex
 - **Date:** 2026-05-31
