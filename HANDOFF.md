@@ -25,15 +25,12 @@
 - **CI follow-up 4:** Fourth PR #350 CI run passed the dedicated fast-lane drift shard, then timed out in `pipeline core` because that shard duplicated `test_check_drift_fast_lane*.py`. Updated CI pipeline-core shard to ignore the fast-lane files already covered by the dedicated shard.
 
 ## Last Session
-- **Tool:** Claude Code
-- **Date:** 2026-05-31
-- **Commit:** 2810fead — @ feat(prop): encode MFFU Builder + Flex specs/tiers/payouts; fix Rapid sim-cap leak
-- **Files changed:** 6 files
-  - `HANDOFF.md`
-  - `docs/audit/2026-05-31-mffu-forced-progression-live-cap-memo.md`
-  - `docs/runtime/stages/2026-05-31-mffu-builder-prop-rules-stage2.md`
-  - `tests/test_prop_profiles_mffu.py`
-  - `trading_app/prop_firm_policies.py`
+- **Tool:** Unknown
+- **Date:** 2026-06-01
+- **Commit:** 14d25171 — perf(portal): bulk-load fitness in go portal
+- **Files changed:** 2 files
+  - `scripts/tools/go_portal.py`
+  - `tests/test_tools/test_go_portal.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
