@@ -46,6 +46,14 @@
 - **Interpretation:** The data says the next capital-aware book design should compare drawdown-budgeted RR1/RR1.5 US_DATA legs against the current RR2 leg, not deploy a silent replacement. All 15 rows are `NARROW`, 0 `CONTINUE`, 0 `KILL`; inherited broad-scan DSR remains the blocker despite family BH/DSR being strong.
 - **Verification:** Front door accepted and executed. `python -m pytest tests\test_research\test_mnq_usdata_rr_leg_choice_v1.py tests\test_research\test_mnq_open_book_validation_v1.py tests\test_research\test_best_own_strategy_scan_v1.py tests\test_research\test_orb_execution_variants_v1.py -q` passed 20 tests. Ruff, claim hygiene, and `git diff --check` passed.
 
+## Current Codex Follow-up - MNQ US_DATA Capital Fit
+- **Tool:** Codex
+- **Date:** 2026-06-01
+- **Summary:** Added allocator/account-fit prereg `docs/audit/hypotheses/2026-06-01-mnq-usdata-capital-fit-v1.yaml` plus runner `research/mnq_usdata_capital_fit_v1.py`. It fixes the same 15 US_DATA leg-choice books and maps 1-10 MNQ contracts per leg through `topstep_50k_mnq_auto` constraints using repo-owned profile data and Topstep scaling math.
+- **Result truth:** Canonical read-only front-door run wrote `docs/audit/results/2026-06-01-mnq-usdata-capital-fit-v1.md`, `*-books.csv`, and `*-sizing.csv`. All 15 raw two-leg books are `KILL` under the active profile: no contract size from 1-10 is profile-safe. Even the lower-DD RR1/no-filter row has 1-contract annual $6,799 but max DD $2,711 and 55 historical daily-belt breaches; current RR2/COST_LT10 has 1-contract annual $7,947 but max DD $3,549 and 62 daily-belt breaches. Raw annual-dollar winner is RR2/no-filter ($7,962) but it is not profile-safe.
+- **Interpretation:** Account constraints, not RR choice, are now the binding issue. Do not promote the raw two-leg book. The next honest hypothesis is a risk-overlay family: profile stop_multiplier=0.75, max ORB/risk cap, sequential one-loss/daily-belt throttle, or lower-risk lane replacement.
+- **Verification:** Front door accepted and executed. `python -m pytest tests\test_research\test_mnq_usdata_capital_fit_v1.py -q` passed 4 tests. Ruff, py_compile, claim hygiene, and `git diff --check` passed.
+
 ## Current Codex Follow-up
 - **Tool:** Codex
 - **Date:** 2026-05-31

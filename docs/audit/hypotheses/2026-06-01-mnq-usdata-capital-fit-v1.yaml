@@ -1,0 +1,66 @@
+metadata:
+  name: mnq-usdata-capital-fit-v1
+  created_by: Codex
+  date_locked: "2026-06-01T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  base_commit_sha: "50bd8c7dfa628c89e1e00d126cb470db7229339e"
+  research_question_type: conditional_role
+  theory_grant: false
+  testing_mode: family
+  total_expected_trials: 15
+  notes: >
+    Capital-fit follow-up to mnq-usdata-rr-leg-choice-v1. The signal universe is
+    fixed at the 15 US_DATA_1000 RR/filter variants paired with the fixed
+    NYSE_OPEN anchor. Contract sizing from 1 to 10 MNQ micros per leg is an
+    allocator accounting curve, not a new alpha family.
+
+execution:
+  entrypoint: research/mnq_usdata_capital_fit_v1.py
+  canonical_inputs:
+    - orb_outcomes
+    - daily_features
+    - trading_app.prop_profiles
+    - trading_app.topstep_scaling_plan
+  output_paths:
+    - docs/audit/results/2026-06-01-mnq-usdata-capital-fit-v1.md
+    - docs/audit/results/2026-06-01-mnq-usdata-capital-fit-v1-books.csv
+    - docs/audit/results/2026-06-01-mnq-usdata-capital-fit-v1-sizing.csv
+
+hypotheses:
+  - id: H1
+    role:
+      kind: allocator
+      parent: MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10_PLUS_US_DATA_1000_O15_E2
+      comparator: MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10_PLUS_US_DATA_1000_O15_E2_RR2_COST_LT10
+      primary_metric: profile_safe_annual_dollars
+      promotion_target: NONE_RESEARCH_ONLY
+      profile_id: topstep_50k_mnq_auto
+    parent_population:
+      symbol: MNQ
+      anchor_leg: MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10
+      variable_leg_session: US_DATA_1000
+      variable_leg_orb_minutes: 15
+      variable_leg_entry_model: E2
+      variable_leg_confirm_bars: 1
+      variable_leg_rr: [1.0, 1.5, 2.0]
+      variable_leg_filters: [NO_FILTER, COST_LT08, COST_LT10, COST_LT12, COST_LT15]
+    expected_trial_count: 15
+    primary_metric: profile_safe_annual_dollars
+    selection_rule: >
+      Rank books by the best contract size that satisfies scaling feasibility,
+      historical drawdown budget, profile daily-loss belt, and 90-day bootstrap
+      operational survival on pre-2026 data. 2026 is descriptive monitoring only.
+    verdict_policy:
+      continue: forbidden_from_this_stage
+      narrow: profile-safe accounting improves deployability design but inherited research DSR remains uncleared
+      kill: no contract size passes account constraints
+
+controls:
+  frozen_monitoring_window: "2026-01-01+"
+  no_2026_tuning: true
+  no_live_deployment: true
+  max_contracts_per_leg_tested: 10
+  monte_carlo:
+    horizon_days: 90
+    n_paths: 10000
+    seed: 20260601
