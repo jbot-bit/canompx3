@@ -54,6 +54,14 @@
 - **Interpretation:** Account constraints, not RR choice, are now the binding issue. Do not promote the raw two-leg book. The next honest hypothesis is a risk-overlay family: profile stop_multiplier=0.75, max ORB/risk cap, sequential one-loss/daily-belt throttle, or lower-risk lane replacement.
 - **Verification:** Front door accepted and executed. `python -m pytest tests\test_research\test_mnq_usdata_capital_fit_v1.py -q` passed 4 tests. Ruff, py_compile, claim hygiene, and `git diff --check` passed.
 
+## Current Codex Follow-up - MNQ Open Book Risk Overlay
+- **Tool:** Codex
+- **Date:** 2026-06-01
+- **Summary:** Added strict K=28 conditional-role prereg `docs/audit/hypotheses/2026-06-01-mnq-open-book-risk-overlay-v1.yaml` plus runner `research/mnq_open_book_risk_overlay_v1.py`. It tests four fixed NYSE_OPEN+US_DATA book shapes against seven structural overlays: raw, stop 0.75, risk caps at $225/$300, stop+cap combinations, and realized-loss throttle. Grounding is local: conditional-edge framework, Criterion 11 account survival, Lopez de Prado finite-data risk/bet-sizing framing, and `TRADING_RULES.md` stop/cap doctrine.
+- **Result truth:** Canonical read-only front-door run wrote `docs/audit/results/2026-06-01-mnq-open-book-risk-overlay-v1.md` and `*-candidates.csv`. All 28 candidates are `KILL`; no overlay is profile-safe at one MNQ contract per leg. Highest annual candidate is `RAW_ANNUAL_RR2_NO_FILTER__RISK_CAP_300` (annual $8,257, DD $3,250, 25 daily-belt breaches, survival 0.223). Best near-miss risk control is `LOW_DD_RR1_NO_FILTER__RISK_CAP_225` (annual $6,947, DD $2,079, 0 daily-belt breaches, survival 0.895), but it still exceeds the 80% max-loss DD budget ($1,600).
+- **Interpretation:** Risk caps help the daily-belt problem but do not solve drawdown. Stop 0.75 worsens drawdown in this two-leg book under the canonical MAE simulation. Realized-loss throttle is mostly ineffective because losses are not known before many later entries. The next honest path is lower-risk lane replacement / single-leg allocation, not more two-leg sizing.
+- **Verification:** Front door accepted and executed. `python -m pytest tests\test_research\test_mnq_open_book_risk_overlay_v1.py -q` passed 3 tests. Ruff passed after fixing the loader to include `symbol` for canonical COST_LT filters.
+
 ## Current Codex Follow-up
 - **Tool:** Codex
 - **Date:** 2026-05-31
