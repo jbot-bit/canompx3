@@ -107,6 +107,10 @@ class AccountProfile:
     # Canonical payout path for this account (e.g. topstep_express_standard).
     # None = payout mechanics are not modeled for this profile.
     payout_policy_id: str | None = None
+    # Optional tier lookup override for firms that keep one canonical firm spec
+    # but expose multiple account-tier variants (for example MFFU Builder default
+    # vs Add-On MLL). When unset, tier lookup uses `firm`.
+    account_tier_firm: str | None = None
     max_risk_per_trade: float | None = None  # Dollar cap per trade. None = no limit.
     # Self-imposed per-account daily-loss circuit breaker in dollars. None = no
     # dollar cap (R cap only). The broker MLL (tier.max_dd, trailing) is the
@@ -1090,6 +1094,12 @@ def get_firm_spec(firm: str) -> PropFirmSpec:
 def get_account_tier(firm: str, account_size: int) -> PropFirmAccount:
     """Look up account tier. Raises KeyError if not found."""
     return ACCOUNT_TIERS[(firm, account_size)]
+
+
+def get_account_tier_for_profile(profile: AccountProfile) -> PropFirmAccount:
+    """Look up the effective account tier for a profile."""
+    tier_firm = profile.account_tier_firm or profile.firm
+    return ACCOUNT_TIERS[(tier_firm, profile.account_size)]
 
 
 def get_profile(profile_id: str) -> AccountProfile:

@@ -13,7 +13,7 @@ from trading_app.prop_firm_policies import (
     get_default_payout_policy_for_firm,
     get_payout_policy,
 )
-from trading_app.prop_profiles import ACCOUNT_TIERS, get_firm_spec
+from trading_app.prop_profiles import ACCOUNT_TIERS, AccountProfile, get_account_tier_for_profile, get_firm_spec
 
 
 def test_non_mffu_specs_without_live_cap_rules_still_default_none():
@@ -65,6 +65,18 @@ def test_builder_tier_matches_verbatim():
     tier = ACCOUNT_TIERS[("mffu_builder", 50_000)]
     assert tier.max_dd == 2_000  # Default MLL
     assert (tier.max_contracts_mini, tier.max_contracts_micro) == (4, 40)
+
+
+def test_builder_addon_profile_resolves_addon_tier():
+    profile = AccountProfile(
+        profile_id="mffu_builder_addon_test",
+        firm="mffu_builder",
+        account_size=50_000,
+        account_tier_firm="mffu_builder_addon",
+    )
+    tier = get_account_tier_for_profile(profile)
+    assert tier.max_dd == 1_500
+    assert get_firm_spec(profile.firm).firm_specific_rules["mll_options"] == {"default": 2_000.0, "add_on": 1_500.0}
 
 
 def test_flex_spec_and_tiers_match_verbatim():

@@ -730,7 +730,7 @@ def build_profile_portfolio(
 
     Raises RuntimeError if any lane's strategy_id is missing from validated_setups.
     """
-    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier_for_profile
 
     if profile_id not in ACCOUNT_PROFILES:
         raise ValueError(f"Unknown profile '{profile_id}'. Valid: {sorted(ACCOUNT_PROFILES.keys())}")
@@ -749,7 +749,7 @@ def build_profile_portfolio(
         db_path = GOLD_DB_PATH
 
     # Always fetch tier (needed for DD budget check even if equity is specified)
-    tier = get_account_tier(profile.firm, profile.account_size)
+    tier = get_account_tier_for_profile(profile)
     if account_equity is None:
         account_equity = float(profile.account_size)
 

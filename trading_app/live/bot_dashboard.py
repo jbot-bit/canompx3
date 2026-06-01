@@ -1893,7 +1893,7 @@ async def api_accounts():
     nuke the entire endpoint. Broken profiles surface in the 'skipped' array
     of the response so the UI / operator can see what was excluded and why.
     """
-    from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes, get_account_tier, get_firm_spec
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes, get_account_tier_for_profile, get_firm_spec
 
     accounts = []
     skipped = []
@@ -1904,7 +1904,7 @@ async def api_accounts():
 
     for pid, p in profile_items:
         try:
-            tier = get_account_tier(p.firm, p.account_size)
+            tier = get_account_tier_for_profile(p)
             firm = get_firm_spec(p.firm)
             p_lanes = effective_daily_lanes(p)
             lanes_summary = []

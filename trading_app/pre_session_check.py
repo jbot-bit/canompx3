@@ -185,7 +185,8 @@ def check_daily_equity(profile_id: str | None = None) -> tuple[bool, str]:
     try:
         resolved_profile_id = resolve_profile_id(profile_id)
         prof = get_profile(resolved_profile_id)
-        tier = ACCOUNT_TIERS.get((prof.firm, prof.account_size))
+        tier_firm = prof.account_tier_firm or prof.firm
+        tier = ACCOUNT_TIERS.get((tier_firm, prof.account_size))
         if tier and tier.daily_loss_limit:
             dll = tier.daily_loss_limit
     except Exception as exc:

@@ -37,7 +37,7 @@ from trading_app.prop_profiles import (
     TradingBookEntry,
     compute_profit_split_factor,
     effective_daily_lanes,
-    get_account_tier,
+    get_account_tier_for_profile,
     get_firm_spec,
 )
 from trading_app.strategy_fitness import compute_fitness  # noqa: F401
@@ -354,7 +354,7 @@ def check_daily_lanes_dd_budget(
     is set). Only TRADE-status lanes count toward DD exposure.
     """
     firm_spec = get_firm_spec(profile.firm)
-    tier = get_account_tier(profile.firm, profile.account_size)
+    tier = get_account_tier_for_profile(profile)
     tradeable = [la for la in lanes if la.status == "TRADE"]
     if not tradeable:
         return 0.0, 0.0, tier.max_dd, False
@@ -532,7 +532,7 @@ def select_for_profile(
         return TradingBook(profile.profile_id, [], [])
 
     firm_spec = get_firm_spec(profile.firm)
-    tier = get_account_tier(profile.firm, profile.account_size)
+    tier = get_account_tier_for_profile(profile)
     all_excluded: list[ExcludedEntry] = []
 
     # 1. Static routing gates (firm bans + profile session/instrument assignment)
@@ -681,7 +681,7 @@ def build_all_books(
 def print_trading_book(book: TradingBook, profile: AccountProfile, verbose: bool = False) -> None:
     """Pretty-print a trading book."""
     firm_spec = get_firm_spec(profile.firm)
-    tier = get_account_tier(profile.firm, profile.account_size)
+    tier = get_account_tier_for_profile(profile)
 
     print(f"\n{'=' * 70}")
     print(f"  {firm_spec.display_name} ${tier.account_size:,} — {profile.profile_id}")

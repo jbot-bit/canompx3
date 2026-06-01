@@ -39,7 +39,7 @@ from trading_app.derived_state import (
 from trading_app.prop_firm_policies import get_payout_policy
 from trading_app.prop_profiles import (
     AccountProfile,
-    get_account_tier,
+    get_account_tier_for_profile,
     get_firm_spec,
     get_profile,
     get_profile_lane_definitions,
@@ -535,7 +535,7 @@ def _load_profile_daily_scenarios(
 
 
 def _build_rules(profile: AccountProfile) -> SurvivalRules:
-    tier = get_account_tier(profile.firm, profile.account_size)
+    tier = get_account_tier_for_profile(profile)
     firm_spec = get_firm_spec(profile.firm)
     starting_balance = 0.0 if profile.is_express_funded else float(profile.account_size)
 

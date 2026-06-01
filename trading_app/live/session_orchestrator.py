@@ -527,13 +527,13 @@ class SessionOrchestrator:
                         "Cannot compute max DD protection. Fix validated_setups data."
                     )
                 try:
-                    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
+                    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier_for_profile
 
                     # Find the profile that generated this portfolio
                     for pid, prof in ACCOUNT_PROFILES.items():
                         if portfolio.name == f"profile_{pid}":
                             matched_prof = prof
-                            tier = get_account_tier(prof.firm, prof.account_size)
+                            tier = get_account_tier_for_profile(prof)
                             # strats_with_risk was filtered on `s.median_risk_dollars and
                             # s.median_risk_dollars > 0` above — all values guaranteed non-None
                             # and > 0. `or 0.0` narrows the type for pyright.
@@ -796,11 +796,11 @@ class SessionOrchestrator:
             if first.source == "profile":
                 try:
                     from trading_app.account_hwm_tracker import AccountHWMTracker
-                    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier, get_firm_spec
+                    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier_for_profile, get_firm_spec
 
                     for pid, prof in ACCOUNT_PROFILES.items():
                         if portfolio.name == f"profile_{pid}":
-                            tier = get_account_tier(prof.firm, prof.account_size)
+                            tier = get_account_tier_for_profile(prof)
                             firm_spec = get_firm_spec(prof.firm)
                             acct_id = str(account_id) if account_id else pid
                             # Freeze EOD trailing accounts at the level where MLL locks

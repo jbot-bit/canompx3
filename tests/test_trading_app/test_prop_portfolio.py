@@ -144,6 +144,20 @@ class TestSelectForProfile:
         assert book.total_slots == 0
         assert len(book.excluded) == 0
 
+    def test_builder_addon_tier_override_tightens_dd_budget(self):
+        profile = AccountProfile(
+            "mffu_builder_addon_test",
+            "mffu_builder",
+            50_000,
+            stop_multiplier=0.75,
+            max_slots=30,
+            account_tier_firm="mffu_builder_addon",
+        )
+        strats = [_make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}") for i in range(20)]
+        book = select_for_profile(profile, strats)
+        assert book.total_slots == 15
+        assert book.total_dd_used <= 1_500
+
     def test_consistency_rule(self):
         profile = AccountProfile("test", "topstep", 50_000, 1, 0.75, max_slots=10)
         dominant = _make_strategy(strategy_id="dominant", orb_label="TOKYO_OPEN", expectancy_r=0.80)

@@ -24,6 +24,12 @@
 - **CI follow-up 3:** Third PR #350 CI run passed tools/research and failed fast-lane drift shard on `test_drift_check_fails_on_unrevoked_pooling_artifact`. Fixed `check_fast_lane_promote_orphans()` to flag any `pooling_artifact` with no revocation sidecar regardless of scanner terminal status. Exact failing test now passes locally.
 - **CI follow-up 4:** Fourth PR #350 CI run passed the dedicated fast-lane drift shard, then timed out in `pipeline core` because that shard duplicated `test_check_drift_fast_lane*.py`. Updated CI pipeline-core shard to ignore the fast-lane files already covered by the dedicated shard.
 
+## Current Codex Follow-up
+- **Tool:** Codex
+- **Date:** 2026-06-01
+- **Summary:** Daily bug scan automation was broken on `origin/main` because `scripts/tools/daily_bug_scan.py` and `tests/test_tools/test_daily_bug_scan.py` were missing even though the automation contract depends on that entrypoint. Restored only those two files from orphan commit `a59791d5` (`Harden daily scanner and AI tooling radar`). In this Windows sandbox, execution remains constrained: `python` is absent from PATH, `py -3` points to a blocked Windows Store interpreter, launching the canonical repo `.venv` returns `Access is denied`, and `uv run` is blocked by inaccessible user-level cache/python directories. Repo evidence confirms the missing-tool regression; runtime verification is still blocked by the environment.
+- **Follow-up (Codex, 2026-06-01, execution-verified):** Windows execution recovered later in-session (`python` resolved to local 3.11). `python scripts/tools/daily_bug_scan.py --since 2026-05-30T23:01:25.023Z --base-ref origin/main --include-local-head --max-commits 5 --format json` ran successfully and the focused scanner suite passed. The one actionable commit-level bug from the emitted candidates was `857a6388`: it added `("mffu_builder_addon", 50_000)` to `ACCOUNT_TIERS` but left every runtime tier lookup keyed to `profile.firm`, making the new add-on MLL tier unreachable. Fixed by adding `AccountProfile.account_tier_firm`, `get_account_tier_for_profile()`, and routing runtime consumers through the profile-aware helper. Regression tests now cover both direct resolution and prop-portfolio DD budgeting for the add-on path.
+
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-31
