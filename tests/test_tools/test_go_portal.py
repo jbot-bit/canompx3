@@ -20,6 +20,8 @@ from trading_app.strategy_fitness import FitnessReport, FitnessScore
 @pytest.fixture
 def patched_freshness_drift(monkeypatch):
     """Stub all slow / DB-bound helpers so unit tests are fast and offline."""
+    import scripts.tools.strategy_lab_mcp_server as strategy_lab
+
     monkeypatch.setattr(
         go_portal,
         "_query_data_freshness",
@@ -30,6 +32,8 @@ def patched_freshness_drift(monkeypatch):
         "_drift_status",
         lambda: {"status": "PASS", "detail": "all checks passed"},
     )
+    monkeypatch.setattr(strategy_lab, "_list_validated_rows", lambda instrument: [])
+    monkeypatch.setattr(go_portal, "_fitness_status_map", lambda instruments: {})
     monkeypatch.setattr(go_portal, "_git_sha", lambda: "deadbeef")
     # Stub every panel — the render-orchestrator behavior is the unit under test here.
     monkeypatch.setattr(go_portal, "panel_deployed_lanes", lambda *a, **kw: "<p>stub-1</p>")
@@ -59,12 +63,16 @@ def test_render_portal_emits_all_panels(patched_freshness_drift):
 
 
 def test_render_portal_stale_banner_when_db_stale(monkeypatch):
+    import scripts.tools.strategy_lab_mcp_server as strategy_lab
+
     monkeypatch.setattr(
         go_portal,
         "_query_data_freshness",
         lambda: {"MNQ": {"max_trading_day": "2026-05-01", "stale_days": 18, "is_stale": True}},
     )
     monkeypatch.setattr(go_portal, "_drift_status", lambda: {"status": "PASS", "detail": ""})
+    monkeypatch.setattr(strategy_lab, "_list_validated_rows", lambda instrument: [])
+    monkeypatch.setattr(go_portal, "_fitness_status_map", lambda instruments: {})
     monkeypatch.setattr(go_portal, "_git_sha", lambda: "abc")
     monkeypatch.setattr(go_portal, "panel_deployed_lanes", lambda *a, **kw: "<p>stub-1</p>")
     monkeypatch.setattr(go_portal, "panel_promotable", lambda *a, **kw: "<p>stub-2</p>")
@@ -188,6 +196,54 @@ def test_main_json_mode(monkeypatch, patched_freshness_drift, capsys):
     assert payload["git_sha"] == "deadbeef"
 
 
+def test_render_portal_shares_bulk_fitness_between_panels(monkeypatch):
+    validated_rows = [
+        {"strategy_id": "MNQ_A", "instrument": "MNQ"},
+        {"strategy_id": "ES_B", "instrument": "ES"},
+    ]
+    shared_map = {"MNQ_A": "FIT", "ES_B": "WATCH"}
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        go_portal,
+        "_query_data_freshness",
+        lambda: {"MNQ": {"max_trading_day": "2026-05-19", "stale_days": 0, "is_stale": False}},
+    )
+    monkeypatch.setattr(go_portal, "_drift_status", lambda: {"status": "PASS", "detail": "all checks passed"})
+    monkeypatch.setattr(go_portal, "_git_sha", lambda: "deadbeef")
+    monkeypatch.setattr(go_portal, "_fitness_status_map", lambda instruments: shared_map if instruments == {"MNQ", "ES"} else {})
+
+    import scripts.tools.strategy_lab_mcp_server as strategy_lab
+
+    monkeypatch.setattr(strategy_lab, "_list_validated_rows", lambda instrument: validated_rows)
+
+    def _panel1(profile_filter, instrument_filter, include_paused=False, fitness_map=None):
+        seen["panel1_map"] = fitness_map
+        return "<p>stub-1</p>"
+
+    def _panel2(instrument_filter, *, validated_rows=None, fitness_map=None):
+        seen["panel2_rows"] = validated_rows
+        seen["panel2_map"] = fitness_map
+        return "<p>stub-2</p>"
+
+    monkeypatch.setattr(go_portal, "panel_deployed_lanes", _panel1)
+    monkeypatch.setattr(go_portal, "panel_promotable", _panel2)
+    monkeypatch.setattr(go_portal, "panel_promote_queue", lambda *a, **kw: ("<p>stub-3</p>", []))
+    monkeypatch.setattr(go_portal, "panel_oos_rejections", lambda *a, **kw: "<p>stub-4</p>")
+    monkeypatch.setattr(go_portal, "panel_cherry_pick_top5", lambda: "<p>stub-5</p>")
+    monkeypatch.setattr(go_portal, "panel_drafts", lambda: "<p>stub-6</p>")
+    monkeypatch.setattr(go_portal, "panel_journal_pending", lambda: "<p>stub-7</p>")
+    monkeypatch.setattr(go_portal, "panel_next_24h", lambda *a, **kw: "<p>stub-8</p>")
+    monkeypatch.setattr(go_portal, "panel_holdout", lambda *a, **kw: "<p>stub-9</p>")
+    monkeypatch.setattr(go_portal, "panel_freshness_drift", lambda *a, **kw: "<p>stub-10</p>")
+
+    go_portal.render_portal()
+
+    assert seen["panel1_map"] is shared_map
+    assert seen["panel2_map"] is shared_map
+    assert seen["panel2_rows"] is validated_rows
+
+
 def _score(strategy_id: str, fitness_status: str) -> FitnessScore:
     return FitnessScore(
         strategy_id=strategy_id,
@@ -232,15 +288,7 @@ def test_panel_deployed_lanes_hides_paused_by_default_and_uses_bulk_fitness(monk
 
     monkeypatch.setattr(strategy_lab, "_load_allocation_doc", lambda *a, **kw: doc)
     monkeypatch.setattr(strategy_lab, "_allocation_index", lambda *a, **kw: idx)
-    monkeypatch.setattr(
-        strategy_fitness,
-        "compute_portfolio_fitness",
-        lambda **kwargs: FitnessReport(
-            as_of_date=date(2026, 6, 1),
-            scores=[_score("MNQ_ACTIVE", "FIT"), _score("MNQ_PAUSED", "WATCH")],
-            summary={"fit": 1, "watch": 1, "decay": 0, "stale": 0},
-        ),
-    )
+    monkeypatch.setattr(go_portal, "_selected_fitness_status_map", lambda strategy_ids: {"MNQ_ACTIVE": "FIT", "MNQ_PAUSED": "WATCH"})
 
     def _boom(*args, **kwargs):
         raise AssertionError("per-strategy compute_fitness should not be used")
@@ -278,15 +326,7 @@ def test_panel_deployed_lanes_include_paused_opt_in(monkeypatch):
 
     monkeypatch.setattr(strategy_lab, "_load_allocation_doc", lambda *a, **kw: doc)
     monkeypatch.setattr(strategy_lab, "_allocation_index", lambda *a, **kw: idx)
-    monkeypatch.setattr(
-        strategy_fitness,
-        "compute_portfolio_fitness",
-        lambda **kwargs: FitnessReport(
-            as_of_date=date(2026, 6, 1),
-            scores=[_score("MNQ_ACTIVE", "FIT"), _score("MNQ_PAUSED", "WATCH")],
-            summary={"fit": 1, "watch": 1, "decay": 0, "stale": 0},
-        ),
-    )
+    monkeypatch.setattr(go_portal, "_selected_fitness_status_map", lambda strategy_ids: {"MNQ_ACTIVE": "FIT", "MNQ_PAUSED": "WATCH"})
 
     body = go_portal.panel_deployed_lanes(None, None, include_paused=True)
 
@@ -342,3 +382,30 @@ def test_panel_promotable_uses_bulk_fitness_not_per_row(monkeypatch):
 
     assert "MNQ_FIT" in body
     assert "MNQ_WATCH" not in body
+
+
+def test_panel_deployed_lanes_uses_supplied_shared_fitness_map(monkeypatch):
+    import scripts.tools.strategy_lab_mcp_server as strategy_lab
+
+    doc = {"lanes": [{"strategy_id": "MNQ_ACTIVE"}], "paused": []}
+    idx = {
+        "MNQ_ACTIVE": {
+            "strategy_id": "MNQ_ACTIVE",
+            "_allocation_state": "active",
+            "session_id": "NYSE_OPEN",
+            "entry_model": "E2",
+        }
+    }
+
+    monkeypatch.setattr(strategy_lab, "_load_allocation_doc", lambda *a, **kw: doc)
+    monkeypatch.setattr(strategy_lab, "_allocation_index", lambda *a, **kw: idx)
+    monkeypatch.setattr(
+        go_portal,
+        "_selected_fitness_status_map",
+        lambda strategy_ids: (_ for _ in ()).throw(AssertionError("shared fitness map should bypass selected reload")),
+    )
+
+    body = go_portal.panel_deployed_lanes(None, None, fitness_map={"MNQ_ACTIVE": "FIT"})
+
+    assert "MNQ_ACTIVE" in body
+    assert "FIT" in body

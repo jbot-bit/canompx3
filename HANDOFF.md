@@ -24,13 +24,20 @@
 - **CI follow-up 3:** Third PR #350 CI run passed tools/research and failed fast-lane drift shard on `test_drift_check_fails_on_unrevoked_pooling_artifact`. Fixed `check_fast_lane_promote_orphans()` to flag any `pooling_artifact` with no revocation sidecar regardless of scanner terminal status. Exact failing test now passes locally.
 - **CI follow-up 4:** Fourth PR #350 CI run passed the dedicated fast-lane drift shard, then timed out in `pipeline core` because that shard duplicated `test_check_drift_fast_lane*.py`. Updated CI pipeline-core shard to ignore the fast-lane files already covered by the dedicated shard.
 
+## Current Portal Follow-up
+- **Tool:** Codex
+- **Date:** 2026-06-01
+- **Summary:** Finished the next `scripts/tools/go_portal.py` performance pass so panels 1 and 2 share one bulk fitness preload instead of shifting the hotspot between per-panel paths. `panel_deployed_lanes()` now accepts a supplied fitness map, `panel_promotable()` accepts supplied validated rows plus a shared map, and `render_portal()` preloads validated rows plus one instrument-scoped fitness map and threads that through both panels.
+- **Verification:** `python -m pytest tests/test_tools/test_go_portal.py -q` passed 15 tests; `ruff check scripts/tools/go_portal.py tests/test_tools/test_go_portal.py --quiet` and `git diff --check` passed.
+- **Measured runtime:** `scripts/tools/go_portal.py --json` now completes in ~466.0s in this Windows worktree, down from the earlier ~481.2s full-render run after the first portal fix and down from timing out under the old 180s budget before portal work began.
+- **Current hotspots:** measured breakdown is `_drift_status()` ~240.0s, shared portal fitness preload ~152.6s, then panel render cost is negligible once that map exists (`panel_deployed_lanes()` ~0.025s, `panel_promotable()` ~0.007s). The next single hotspot is therefore panel 10 drift status, not panel fan-out.
+
 ## Last Session
 - **Tool:** Unknown
 - **Date:** 2026-06-01
-- **Commit:** 14d25171 — perf(portal): bulk-load fitness in go portal
-- **Files changed:** 2 files
-  - `scripts/tools/go_portal.py`
-  - `tests/test_tools/test_go_portal.py`
+- **Commit:** 5b7f3ff3 — docs(handoff): record portal performance fix
+- **Files changed:** 1 files
+  - `HANDOFF.md`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

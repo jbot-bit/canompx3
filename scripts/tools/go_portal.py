@@ -129,6 +129,64 @@ def _fitness_status_map(instruments: set[str]) -> dict[str, str]:
     return status_map
 
 
+def _selected_fitness_status_map(strategy_ids: set[str]) -> dict[str, str]:
+    import duckdb
+
+    from pipeline.paths import GOLD_DB_PATH
+    from trading_app.config import ALL_FILTERS, CrossAssetATRFilter, VolumeFilter
+    from trading_app.strategy_fitness import (
+        _bulk_load_all_features,
+        _bulk_load_all_outcomes,
+        _compute_fitness_from_cache,
+        _compute_fitness_with_con,
+    )
+    from trading_app.validated_shelf import deployable_validated_relation
+
+    if not strategy_ids:
+        return {}
+
+    status_map: dict[str, str] = {}
+    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+        shelf_relation = deployable_validated_relation(con, alias="vs")
+        rows = con.execute(
+            f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
+                       entry_model, rr_target, confirm_bars, filter_type,
+                       COALESCE(stop_multiplier, 1.0) AS stop_multiplier,
+                       sample_size, win_rate, expectancy_r, sharpe_ratio,
+                       max_drawdown_r
+                FROM {shelf_relation}
+                WHERE strategy_id IN (SELECT UNNEST(?::VARCHAR[]))
+                ORDER BY strategy_id""",
+            [sorted(strategy_ids)],
+        ).fetchall()
+        cols = [desc[0] for desc in con.description]
+        param_rows = [dict(zip(cols, row, strict=False)) for row in rows]
+
+        by_instrument: dict[str, list[dict[str, Any]]] = {}
+        for params in param_rows:
+            by_instrument.setdefault(str(params["instrument"]), []).append(params)
+
+        today = date.today()
+        for instrument, instrument_params in by_instrument.items():
+            outcome_cache = _bulk_load_all_outcomes(con, instrument, end_date=today)
+            feature_cache = _bulk_load_all_features(con, instrument)
+            for params in instrument_params:
+                sid = str(params["strategy_id"])
+                filt = ALL_FILTERS.get(params["filter_type"])
+                if isinstance(filt, VolumeFilter | CrossAssetATRFilter):
+                    score = _compute_fitness_with_con(con, sid, today)
+                else:
+                    score = _compute_fitness_from_cache(
+                        sid,
+                        params,
+                        outcome_cache,
+                        feature_cache,
+                        today,
+                    )
+                status_map[sid] = score.fitness_status
+    return status_map
+
+
 def _match_profile(entry: dict[str, Any], profile_filter: str | None) -> bool:
     if not profile_filter:
         return True
@@ -140,6 +198,7 @@ def panel_deployed_lanes(
     profile_filter: str | None,
     instrument_filter: str | None,
     include_paused: bool = False,
+    fitness_map: dict[str, str] | None = None,
 ) -> str:
     from scripts.tools.strategy_lab_mcp_server import _allocation_index, _load_allocation_doc
 
@@ -167,8 +226,7 @@ def panel_deployed_lanes(
     if not visible_entries:
         return _empty("No deployed lanes match the current filters.")
 
-    instruments = {inst for sid, entry in visible_entries if (inst := _infer_instrument(sid, entry)) is not None}
-    fitness_map = _fitness_status_map(instruments)
+    fitness_map = fitness_map or _selected_fitness_status_map({sid for sid, _entry in visible_entries})
 
     rows: list[tuple[str, str, str, str, str]] = []
     for sid, entry in visible_entries:
@@ -200,24 +258,30 @@ def panel_deployed_lanes(
     return summary + _table(header, rows)
 
 
-def panel_promotable(instrument_filter: str | None) -> str:
+def panel_promotable(
+    instrument_filter: str | None,
+    *,
+    validated_rows: list[dict[str, Any]] | None = None,
+    fitness_map: dict[str, str] | None = None,
+) -> str:
     from scripts.tools.strategy_lab_mcp_server import (
         _allocation_index,
         _list_validated_rows,
         _load_allocation_doc,
     )
 
-    validated = _list_validated_rows(instrument_filter)
+    validated = validated_rows if validated_rows is not None else _list_validated_rows(instrument_filter)
     if not validated:
         return _empty("No validated rows for the active instrument filter.")
     doc = _load_allocation_doc()
     allocated_ids = set(_allocation_index(doc).keys()) if doc else set()
-    instruments = {
-        str(row.get("instrument"))
-        for row in validated
-        if isinstance(row.get("instrument"), str) and row.get("instrument")
-    }
-    fitness_map = _fitness_status_map(instruments)
+    if fitness_map is None:
+        instruments = {
+            str(row.get("instrument"))
+            for row in validated
+            if isinstance(row.get("instrument"), str) and row.get("instrument")
+        }
+        fitness_map = _fitness_status_map(instruments)
 
     rows: list[tuple[str, ...]] = []
     for row in validated:
@@ -573,9 +637,18 @@ def render_portal(
     include_paused: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     """Render the portal. Returns (html_string, json_payload)."""
+    from scripts.tools.strategy_lab_mcp_server import _list_validated_rows
+
     freshness = _query_data_freshness()
     any_stale = any(info.get("is_stale") for info in freshness.values())
     drift = _drift_status()
+    validated_rows = _list_validated_rows(instrument_filter)
+    portal_instruments = {
+        str(row.get("instrument"))
+        for row in validated_rows
+        if isinstance(row.get("instrument"), str) and row.get("instrument")
+    }
+    shared_fitness_map = _fitness_status_map(portal_instruments)
 
     # Panel 3 also feeds panel 4 (rejection sub-view) so render it once.
     promote_html: str = ""
@@ -590,9 +663,22 @@ def render_portal(
         _render_panel(
             1,
             "Deployed lanes + fitness",
-            lambda: panel_deployed_lanes(profile_filter, instrument_filter, include_paused=include_paused),
+            lambda: panel_deployed_lanes(
+                profile_filter,
+                instrument_filter,
+                include_paused=include_paused,
+                fitness_map=shared_fitness_map,
+            ),
         ),
-        _render_panel(2, "Promotable candidates (FIT, unallocated)", lambda: panel_promotable(instrument_filter)),
+        _render_panel(
+            2,
+            "Promotable candidates (FIT, unallocated)",
+            lambda: panel_promotable(
+                instrument_filter,
+                validated_rows=validated_rows,
+                fitness_map=shared_fitness_map,
+            ),
+        ),
         _render_panel(3, "PROMOTE queue (live state)", _panel3),
         _render_panel(4, "OOS-power rejections", lambda: panel_oos_rejections(promote_entries)),
         _render_panel(5, "Cherry-pick top-5 (latest ranking)", panel_cherry_pick_top5),
