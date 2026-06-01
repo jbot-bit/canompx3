@@ -1965,6 +1965,7 @@ async def api_accounts():
                     "profile_id": pid,
                     "firm": firm.display_name,
                     "firm_key": p.firm,
+                    "is_express_funded": bool(getattr(p, "is_express_funded", False)),
                     "account_size": p.account_size,
                     "copies": p.copies,
                     "max_dd": tier.max_dd,
@@ -1992,6 +1993,170 @@ async def api_accounts():
             )
 
     return {"accounts": accounts, "skipped": skipped}
+
+
+def _lane_control_setup_label(meta: dict[str, object]) -> str:
+    rr_target = meta.get("rr_target")
+    rr_label = f"RR{rr_target:g}" if isinstance(rr_target, float) else None
+    parts = [str(part) for part in (meta.get("entry_model"), rr_label, meta.get("filter_type")) if part]
+    return " | ".join(parts) if parts else "Setup unknown"
+
+
+def _lane_control_row(
+    *,
+    profile: str,
+    strategy_id: str,
+    instrument: str | None,
+    session_name: str | None,
+    active_book: bool,
+    override: dict | None,
+) -> dict[str, object]:
+    meta = _strategy_meta(strategy_id)
+    resolved_session = session_name or cast(str | None, meta.get("session_name"))
+    resolved_instrument = instrument or cast(str | None, meta.get("instrument_label"))
+    enabled = active_book and override is None
+    status = "ON" if enabled else ("OFF" if active_book else "PARKED")
+    return {
+        "profile": profile,
+        "strategy_id": strategy_id,
+        "instrument": resolved_instrument,
+        "session": resolved_session,
+        "session_time_brisbane": _get_session_time_brisbane(resolved_session),
+        "label": str(meta.get("lane_label") or strategy_id),
+        "setup_label": _lane_control_setup_label(meta),
+        "active_book": active_book,
+        "enabled": enabled,
+        "status": status,
+        "reason": (override or {}).get("reason") or (None if active_book else "Parked outside active pilot book"),
+        "paused_at": (override or {}).get("paused_at") or None,
+        "expires_on": (override or {}).get("expires") or None,
+    }
+
+
+def _lane_control_payload(profile: str) -> dict[str, object]:
+    """Return dashboard lane-control state from profile authority + lane_ctl."""
+    from trading_app.lane_ctl import get_lane_override, get_paused_strategy_ids
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
+
+    account_profile = ACCOUNT_PROFILES.get(profile)
+    if account_profile is None:
+        raise KeyError(f"Unknown profile: {profile}")
+
+    active_specs = tuple(effective_daily_lanes(account_profile))
+    active_ids = {lane.strategy_id for lane in active_specs}
+    rows: list[dict[str, object]] = []
+
+    for lane in active_specs:
+        rows.append(
+            _lane_control_row(
+                profile=profile,
+                strategy_id=lane.strategy_id,
+                instrument=lane.instrument,
+                session_name=lane.orb_label,
+                active_book=True,
+                override=get_lane_override(profile, lane.strategy_id),
+            )
+        )
+
+    for strategy_id in sorted(get_paused_strategy_ids(profile) - active_ids):
+        rows.append(
+            _lane_control_row(
+                profile=profile,
+                strategy_id=strategy_id,
+                instrument=None,
+                session_name=None,
+                active_book=False,
+                override=get_lane_override(profile, strategy_id),
+            )
+        )
+
+    rows.sort(
+        key=lambda item: (
+            not bool(item.get("active_book")),
+            _sort_time_key(str(item.get("session_time_brisbane") or "")),
+            str(item.get("strategy_id") or ""),
+        )
+    )
+    enabled_count = sum(1 for row in rows if row.get("active_book") and row.get("enabled"))
+    disabled_count = sum(1 for row in rows if row.get("active_book") and not row.get("enabled"))
+    parked_count = sum(1 for row in rows if not row.get("active_book"))
+    session = _session_snapshot()
+    return {
+        "profile": profile,
+        "active_book_count": len(active_specs),
+        "enabled_count": enabled_count,
+        "disabled_count": disabled_count,
+        "parked_count": parked_count,
+        "session_running": bool(session.get("running")),
+        "raw_mode": session.get("raw_mode"),
+        "lanes": rows,
+    }
+
+
+@app.get("/api/lane-control")
+async def api_lane_control(profile: str = LIVE_PILOT_PROFILE):
+    try:
+        return _lane_control_payload(profile)
+    except KeyError as exc:
+        return JSONResponse(status_code=404, content={"status": "error", "message": str(exc), "profile": profile})
+    except Exception as exc:
+        log.warning("api/lane-control failed for profile=%s: %s", profile, exc)
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(exc), "profile": profile})
+
+
+@app.post("/api/lane-control/toggle")
+async def api_lane_control_toggle(request_body: dict | None = None):
+    if not request_body:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Request body required"})
+    profile = str(request_body.get("profile") or LIVE_PILOT_PROFILE)
+    strategy_id = str(request_body.get("strategy_id") or "")
+    enabled = request_body.get("enabled")
+    if not strategy_id:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "strategy_id required"})
+    if not isinstance(enabled, bool):
+        return JSONResponse(status_code=400, content={"status": "error", "message": "enabled boolean required"})
+
+    session = _session_snapshot()
+    if session.get("running"):
+        return JSONResponse(
+            status_code=409,
+            content={"status": "blocked", "message": "Stop the running session before changing lanes."},
+        )
+
+    from trading_app.lane_ctl import pause_strategy_id, resume_strategy_id
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
+
+    account_profile = ACCOUNT_PROFILES.get(profile)
+    if account_profile is None:
+        return JSONResponse(status_code=404, content={"status": "error", "message": f"Unknown profile: {profile}"})
+
+    active_ids = {lane.strategy_id for lane in effective_daily_lanes(account_profile)}
+    if strategy_id not in active_ids:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "blocked",
+                "message": "Only active-book lanes can be changed here. Parked lanes require a separate audit/rebalance.",
+                "strategy_id": strategy_id,
+            },
+        )
+
+    if enabled:
+        changed = resume_strategy_id(profile, strategy_id)
+    else:
+        changed = pause_strategy_id(profile, strategy_id, reason="Dashboard lane off", source="dashboard")
+
+    with _state_lock:
+        _preflight_cache.pop(profile, None)
+
+    return {
+        "status": "ok",
+        "profile": profile,
+        "strategy_id": strategy_id,
+        "enabled": enabled,
+        "changed": changed,
+        "lane_control": _lane_control_payload(profile),
+    }
 
 
 # ── Broker connection management ─────────────────────────────────────

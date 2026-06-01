@@ -1040,14 +1040,32 @@ def test_dashboard_live_pilot_copy_is_explicit_and_professional():
     html = (bot_dashboard.PROJECT_ROOT / "trading_app" / "live" / "bot_dashboard.html").read_text(encoding="utf-8")
 
     assert "HOLD TO GO LIVE" in html
+    assert 'id="ops-strip"' in html
+    assert 'id="ops-running"' in html
+    assert 'id="ops-chart"' in html
+    assert 'id="ops-lanes"' in html
+    assert 'id="ops-accounts"' in html
+    assert "Lane Controls" in html
+    assert "/api/lane-control" in html
+    assert "toggleLane(" in html
+    assert 'data-tab="connections" onclick="switchTab(\'connections\')">Accounts</button>' in html
     assert "pilot-contract" in html
     assert "hero-pilot" in html
     assert "NYSE parked" in html
-    assert "Topstep MNQ &middot; one protected primary account" in html
-    assert "Topstep MNQ &middot; 1 copy &middot; real orders &middot; gates run first" in html
-    assert "Live pilot: <b>MNQ</b> &middot; 3 lanes &middot; 1 copy &middot; NYSE: parked" in html
+    assert "Topstep XFA &middot; one protected primary account" in html
+    assert "Topstep XFA &middot; MNQ &middot; 1 copy &middot; gates run first" in html
+    assert "pilot 3L/1x" in html
     assert "Broker account pending" in html
     assert "renderAccounts(lastAccountsData)" in html
+    assert "Refreshing. Wait." in html
+    assert "Show gate detail" in html
+    assert "Prop sim" in html
+    assert '<span class="btn-title">Demo</span><span class="btn-sub">Broker sandbox</span>' in html
+    assert "Demo broker orders." in html
+    assert "No chart data" in html
+    assert "Start signals" in html
+    assert '<span class="btn-title">Paper</span>' not in html
+    assert "Practice only" not in html
     assert "Combine" not in html
     assert "🔒" not in html
 

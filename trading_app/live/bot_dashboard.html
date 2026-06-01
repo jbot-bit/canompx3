@@ -101,12 +101,81 @@
     cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em; transition: all 0.12s;
   }
   .topbar-btn:hover { border-color: var(--border-hi); color: var(--text); }
+  .topbar-btn:disabled { opacity: 0.46; cursor: not-allowed; filter: saturate(0.55); }
   .topbar-btn.primary { border-color: rgba(0,212,255,0.20); color: var(--cyan); }
   .topbar-btn.primary:hover { background: var(--cyan-soft); }
   .topbar-btn.warn { border-color: rgba(255,193,7,0.20); color: var(--yellow); }
   .topbar-btn.warn:hover { background: var(--yellow-soft); }
   .topbar-btn.danger { border-color: rgba(255,92,92,0.25); color: var(--red); }
   .topbar-btn.danger:hover { background: var(--red-soft); }
+
+  /* Operator controls: one-line access to the things you actually change. */
+  .ops-strip {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px;
+    background: var(--border); border: 1px solid var(--border); border-radius: var(--r-lg);
+    overflow: hidden; margin: 10px 0;
+  }
+  .ops-tile {
+    min-height: 58px; padding: 10px 12px; background: var(--surface);
+    border: 0; color: var(--text); text-align: left;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  }
+  button.ops-tile { cursor: pointer; transition: background 0.12s, color 0.12s; }
+  button.ops-tile:hover { background: var(--surface-2); }
+  .ops-label {
+    color: var(--dim); font-size: 10px; font-weight: 800;
+    letter-spacing: 0.10em; text-transform: uppercase;
+  }
+  .ops-value {
+    min-width: 0; color: var(--text); font: 700 15px/1.2 var(--mono);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ops-sub { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ops-value.ok { color: var(--green); }
+  .ops-value.warn { color: var(--yellow); }
+  .ops-value.bad { color: var(--red); }
+  .ops-value.info { color: var(--cyan); }
+  .lane-control-panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin: -2px 0 10px; overflow: hidden;
+  }
+  .lane-control-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+  }
+  .lane-control-title { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+  .lane-control-sub { color: var(--muted); font-size: 11px; text-align: right; }
+  .lane-control-list { display: grid; gap: 1px; background: var(--border); }
+  .lane-control-row {
+    display: grid; grid-template-columns: 86px minmax(0, 1fr) 82px 92px; gap: 10px;
+    align-items: center; padding: 9px 12px; background: var(--surface-2);
+  }
+  .lane-control-time { color: var(--cyan); font: 700 12px/1.2 var(--mono); }
+  .lane-control-name { min-width: 0; }
+  .lane-control-name b {
+    display: block; color: var(--text); font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lane-control-name span {
+    display: block; color: var(--muted); font-size: 10px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lane-status-pill {
+    justify-self: start; padding: 4px 8px; border-radius: 999px;
+    font: 800 10px/1 var(--mono); letter-spacing: 0.08em;
+  }
+  .lane-status-pill.on { background: var(--green-soft); color: var(--green); }
+  .lane-status-pill.off { background: var(--yellow-soft); color: var(--yellow); }
+  .lane-status-pill.parked { background: rgba(71,85,105,0.18); color: var(--muted); }
+  .lane-toggle-btn {
+    min-height: 30px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-2); font-size: 11px; font-weight: 800;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .lane-toggle-btn:hover { border-color: var(--border-hi); color: var(--text); }
+  .lane-toggle-btn.off { color: var(--yellow); border-color: rgba(255,193,7,0.25); }
+  .lane-toggle-btn.on { color: var(--green); border-color: rgba(0,214,143,0.25); }
+  .lane-toggle-btn:disabled { opacity: 0.42; cursor: not-allowed; }
 
   /* ── METRICS STRIP ──────────────────── */
   .metrics {
@@ -1645,6 +1714,7 @@
   .hero[data-state="in_trade"] .hero-state-badge { color: var(--accent); background: var(--accent-strong); }
   .hero[data-state="blocked"] .hero-state-badge,
   .hero[data-state="error"]   .hero-state-badge { color: var(--red); background: var(--red-soft); }
+  .hero[data-state="refreshing"] .hero-state-badge,
   .hero[data-state="warn"]    .hero-state-badge { color: var(--yellow); background: var(--yellow-soft); }
 
   .hero-head-hint {
@@ -2286,6 +2356,17 @@
     .hero-pilot-label { grid-column: 1 / -1; }
   }
   @media (max-width: 600px) {
+    .ops-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .lane-control-row {
+      grid-template-columns: 64px minmax(0, 1fr) 74px;
+      gap: 8px;
+    }
+    .lane-control-row .lane-toggle-btn {
+      grid-column: 2 / 4;
+      width: 100%;
+    }
     body.cockpit #header-mode-badge {
       flex: 1 0 calc(100% - 28px);
     }
@@ -2371,6 +2452,51 @@
   /* explicit overrides for key text nodes */
   .operator-check-detail, .operator-reason { font-size: 13px; }
   .operator-headline { font-size: 15px; font-weight: 600; }
+  .operator-checks.compact { grid-template-columns: 1fr; }
+  .operator-detail-toggle {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .operator-detail-toggle summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .operator-detail-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .operator-detail-row {
+    display: grid;
+    grid-template-columns: 140px 56px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    color: var(--text-2);
+    font-size: 12px;
+  }
+  .operator-detail-row b {
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+  .operator-detail-row span {
+    color: var(--dim);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .operator-detail-row em {
+    color: var(--text-2);
+    font-style: normal;
+    overflow-wrap: anywhere;
+  }
   .hm-lbl, .pnl-cell-lbl { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
   /* Bloomberg-scale figures — quiet labels, loud numbers. The four that decide
      a trade: balance, P&L today, DD-used headroom, next-session countdown. */
@@ -2418,7 +2544,8 @@
   .hero[data-state="in_trade"] { border-left-color: var(--accent) !important; }
   .hero[data-state="blocked"],
   .hero[data-state="error"]    { border-left-color: var(--red) !important; }
-  .hero[data-state="warn"]     { border-left-color: var(--yellow) !important; }
+  .hero[data-state="warn"],
+  .hero[data-state="refreshing"] { border-left-color: var(--yellow) !important; }
   .hero[data-state="ready"]    { border-left-color: var(--accent) !important; }
   .pf-card.active-auto         { border-left-color: var(--green) !important; background: linear-gradient(90deg, rgba(34,197,94,0.04), transparent 60%), var(--surface-2); }
   .sec:hover { border-left-color: var(--border-hi); }
@@ -2763,7 +2890,7 @@
     <span id="running-profile" class="compat-hidden">Idle</span>
     <span id="running-profile-detail" class="compat-hidden"></span>
     <span class="topbar-spacer"></span>
-    <span id="planned-launch-banner" class="planned-launch-banner" style="display:none" title="Source of truth: data/bot_planned_launch.json — written by START_BOT.bat or run_live_session.py"></span>
+    <span id="planned-launch-banner" class="planned-launch-banner" style="display:none" title="Launch plan"></span>
     <button id="btn-primary-cta" class="topbar-btn primary" style="display:none" type="button"></button>
     <input type="checkbox" id="focus-toggle" tabindex="-1" aria-hidden="true">
     <label for="focus-toggle" class="show-all-label" title="Toggle FOCUS / SHOW ALL — reveals demoted panels (specs, profiles, brokers, live-session duplicate block)"></label>
@@ -2787,11 +2914,44 @@
   <!-- TAB BAR -->
   <nav class="tab-bar">
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
-    <button class="tab-btn" data-tab="connections" onclick="switchTab('connections')">Connections</button>
+    <button class="tab-btn" data-tab="connections" onclick="switchTab('connections')">Accounts</button>
   </nav>
 
   <!-- ═══ DASHBOARD TAB ═══ -->
   <div id="tab-dashboard" class="tab-content active">
+
+  <section id="ops-strip" class="ops-strip" aria-label="Operator controls">
+    <div class="ops-tile">
+      <span class="ops-label">Running</span>
+      <strong id="ops-running" class="ops-value">Stopped</strong>
+      <span id="ops-running-sub" class="ops-sub">no session</span>
+    </div>
+    <button class="ops-tile" type="button" onclick="focusChart()">
+      <span class="ops-label">Chart</span>
+      <strong id="ops-chart" class="ops-value info">MNQ</strong>
+      <span class="ops-sub">live candles</span>
+    </button>
+    <button class="ops-tile" type="button" onclick="toggleLaneControls()">
+      <span class="ops-label">Lanes</span>
+      <strong id="ops-lanes" class="ops-value">Loading</strong>
+      <span id="ops-lanes-sub" class="ops-sub">control book</span>
+    </button>
+    <button class="ops-tile" type="button" onclick="openAccountsControl()">
+      <span class="ops-label">Accounts</span>
+      <strong id="ops-accounts" class="ops-value">Loading</strong>
+      <span class="ops-sub">enable / disable</span>
+    </button>
+  </section>
+
+  <section id="lane-control-panel" class="lane-control-panel hidden">
+    <div class="lane-control-head">
+      <span class="lane-control-title">Lane Controls</span>
+      <span id="lane-control-sub" class="lane-control-sub">Loading</span>
+    </div>
+    <div id="lane-control-list" class="lane-control-list">
+      <div class="empty">Loading lanes...</div>
+    </div>
+  </section>
 
   <!-- ═══ COCKPIT GRID ═══ -->
   <div class="cockpit-grid">
@@ -2813,9 +2973,9 @@
     <div class="chart-cockpit-body">
       <div id="chart-host"></div>
       <div id="chart-cockpit-fallback" class="chart-cockpit-fallback">
-        <div id="chart-fb-title" style="font-size:20px;font-weight:800;color:var(--red,#ff5c5c);letter-spacing:0.04em;margin-bottom:6px;">NO LIVE FEED</div>
-        <div id="chart-fb-detail" style="font-size:13px;color:var(--dim);margin-bottom:14px;text-align:center;max-width:420px;">No recent bars. Start the feed to begin streaming candles.</div>
-        <button id="chart-fb-start" type="button" style="background:var(--cyan,#00d4ff);color:#000;border:none;border-radius:6px;padding:12px 28px;font:700 14px/1 var(--mono);letter-spacing:0.08em;cursor:pointer;text-transform:uppercase;animation:pulse-cyan 1.6s ease-in-out infinite;">▶ START FEED</button>
+        <div id="chart-fb-title" style="font-size:15px;font-weight:700;color:var(--muted);letter-spacing:0.02em;margin-bottom:6px;">No chart data</div>
+        <div id="chart-fb-detail" style="font-size:12px;color:var(--dim);margin-bottom:14px;text-align:center;max-width:360px;">Start signals to stream candles.</div>
+        <button id="chart-fb-start" type="button" style="background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px 22px;font:700 12px/1 var(--mono);letter-spacing:0.06em;cursor:pointer;text-transform:uppercase;">Start signals</button>
         <div style="font-size:11px;color:var(--dim);margin-top:10px;">Signal mode — bar feed only, no orders, zero risk.</div>
       </div>
     </div>
@@ -2854,7 +3014,7 @@
       <div id="connection-summary-title" class="connection-summary-title">Connection</div>
       <div id="connection-summary-message" class="connection-summary-message">Loading broker connection state...</div>
     </div>
-    <button id="connection-summary-action" class="connection-summary-action" type="button">Connections</button>
+    <button id="connection-summary-action" class="connection-summary-action" type="button">Accounts</button>
   </section>
 
   <!-- ═══ COCKPIT HERO — state-adaptive top card ═══ -->
@@ -2947,7 +3107,7 @@
 
   <!-- DRAWER HANDLE STRIP — Stage 4.1 quick-access pills (open drawer to specific tab) -->
   <div id="drawer-handle-strip" class="drawer-handle-strip">
-    <button class="drawer-handle" data-drawer-tab="brokers" type="button">Brokers <span id="dh-brokers-count" class="drawer-handle-count">—</span></button>
+    <button class="drawer-handle" data-drawer-tab="brokers" type="button">Accounts <span id="dh-brokers-count" class="drawer-handle-count">—</span></button>
     <button class="drawer-handle" data-drawer-tab="trades" type="button">Trades <span id="dh-trades-count" class="drawer-handle-count">0</span></button>
     <button class="drawer-handle" data-drawer-tab="profiles" type="button">Profiles</button>
     <button class="drawer-handle" data-drawer-tab="specs" type="button">Account Specs</button>
@@ -3137,7 +3297,7 @@
           <tbody id="trade-book-live-body"><tr><td colspan="12" class="muted">Loading...</td></tr></tbody>
         </table>
       </div>
-      <h4 style="margin:18px 0 4px; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;" class="muted">Paper trades (gold.db)</h4>
+      <h4 style="margin:18px 0 4px; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;" class="muted">Historical paper log (gold.db)</h4>
       <div id="trade-book-paper-note" class="muted" style="font-size:11px; margin-bottom:6px"></div>
       <div class="tbl-wrap">
         <table class="blotter">
@@ -3180,7 +3340,7 @@
 
     <!-- CONNECTION LIST -->
     <div class="conn-header">
-      <span class="conn-header-title">Broker Connections</span>
+      <span class="conn-header-title">Broker Accounts</span>
       <button class="conn-add-btn" onclick="openAddForm()">+ Add Connection</button>
     </div>
     <div id="conn-list"></div>
@@ -3205,6 +3365,8 @@ let showArchived = false;
 let lastEquityData = null;  // cached for re-renders
 let lastOperatorState = null;
 let lastAlertsData = null;
+let lastLaneControlData = null;
+let laneControlOpen = false;
 
 const $ = id => document.getElementById(id);
 const setText = (id, t) => { const e = $(id); if (e) e.textContent = t; };
@@ -3228,6 +3390,104 @@ function operatorTone(status) { return status === "READY" || status.startsWith("
 function operatorButtonTone(actionId) { return actionId === "start_signal" ? "success" : actionId === "stop_session" ? "danger" : actionId === "refresh_data" || actionId === "run_preflight" ? "warn" : ""; }
 function alertTone(level) { return level === "critical" ? "critical" : level === "warning" ? "warning" : "info"; }
 function getProfileRecord(profileId) { return (lastAccountsData || []).find(a => a.profile_id === profileId) || activeProfileData || null; }
+function capitalContextLabel(acct, profileId) {
+  const profile = String(profileId || acct?.profile_id || "").toLowerCase();
+  const firmKey = String(acct?.firm_key || acct?.firm || "").toLowerCase();
+  if (!acct && profile.includes("topstep")) return "Prop sim";
+  if (!acct) return "Capital unknown";
+  const notes = String(acct.notes || "").toLowerCase();
+  if (firmKey.includes("self") || profile.includes("self_funded")) return "Self-funded";
+  if (acct.is_express_funded === true) return "Prop sim";
+  if (notes.includes("express funded") || notes.includes("xfa")) return "Prop sim";
+  if (notes.includes("live funded") || notes.includes("lfa")) return "Prop live";
+  if (firmKey.includes("topstep") || firmKey.includes("tradeify") || firmKey.includes("bulenox") || firmKey.includes("mffu")) return "Prop sim";
+  if (firmKey || acct.firm) return "Broker";
+  return "Capital unknown";
+}
+function orderModeLabel(mode) {
+  const m = String(mode || "STOPPED").toUpperCase();
+  if (m === "SIGNAL") return "Signal-only.";
+  if (m === "DEMO") return "Demo.";
+  if (m === "LIVE") return "Live route.";
+  return "Stopped.";
+}
+function isRefreshBusy(data) {
+  const action = data?.recommended_action?.id;
+  const refresh = data?.resource_locks?.refresh || data?.refresh || {};
+  const reason = String(data?.reason || data?.busy_reason || "").toLowerCase();
+  return action === "wait_refresh" || refresh.running === true || reason.includes("refresh");
+}
+function isSessionRunningState(data) {
+  const rawMode = String(data?.raw_mode || data?.resource_locks?.session?.mode || "").toUpperCase();
+  const sessionRunning = data?.resource_locks?.session?.running === true;
+  return sessionRunning || ["SIGNAL", "DEMO", "LIVE"].includes(rawMode) || String(data?.top_state || "").startsWith("RUNNING_");
+}
+function operatorShortCopy(data, connectionBlocked) {
+  const topState = String(data?.top_state || "ERROR");
+  const rawMode = String(data?.raw_mode || data?.resource_locks?.session?.mode || "").toUpperCase();
+  if (connectionBlocked) {
+    return {tone: "fail", badge: "BROKER", headline: "Connect broker.", reason: "", hideAction: true};
+  }
+  if (isSessionRunningState(data)) {
+    const mode = rawMode === "LIVE" ? "LIVE" : rawMode === "DEMO" ? "DEMO" : rawMode === "SIGNAL" ? "SIGNAL" : "RUNNING";
+    return {tone: mode === "LIVE" ? "fail" : "pass", badge: mode, headline: orderModeLabel(mode), reason: "", hideAction: false};
+  }
+  if (isRefreshBusy(data)) {
+    return {tone: "warn", badge: "WAIT", headline: "Refreshing. Wait.", reason: "", hideAction: true};
+  }
+  if (topState === "READY") {
+    return {tone: "pass", badge: "READY", headline: "Ready.", reason: "", hideAction: false};
+  }
+  if (topState === "DEGRADED" || topState === "STALE") {
+    return {tone: "warn", badge: "CHECK", headline: "Check gates.", reason: "", hideAction: false};
+  }
+  if (topState === "BLOCKED") {
+    return {tone: "fail", badge: "BLOCKED", headline: "Blocked.", reason: "", hideAction: false};
+  }
+  return {tone: operatorTone(topState), badge: topState.replace(/_/g, " "), headline: topState.replace(/_/g, " "), reason: "", hideAction: false};
+}
+function renderGateDetails(checks) {
+  if (!checks.length) return "";
+  return `
+    <details class="operator-detail-toggle">
+      <summary>Show gate detail</summary>
+      <div class="operator-detail-list">
+        ${checks.map(check => `
+          <div class="operator-detail-row">
+            <b>${escapeHtml(check.name || "Check")}</b>
+            <span>${escapeHtml(String(check.status || "info").toUpperCase())}</span>
+            <em>${escapeHtml(check.detail || "")}</em>
+          </div>
+        `).join("")}
+      </div>
+    </details>
+  `;
+}
+function renderCompactOperatorChecks(data, wrap) {
+  const checks = Array.isArray(data?.checks) ? data.checks : [];
+  wrap.className = "operator-checks compact";
+  if (isRefreshBusy(data)) {
+    wrap.innerHTML = '<div class="operator-check warn"><div class="operator-check-detail">Refresh running. Wait.</div></div>' + renderGateDetails(checks);
+    return;
+  }
+  if (isSessionRunningState(data)) {
+    wrap.innerHTML = '<div class="operator-check info"><div class="operator-check-detail">Session running. Refresh blocked.</div></div>' + renderGateDetails(checks);
+    return;
+  }
+  if (!checks.length) {
+    wrap.innerHTML = '<div class="operator-check info"><div class="operator-check-detail">No cached gates yet.</div></div>';
+    return;
+  }
+  const hard = checks.filter(c => ["fail", "error"].includes(String(c.status || "").toLowerCase()));
+  const warn = checks.filter(c => String(c.status || "").toLowerCase() === "warn");
+  const line = hard.length
+    ? `${hard.length} blocker${hard.length === 1 ? "" : "s"}: ${hard.map(c => c.name || "gate").slice(0, 3).join(", ")}.`
+    : warn.length
+      ? `${warn.length} warning${warn.length === 1 ? "" : "s"}: ${warn.map(c => c.name || "gate").slice(0, 3).join(", ")}.`
+      : "Hard gates clear.";
+  const tone = hard.length ? "fail" : warn.length ? "warn" : "pass";
+  wrap.innerHTML = `<div class="operator-check ${tone}"><div class="operator-check-detail">${escapeHtml(line)}</div></div>` + renderGateDetails(checks);
+}
 function fmtAlertTime(v) {
   if (!v) return "—";
   try {
@@ -3263,6 +3523,145 @@ function toggleArchived() {
   if (lastEquityData) renderBrokerAccounts(lastEquityData);
 }
 
+function focusChart() {
+  const chart = $("chart-cockpit");
+  if (chart) chart.scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function openAccountsControl() {
+  switchTab("connections");
+  fetchBrokerList();
+  fetchEquity();
+}
+
+function toggleLaneControls() {
+  laneControlOpen = !laneControlOpen;
+  const panel = $("lane-control-panel");
+  if (panel) panel.classList.toggle("hidden", !laneControlOpen);
+  if (laneControlOpen) fetchLaneControl();
+}
+
+function compactLaneName(lane) {
+  const raw = String(lane?.session || lane?.label || lane?.strategy_id || "Lane");
+  return raw.replace(/_/g, " ").replace("OPEN", "").replace("SETTLE", "").trim() || raw;
+}
+
+function renderOpsStrip() {
+  const mode = ($("summary-mode")?.textContent || "Stopped").trim() || "Stopped";
+  const running = $("ops-running");
+  if (running) {
+    running.textContent = mode;
+    running.className = `ops-value ${mode === "Stopped" || mode === "Offline" ? "" : mode === "LIVE" ? "bad" : mode === "DEMO" ? "info" : "ok"}`;
+  }
+  setText("ops-running-sub", runningProfile || (mode === "Stopped" ? "no session" : ""));
+
+  const connList = Array.isArray(_lastBrokerHealth?.connections) ? _lastBrokerHealth.connections : [];
+  const enabledConns = connList.filter(c => c.enabled !== false);
+  const connectedConns = enabledConns.filter(c => String(c.status || "").toLowerCase() === "connected");
+  const acctValue = $("ops-accounts");
+  if (acctValue) {
+    acctValue.textContent = enabledConns.length ? `${connectedConns.length}/${enabledConns.length} on` : "0 on";
+    acctValue.className = `ops-value ${enabledConns.length && connectedConns.length === enabledConns.length ? "ok" : enabledConns.length ? "warn" : ""}`;
+  }
+
+  const laneValue = $("ops-lanes");
+  const laneSub = $("ops-lanes-sub");
+  if (laneValue) {
+    const data = lastLaneControlData;
+    if (!data) {
+      laneValue.textContent = "Loading";
+      laneValue.className = "ops-value";
+    } else {
+      const on = Number(data.enabled_count || 0);
+      const off = Number(data.disabled_count || 0);
+      const parked = Number(data.parked_count || 0);
+      laneValue.textContent = off ? `${on} on / ${off} off` : `${on} on`;
+      laneValue.className = `ops-value ${off ? "warn" : "ok"}`;
+      if (laneSub) laneSub.textContent = parked ? `${parked} parked` : "active book";
+    }
+  }
+}
+
+function renderLaneControls(data) {
+  lastLaneControlData = data;
+  const list = $("lane-control-list");
+  const sub = $("lane-control-sub");
+  if (!list) return;
+  const lanes = Array.isArray(data?.lanes) ? data.lanes : [];
+  const locked = !!data?.session_running;
+  if (sub) {
+    const mode = data?.raw_mode && data.raw_mode !== "STOPPED" ? `${data.raw_mode} running` : "stopped";
+    sub.textContent = `${data?.enabled_count ?? 0} on · ${data?.disabled_count ?? 0} off · ${data?.parked_count ?? 0} parked · ${mode}`;
+  }
+  if (!lanes.length) {
+    list.innerHTML = '<div class="empty">No lanes found.</div>';
+    renderOpsStrip();
+    return;
+  }
+  list.innerHTML = lanes.map((lane) => {
+    const status = String(lane.status || (lane.enabled ? "ON" : "OFF")).toLowerCase();
+    const parked = !lane.active_book;
+    const disabled = locked || parked;
+    const nextEnabled = !lane.enabled;
+    const title = locked ? "Stop the running session before changing lanes."
+      : parked ? "Parked lanes require a separate audit/rebalance."
+        : (lane.reason || "");
+    const btnText = lane.enabled ? "Turn off" : "Turn on";
+    const statusText = parked ? "PARKED" : lane.enabled ? "ON" : "OFF";
+    return `
+      <div class="lane-control-row" data-strategy-id="${escapeHtml(lane.strategy_id || "")}">
+        <div class="lane-control-time">${escapeHtml(lane.session_time_brisbane || "??:??")}</div>
+        <div class="lane-control-name">
+          <b>${escapeHtml(compactLaneName(lane))}</b>
+          <span>${escapeHtml(lane.instrument || "MNQ")} · ${escapeHtml(lane.setup_label || lane.strategy_id || "")}${lane.reason ? " · " + escapeHtml(lane.reason) : ""}</span>
+        </div>
+        <span class="lane-status-pill ${status}">${statusText}</span>
+        <button class="lane-toggle-btn ${nextEnabled ? "on" : "off"}" type="button"
+          ${disabled ? "disabled" : ""}
+          title="${escapeHtml(title)}"
+          onclick="toggleLane('${escapeHtml(lane.strategy_id || "")}', ${nextEnabled ? "true" : "false"})">${btnText}</button>
+      </div>`;
+  }).join("");
+  renderOpsStrip();
+}
+
+async function fetchLaneControl() {
+  const profile = runningProfile || activeProfileData?.profile_id || "topstep_50k_mnq_auto";
+  try {
+    const q = new URLSearchParams({profile});
+    const data = await (await fetch(`/api/lane-control?${q.toString()}`)).json();
+    if (data?.status === "error") throw new Error(data.message || "lane-control failed");
+    renderLaneControls(data);
+  } catch (e) {
+    lastLaneControlData = null;
+    setText("ops-lanes", "Error");
+    const laneValue = $("ops-lanes");
+    if (laneValue) laneValue.className = "ops-value bad";
+    const list = $("lane-control-list");
+    if (list) list.innerHTML = `<div class="empty">Lane controls unavailable: ${escapeHtml(e.message || e)}</div>`;
+  }
+}
+
+async function toggleLane(strategyId, enabled) {
+  const profile = lastLaneControlData?.profile || runningProfile || activeProfileData?.profile_id || "topstep_50k_mnq_auto";
+  showToast("Lane", enabled ? "Turning lane on..." : "Turning lane off...", "busy", {id: "lane"});
+  try {
+    const resp = await fetch("/api/lane-control/toggle", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({profile, strategy_id: strategyId, enabled}),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.status !== "ok") throw new Error(data.message || "toggle failed");
+    renderLaneControls(data.lane_control);
+    showToast("Lane saved", enabled ? "Lane on." : "Lane off.", "success", {id: "lane"});
+    fetchOperatorState();
+    fetchLaneStatus();
+  } catch (e) {
+    showToast("Lane blocked", e.message || String(e), "error", {id: "lane"});
+  }
+}
+
 /* ── Account Selector ───────────────── */
 function initAccountSelector() {
   try { selectedAccountId = parseInt(localStorage.getItem("orb_selected_acct")) || null; } catch (_) {}
@@ -3287,7 +3686,7 @@ function renderAccountSummary(accounts) {
   if (active) {
     const fc = (FIRM_STYLES[active.firm] || FIRM_STYLES["Self-Funded"]).color;
     $("topbar-acct").innerHTML = `<span style="color:${fc}">${active.firm}</span> ${fmtDollar(active.account_size)}`;
-    $("topbar-acct-detail").textContent = `${active.instruments.join("+")} · ${active.lane_count} lanes · ${active.platform || ""}`;
+    $("topbar-acct-detail").textContent = `${capitalContextLabel(active)} · ${active.instruments.join("+")} · ${active.lane_count}L`;
     $("metric-balance").textContent = fmtDollar(active.account_size);
     $("metric-balance-sub").textContent = "starting capital";
     $("metric-dd-sub").textContent = `of ${fmtDollar(active.max_dd)} max`;
@@ -3388,8 +3787,8 @@ function renderAccounts(accounts) {
           '<button class="pf-btn signal" title="Bot watches the market and sends Telegram alerts when a lane fires. You place orders manually on the Topstep platform. No orders are sent. Safe to run anytime.">' +
             '<span class="btn-title">Alerts</span><span class="btn-sub">Telegram only</span>' +
           '</button>' +
-          '<button class="pf-btn demo" title="Bot places practice orders on a separate ProjectX demo/sandbox account. No real money. Use this only to rehearse the full order round-trip.">' +
-            '<span class="btn-title">Paper</span><span class="btn-sub">Practice only</span>' +
+          '<button class="pf-btn demo" title="Bot places demo orders on a separate ProjectX demo/sandbox account. No real money. Use this only to rehearse the full order round-trip.">' +
+            '<span class="btn-title">Demo</span><span class="btn-sub">Broker sandbox</span>' +
           '</button>';
         const [bs, bd] = ar.querySelectorAll("button");
         const signalBlocked = blockedActionReason("start_signal");
@@ -3404,7 +3803,7 @@ function renderAccounts(accounts) {
         const legend = document.createElement("div"); legend.className = "mode-legend";
         legend.innerHTML =
           '<div><b class="lg-signal">Alerts</b> - Telegram only. You trade manually. <em>No broker orders.</em></div>' +
-          '<div><b class="lg-demo">Paper</b> - practice orders on the demo account.</div>';
+          '<div><b class="lg-demo">Demo</b> - broker sandbox orders. No real money.</div>';
         card.appendChild(legend);
 
         const pilot = document.createElement("div"); pilot.className = "pilot-contract";
@@ -3422,11 +3821,11 @@ function renderAccounts(accounts) {
         const wrap = document.createElement("div"); wrap.className = "go-live-wrap";
         wrap.innerHTML =
           '<div class="go-live-ring"></div>' +
-          '<div class="go-live-copy"><strong>Real orders</strong><span>Topstep MNQ &middot; one protected primary account</span></div>' +
-          '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch real Topstep MNQ orders on one protected primary account.">' +
+          '<div class="go-live-copy"><strong>Live route</strong><span>Topstep XFA &middot; one protected primary account</span></div>' +
+          '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch the non-demo Topstep MNQ route on one protected primary account.">' +
             '<span class="lock" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>HOLD TO GO LIVE' +
           '</button>' +
-          '<span class="go-live-hint">Topstep MNQ &middot; 1 copy &middot; real orders &middot; gates run first</span>';
+          '<span class="go-live-hint">Topstep XFA &middot; MNQ &middot; 1 copy &middot; gates run first</span>';
         const goLiveBtn = wrap.querySelector("button");
         const goLiveRing = wrap.querySelector(".go-live-ring");
         if (liveBlocked) {
@@ -3682,21 +4081,24 @@ function renderOperatorState(data) {
   try { renderHero(); } catch (_) {}
   try { renderConnectionReadiness(data?.connection_readiness); } catch (_) {}
   const topState = data?.top_state || "ERROR";
-  const tone = operatorTone(topState);
   const connectionBlocked = data?.recommended_action?.id === "open_connections"
     || data?.connection_readiness?.action === "open_connections";
+  const short = operatorShortCopy(data, connectionBlocked);
   $("operator-shell")?.classList.toggle("connection-blocked", !!connectionBlocked);
   const badge = $("operator-state-badge");
-  badge.className = `operator-state-badge ${tone}`;
-  badge.textContent = topState.replace(/_/g, " ");
+  badge.className = `operator-state-badge ${short.tone}`;
+  badge.textContent = short.badge;
 
-  setText("operator-headline", connectionBlocked ? "Broker connection required" : topState === "READY" ? "Ready to start" : topState.replace(/_/g, " "));
-  setText("operator-reason", data?.reason || "No operator summary available.");
-  setText("operator-profile", data?.profile ? `Profile: ${data.profile}` : "Profile: none");
+  setText("operator-headline", short.headline);
+  setText("operator-reason", short.reason);
+  const reasonEl = $("operator-reason");
+  if (reasonEl) reasonEl.style.display = short.reason ? "" : "none";
+  const profileRecord = getProfileRecord(data?.profile);
+  setText("operator-profile", data?.profile ? `${capitalContextLabel(profileRecord, data.profile)} · ${data.profile}` : "Profile: none");
 
   const btn = $("operator-primary-action");
   const action = data?.recommended_action || null;
-  if (action && action.id && !connectionBlocked) {
+  if (action && action.id && !connectionBlocked && !short.hideAction && !["wait_refresh", "wait_cleanup"].includes(action.id)) {
     btn.style.display = "";
     btn.textContent = action.label || "Continue";
     btn.className = `operator-primary-btn ${operatorButtonTone(action.id)}`.trim();
@@ -3707,26 +4109,17 @@ function renderOperatorState(data) {
   }
 
   const blocked = new Set(data?.blocked_action_ids || []);
-  $("btn-refresh").disabled = blocked.has("refresh_data") && action?.id !== "refresh_data";
-  $("btn-preflight").disabled = blocked.has("run_preflight") && action?.id !== "run_preflight";
-  $("btn-refresh").title = $("btn-refresh").disabled ? (data?.reason || "Unavailable right now") : "";
-  $("btn-preflight").title = $("btn-preflight").disabled ? (data?.reason || "Unavailable right now") : "";
-
-  const checks = Array.isArray(data?.checks) ? data.checks : [];
-  const wrap = $("operator-checks");
-  if (!checks.length) {
-    wrap.innerHTML = '<div class="operator-check info"><div class="operator-check-detail">No readiness checks available.</div></div>';
-    return;
+  const refreshBtn = $("btn-refresh");
+  const preflightBtn = $("btn-preflight");
+  refreshBtn.disabled = blocked.has("refresh_data") && action?.id !== "refresh_data";
+  preflightBtn.disabled = blocked.has("run_preflight") && action?.id !== "run_preflight";
+  refreshBtn.title = refreshBtn.disabled ? (data?.reason || "Unavailable right now") : "";
+  preflightBtn.title = preflightBtn.disabled ? (data?.reason || "Unavailable right now") : "";
+  if (!refreshPolling && !refreshBtn.classList.contains("is-busy")) {
+    refreshBtn.textContent = (refreshBtn.disabled && isRefreshBusy(data)) ? "Refreshing" : "Refresh";
   }
-  wrap.innerHTML = checks.map(check => `
-    <div class="operator-check ${check.status || "info"}">
-      <div class="operator-check-top">
-        <span class="operator-check-name">${escapeHtml(check.name || "Check")}</span>
-        <span class="operator-check-status">${escapeHtml(String(check.status || "info").toUpperCase())}</span>
-      </div>
-      <div class="operator-check-detail">${escapeHtml(check.detail || "")}</div>
-    </div>
-  `).join("");
+  const wrap = $("operator-checks");
+  renderCompactOperatorChecks(data, wrap);
   if (Array.isArray(lastAccountsData) && lastAccountsData.length) {
     try { renderAccounts(lastAccountsData); } catch (_) {}
   }
@@ -3928,7 +4321,7 @@ function updateStatus(state) {
 
   const acctName = state.account_name || "";
   const profileId = acctName.startsWith("profile_") ? acctName.slice(8) : null;
-  if (profileId !== runningProfile) { runningProfile = mode === "STOPPED" ? null : profileId; fetchAccounts(); }
+  if (profileId !== runningProfile) { runningProfile = mode === "STOPPED" ? null : profileId; fetchAccounts(); fetchLaneControl(); }
   setText("running-profile", runningProfile || "Idle");
 
   $("mode-badge").className = `topbar-mode ${modeClass(mode)}`;
@@ -4156,7 +4549,15 @@ async function fetchAlerts() {
     $("alerts-shell-sub").textContent = e.message || "Failed to load runtime alerts";
   }
 }
-async function fetchAccounts() { try { renderAccounts((await (await fetch("/api/accounts")).json()).accounts || []); } catch (_) { $("accounts-grid").innerHTML = '<div class="empty">Could not load.</div>'; } }
+async function fetchAccounts() {
+  try {
+    const data = await (await fetch("/api/accounts")).json();
+    renderAccounts(data.accounts || []);
+    renderOpsStrip();
+  } catch (_) {
+    $("accounts-grid").innerHTML = '<div class="empty">Could not load.</div>';
+  }
+}
 
 /* Tier 1.1b — planned-launch surface (data/bot_planned_launch.json).
    This is the authoritative pre-start record of what START_BOT.bat / the CLI
@@ -4193,19 +4594,23 @@ function renderPlannedLaunchBanner() {
   const profile = p.profile_id || "?";
   const instr = (Array.isArray(p.instruments) && p.instruments.length) ? p.instruments.join("+") : "ALL";
   const copies = Number(p.broker_accounts_count || p.copies || 1);
-  const acctTxt = copies > 1 ? `${copies} broker accounts` : `1 broker account`;
-  const sourceTxt = p.source ? `<span class="plb-source">src:${escapeHtml(p.source)}</span>` : "";
-  const pilotTxt = profile === "topstep_50k_mnq_auto"
-    ? '<span class="plb-pilot">Live pilot: <b>MNQ</b> &middot; 3 lanes &middot; 1 copy &middot; NYSE: parked</span>'
+  const acctTxt = copies > 1 ? `${copies} acct` : `1 acct`;
+  const acct = getProfileRecord(profile) || activeProfileData;
+  const capitalTxt = capitalContextLabel(acct, profile);
+  const stateTxt = isRefreshBusy(lastOperatorState)
+    ? '<span class="plb-pilot"><b>Refreshing. Wait.</b></span>'
     : "";
+  const pilotTxt = profile === "topstep_50k_mnq_auto" ? " · pilot 3L/1x" : "";
   if (p.status === "stale") {
     el.className = "planned-launch-banner stale";
-    el.innerHTML = `<span>Current: <b>STALE</b> - last set as <b>${escapeHtml(mode)}</b> &middot; ${escapeHtml(profile)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}</span>${sourceTxt}<span>re-run START_BOT.bat</span>`;
+    el.title = `Profile: ${profile}`;
+    el.innerHTML = `<span><b>STALE</b> · ${escapeHtml(mode)} · ${escapeHtml(capitalTxt)} · ${escapeHtml(instr)} · ${acctTxt}</span>${stateTxt}`;
     return;
   }
   el.className = `planned-launch-banner ${cls}`;
-  const current = mode === "SIGNAL" ? "Signal-only" : mode === "DEMO" ? "Demo" : "Live";
-  el.innerHTML = `<span>Current: <b>${escapeHtml(current)}</b> &middot; ${escapeHtml(profile)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}</span>${pilotTxt}${sourceTxt}`;
+  const current = mode === "SIGNAL" ? "Signal" : mode === "DEMO" ? "Demo" : "Live";
+  el.title = `Profile: ${profile}`;
+  el.innerHTML = `<span><b>${escapeHtml(current)}</b> · ${escapeHtml(capitalTxt)} · ${escapeHtml(instr)} · ${acctTxt}${pilotTxt}</span>${stateTxt}`;
 }
 
 /* Tier 1.1 — primary CTA in topbar (Start / Stop context-aware) */
@@ -4244,6 +4649,11 @@ function updatePrimaryCta() {
 
   if (recommended && recommended.id && recommended.id !== "start_signal") {
     if (recommended.id === "open_connections") {
+      btn.style.display = "none";
+      btn.onclick = null;
+      return;
+    }
+    if (recommended.id === "wait_refresh" || recommended.id === "wait_cleanup") {
       btn.style.display = "none";
       btn.onclick = null;
       return;
@@ -4328,6 +4738,7 @@ let _lastPlannedLaunch = null;  // cached from /api/planned-launch — authorita
 function _heroDeriveState() {
   const mode = ($("summary-mode")?.textContent || "Stopped").toString();
   const op = lastOperatorState?.top_state || "";
+  if (isRefreshBusy(lastOperatorState)) return "refreshing";
   if (mode === "Stopped" || mode === "Offline" || mode === "—") {
     if (op === "BLOCKED" || op === "ERROR") return "blocked";
     if (op === "DEGRADED" || op === "STALE") return "warn";
@@ -4343,6 +4754,7 @@ function _heroStateLabel(state) {
     loading: "Loading",
     stopped: "Stopped",
     ready:   "Ready",
+    refreshing: "Refreshing",
     warn:    "Warning",
     blocked: "Blocked",
     error:   "Error",
@@ -4470,10 +4882,10 @@ function renderHero() {
           ` <span class="sub">· heartbeat ${escapeHtml(ageStr)}</span>`;
       }
     }
-  } else if ((state === "blocked" || state === "warn") && lastOperatorState?.recommended_action?.id !== "open_connections") {
+  } else if ((state === "blocked" || state === "warn" || state === "refreshing") && lastOperatorState?.recommended_action?.id !== "open_connections") {
     nowEl.style.display = "";
-    const reason = lastOperatorState?.reason || _heroStateLabel(state);
-    $("hero-now-body").innerHTML = `<span class="mono">${escapeHtml(_heroStateLabel(state).toUpperCase())}</span> <span class="sub">· ${escapeHtml(String(reason).slice(0, 180))}</span>`;
+    const short = operatorShortCopy(lastOperatorState || {}, false);
+    $("hero-now-body").innerHTML = `<span class="mono">${escapeHtml(short.badge)}</span> <span class="sub">· ${escapeHtml(short.headline)}</span>`;
   } else {
     nowEl.style.display = "none";
   }
@@ -4706,6 +5118,7 @@ function renderConnHealthDot(connections, errorMsg) {
   if (errorMsg) {
     dot.className = "conn-health-dot err";
     dot.title = `Broker connections: ${errorMsg}`;
+    try { renderOpsStrip(); } catch (_) {}
     return;
   }
   const list = Array.isArray(connections) ? connections : [];
@@ -4713,6 +5126,7 @@ function renderConnHealthDot(connections, errorMsg) {
   if (enabled.length === 0) {
     dot.className = "conn-health-dot unknown";
     dot.title = list.length === 0 ? "No broker connections configured" : "All broker connections disabled";
+    try { renderOpsStrip(); } catch (_) {}
     return;
   }
   const connected = enabled.filter(c => String(c.status || "").toLowerCase() === "connected");
@@ -4733,6 +5147,7 @@ function renderConnHealthDot(connections, errorMsg) {
   }
   dot.className = `conn-health-dot ${cls}`;
   dot.title = title;
+  try { renderOpsStrip(); } catch (_) {}
 }
 
 async function fetchSessions() {
@@ -4931,8 +5346,9 @@ function updateMetricsFromEquity(data) {
 
   // Update topbar display
   $("topbar-acct").textContent = acct.broker_display || "";
-  $("topbar-acct-detail").textContent = acct.name || "";
+  $("topbar-acct-detail").textContent = [activeProfileData ? capitalContextLabel(activeProfileData) : "Broker account", acct.name || ""].filter(Boolean).join(" · ");
   try { renderHero(); } catch (_) {}
+  try { renderOpsStrip(); } catch (_) {}
 }
 
 function renderAccountSelector(data) {
@@ -5059,7 +5475,7 @@ async function fetchEquity() {
 /* ── Actions ────────────────────────── */
 async function launchSession(pid, firm, instr, mode, opts) {
   const lbl = {signal: "SIGNAL-ONLY", demo: "DEMO", live: "LIVE"};
-  const warn = mode === "live" ? "\n\nREAL MONEY." : mode === "demo" ? "\n\nPaper orders." : "\n\nSignals only.";
+  const warn = mode === "live" ? "\n\nNon-demo broker route." : mode === "demo" ? "\n\nDemo broker orders." : "\n\nSignals only.";
   // Skip the JS confirm() prompt when the caller has already done its own
   // physical-gesture confirmation (e.g. hold-to-confirm on GO LIVE).
   const skipConfirm = opts && opts.skipConfirm === true;
@@ -5094,7 +5510,7 @@ window.startSignalForSelected = function() {
           || accts[0]
           || null;
   if (!acct) {
-    showToast("No account", "Configure an account on the Connections tab first.", "warning");
+    showToast("No account", "Configure an account on the Accounts tab first.", "warning");
     return;
   }
   const instr = (acct.instruments || []).join("+") || "ALL";
@@ -5584,7 +6000,7 @@ initCockpit();
 // drawer tab is opened (Stage 4.2). fetchStatus/fetchAlerts/fetchLaneStatus
 // also bootstrapped once so the no-SSE path has a baseline; SSE events take
 // over on first connect.
-fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus(); fetchPlannedLaunch();
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus(); fetchLaneControl(); fetchPlannedLaunch();
 
 /* Stage 4.2 poller taxonomy:
    _COCKPIT_POLLERS      = always-on (SSE-paused on OPEN, resumed on CLOSED>10s).
@@ -5602,6 +6018,7 @@ const _COCKPIT_POLLERS = [
   setInterval(fetchOperatorState, 5000),
   // Tier 1.3 — broker health dot (topbar) polled regardless of tab
   setInterval(fetchBrokerHealth, 30000),
+  setInterval(fetchLaneControl, 30000),
   // Planned-launch surface — 10s suffices since it only changes when the
   // operator re-runs START_BOT.bat or shells the CLI. Cheap stat-then-read.
   setInterval(fetchPlannedLaunch, 10000),
@@ -5884,13 +6301,15 @@ const ChartCockpit = (() => {
     const detailEl = document.getElementById("chart-fb-detail");
     const btn = document.getElementById("chart-fb-start");
     const o = opts || {};
-    if (titleEl) titleEl.textContent = o.title || "NO LIVE FEED";
-    if (detailEl) detailEl.textContent = msg || "No recent bars. Start the feed to begin streaming candles.";
+    if (titleEl) titleEl.textContent = o.title || "No chart data";
+    if (detailEl) detailEl.textContent = msg || "Start signals to stream candles.";
     if (btn) {
       // Disable START FEED only when the failure is non-recoverable by starting a session
       // (e.g. Lightweight Charts CDN failed to load). For data-empty cases, leave it active.
       const recoverable = o.recoverable !== false;
-      btn.disabled = !recoverable;
+      const waiting = isRefreshBusy(lastOperatorState);
+      btn.disabled = waiting || !recoverable;
+      btn.textContent = waiting ? "Refreshing" : recoverable ? "Start signals" : "Unavailable";
       btn.onclick = recoverable ? () => {
         if (typeof window.startSignalForSelected === "function") {
           window.startSignalForSelected();
@@ -5904,7 +6323,7 @@ const ChartCockpit = (() => {
   function init() {
     if (initialized) return true;
     if (typeof window.LightweightCharts === "undefined") {
-      _showFallback("Chart library failed to load (CDN unreachable). Restart the dashboard or check internet.", {title: "CHART UNAVAILABLE", recoverable: false});
+      _showFallback("Chart unavailable.", {title: "No chart data", recoverable: false});
       return false;
     }
     const host = document.getElementById(HOST_ID);
@@ -5987,7 +6406,7 @@ const ChartCockpit = (() => {
         }
       } catch (e) {
         console.error("ChartCockpit.loadInitial failed (window=" + win + ")", e);
-        _showFallback("Could not reach bars API: " + (e.message || "fetch failed"), {title: "API ERROR", recoverable: false});
+        _showFallback("Chart unavailable.", {title: "No chart data", recoverable: false});
         return;
       }
     }
@@ -5999,7 +6418,7 @@ const ChartCockpit = (() => {
         const ageStr = ageMin >= 60 ? (Math.round(ageMin / 60) + "h") : (ageMin + "m");
         ageLine = "Last bar " + ageStr + " ago — feed is stopped.";
       }
-      _showFallback(ageLine + " Press START FEED to begin streaming " + instrument + ".");
+      _showFallback(ageLine);
     }
   }
 
@@ -6341,6 +6760,7 @@ const SseClient = (() => {
         setInterval(fetchDataStatus, 30000),
         setInterval(fetchOperatorState, 5000),
         setInterval(fetchBrokerHealth, 30000),
+        setInterval(fetchLaneControl, 30000),
         setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000),
       );
       pollersActive = true;
