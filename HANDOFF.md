@@ -79,12 +79,11 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-01
-- **Commit:** e5effe01 — Refine dashboard pilot labels and banner copy
-- **Files changed:** 5 files
-  - `HANDOFF.md`
+- **Date:** 2026-06-02
+- **Commit:** 52b698c7 — @ fix(dashboard): release runningProfile latch when session is dead/stale
+- **Files changed:** 4 files
+  - `docs/runtime/stages/2026-06-02-stale-session-golive-latch-fix.md`
   - `tests/test_trading_app/test_bot_dashboard.py`
-  - `tests/test_trading_app/test_bot_dashboard_routes.py`
   - `trading_app/live/bot_dashboard.html`
   - `trading_app/live/bot_dashboard.py`
 
