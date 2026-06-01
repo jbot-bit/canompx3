@@ -81,11 +81,14 @@
      over and this banner hides. Fail-visible: unknown/stale states are explicitly labelled. */
   .planned-launch-banner {
     display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    flex: 0 0 auto; min-width: 340px;
     padding: 5px 10px; border-radius: 6px;
+    line-height: 1.35;
     font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
     border: 1px solid var(--border); background: var(--surface); color: var(--muted);
     max-width: 620px; overflow: hidden; text-overflow: ellipsis; white-space: normal;
   }
+  .planned-launch-banner > span { white-space: nowrap; }
   .planned-launch-banner.signal { border-color: rgba(34,197,94,0.35); background: var(--green-soft); color: var(--green); }
   .planned-launch-banner.demo   { border-color: rgba(59,130,246,0.35); background: var(--blue-soft);  color: var(--blue);  }
   .planned-launch-banner.live   { border-color: rgba(220,38,38,0.45);  background: var(--red-soft);   color: var(--red); font-weight: 800; }
@@ -2231,7 +2234,12 @@
     body.cockpit #planned-launch-banner {
       order: 0;
       flex: 1 0 100%;
+      min-width: 0;
       max-width: 100%;
+      overflow: visible;
+    }
+    body.cockpit #planned-launch-banner > span {
+      white-space: normal;
     }
     body.cockpit #planned-launch-banner .plb-pilot {
       border-left: 0;
@@ -2929,7 +2937,7 @@
     <button class="ops-tile" type="button" onclick="focusChart()">
       <span class="ops-label">Chart</span>
       <strong id="ops-chart" class="ops-value info">MNQ</strong>
-      <span class="ops-sub">live candles</span>
+      <span id="ops-chart-sub" class="ops-sub">candles</span>
     </button>
     <button class="ops-tile" type="button" onclick="toggleLaneControls()">
       <span class="ops-label">Lanes</span>
@@ -3169,7 +3177,7 @@
   <section id="broker-accounts-section" class="sec collapsed">
     <div class="sec-hd" onclick="toggleSection('broker')">
       <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
-      <span class="sec-ttl">Broker Accounts</span>
+      <span class="sec-ttl">Accounts</span>
       <span id="broker-acct-badge" class="sec-badge"></span>
       <div class="sec-right">
         <button id="btn-toggle-archived" class="toggle-btn" onclick="event.stopPropagation();toggleArchived()">Show Archived</button>
@@ -3340,7 +3348,7 @@
 
     <!-- CONNECTION LIST -->
     <div class="conn-header">
-      <span class="conn-header-title">Broker Accounts</span>
+      <span class="conn-header-title">Accounts</span>
       <button class="conn-add-btn" onclick="openAddForm()">+ Add Connection</button>
     </div>
     <div id="conn-list"></div>
@@ -3390,6 +3398,35 @@ function operatorTone(status) { return status === "READY" || status.startsWith("
 function operatorButtonTone(actionId) { return actionId === "start_signal" ? "success" : actionId === "stop_session" ? "danger" : actionId === "refresh_data" || actionId === "run_preflight" ? "warn" : ""; }
 function alertTone(level) { return level === "critical" ? "critical" : level === "warning" ? "warning" : "info"; }
 function getProfileRecord(profileId) { return (lastAccountsData || []).find(a => a.profile_id === profileId) || activeProfileData || null; }
+const LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto";
+const LIVE_PILOT_INSTRUMENT = "MNQ";
+const LIVE_PILOT_COPY_COUNT = 1;
+function isLivePilotProfile(profileId) { return String(profileId || "") === LIVE_PILOT_PROFILE; }
+function currentOperatorProfile() {
+  return runningProfile || activeProfileData?.profile_id || _lastPlannedLaunch?.profile_id || LIVE_PILOT_PROFILE;
+}
+function profileInstrumentsLabel(acct, fallback) {
+  const values = Array.isArray(acct?.instruments) ? acct.instruments.filter(Boolean) : [];
+  if (values.length) return values.join("+");
+  const laneInstruments = Array.isArray(lastLaneControlData?.lanes)
+    ? [...new Set(lastLaneControlData.lanes.map(l => l.instrument).filter(Boolean))]
+    : [];
+  if (laneInstruments.length) return laneInstruments.join("+");
+  const planInstruments = Array.isArray(_lastPlannedLaunch?.instruments)
+    ? _lastPlannedLaunch.instruments.filter(Boolean)
+    : [];
+  if (planInstruments.length) return planInstruments.join("+");
+  return fallback || "All";
+}
+function chartInstrumentLabel() {
+  try {
+    if (typeof ChartCockpit !== "undefined" && typeof ChartCockpit.getInstrument === "function") {
+      const inst = ChartCockpit.getInstrument();
+      if (inst) return inst;
+    }
+  } catch (_) {}
+  return profileInstrumentsLabel(getProfileRecord(currentOperatorProfile()), LIVE_PILOT_INSTRUMENT);
+}
 function capitalContextLabel(acct, profileId) {
   const profile = String(profileId || acct?.profile_id || "").toLowerCase();
   const firmKey = String(acct?.firm_key || acct?.firm || "").toLowerCase();
@@ -3397,9 +3434,9 @@ function capitalContextLabel(acct, profileId) {
   if (!acct) return "Capital unknown";
   const notes = String(acct.notes || "").toLowerCase();
   if (firmKey.includes("self") || profile.includes("self_funded")) return "Self-funded";
-  if (acct.is_express_funded === true) return "Prop sim";
-  if (notes.includes("express funded") || notes.includes("xfa")) return "Prop sim";
   if (notes.includes("live funded") || notes.includes("lfa")) return "Prop live";
+  if (acct.is_express_funded === true || notes.includes("express funded") || notes.includes("xfa") || notes.includes("funded")) return "Prop funded";
+  if (notes.includes("combine") || notes.includes("evaluation") || notes.includes("eval")) return "Prop sim";
   if (firmKey.includes("topstep") || firmKey.includes("tradeify") || firmKey.includes("bulenox") || firmKey.includes("mffu")) return "Prop sim";
   if (firmKey || acct.firm) return "Broker";
   return "Capital unknown";
@@ -3554,6 +3591,13 @@ function renderOpsStrip() {
     running.className = `ops-value ${mode === "Stopped" || mode === "Offline" ? "" : mode === "LIVE" ? "bad" : mode === "DEMO" ? "info" : "ok"}`;
   }
   setText("ops-running-sub", runningProfile || (mode === "Stopped" ? "no session" : ""));
+  const chartValue = $("ops-chart");
+  if (chartValue) {
+    const inst = chartInstrumentLabel();
+    chartValue.textContent = inst;
+    chartValue.className = `ops-value ${inst && inst !== "All" ? "info" : ""}`;
+    setText("ops-chart-sub", inst && inst !== "All" ? "candles" : "select profile");
+  }
 
   const connList = Array.isArray(_lastBrokerHealth?.connections) ? _lastBrokerHealth.connections : [];
   const enabledConns = connList.filter(c => c.enabled !== false);
@@ -3626,7 +3670,7 @@ function renderLaneControls(data) {
 }
 
 async function fetchLaneControl() {
-  const profile = runningProfile || activeProfileData?.profile_id || "topstep_50k_mnq_auto";
+  const profile = currentOperatorProfile();
   try {
     const q = new URLSearchParams({profile});
     const data = await (await fetch(`/api/lane-control?${q.toString()}`)).json();
@@ -3643,7 +3687,7 @@ async function fetchLaneControl() {
 }
 
 async function toggleLane(strategyId, enabled) {
-  const profile = lastLaneControlData?.profile || runningProfile || activeProfileData?.profile_id || "topstep_50k_mnq_auto";
+  const profile = lastLaneControlData?.profile || currentOperatorProfile();
   showToast("Lane", enabled ? "Turning lane on..." : "Turning lane off...", "busy", {id: "lane"});
   try {
     const resp = await fetch("/api/lane-control/toggle", {
@@ -3806,36 +3850,40 @@ function renderAccounts(accounts) {
           '<div><b class="lg-demo">Demo</b> - broker sandbox orders. No real money.</div>';
         card.appendChild(legend);
 
-        const pilot = document.createElement("div"); pilot.className = "pilot-contract";
-        pilot.innerHTML =
-          '<div class="pilot-contract-top"><span class="pilot-label">Live pilot</span><span class="pilot-state">Gates run first</span></div>' +
-          '<div class="pilot-contract-grid">' +
-            '<span><b>MNQ</b><em>Instrument</em></span>' +
-            '<span><b>3 lanes</b><em>Active book</em></span>' +
-            '<span><b>1 copy</b><em>Primary only</em></span>' +
-          '</div>' +
-          '<div class="pilot-exclusion">NYSE_OPEN parked for SR alarm; no replacement lane in this pilot.</div>';
-        card.appendChild(pilot);
+        if (isLivePilotProfile(acct.profile_id)) {
+          const pilot = document.createElement("div"); pilot.className = "pilot-contract";
+          pilot.innerHTML =
+            '<div class="pilot-contract-top"><span class="pilot-label">Live pilot</span><span class="pilot-state">Gates run first</span></div>' +
+            '<div class="pilot-contract-grid">' +
+              `<span><b>${LIVE_PILOT_INSTRUMENT}</b><em>Instrument</em></span>` +
+              '<span><b>3 lanes</b><em>Active book</em></span>' +
+              `<span><b>${LIVE_PILOT_COPY_COUNT} copy</b><em>Primary only</em></span>` +
+            '</div>' +
+            '<div class="pilot-exclusion">NYSE_OPEN parked for SR alarm; no replacement lane in this pilot.</div>';
+          card.appendChild(pilot);
 
-        // Hold-to-confirm GO LIVE button (replaces type-LIVE-then-click gate).
-        const wrap = document.createElement("div"); wrap.className = "go-live-wrap";
-        wrap.innerHTML =
-          '<div class="go-live-ring"></div>' +
-          '<div class="go-live-copy"><strong>Live route</strong><span>Topstep XFA &middot; one protected primary account</span></div>' +
-          '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch the non-demo Topstep MNQ route on one protected primary account.">' +
-            '<span class="lock" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>HOLD TO GO LIVE' +
-          '</button>' +
-          '<span class="go-live-hint">Topstep XFA &middot; MNQ &middot; 1 copy &middot; gates run first</span>';
-        const goLiveBtn = wrap.querySelector("button");
-        const goLiveRing = wrap.querySelector(".go-live-ring");
-        if (liveBlocked) {
-          goLiveBtn.disabled = true;
-          goLiveBtn.title = liveBlocked;
-          wrap.classList.add("blocked");
-          wrap.querySelector(".go-live-hint").textContent = `Blocked: ${liveBlocked}`;
+          // Hold-to-confirm GO LIVE button. Only the pilot profile exposes this
+          // real-order control; other profiles remain viewable without implying
+          // live-launch eligibility.
+          const wrap = document.createElement("div"); wrap.className = "go-live-wrap";
+          wrap.innerHTML =
+            '<div class="go-live-ring"></div>' +
+            '<div class="go-live-copy"><strong>Real orders</strong><span>Topstep account &middot; one protected primary</span></div>' +
+            '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch the supervised Topstep MNQ route on one protected primary account.">' +
+              '<span class="lock" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>HOLD TO GO LIVE' +
+            '</button>' +
+            '<span class="go-live-hint">Topstep account &middot; MNQ &middot; 1 copy &middot; real orders</span>';
+          const goLiveBtn = wrap.querySelector("button");
+          const goLiveRing = wrap.querySelector(".go-live-ring");
+          if (liveBlocked) {
+            goLiveBtn.disabled = true;
+            goLiveBtn.title = liveBlocked;
+            wrap.classList.add("blocked");
+            wrap.querySelector(".go-live-hint").textContent = `Blocked: ${liveBlocked}`;
+          }
+          else { window.attachHoldToFireLive(goLiveBtn, goLiveRing, wrap, acct); }
+          card.appendChild(wrap);
         }
-        else { window.attachHoldToFireLive(goLiveBtn, goLiveRing, wrap, acct); }
-        card.appendChild(wrap);
       }
     } else if (!isActive) {
       const n = document.createElement("div"); n.className = "pf-meta"; n.style.cssText = "margin-top:8px;font-style:italic"; n.textContent = "Inactive"; card.appendChild(n);
@@ -4600,17 +4648,23 @@ function renderPlannedLaunchBanner() {
   const stateTxt = isRefreshBusy(lastOperatorState)
     ? '<span class="plb-pilot"><b>Refreshing. Wait.</b></span>'
     : "";
-  const pilotTxt = profile === "topstep_50k_mnq_auto" ? " · pilot 3L/1x" : "";
+  const pilotTxt = isLivePilotProfile(profile)
+    ? `<span class="plb-pilot"><b>Live pilot:</b> ${LIVE_PILOT_INSTRUMENT} &middot; 3 lanes &middot; ${LIVE_PILOT_COPY_COUNT} copy</span><span class="plb-pilot"><b>NYSE:</b> parked</span>`
+    : "";
   if (p.status === "stale") {
     el.className = "planned-launch-banner stale";
     el.title = `Profile: ${profile}`;
-    el.innerHTML = `<span><b>STALE</b> · ${escapeHtml(mode)} · ${escapeHtml(capitalTxt)} · ${escapeHtml(instr)} · ${acctTxt}</span>${stateTxt}`;
+    el.innerHTML = `<span><b>STALE</b> &middot; ${escapeHtml(mode)} &middot; ${escapeHtml(capitalTxt)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}</span>${stateTxt}`;
     return;
   }
   el.className = `planned-launch-banner ${cls}`;
   const current = mode === "SIGNAL" ? "Signal" : mode === "DEMO" ? "Demo" : "Live";
   el.title = `Profile: ${profile}`;
-  el.innerHTML = `<span><b>${escapeHtml(current)}</b> · ${escapeHtml(capitalTxt)} · ${escapeHtml(instr)} · ${acctTxt}${pilotTxt}</span>${stateTxt}`;
+  const currentLabel = mode === "SIGNAL" ? "Signal-only" : current;
+  const currentDetail = isLivePilotProfile(profile)
+    ? `${currentLabel} · ${capitalTxt}`
+    : `${currentLabel} · ${capitalTxt} · ${instr} · ${acctTxt}`;
+  el.innerHTML = `<span><b>Current:</b> ${escapeHtml(currentDetail)}</span>${pilotTxt}${stateTxt}`;
 }
 
 /* Tier 1.1 — primary CTA in topbar (Start / Stop context-aware) */
@@ -4700,7 +4754,8 @@ function updatePrimaryCta() {
     const acctSub = copies > 1 ? `${escapeHtml(planProfile)} · ${copies} accts` : escapeHtml(planProfile);
     if (planMode === "LIVE") {
       btn.disabled = true;
-      btn.innerHTML = `LIVE ARMED <span class="cta-sub">use HOLD TO GO LIVE</span>`;
+      const liveSub = isLivePilotProfile(planProfile) ? "use HOLD TO GO LIVE" : "not configured for this profile";
+      btn.innerHTML = `LIVE ARMED <span class="cta-sub">${escapeHtml(liveSub)}</span>`;
       btn.onclick = null;
       return;
     }
@@ -5308,7 +5363,8 @@ function getSelectedAccount(data) {
     const match = tradeable.find(a => a.id === selectedAccountId);
     if (match) return match;
     // Selected account went non-tradeable (blown/restricted) — warn and fallback
-    showEquityError(`Account ${selectedAccountId} no longer tradeable — switched to ${tradeable[0].name}`);
+    const fallbackName = tradeable[0].name || tradeable[0].broker_display || `Account ${tradeable[0].id}`;
+    showEquityError(`Account ${selectedAccountId} no longer tradeable — switched to ${fallbackName}`);
     selectedAccountId = tradeable[0].id;
     try { localStorage.setItem("orb_selected_acct", String(selectedAccountId)); } catch (_) {}
   }
@@ -5362,7 +5418,8 @@ function renderAccountSelector(data) {
   for (const a of tradeable) {
     const opt = document.createElement("option");
     opt.value = String(a.id);
-    const shortName = a.name.replace(/-V2-\d+-/, " #").substring(0, 30);
+    const rawName = a.name || a.broker_display || `Account ${a.id}`;
+    const shortName = rawName.replace(/-V2-\d+-/, " #").substring(0, 30);
     opt.textContent = `${shortName} · ${fmtDollar(a.balance)}`;
     if (a.id === selectedAccountId) opt.selected = true;
     sel.appendChild(opt);
@@ -5529,8 +5586,7 @@ window.attachHoldToFireLive = function(button, ring, wrap, acct) {
     if (p >= 100 && !fired) {
       fired = true;
       cancel();
-      const instr = (acct.instruments || []).join("+") || "ALL";
-      launchSession(acct.profile_id, acct.firm, instr, "live", {skipConfirm: true});
+      launchSession(LIVE_PILOT_PROFILE, acct.firm, LIVE_PILOT_INSTRUMENT, "live", {skipConfirm: true});
       return;
     }
     raf = requestAnimationFrame(tick);
@@ -6365,6 +6421,7 @@ const ChartCockpit = (() => {
     if (!init()) return;
     currentInstrument = instrument;
     document.getElementById("chart-cockpit-instr").textContent = instrument;
+    try { renderOpsStrip(); } catch (_) {}
     // Try a tight window first; widen to the last 24h if nothing recent (weekend / overnight / paused session).
     const windows = [LOOKBACK_MIN, 60 * 24];
     let loaded = false;
@@ -6610,6 +6667,7 @@ const ChartCockpit = (() => {
 
   function setInstrument(instrument) {
     if (instrument && instrument !== currentInstrument) { loadInitial(instrument); }
+    else if (instrument) { try { renderOpsStrip(); } catch (_) {} }
   }
 
   function applyOrbFromState(state) {

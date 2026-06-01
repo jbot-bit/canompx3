@@ -356,10 +356,26 @@ def test_lane_control_surfaces_active_and_parked_lanes(client, monkeypatch, tmp_
     assert body["profile"] == "topstep_50k_mnq_auto"
     assert body["enabled_count"] == body["active_book_count"]
     assert body["parked_count"] == 1
+    assert body["counts"] == {
+        "active": body["active_book_count"],
+        "enabled": body["enabled_count"],
+        "disabled": body["disabled_count"],
+        "parked": body["parked_count"],
+    }
     parked = next(row for row in body["lanes"] if row["strategy_id"] == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12")
     assert parked["status"] == "PARKED"
     assert parked["active_book"] is False
     assert "SR ALARM" in parked["reason"]
+
+
+def test_dashboard_live_start_blocks_non_pilot_profile(client):
+    resp = client.post("/api/action/start", params={"profile": "self_funded_tradovate", "mode": "live"})
+
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["status"] == "blocked"
+    assert body["profile"] == "self_funded_tradovate"
+    assert "approved Topstep MNQ pilot" in body["message"]
 
 
 def test_lane_control_toggle_pauses_and_resumes_active_lane(client, monkeypatch, tmp_path):
