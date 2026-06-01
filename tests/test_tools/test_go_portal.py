@@ -9,10 +9,12 @@ Coverage:
 from __future__ import annotations
 
 import json
+from datetime import date
 
 import pytest
 
 from scripts.tools import go_portal
+from trading_app.strategy_fitness import FitnessReport, FitnessScore
 
 
 @pytest.fixture
@@ -184,3 +186,159 @@ def test_main_json_mode(monkeypatch, patched_freshness_drift, capsys):
     payload = json.loads(captured.out)
     assert payload["panels"] == {str(i): True for i in range(1, 11)}
     assert payload["git_sha"] == "deadbeef"
+
+
+def _score(strategy_id: str, fitness_status: str) -> FitnessScore:
+    return FitnessScore(
+        strategy_id=strategy_id,
+        full_period_exp_r=0.1,
+        full_period_sharpe=1.0,
+        full_period_sample=100,
+        rolling_exp_r=0.1,
+        rolling_sharpe=1.0,
+        rolling_win_rate=0.55,
+        rolling_sample=25,
+        rolling_window_months=18,
+        recent_sharpe_30=0.8,
+        recent_sharpe_60=0.9,
+        sharpe_delta_30=-0.2,
+        sharpe_delta_60=-0.1,
+        fitness_status=fitness_status,
+        fitness_notes=f"{fitness_status} notes",
+    )
+
+
+def test_panel_deployed_lanes_hides_paused_by_default_and_uses_bulk_fitness(monkeypatch):
+    import scripts.tools.strategy_lab_mcp_server as strategy_lab
+    import trading_app.strategy_fitness as strategy_fitness
+
+    go_portal._fitness_status_map_for_instrument.cache_clear()
+
+    doc = {"lanes": [{"strategy_id": "MNQ_ACTIVE", "session_id": "NYSE_OPEN", "entry_model": "E2"}], "paused": []}
+    idx = {
+        "MNQ_ACTIVE": {
+            "strategy_id": "MNQ_ACTIVE",
+            "_allocation_state": "active",
+            "session_id": "NYSE_OPEN",
+            "entry_model": "E2",
+        },
+        "MNQ_PAUSED": {
+            "strategy_id": "MNQ_PAUSED",
+            "_allocation_state": "paused",
+            "session_id": "COMEX_SETTLE",
+            "entry_model": "E1",
+        },
+    }
+
+    monkeypatch.setattr(strategy_lab, "_load_allocation_doc", lambda *a, **kw: doc)
+    monkeypatch.setattr(strategy_lab, "_allocation_index", lambda *a, **kw: idx)
+    monkeypatch.setattr(
+        strategy_fitness,
+        "compute_portfolio_fitness",
+        lambda **kwargs: FitnessReport(
+            as_of_date=date(2026, 6, 1),
+            scores=[_score("MNQ_ACTIVE", "FIT"), _score("MNQ_PAUSED", "WATCH")],
+            summary={"fit": 1, "watch": 1, "decay": 0, "stale": 0},
+        ),
+    )
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("per-strategy compute_fitness should not be used")
+
+    monkeypatch.setattr(strategy_fitness, "compute_fitness", _boom)
+
+    body = go_portal.panel_deployed_lanes(None, None)
+
+    assert "MNQ_ACTIVE" in body
+    assert "MNQ_PAUSED" not in body
+    assert "1 paused hidden" in body
+
+
+def test_panel_deployed_lanes_include_paused_opt_in(monkeypatch):
+    import scripts.tools.strategy_lab_mcp_server as strategy_lab
+    import trading_app.strategy_fitness as strategy_fitness
+
+    go_portal._fitness_status_map_for_instrument.cache_clear()
+
+    doc = {"lanes": [{"strategy_id": "MNQ_ACTIVE"}], "paused": [{"strategy_id": "MNQ_PAUSED"}]}
+    idx = {
+        "MNQ_ACTIVE": {
+            "strategy_id": "MNQ_ACTIVE",
+            "_allocation_state": "active",
+            "session_id": "NYSE_OPEN",
+            "entry_model": "E2",
+        },
+        "MNQ_PAUSED": {
+            "strategy_id": "MNQ_PAUSED",
+            "_allocation_state": "paused",
+            "session_id": "COMEX_SETTLE",
+            "entry_model": "E1",
+        },
+    }
+
+    monkeypatch.setattr(strategy_lab, "_load_allocation_doc", lambda *a, **kw: doc)
+    monkeypatch.setattr(strategy_lab, "_allocation_index", lambda *a, **kw: idx)
+    monkeypatch.setattr(
+        strategy_fitness,
+        "compute_portfolio_fitness",
+        lambda **kwargs: FitnessReport(
+            as_of_date=date(2026, 6, 1),
+            scores=[_score("MNQ_ACTIVE", "FIT"), _score("MNQ_PAUSED", "WATCH")],
+            summary={"fit": 1, "watch": 1, "decay": 0, "stale": 0},
+        ),
+    )
+
+    body = go_portal.panel_deployed_lanes(None, None, include_paused=True)
+
+    assert "MNQ_ACTIVE" in body
+    assert "MNQ_PAUSED" in body
+    assert "paused hidden" not in body
+
+
+def test_panel_promotable_uses_bulk_fitness_not_per_row(monkeypatch):
+    import scripts.tools.strategy_lab_mcp_server as strategy_lab
+    import trading_app.strategy_fitness as strategy_fitness
+
+    go_portal._fitness_status_map_for_instrument.cache_clear()
+
+    validated = [
+        {
+            "strategy_id": "MNQ_FIT",
+            "instrument": "MNQ",
+            "orb_label": "NYSE_OPEN",
+            "entry_model": "E2",
+            "expectancy_r": 0.1234,
+            "sample_size": 99,
+        },
+        {
+            "strategy_id": "MNQ_WATCH",
+            "instrument": "MNQ",
+            "orb_label": "COMEX_SETTLE",
+            "entry_model": "E1",
+            "expectancy_r": 0.1111,
+            "sample_size": 88,
+        },
+    ]
+
+    monkeypatch.setattr(strategy_lab, "_list_validated_rows", lambda instrument: validated)
+    monkeypatch.setattr(strategy_lab, "_load_allocation_doc", lambda *a, **kw: {"lanes": [], "paused": []})
+    monkeypatch.setattr(strategy_lab, "_allocation_index", lambda *a, **kw: {})
+    monkeypatch.setattr(
+        strategy_fitness,
+        "compute_portfolio_fitness",
+        lambda **kwargs: FitnessReport(
+            as_of_date=date(2026, 6, 1),
+            scores=[_score("MNQ_FIT", "FIT"), _score("MNQ_WATCH", "WATCH")],
+            summary={"fit": 1, "watch": 1, "decay": 0, "stale": 0},
+        ),
+    )
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("per-strategy compute_fitness should not be used")
+
+    monkeypatch.setattr(strategy_fitness, "compute_fitness", _boom)
+
+    body = go_portal.panel_promotable(None)
+
+    assert "MNQ_FIT" in body
+    assert "MNQ_WATCH" not in body
