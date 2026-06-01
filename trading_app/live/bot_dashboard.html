@@ -1455,6 +1455,68 @@
     text-transform: none;
   }
   #btn-primary-cta.stop .cta-sub { color: rgba(254, 202, 202, 0.65); }
+  #btn-live-cta {
+    position: relative;
+    overflow: hidden;
+    min-width: 168px;
+    justify-content: center;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    line-height: 1.1;
+  }
+  #btn-live-cta.live-hold {
+    border-color: rgba(239, 68, 68, 0.54);
+    color: #fff;
+    background: linear-gradient(180deg, rgba(239,68,68,0.90) 0%, rgba(127,29,29,0.94) 100%);
+  }
+  #btn-live-cta.live-hold:hover:not(:disabled) {
+    border-color: rgba(248, 113, 113, 0.78);
+    filter: brightness(1.06);
+  }
+  #btn-live-cta:disabled {
+    opacity: 0.54;
+    cursor: not-allowed;
+  }
+  #btn-live-cta .topbar-live-ring {
+    position: absolute;
+    inset: 2px;
+    border-radius: calc(var(--r) - 2px);
+    background: conic-gradient(var(--accent) calc(var(--p, 0) * 1%), transparent 0);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s;
+  }
+  #btn-live-cta.holding .topbar-live-ring { opacity: 0.42; }
+  #btn-live-cta .topbar-live-label,
+  #btn-live-cta .cta-sub {
+    position: relative;
+    z-index: 1;
+  }
+  #btn-live-cta .topbar-live-label {
+    font-weight: 800;
+  }
+  #btn-live-cta .cta-sub {
+    color: rgba(254, 226, 226, 0.72);
+    display: block;
+    margin-left: 0;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (max-width: 1500px) {
+    body.cockpit .topbar { flex-wrap: wrap; }
+    body.cockpit #planned-launch-banner {
+      order: 20;
+      flex: 1 0 100%;
+      max-width: none;
+      min-width: 0;
+    }
+    body.cockpit #btn-primary-cta { min-width: 160px; max-width: 220px; }
+    body.cockpit #btn-live-cta { min-width: 168px; }
+  }
 
   /* 1.3 — Connection health dot */
   .conn-health-dot {
@@ -2900,6 +2962,7 @@
     <span class="topbar-spacer"></span>
     <span id="planned-launch-banner" class="planned-launch-banner" style="display:none" title="Launch plan"></span>
     <button id="btn-primary-cta" class="topbar-btn primary" style="display:none" type="button"></button>
+    <button id="btn-live-cta" class="topbar-btn live-hold" style="display:none" type="button" title="Hold 2 seconds to start the pinned Topstep MNQ live pilot."></button>
     <input type="checkbox" id="focus-toggle" tabindex="-1" aria-hidden="true">
     <label for="focus-toggle" class="show-all-label" title="Toggle FOCUS / SHOW ALL — reveals demoted panels (specs, profiles, brokers, live-session duplicate block)"></label>
     <button id="btn-trade-book" class="topbar-btn" type="button" onclick="toggleTradeBook()">Trade Book</button>
@@ -3754,6 +3817,7 @@ function renderAccountSummary(accounts) {
   }
   // Tier 1.1 — active profile may have changed, refresh CTA
   try { updatePrimaryCta(); } catch (_) {}
+  try { updateLiveCta(); } catch (_) {}
   // Cockpit — hero + summaries
   try { renderHero(); } catch (_) {}
   try { updateCockpitSummaries(); } catch (_) {}
@@ -3893,6 +3957,7 @@ function renderAccounts(accounts) {
     grid.appendChild(card);
   }
   $("profiles-badge").textContent = `${activeCount} active`;
+  try { updateLiveCta(); } catch (_) {}
   const tb = $("btn-toggle-inactive");
   if (inactiveCount > 0) { tb.style.display = ""; tb.textContent = showInactive ? `Hide ${inactiveCount} Inactive` : `Show ${inactiveCount} Inactive`; }
   else { tb.style.display = "none"; }
@@ -4051,6 +4116,59 @@ function blockedActionReason(actionId) {
   return lastOperatorState?.busy_reason || lastOperatorState?.reason || "Unavailable right now";
 }
 
+function resetHoldToFireButton(button) {
+  if (!button) return;
+  if (button._holdToFireCleanup) button._holdToFireCleanup();
+  button.classList.remove("holding");
+  const ring = button.querySelector(".topbar-live-ring");
+  if (ring) ring.style.setProperty("--p", 0);
+}
+
+function updateLiveCta() {
+  const btn = $("btn-live-cta");
+  if (!btn) return;
+  resetHoldToFireButton(btn);
+
+  const pilotAcct = (lastAccountsData || []).find(a => isLivePilotProfile(a.profile_id))
+    || (isLivePilotProfile(activeProfileData?.profile_id) ? activeProfileData : null);
+  const statusMode = ($("summary-mode")?.textContent || "Stopped").toString();
+  const isRunning = runningProfile || (statusMode !== "Stopped" && statusMode !== "Offline" && statusMode !== "—");
+
+  if (isRunning || !pilotAcct) {
+    btn.style.display = "none";
+    btn.onclick = null;
+    return;
+  }
+
+  let disabledReason = "";
+  if (!pilotAcct.active) {
+    disabledReason = "Live pilot profile is inactive.";
+  } else if (!(pilotAcct.auto_trading === "full" || pilotAcct.auto_trading === "semi")) {
+    disabledReason = "Live pilot profile is not automation-enabled.";
+  } else if (!pilotAcct.lane_count) {
+    disabledReason = "Live pilot has no active lanes.";
+  } else if (!lastOperatorState) {
+    disabledReason = "Checking live gates...";
+  } else {
+    disabledReason = blockedActionReason("start_live");
+  }
+
+  btn.style.display = "";
+  btn.className = "topbar-btn live-hold";
+  btn.disabled = !!disabledReason;
+  btn.title = disabledReason || "Hold 2 seconds to start the pinned Topstep MNQ live pilot.";
+  btn.setAttribute("aria-label", disabledReason ? `Live launch blocked: ${disabledReason}` : "Hold to go live. Topstep MNQ one copy.");
+  const sub = disabledReason ? `Blocked: ${disabledReason}` : `${LIVE_PILOT_PROFILE} · ${LIVE_PILOT_INSTRUMENT} · ${LIVE_PILOT_COPY_COUNT} copy`;
+  btn.innerHTML =
+    '<span class="topbar-live-ring"></span>' +
+    '<span class="topbar-live-label">HOLD TO GO LIVE</span>' +
+    `<span class="cta-sub">${escapeHtml(sub)}</span>`;
+  if (disabledReason) return;
+
+  const ring = btn.querySelector(".topbar-live-ring");
+  window.attachHoldToFireLive(btn, ring, btn, pilotAcct);
+}
+
 async function handleOperatorAction(action, data) {
   if (!action || !action.id) return;
 
@@ -4171,6 +4289,7 @@ function renderOperatorState(data) {
   if (Array.isArray(lastAccountsData) && lastAccountsData.length) {
     try { renderAccounts(lastAccountsData); } catch (_) {}
   }
+  try { updateLiveCta(); } catch (_) {}
 }
 
 function renderConnectionReadiness(connection) {
@@ -4387,6 +4506,7 @@ function updateStatus(state) {
 
   // Tier 1.1 — refresh primary CTA based on new status
   try { updatePrimaryCta(); } catch (_) {}
+  try { updateLiveCta(); } catch (_) {}
   // Cockpit — hero card reflects new status
   try { renderHero(); } catch (_) {}
 
@@ -4629,6 +4749,7 @@ async function fetchPlannedLaunch() {
   }
   renderPlannedLaunchBanner();
   try { updatePrimaryCta(); } catch (_) {}
+  try { updateLiveCta(); } catch (_) {}
 }
 
 function renderPlannedLaunchBanner() {
@@ -5589,6 +5710,7 @@ window.startSignalForSelected = function() {
 window.attachHoldToFireLive = function(button, ring, wrap, acct) {
   const HOLD_MS = 2000;
   let startTs = 0, raf = 0, fired = false;
+  if (button._holdToFireCleanup) button._holdToFireCleanup();
   function tick(now) {
     if (!startTs) return;
     const p = Math.min(100, ((now - startTs) / HOLD_MS) * 100);
@@ -5616,10 +5738,20 @@ window.attachHoldToFireLive = function(button, ring, wrap, acct) {
     wrap.classList.remove("holding");
     ring.style.setProperty("--p", 0);
   }
+  const onPointerUp = () => { if (!fired) cancel(); };
+  const onPointerLeave = () => { if (!fired) cancel(); };
   button.addEventListener("pointerdown", start);
-  button.addEventListener("pointerup", () => { if (!fired) cancel(); });
-  button.addEventListener("pointerleave", () => { if (!fired) cancel(); });
+  button.addEventListener("pointerup", onPointerUp);
+  button.addEventListener("pointerleave", onPointerLeave);
   button.addEventListener("pointercancel", cancel);
+  button._holdToFireCleanup = () => {
+    cancel();
+    button.removeEventListener("pointerdown", start);
+    button.removeEventListener("pointerup", onPointerUp);
+    button.removeEventListener("pointerleave", onPointerLeave);
+    button.removeEventListener("pointercancel", cancel);
+    delete button._holdToFireCleanup;
+  };
 };
 
 wireStaleBanner();

@@ -1040,6 +1040,10 @@ def test_dashboard_live_pilot_copy_is_explicit_and_professional():
     html = (bot_dashboard.PROJECT_ROOT / "trading_app" / "live" / "bot_dashboard.html").read_text(encoding="utf-8")
 
     assert "HOLD TO GO LIVE" in html
+    assert 'id="btn-live-cta"' in html
+    assert "function updateLiveCta()" in html
+    assert 'window.attachHoldToFireLive(btn, ring, btn, pilotAcct)' in html
+    assert "resetHoldToFireButton(btn)" in html
     assert 'id="ops-strip"' in html
     assert 'id="ops-running"' in html
     assert 'id="ops-chart"' in html

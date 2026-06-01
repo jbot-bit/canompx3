@@ -87,6 +87,13 @@
   - `trading_app/live/bot_dashboard.html`
   - `trading_app/live/bot_dashboard.py`
 
+## Current Codex Follow-up - Dashboard Live CTA Visibility
+- **Tool:** Codex
+- **Date:** 2026-06-02
+- **Summary:** Fixed the dashboard focus-mode gap where the only usable `HOLD TO GO LIVE` control lived inside profile/account cards hidden behind SHOW ALL/drawer views. Added a first-viewport topbar `HOLD TO GO LIVE` control for the pinned `topstep_50k_mnq_auto` MNQ pilot. It stays hidden while a session is running, disabled with a surfaced blocker while gates/operator state are not ready, and uses the same 2-second hold-to-confirm path as the existing profile-card live control.
+- **Safety note:** No backend live-launch relaxation. The button still calls the existing dashboard `launchSession(..., "live", {skipConfirm: true})` only after the hold gesture; server-side `/api/action/start?mode=live` still runs the live preflight and strict live gating before starting `scripts.run_live_session --live --auto-confirm`.
+- **Verification:** Inline dashboard JS parse check passed. `python -m pytest tests\test_trading_app\test_bot_dashboard.py -q` passed 39 tests. Mocked browser render at `127.0.0.1:8093` showed a visible enabled topbar live button in the first viewport; helper server was stopped after the check. `git diff --check` passed.
+
 ## Durable References
 - `docs/runtime/action-queue.yaml`
 - `docs/runtime/decision-ledger.md`
