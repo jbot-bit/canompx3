@@ -78,13 +78,15 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Unknown
+- **Tool:** Claude Code
 - **Date:** 2026-06-01
-- **Commit:** 060fc2d8 — style(live): smoke-polish dashboard pilot UX
-- **Files changed:** 3 files
+- **Commit:** e5effe01 — Refine dashboard pilot labels and banner copy
+- **Files changed:** 5 files
   - `HANDOFF.md`
   - `tests/test_trading_app/test_bot_dashboard.py`
+  - `tests/test_trading_app/test_bot_dashboard_routes.py`
   - `trading_app/live/bot_dashboard.html`
+  - `trading_app/live/bot_dashboard.py`
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
