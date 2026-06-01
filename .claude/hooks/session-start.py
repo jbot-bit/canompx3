@@ -1502,7 +1502,17 @@ def main() -> None:
     except (json.JSONDecodeError, Exception):
         sys.exit(0)
 
-    session_type = event.get("session_type", "startup")
+    # Normalize the session boundary from the OFFICIAL `source` field first
+    # (startup/resume/clear/compact per the SessionStart hook contract), falling
+    # back to the legacy `session_type` for older harnesses. These were diverging:
+    # a real /clear sends `source:"clear"` but often omits `session_type`, so a
+    # `session_type`-only read defaulted to "startup" and routed /clear into the
+    # cold-start concurrency HARD-BLOCK (sys.exit 2) — skipping the stale-process
+    # reaper at the exact highest-accumulation moment it exists for. /clear and
+    # /resume are SAME-session continuations, not new concurrent sessions, so they
+    # must NOT hit the new-session worktree mutex. One normalized value drives every
+    # branch below (block-check, resume, clear, reaper) so they can never disagree.
+    session_type = (event.get("source") or event.get("session_type") or "startup").lower()
     # Fallback order MUST match session-heartbeat.py's writer (CLAUDE_CODE_SESSION_ID
     # before CLAUDE_SESSION_ID): if stdin lacks session_id (older harness on
     # /clear/resume) and the two env vars differ, a mismatched fallback would make
@@ -1589,8 +1599,10 @@ def main() -> None:
         # legacy `session_type` for older harnesses. We deliberately SKIP
         # `compact` — compaction is mid-session, where the live session's own
         # freshly-spawned servers must not be disturbed.
-        boundary = (event.get("source") or session_type or "startup").lower()
-        if boundary in ("startup", "resume", "clear"):
+        # `session_type` is already normalized from the official `source` field
+        # at the top of main(); reuse it so the reaper boundary cannot diverge
+        # from the routing branch above.
+        if session_type in ("startup", "resume", "clear"):
             lines.extend(_stale_process_reaper_lines())
         print("\n".join(lines), file=sys.stderr)
 
