@@ -620,6 +620,13 @@ def _normalize_check_status(raw_status: str) -> str:
         return "warn"
     if status == "FAILED":
         return "fail"
+    # The "info" fallback is unreachable from scripts/run_live_session.py
+    # --preflight, which emits only OK / FAILED / WARN(S) / SKIPPED (verified
+    # 2026-06-01). It exists for an unrecognized token. CAUTION: an "info" check
+    # does NOT set has_warnings, so it would NOT block a live launch under the
+    # strict-zero-warn gate in action_start. If a new preflight token is ever
+    # added, map it to "warn" or "fail" here (never leave it as "info") so it
+    # cannot silently pass a real-money launch.
     return "info"
 
 
@@ -2517,10 +2524,20 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
 
     prepared = await _prepare_profile_for_start(profile, mode)
     prep_status = str(prepared.get("status") or "error")
-    if prep_status in {"fail", "error", "timeout"}:
+    # Live launches restore strict-zero-warn parity with the retired
+    # scripts/tools/start_topstep_live_pilot.py launcher (which ran readiness
+    # with --strict-zero-warn): any preflight WARN — including SKIPPED checks,
+    # which _normalize_check_status maps to "warn" — blocks a real-money launch.
+    # Signal/demo place no live orders, so a warn is advisory there and the
+    # launch proceeds; the operator weighs warnings via the surfaced preflight
+    # output and re-runs once clean.
+    blocking_statuses = {"fail", "error", "timeout"}
+    if mode == "live":
+        blocking_statuses = blocking_statuses | {"warn"}
+    if prep_status in blocking_statuses:
         return {
             "status": "blocked",
-            "message": str(prepared.get("message") or "Automatic readiness checks failed."),
+            "message": str(prepared.get("message") or "Automatic readiness checks did not pass cleanly."),
             "profile": profile,
             "output": prepared.get("output", ""),
         }

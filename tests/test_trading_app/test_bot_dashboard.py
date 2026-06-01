@@ -720,6 +720,97 @@ def test_action_start_pins_single_copy_live_pilot_command(monkeypatch, tmp_path)
     bot_dashboard._bg_processes.pop("session", None)
 
 
+def _patch_action_start_to_warn(monkeypatch, tmp_path) -> dict[str, list[str]]:
+    """Wire action_start mocks so readiness returns a WARN preflight status.
+
+    Returns the dict that captures the launched command (empty if blocked).
+    """
+    bot_dashboard._clear_handoff()
+    bot_dashboard._bg_processes.pop("session", None)
+    bot_dashboard._bg_processes.pop("_session_logfile", None)
+    captured: dict[str, list[str]] = {}
+
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "STOPPED",
+            "heartbeat_age_s": 9999.0,
+            "profile": None,
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_data_status",
+        lambda: {"status": "ok", "any_stale": False, "instruments": {}},
+    )
+    monkeypatch.setattr(bot_dashboard, "_collect_broker_status", lambda: dict(_CONNECTED_BROKER_SUMMARY))
+
+    async def fake_prepare(profile, mode="live"):
+        # A readiness WARN: returncode 0 but a check emitted WARN/SKIPPED.
+        return {"status": "warn", "output": "preflight: 1 WARN"}
+
+    monkeypatch.setattr(bot_dashboard, "_prepare_profile_for_start", fake_prepare)
+    monkeypatch.setattr(bot_dashboard, "_ensure_log_dir", lambda: tmp_path)
+
+    class FakePopen:
+        pid = 4343
+
+        def __init__(self, cmd, **_kw):
+            captured["cmd"] = list(cmd)
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(bot_dashboard.subprocess, "Popen", FakePopen)
+    return captured
+
+
+def test_action_start_live_blocks_on_preflight_warn(monkeypatch, tmp_path):
+    """Strict-zero-warn parity: a readiness WARN blocks a real-money launch.
+
+    Restores the gate the retired start_topstep_live_pilot.py enforced via
+    --strict-zero-warn. SKIPPED checks normalize to WARN, so this also covers
+    a silently-skipped readiness check sliding into live.
+    """
+    captured = _patch_action_start_to_warn(monkeypatch, tmp_path)
+
+    result = asyncio.run(bot_dashboard.action_start(profile="topstep_50k_mnq_auto", mode="live"))
+
+    assert result["status"] == "blocked"
+    assert "cmd" not in captured  # never launched
+    bot_dashboard._bg_processes.pop("session", None)
+    bot_dashboard._bg_processes.pop("_session_logfile", None)
+
+
+def _assert_non_live_mode_proceeds_on_warn(monkeypatch, tmp_path, mode: str) -> None:
+    """WARN is advisory for signal/demo — they place no live orders, so the
+    launch proceeds (a WARN must NOT block non-live modes)."""
+    captured = _patch_action_start_to_warn(monkeypatch, tmp_path)
+
+    result = asyncio.run(bot_dashboard.action_start(profile="topstep_50k_mnq_auto", mode=mode))
+
+    assert result["status"] == "started"
+    assert captured["cmd"], "expected a launched command for non-live mode on WARN"
+    assert "--live" not in captured["cmd"]
+
+    log_file = bot_dashboard._bg_processes.pop("_session_logfile", None)
+    if log_file is not None:
+        log_file.close()
+    bot_dashboard._bg_processes.pop("session", None)
+
+
+def test_action_start_signal_proceeds_on_preflight_warn(monkeypatch, tmp_path):
+    _assert_non_live_mode_proceeds_on_warn(monkeypatch, tmp_path, "signal")
+
+
+def test_action_start_demo_proceeds_on_preflight_warn(monkeypatch, tmp_path):
+    _assert_non_live_mode_proceeds_on_warn(monkeypatch, tmp_path, "demo")
+
+
 def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
     """Exercise _handoff_snapshot through every transition of the state machine.
 
