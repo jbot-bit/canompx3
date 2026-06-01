@@ -1,0 +1,60 @@
+{
+  "actual_interpreter": "C:\\Users\\joshd\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+  "blockers": [
+    {
+      "code": "missing_expected_interpreter",
+      "detail": "C:\\Users\\joshd\\canompx3\\.worktrees\\ev-proof-pack-harness\\.venv-wsl\\bin\\python",
+      "message": "Expected interpreter is missing"
+    },
+    {
+      "code": "dirty_tree",
+      "detail": "9",
+      "message": "Git tree has uncommitted changes"
+    },
+    {
+      "code": "pulse_broken",
+      "detail": "3",
+      "message": "Project pulse reports broken items"
+    }
+  ],
+  "context": "codex-wsl",
+  "database": {
+    "exists": true,
+    "mtime_utc": "2026-05-31T03:17:14.307749+00:00",
+    "path": "C:\\Users\\joshd\\canompx3\\gold.db",
+    "size_bytes": 7628664832
+  },
+  "expected_interpreter": "C:\\Users\\joshd\\canompx3\\.worktrees\\ev-proof-pack-harness\\.venv-wsl\\bin\\python",
+  "expected_interpreter_exists": false,
+  "generated_at": "2026-05-31T16:57:08.155071+00:00",
+  "git": {
+    "branch": "codex/ev-proof-pack-harness",
+    "dirty": true,
+    "dirty_files": [
+      "M scripts/tools/live_readiness_report.py",
+      " M tests/test_tools/test_live_readiness_report.py",
+      "?? docs/audit/results/2026-06-01-bootstrap-health-proof/",
+      "?? docs/audit/results/2026-06-01-bounded-benchmark-input.csv",
+      "?? docs/audit/results/2026-06-01-bounded-benchmark/",
+      "?? scripts/tools/bootstrap_health_proof.py",
+      "?? scripts/tools/bounded_benchmark_harness.py",
+      "?? tests/test_tools/test_bootstrap_health_proof.py",
+      "?? tests/test_tools/test_bounded_benchmark_harness.py"
+    ],
+    "head": "4b7b78df"
+  },
+  "mutating_session_claims": {
+    "active": false,
+    "claims": []
+  },
+  "next_command": "uv sync --frozen --python C:\\Users\\joshd\\canompx3\\.worktrees\\ev-proof-pack-harness\\.venv-wsl\\bin\\python",
+  "pulse": {
+    "available": true,
+    "broken_count": 3,
+    "source": "project_pulse --fast --format json",
+    "startup_blockers": []
+  },
+  "repo_root": "C:\\Users\\joshd\\canompx3\\.worktrees\\ev-proof-pack-harness",
+  "schema_version": 1,
+  "warnings": []
+}

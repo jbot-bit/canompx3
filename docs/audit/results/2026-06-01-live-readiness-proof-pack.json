@@ -1,0 +1,183 @@
+{
+  "active_lanes": [
+    {
+      "allocator_bucket": "lanes",
+      "chordia_audit_age_days": 28,
+      "chordia_verdict": "PASS_CHORDIA",
+      "filter_type": "OVNRNG_100",
+      "instrument": "MNQ",
+      "lifecycle_block_reason": null,
+      "lifecycle_block_source": null,
+      "lifecycle_blocked": false,
+      "orb_label": "COMEX_SETTLE",
+      "orb_minutes": 5,
+      "pause_reason": null,
+      "paused": false,
+      "rr_target": 1.5,
+      "sr_recheck_trigger": null,
+      "sr_review_outcome": null,
+      "sr_review_summary": null,
+      "sr_reviewed_at": null,
+      "sr_status": null,
+      "status": "DEPLOY",
+      "status_reason": "Session HOT (+0.0837), ExpR=+0.2307, N=161",
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+    },
+    {
+      "allocator_bucket": "lanes",
+      "chordia_audit_age_days": 28,
+      "chordia_verdict": "PASS_CHORDIA",
+      "filter_type": "VWAP_MID_ALIGNED",
+      "instrument": "MNQ",
+      "lifecycle_block_reason": null,
+      "lifecycle_block_source": null,
+      "lifecycle_blocked": false,
+      "orb_label": "US_DATA_1000",
+      "orb_minutes": 15,
+      "pause_reason": null,
+      "paused": false,
+      "rr_target": 1.5,
+      "sr_recheck_trigger": null,
+      "sr_review_outcome": null,
+      "sr_review_summary": null,
+      "sr_reviewed_at": null,
+      "sr_status": null,
+      "status": "DEPLOY",
+      "status_reason": "Session HOT (+0.0615), ExpR=+0.2303, N=119",
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15"
+    },
+    {
+      "allocator_bucket": "lanes",
+      "chordia_audit_age_days": 7,
+      "chordia_verdict": "PASS_PROTOCOL_A",
+      "filter_type": "COST_LT08",
+      "instrument": "MNQ",
+      "lifecycle_block_reason": null,
+      "lifecycle_block_source": null,
+      "lifecycle_blocked": false,
+      "orb_label": "TOKYO_OPEN",
+      "orb_minutes": 5,
+      "pause_reason": null,
+      "paused": false,
+      "rr_target": 1.5,
+      "sr_recheck_trigger": null,
+      "sr_review_outcome": null,
+      "sr_review_summary": null,
+      "sr_reviewed_at": null,
+      "sr_status": null,
+      "status": "DEPLOY",
+      "status_reason": "Session HOT (+0.0456), ExpR=+0.1710, N=154",
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08"
+    }
+  ],
+  "command_line": [
+    "scripts/tools/live_readiness_report.py",
+    "--profile",
+    "topstep_50k_mnq_auto",
+    "--format",
+    "json",
+    "--proof-pack-only",
+    "--out",
+    "docs/audit/results/2026-06-01-live-readiness-proof-pack.json"
+  ],
+  "criterion11": {
+    "age_days": null,
+    "message": "BLOCKED: no Criterion 11 survival report. Run: python -m trading_app.account_survival --profile topstep_50k_mnq_auto",
+    "state": "fail"
+  },
+  "criterion12": {
+    "age_days": null,
+    "latest_verdict": "invalid",
+    "state": "invalid"
+  },
+  "database": {
+    "exists": true,
+    "mtime_utc": "2026-05-31T03:17:14.307749+00:00",
+    "path": "C:\\Users\\joshd\\canompx3\\gold.db",
+    "size_bytes": 7628664832
+  },
+  "generated_at": "2026-05-31T17:11:20.071232+00:00",
+  "git": {
+    "branch": "codex/ev-proof-pack-harness",
+    "dirty": true,
+    "dirty_files": [
+      "M  HANDOFF.md",
+      "A  docs/audit/results/2026-06-01-bootstrap-health-proof/bootstrap_health_proof.json",
+      "A  docs/audit/results/2026-06-01-bootstrap-health-proof/bootstrap_health_proof.md",
+      "A  docs/audit/results/2026-06-01-bounded-benchmark-input.csv",
+      "A  docs/audit/results/2026-06-01-bounded-benchmark/README.md",
+      "A  docs/audit/results/2026-06-01-bounded-benchmark/bounded_benchmark_report.json",
+      "A  docs/audit/results/2026-06-01-bounded-benchmark/bounded_benchmark_report.md",
+      "A  docs/audit/results/2026-06-01-live-readiness-proof-pack.json",
+      "AM docs/audit/results/2026-06-01-live-readiness-proof-pack.md",
+      "A  docs/audit/results/2026-06-01-live-readiness-strict-zero-warn.json",
+      "A  docs/audit/results/2026-06-01-project-pulse-fast.json",
+      "A  scripts/tools/bootstrap_health_proof.py",
+      "A  scripts/tools/bounded_benchmark_harness.py",
+      "MM scripts/tools/live_readiness_report.py",
+      "A  tests/test_tools/test_bootstrap_health_proof.py",
+      "A  tests/test_tools/test_bounded_benchmark_harness.py",
+      "MM tests/test_tools/test_live_readiness_report.py"
+    ],
+    "head": "4b7b78df"
+  },
+  "paused_lanes": {
+    "count": 845,
+    "reason_summary": [
+      {
+        "count": 845,
+        "examples": [
+          "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT15_S075",
+          "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
+          "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_VOL_16K_S075",
+          "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_VOL_16K",
+          "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08_S075"
+        ],
+        "reason": "unspecified"
+      }
+    ]
+  },
+  "profile_id": "topstep_50k_mnq_auto",
+  "schema_version": 1,
+  "stale_lanes": {
+    "count": 0,
+    "reason_summary": []
+  },
+  "strict_warnings": {
+    "advisory": [
+      "Telemetry not mature: UNVERIFIED_INSUFFICIENT_TELEMETRY (6/30 trading days) (advisory for express/funded profile)",
+      "Automation health not green: CanonMPX_TopstepTelemetry_SignalOnly=FAILED (advisory for express/funded profile)"
+    ],
+    "blockers": [
+      "Criterion 11 gate not OK",
+      "Criterion 12 invalid"
+    ],
+    "blocking": [],
+    "raw": [
+      "Telemetry not mature: UNVERIFIED_INSUFFICIENT_TELEMETRY (6/30 trading days) (advisory for express/funded profile)",
+      "Automation health not green: CanonMPX_TopstepTelemetry_SignalOnly=FAILED (advisory for express/funded profile)"
+    ]
+  },
+  "telemetry_maturity": {
+    "instrument": "MNQ",
+    "min_required": 30,
+    "n_unique_trading_days": 6,
+    "profile_id": "topstep_50k_mnq_auto",
+    "profile_scoped": true,
+    "records_qualifying": 44,
+    "records_scanned": 106,
+    "scope": "profile",
+    "signal_files_scanned": 21,
+    "signals_dir": "C:\\Users\\joshd\\canompx3",
+    "trading_days": [
+      "2026-05-25",
+      "2026-05-26",
+      "2026-05-27",
+      "2026-05-28",
+      "2026-05-29",
+      "2026-05-31"
+    ],
+    "verdict": "UNVERIFIED_INSUFFICIENT_TELEMETRY"
+  },
+  "unsupported_or_missing_evidence": []
+}

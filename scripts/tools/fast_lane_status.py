@@ -216,6 +216,70 @@ def _safe_load_yaml(path: Path) -> Any:
         return None
 
 
+def _unquote_scalar(value: str) -> str:
+    value = value.split("#", 1)[0].strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1].strip()
+    return value
+
+
+def _scope_strategy_id(path: Path) -> str | None:
+    """Extract scope.strategy_id without constructing full YAML objects.
+
+    Live prereg directories contain hundreds of files, and PyYAML object
+    construction dominates the status roll-up smoke test. The status walker
+    only needs one scalar from the top-level ``scope`` block, so scan that
+    narrow block directly and fall back silently when the file is malformed.
+    """
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+
+    scope_indent: int | None = None
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        if scope_indent is None:
+            if stripped == "scope:":
+                scope_indent = indent
+            continue
+        if indent <= scope_indent:
+            break
+        if stripped.startswith("strategy_id:"):
+            sid = _unquote_scalar(stripped.split(":", 1)[1])
+            return sid or None
+    return None
+
+
+def _top_level_mapping_scalar(path: Path, section: str, key: str) -> str | None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+
+    section_indent: int | None = None
+    section_header = f"{section}:"
+    key_prefix = f"{key}:"
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        if section_indent is None:
+            if stripped == section_header:
+                section_indent = indent
+            continue
+        if indent <= section_indent:
+            break
+        if stripped.startswith(key_prefix):
+            value = _unquote_scalar(stripped.split(":", 1)[1])
+            return value or None
+    return None
+
+
 def collect_active_preregs(
     hypotheses_dir: Path = HYPOTHESES_DIR,
 ) -> dict[str, Path]:
@@ -231,11 +295,7 @@ def collect_active_preregs(
     for path in sorted(hypotheses_dir.glob("*.yaml")):
         if path.name.startswith("TEMPLATE-"):
             continue  # Skip skeleton templates whose strategy_id is a placeholder.
-        data = _safe_load_yaml(path)
-        if not isinstance(data, dict):
-            continue
-        scope = data.get("scope") or {}
-        sid = scope.get("strategy_id") if isinstance(scope, dict) else None
+        sid = _scope_strategy_id(path)
         if isinstance(sid, str) and sid:
             out.setdefault(sid, path)
     return out
@@ -254,11 +314,7 @@ def collect_drafts(
     if not drafts_dir.exists():
         return out
     for path in sorted(drafts_dir.glob("*.draft.yaml")):
-        data = _safe_load_yaml(path)
-        if not isinstance(data, dict):
-            continue
-        scope = data.get("scope") or {}
-        sid = scope.get("strategy_id") if isinstance(scope, dict) else None
+        sid = _scope_strategy_id(path)
         if not isinstance(sid, str) or not sid:
             continue
         entry = out.setdefault(sid, {})
@@ -444,13 +500,7 @@ def _active_prereg_is_fast_lane(path: Path) -> bool:
     """Return True for active preregs authored by the Fast Lane templates."""
     if "fast-lane" in path.name:
         return True
-    data = _safe_load_yaml(path)
-    if not isinstance(data, dict):
-        return False
-    metadata = data.get("metadata") or {}
-    if not isinstance(metadata, dict):
-        return False
-    template = metadata.get("template_version")
+    template = _top_level_mapping_scalar(path, "metadata", "template_version")
     return isinstance(template, str) and template.startswith("fast_lane")
 
 
