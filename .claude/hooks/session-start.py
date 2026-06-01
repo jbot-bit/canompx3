@@ -1441,13 +1441,21 @@ def _stale_process_reaper_lines() -> list[str]:
     documented root cause of "commit/drift is slow because a sibling holds the
     lock" (see memory/feedback_stale_mcp_node_process_accumulation_slows_session_2026_05_29.md).
 
-    This wires the already-committed, dry-run-by-default
-    `scripts/tools/reap_stale_claude_processes.py` to FIRE at session start so
-    the operator sees how many stale candidates exist. It deliberately does NOT
-    pass `--apply` — first-wire policy is to prove the dry-run classification is
-    correct on this machine (no live-bot false-positive) before any kill is
-    enabled. The reaper's own contract hard-excludes capital-path processes and
-    is fail-open; this wrapper adds a second fail-silent layer.
+    This wires `scripts/tools/reap_stale_claude_processes.py` to FIRE at session
+    start and AUTO-CLEAN the pile-up. The dominant leak is abandoned prior Claude
+    sessions (observed 14-65h old) whose `claude.exe` launcher never exited,
+    keeping full MCP server sets alive as children — so every child reports
+    "parent alive" and evades the orphan/age rules. The reaper's Rule (d)
+    detects MCP servers parented by a prior-session launcher and reaps them.
+
+    Auto-apply policy (operator-approved 2026-06-01): we pass `--apply
+    --reap-duplicates` ONLY when a session lock is readable, so every kill is
+    either launcher-proven (Rule d) or lock-proven (Rule b) — never a guess. The
+    reaper's own contract hard-excludes capital-path processes (Gate 1) and is
+    fail-open; SessionStart cannot block (per the hooks contract), so the worst
+    case is a 35s timeout returning []. This wrapper adds a second fail-silent
+    layer. If the lock is unreadable we fall back to dry-run (report only) so we
+    never kill on an unprovable basis.
 
     Returns the summary line (+ any candidate detail) or [] on any error.
     """
@@ -1455,8 +1463,15 @@ def _stale_process_reaper_lines() -> list[str]:
         reaper = PROJECT_ROOT / "scripts" / "tools" / "reap_stale_claude_processes.py"
         if not reaper.exists():
             return []
+        # Auto-apply only when the session lock is readable (kills then provable
+        # via Rule b/d). No lock -> dry-run report only (fail-closed on killing).
+        lock_path = PROJECT_ROOT / ".git" / ".claude.pid"
+        lock_readable = lock_path.exists() and lock_path.stat().st_size > 0
+        cmd = [sys.executable, str(reaper), "--quiet"]
+        if lock_readable:
+            cmd += ["--apply", "--reap-duplicates"]
         r = subprocess.run(
-            [sys.executable, str(reaper)],  # dry-run (no --apply)
+            cmd,
             capture_output=True,
             text=True,
             timeout=35,
@@ -1467,20 +1482,14 @@ def _stale_process_reaper_lines() -> list[str]:
         out_lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
         if not out_lines:
             return []
-        # The reaper's last line is its summary ("... N candidate(s) ...").
+        # The reaper's last line is its summary ("... killed N." or "... N candidate(s) ...").
         summary = out_lines[-1].strip()
-        lines = [f"  Process reaper (dry-run): {summary}"]
-        # If candidates exist, surface up to 3 KILL/DRY reasons so the operator
-        # can eyeball the classification before opting into --apply.
-        detail = [ln.strip() for ln in out_lines if "[DRY " in ln or "[KILL" in ln]
-        for d in detail[:3]:
-            lines.append(f"    {d}")
-        # Only nudge --apply when there is genuinely something to clean up. The
-        # candidate count is the integer immediately before "candidate(s)".
-        m = re.search(r",\s*(\d+)\s+candidate\(s\)", summary)
-        if m and int(m.group(1)) > 0:
+        mode = "auto-clean" if lock_readable else "dry-run"
+        lines = [f"  Process reaper ({mode}): {summary}"]
+        if not lock_readable:
             lines.append(
-                "    (to clean up: python scripts/tools/reap_stale_claude_processes.py --apply)"
+                "    (no session lock — kill skipped; clean manually: "
+                "python scripts/tools/reap_stale_claude_processes.py --apply --reap-duplicates)"
             )
         return lines
     except BaseException:  # pragma: no cover - hook fallback path
@@ -1572,7 +1581,16 @@ def main() -> None:
         lines.extend(_main_ci_status_lines())
         lines.extend(_stale_mcp_server_lines())
         lines.extend(_handoff_next_step_line())
-        if session_type == "startup":
+        # Reap stale MCP/helper trees at every TRUE session boundary so the
+        # pile-up self-cleans on the occasions it actually accumulates — not just
+        # cold "startup". `/clear` and `--resume` after a long working day are the
+        # highest-accumulation moments. The official SessionStart `source` field
+        # (startup/resume/clear/compact) is the contract; we also honor the
+        # legacy `session_type` for older harnesses. We deliberately SKIP
+        # `compact` — compaction is mid-session, where the live session's own
+        # freshly-spawned servers must not be disturbed.
+        boundary = (event.get("source") or session_type or "startup").lower()
+        if boundary in ("startup", "resume", "clear"):
             lines.extend(_stale_process_reaper_lines())
         print("\n".join(lines), file=sys.stderr)
 

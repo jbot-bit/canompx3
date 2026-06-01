@@ -1,0 +1,256 @@
+metadata:
+  name: orb-execution-variants-v1
+  owner: codex
+  created_at: 2026-06-01
+  base_commit_sha: fffdd30e
+  testing_mode: research_investigation
+  route: canompx3-research -> research_investigation -> conditional_role
+  primary_role: execution_modifier
+  depends_on:
+    - RESEARCH_RULES.md
+    - TRADING_RULES.md
+    - docs/STRATEGY_BLUEPRINT.md
+    - docs/institutional/pre_registered_criteria.md
+    - .claude/rules/backtesting-methodology.md
+  authority:
+    - RESEARCH_RULES.md
+    - docs/institutional/pre_registered_criteria.md
+  scope_note: >
+    Bias-hardened execution investigation for ORB stop/fakeout/re-entry failure modes.
+    The tested object is not stop-hunt intent. The tested object is whether a measurable
+    execution modification improves policy EV per original MNQ E2 parent opportunity after
+    accounting for the parent trade.
+
+primary_question: >
+  Does a bounded same-direction re-entry rule improve policy EV, drawdown, and robustness
+  versus the parent ORB strategy after accounting for the initial stopped trade?
+
+sacred_boundary_discipline:
+  holdout_date: 2026-01-01
+  pre_2026_selection_only: true
+  use_2026_for_selection: false
+  use_2026_for_descriptive_monitoring: true
+  no_oos_re_tuning: true
+  validation_method: DSR_FIXED_UNIVERSE_RESEARCH_VALIDATION
+  deployment_note: >
+    This file can produce research-valid/rankable evidence immediately from full eligible
+    pre-2026 canonical history. Deployment and live-capital clearance remain separate routes.
+
+canonical_inputs:
+  allowed_tables:
+    - bars_1m
+    - daily_features
+    - orb_outcomes
+  required_join: "(symbol, trading_day, orb_minutes)"
+  banned_truth_surfaces:
+    - validated_setups
+    - edge_families
+    - live_config
+    - docs as current performance truth
+    - memory as current performance truth
+
+parents:
+  symbol: MNQ
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_targets:
+    - 1.0
+    - 1.5
+    - 2.0
+  primary_sessions:
+    - NYSE_OPEN
+    - US_DATA_1000
+  secondary_sessions:
+    - CME_PRECLOSE
+  secondary_note: >
+    CME_PRECLOSE is included for research-provisional context and ranked separately in outputs.
+
+candidate_universe:
+  selectable_k: 114
+  construction:
+    same_direction_reentry_after_stop:
+      role: execution
+      count: 27
+      sessions: 3
+      rr_targets: 3
+      wait_bars:
+        - 0
+        - 2
+        - 5
+      size: 1.0
+      max_reentries: 1
+      policy_accounting: parent_pnl_plus_reentry_pnl_if_triggered
+    initial_entry_confirmation_delay:
+      role: execution
+      count: 27
+      sessions: 3
+      rr_targets: 3
+      confirm_bars:
+        - 2
+        - 3
+        - 5
+      replacement_model: E1_market_on_confirm
+      policy_accounting: e1_pnl_if_triggered_else_zero_per_parent_opportunity
+    one_loss_session_throttle:
+      role: allocator
+      count: 6
+      rr_targets: 3
+      rules:
+        - skip_after_first_loss
+        - half_after_first_loss
+      population: pooled_three_parent_sessions_by_rr
+    retest_hold_before_stop:
+      role: execution
+      count: 18
+      sessions: 3
+      rr_targets: 3
+      wait_bars:
+        - 0
+        - 2
+      replacement_policy: enter_on_retest_before_any_stop_breach_else_zero
+    pre_entry_size_atr_filter:
+      role: filter
+      count: 18
+      sessions: 3
+      rr_targets: 3
+      filters:
+        - orb_size_q67
+        - atr20pct_ge70
+      policy_accounting: parent_pnl_if_pass_else_zero
+    fakeout_reversal_after_stop:
+      role: standalone
+      count: 18
+      sessions: 3
+      rr_targets: 3
+      wait_bars:
+        - 0
+        - 5
+      policy_accounting: parent_pnl_plus_opposite_direction_trade_if_triggered
+  parked_new_data:
+    order_flow_absorption_delta_footprint:
+      role: PARK_NEW_DATA
+      reason: >
+        Current canonical bars_1m OHLCV cannot honestly measure volume delta, absorption,
+        footprint imbalance, queue position, or tape-reading claims.
+
+lookahead_bans:
+  e2_pre_entry_predictors_forbidden:
+    - rel_vol_{session}
+    - orb_{session}_break_ts
+    - orb_{session}_break_delay_min
+    - orb_{session}_break_bar_volume
+    - orb_{session}_break_bar_continues
+    - orb_{session}_break_dir
+    - orb_{session}_double_break
+    - orb_{session}_mae_r
+    - orb_{session}_mfe_r
+    - outcome
+    - pnl_r
+  allowed_pre_entry_fields_in_v1:
+    - orb_{session}_size
+    - orb_{session}_volume
+    - atr_20_pct
+  post_trigger_execution_fields: >
+    entry_ts, exit_ts, and post-stop bars may be used only after the actual trade state makes
+    them timestamp-eligible. They are not pre-entry predictors.
+
+controls:
+  negative_controls:
+    - id: known_bad_lookahead_injection
+      required_result: rejected_before_run
+      injected_columns:
+        - orb_NYSE_OPEN_break_ts
+        - rel_vol_NYSE_OPEN
+        - pnl_r
+    - id: inverted_direction_trigger
+      required_result: scored_as_fakeout_reversal_family_not_same_direction
+    - id: shuffled_reentry_trigger_dates
+      required_result: scored_as_nonselectable_control_rows
+      implementation: >
+        Shift the next trading day's 1m path onto the parent day and run same-direction
+        re-entry wait5 against the original parent levels. These rows are not eligible
+        for ranking and do not change selectable K.
+    - id: random_non_open_range_window
+      required_result: scored_as_nonselectable_control_rows
+      implementation: >
+        Replace ORB levels with a deterministic 5m range beginning 73 minutes after the
+        session OR start, then run same-direction re-entry wait5. These rows are not
+        eligible for ranking and do not change selectable K.
+  leakage_checks:
+    - actual_entry_ts_must_be_at_or_after_orb_window_end_for_parent_pre_entry_features
+    - post_stop_reentry_entry_ts_must_be_after_parent_exit_ts_plus_wait
+    - daily_features_join_must_use_symbol_trading_day_orb_minutes
+    - no_where_pnl_r_is_not_null_dropout
+    - scratch_uses_canonical_eod_mtm_pnl_r
+  robustness_checks:
+    - BH_FDR_by_family
+    - BH_FDR_by_lane
+    - global_BH_FDR_reported
+    - fixed_universe_DSR_with_K_114
+    - walk_forward_efficiency_delta_proxy
+    - era_stability
+    - year_by_year_outlier_contribution
+    - fire_rate_guard
+
+hypotheses:
+  - id: H1_same_direction_reentry
+    type: primary_family
+    statement: >
+      At least one same-direction re-entry cell improves pre-2026 policy EV versus parent,
+      after booking the initial stopped trade, and survives BH-FDR, DSR, WFE, era stability,
+      and fire-rate guards.
+  - id: H2_execution_family_comparison
+    type: family_rank
+    statement: >
+      Execution changes, filters, throttles, and reversal variants must be ranked only after
+      canonical policy accounting. Selected child-trade mean is not admissible evidence.
+  - id: H3_2026_monitoring_only
+    type: diagnostic_only
+    statement: >
+      2026 rows may be reported for descriptive monitoring but cannot change ranking,
+      thresholds, candidate order, or verdicts.
+
+promotion_rule:
+  continue_if_all:
+    - modified_policy_ev_is_gt_parent_ev_is
+    - delta_ev_is_gt_zero
+    - p_delta_is_lte_0.05
+    - bh_q_family_lte_0.05
+    - dsr_gte_0.95
+    - wfe_delta_proxy_gte_0.50
+    - era_stable_true
+    - fire_rate_guard_true
+  narrow_if:
+    - ev_positive_but_one_or_more_robustness_gates_fail
+  park_if:
+    - underpowered
+    - requires_new_data
+    - control_upgrade_not_implemented
+  kill_if:
+    - policy_ev_not_improved
+    - family_signal_fails_after_BH_FDR
+    - candidate_uses_banned_lookahead
+
+deliverables_locked:
+  - research/orb_execution_variants_v1.py
+  - tests/test_research/test_orb_execution_variants_v1.py
+  - docs/audit/results/2026-06-01-orb-execution-variants-v1.md
+  - docs/audit/results/2026-06-01-orb-execution-variants-v1-cells.csv
+
+output_contract:
+  per_candidate_fields:
+    - role
+    - measurable_trigger_rule
+    - parent_population
+    - original_parent_ev
+    - modified_policy_ev_including_first_loss
+    - delta_drawdown_tail_loss
+    - sample_size_and_date_span
+    - p_value
+    - BH_K
+    - DSR
+    - WFE
+    - era_stability
+    - 2026_descriptive_non_selection
+    - verdict
