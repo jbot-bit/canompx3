@@ -79,6 +79,12 @@ def test_flex_spec_and_tiers_match_verbatim():
     by_size = fsr["by_size"]
     assert by_size[25_000]["mll"] == 1_000.0 and by_size[25_000]["max_contracts_micro"] == 20
     assert by_size[50_000]["mll"] == 2_000.0 and by_size[50_000]["max_contracts_micro"] == 30
+    # Per-payout cap is SIZE-SPECIFIC, not flat: verbatim "Maximum payout per
+    # request" = $1,000 (25k) / $2,000 (50k). Guards against the flattening bug
+    # where a single top-level payout_cap_per_cycle=2000 overstated the 25k cap.
+    assert by_size[25_000]["payout_cap_per_cycle"] == 1_000.0
+    assert by_size[50_000]["payout_cap_per_cycle"] == 2_000.0
+    assert "payout_cap_per_cycle" not in fsr  # must NOT exist as a flat top-level value
 
     assert ACCOUNT_TIERS[("mffu_flex", 25_000)].max_dd == 1_000
     assert ACCOUNT_TIERS[("mffu_flex", 50_000)].max_dd == 2_000

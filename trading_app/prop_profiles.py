@@ -401,6 +401,8 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
                     "max_contracts_mini": 2,
                     "max_contracts_micro": 20,
                     "min_payout_amount": 250.0,
+                    # @verbatim (25k) "Maximum payout per request: $1,000"
+                    "payout_cap_per_cycle": 1_000.0,
                 },
                 50_000: {
                     "profit_target": 3_000.0,
@@ -408,12 +410,16 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
                     "max_contracts_mini": 3,
                     "max_contracts_micro": 30,
                     "min_payout_amount": 500.0,
+                    # @verbatim (50k) "Maximum payout per request: $2,000"
+                    "payout_cap_per_cycle": 2_000.0,
                 },
             },
             "mll_moves_to_after_first_payout": 100.0,
             "eval_consistency_rule": 0.50,  # evaluation stage only
             "payout_consistency_rule": None,  # "Consistency rule during payout stage: None"
-            "payout_cap_per_cycle": 2_000.0,
+            # payout_cap_per_cycle is SIZE-SPECIFIC (25k=$1,000, 50k=$2,000) and
+            # lives in by_size above — NOT a single flat value. See verbatim
+            # "Maximum payout per request" in mffu_flex_25k.md / mffu_flex_50k.md.
             "payout_pct_of_profits": 0.50,  # withdraw up to 50% of total profits per payout
             "max_sim_payouts": 5,
             "total_sim_payout_cap": 100_000.0,
@@ -424,7 +430,8 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         },
         notes=(
             "FLEX PLAN ($25k/$50k). EOD trailing, MLL→$100 fixed after first payout, 80/20, "
-            "$2K payout cap (50% of profits), 5 sim payouts ($100K total cap), 50% consistency "
+            "size-specific payout cap ($1K 25k / $2K 50k; 50% of profits), "
+            "5 sim payouts ($100K total cap), 50% consistency "
             "EVAL-ONLY, scaled contract ladder, $1K intraday soft pause, news allowed. "
             "Source: help.myfundedfutures.com Flex 25k/50k articles (scraped 2026-05-31)."
         ),
