@@ -82,6 +82,25 @@ if "%DECISION%"=="NEW" (
         echo [ERROR] git worktree add failed.
         endlocal & exit /b 4
     )
+    :: Per-worktree venv isolation (Stage 1, 2026-06-03). Each worktree gets its
+    :: OWN .venv so a peer's `uv sync` can never strip this tree's dev group.
+    :: uv resolves a RELATIVE .venv from the workspace root (the worktree), so a
+    :: bare `uv sync` from inside !WTPATH! with UV_PROJECT_ENVIRONMENT UNSET makes
+    :: an isolated env. Never use an absolute path — uv overwrites it per-project.
+    :: Doctrine: .claude/rules/worktree-venv-isolation.md
+    where uv >nul 2>&1
+    if errorlevel 1 (
+        echo [WARN] 'uv' not on PATH — skipping isolated venv bootstrap; worktree shares canonical venv.
+    ) else (
+        echo Bootstrapping isolated venv in !WTPATH!\.venv ...
+        set "UV_PROJECT_ENVIRONMENT="
+        pushd "!WTPATH!"
+        uv sync --locked --group dev
+        if errorlevel 1 (
+            echo [WARN] isolated venv bootstrap failed — worktree falls back to shared canonical venv.
+        )
+        popd
+    )
 )
 
 :: --- launch Claude in the worktree (guards fire normally) ------------------

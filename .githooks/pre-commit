@@ -140,11 +140,12 @@ except Exception:
 fi
 
 # Quick venv health — catches dev deps wiped by interrupted uv sync.
-# Worktrees commonly have NO local .venv and instead share the canonical
-# venv at the project root (e.g. ../canompx3/.venv). Probe SCRIPT_DIR
-# first (normal case), then the canonical sibling (worktree case), then
-# fall back to PATH `python` (last resort — only if dev deps are
-# importable there).
+# Worktrees created since 2026-06-03 get their OWN isolated .venv (bootstrapped
+# by new_session.sh / START_WORKTREE.bat) so a peer's `uv sync` cannot strip
+# this tree's dev group — see .claude/rules/worktree-venv-isolation.md. The
+# probe below therefore prefers SCRIPT_DIR's local venv first (isolated case),
+# then the canonical sibling (legacy shared-venv worktrees that predate
+# isolation), then PATH `python` (last resort — only if dev deps importable).
 _dev_dep_check() {
     local py="$1"
     [ -x "$py" ] || return 1
