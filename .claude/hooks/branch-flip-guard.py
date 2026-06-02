@@ -63,7 +63,13 @@ def main() -> None:
     if not any(op in command for op in branch_ops):
         sys.exit(0)
 
-    git_dir = _git_dir()
+    # Scope the guard to the worktree the Bash command actually ran in, NOT
+    # the hook process's cwd (always the main checkout, per the hardcoded
+    # settings.json command). A peer flipping the main checkout's branch must
+    # not false-fire against an isolated worktree whose lock says otherwise.
+    cwd = _branch_state.invoking_cwd(event)
+
+    git_dir = _git_dir(cwd)
     if git_dir is None:
         sys.exit(0)  # fail-safe: not in a git repo -> pass
 
@@ -75,7 +81,7 @@ def main() -> None:
     if not branch_at_start:
         sys.exit(0)  # fail-safe: corrupted/empty lock -> pass
 
-    current = _current_branch()
+    current = _current_branch(cwd)
     if current is None:
         sys.exit(0)  # fail-safe: detached HEAD / git failure -> pass
 

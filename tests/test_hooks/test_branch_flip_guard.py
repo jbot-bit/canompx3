@@ -71,7 +71,7 @@ class TestBranchFlipGuard:
         _init_git(tmp_path)
         event = _make_event(command="git checkout feature")
 
-        def fake_git_dir():
+        def fake_git_dir(cwd=None):
             return tmp_path / ".git"
 
         monkeypatch.setattr(hook, "_git_dir", fake_git_dir)
@@ -87,7 +87,7 @@ class TestBranchFlipGuard:
         (git_dir / ".claude.pid").write_text("not json", encoding="utf-8")
         event = _make_event(command="git checkout feature")
 
-        def fake_git_dir():
+        def fake_git_dir(cwd=None):
             return git_dir
 
         monkeypatch.setattr(hook, "_git_dir", fake_git_dir)
@@ -103,10 +103,10 @@ class TestBranchFlipGuard:
         _write_lock(git_dir, "main")
         event = _make_event(command="git checkout main")
 
-        def fake_git_dir():
+        def fake_git_dir(cwd=None):
             return git_dir
 
-        def fake_current_branch():
+        def fake_current_branch(cwd=None):
             return "main"
 
         monkeypatch.setattr(hook, "_git_dir", fake_git_dir)
@@ -123,10 +123,10 @@ class TestBranchFlipGuard:
         _write_lock(git_dir, "main")
         event = _make_event(command="git checkout feature/new-thing")
 
-        def fake_git_dir():
+        def fake_git_dir(cwd=None):
             return git_dir
 
-        def fake_current_branch():
+        def fake_current_branch(cwd=None):
             return "feature/new-thing"
 
         monkeypatch.setattr(hook, "_git_dir", fake_git_dir)
@@ -139,3 +139,86 @@ class TestBranchFlipGuard:
         assert "BLOCKED" in captured.err
         assert "main" in captured.err
         assert "feature/new-thing" in captured.err
+
+
+class TestCwdScoping:
+    """F4-A regression: the guard must inspect the worktree the Bash command
+    actually ran in (payload `cwd`), NOT the hook process's cwd (always the
+    main checkout per the hardcoded settings.json command). Before the fix, a
+    peer flipping the main checkout's branch false-fired ~20x/session against
+    every isolated worktree.
+    """
+
+    def _make_worktree(self, tmp_path: Path) -> tuple[Path, Path, ModuleType]:
+        """Build a real repo + a linked worktree on a different branch."""
+        hook = _load_hook()
+        main = tmp_path / "main"
+        main.mkdir()
+        _init_git(main, branch="main")
+        (main / "f.txt").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=main, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+            cwd=main,
+            check=True,
+            capture_output=True,
+        )
+        wt = tmp_path / "wt"
+        subprocess.run(
+            ["git", "worktree", "add", "-q", "-b", "session/work", str(wt)],
+            cwd=main,
+            check=True,
+            capture_output=True,
+        )
+        # Simulate a peer flipping the MAIN checkout to another branch.
+        subprocess.run(
+            ["git", "checkout", "-q", "-b", "codex/peer-flip"],
+            cwd=main,
+            check=True,
+            capture_output=True,
+        )
+        return main, wt, hook
+
+    def test_no_false_fire_in_isolated_worktree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        main, wt, hook = self._make_worktree(tmp_path)
+        wt_gitdir = hook._branch_state.git_dir(str(wt))
+        assert wt_gitdir is not None
+        # Lock in the WORKTREE records its OWN branch — no real flip here.
+        (wt_gitdir / ".claude.pid").write_text(
+            json.dumps({"pid": 1, "branch_at_start": "session/work"}),
+            encoding="utf-8",
+        )
+        # Hook process cwd is the MAIN checkout (the false-fire trigger).
+        monkeypatch.chdir(main)
+        event = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git worktree list"},
+            "cwd": str(wt),
+        }
+        monkeypatch.setattr("sys.stdin", StringIO(json.dumps(event)))
+        with pytest.raises(SystemExit) as exc:
+            hook.main()
+        # cwd-scoped: worktree branch == lock branch -> exit 0 (no false fire).
+        assert exc.value.code == 0
+
+    def test_real_flip_in_worktree_still_blocks(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+        main, wt, hook = self._make_worktree(tmp_path)
+        wt_gitdir = hook._branch_state.git_dir(str(wt))
+        assert wt_gitdir is not None
+        # Lock says the worktree STARTED on a different branch -> a REAL flip.
+        (wt_gitdir / ".claude.pid").write_text(
+            json.dumps({"pid": 1, "branch_at_start": "session/original"}),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(main)
+        event = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git checkout session/work"},
+            "cwd": str(wt),
+        }
+        monkeypatch.setattr("sys.stdin", StringIO(json.dumps(event)))
+        with pytest.raises(SystemExit) as exc:
+            hook.main()
+        # Real same-worktree flip is still caught.
+        assert exc.value.code == 2
+        assert "session/original" in capsys.readouterr().err

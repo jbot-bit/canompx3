@@ -59,7 +59,12 @@ def main() -> None:
     if event.get("tool_name", "") != "Bash":
         sys.exit(0)
 
-    git_dir = _git_dir()
+    # Scope to the worktree the Bash command ran in, not the hook process's
+    # cwd (always the main checkout). Advisory-only, but a cross-worktree
+    # mismatch would inject a false "SHA rewritten" warning every turn.
+    cwd = _branch_state.invoking_cwd(event)
+
+    git_dir = _git_dir(cwd)
     if git_dir is None:
         sys.exit(0)
 
@@ -72,8 +77,8 @@ def main() -> None:
     if not branch_at_start or not head_at_start:
         sys.exit(0)
 
-    current_branch = _current_branch()
-    current_head = _current_head_sha()
+    current_branch = _current_branch(cwd)
+    current_head = _current_head_sha(cwd)
     if current_branch is None or current_head is None:
         sys.exit(0)
 
