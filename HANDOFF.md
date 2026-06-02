@@ -80,11 +80,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-02
-- **Commit:** 52b698c7 — @ fix(dashboard): release runningProfile latch when session is dead/stale
-- **Files changed:** 4 files
-  - `docs/runtime/stages/2026-06-02-stale-session-golive-latch-fix.md`
+- **Commit:** 1c581c65 — fix(live): auto-expire orphaned handoff so it never blocks start buttons
+- **Files changed:** 2 files
   - `tests/test_trading_app/test_bot_dashboard.py`
-  - `trading_app/live/bot_dashboard.html`
   - `trading_app/live/bot_dashboard.py`
 
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
