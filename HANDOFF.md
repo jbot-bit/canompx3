@@ -78,12 +78,11 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Codex
 - **Date:** 2026-06-02
-- **Commit:** 1c581c65 — fix(live): auto-expire orphaned handoff so it never blocks start buttons
-- **Files changed:** 2 files
-  - `tests/test_trading_app/test_bot_dashboard.py`
-  - `trading_app/live/bot_dashboard.py`
+- **Commit:** 98729538 — chore(vscode): hide generated workspace noise
+- **Files changed:** 1 files
+  - `.vscode/settings.json`
 
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
 - **Tool:** Codex
