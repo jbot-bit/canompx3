@@ -80,12 +80,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-02
-- **Commit:** 52b698c7 — @ fix(dashboard): release runningProfile latch when session is dead/stale
-- **Files changed:** 4 files
-  - `docs/runtime/stages/2026-06-02-stale-session-golive-latch-fix.md`
-  - `tests/test_trading_app/test_bot_dashboard.py`
-  - `trading_app/live/bot_dashboard.html`
-  - `trading_app/live/bot_dashboard.py`
+- **Commit:** 0c04bfea — @ docs(audit): London ovn>=80 reopen-decision memo — UNVERIFIED, shadow-pending
+- **Files changed:** 1 files
+  - `docs/audit/results/2026-06-02-london-ovn80-reopen-decision-memo.md`
 
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
 - **Tool:** Codex
