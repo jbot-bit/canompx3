@@ -1,0 +1,152 @@
+metadata:
+  name: mnq-single-leg-account-fit-replacement-v1
+  created_by: Codex
+  date_locked: "2026-06-02T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  base_commit_sha: "207734a0b58efc16dfc73cecff09352df824fd7b"
+  research_question_type: conditional_role
+  theory_grant: false
+  testing_mode: family
+  total_expected_trials: 15
+  notes: >
+    Account-fit replacement follow-up after the MNQ two-leg capital-fit and
+    risk-overlay paths failed topstep_50k_mnq_auto constraints. This is an
+    allocator replacement audit over a locked single-leg universe, not a new
+    alpha discovery scan and not a deployment approval.
+
+execution:
+  entrypoint: research/mnq_single_leg_account_fit_replacement_v1.py
+  canonical_inputs:
+    - orb_outcomes
+    - daily_features
+    - trading_app.prop_profiles
+    - trading_app.topstep_scaling_plan
+    - docs/runtime/lane_allocation/topstep_50k_mnq_auto.json
+  output_paths:
+    - docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.md
+    - docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.csv
+
+hypotheses:
+  - id: H1
+    role:
+      kind: allocator
+      parent: topstep_50k_mnq_auto_current_three_lane_book
+      comparator: current_three_lane_book
+      primary_metric: annual_dollars_per_max_drawdown
+      promotion_target: ACCOUNT_FIT_CANDIDATE_ONLY
+      profile_id: topstep_50k_mnq_auto
+    parent_population:
+      symbol: MNQ
+      incumbent_lanes:
+        - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
+        - MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15
+        - MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08
+      replacement_candidates:
+        - MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10
+        - MNQ_US_DATA_1000_O15_E2_RR1_NO_FILTER
+        - MNQ_US_DATA_1000_O15_E2_RR1_5_NO_FILTER
+        - MNQ_US_DATA_1000_O15_E2_RR2_NO_FILTER
+        - MNQ_CME_PRECLOSE_O15_E2_RR2_COST_LT10
+    expected_trial_count: 15
+    selection_rule: >
+      Replace exactly one incumbent lane at a time with one locked candidate
+      lane. Rank replacement scenarios after account gates by 90-day survival,
+      daily-loss breach rate, trailing-DD breach rate, annual dollars per max
+      drawdown, expected R after costs, and Chordia/SR/OOS status.
+    verdict_policy:
+      pass: account-safe and improves the incumbent book after costs with no missing research-status gates
+      continue: account-safe and improves the incumbent book after costs but still research-only
+      park: underpowered or ambiguous account/research-status evidence
+      kill: account unsafe, non-positive economics, or worse than incumbent
+
+controls:
+  frozen_monitoring_window: "2026-01-01+"
+  no_2026_tuning: true
+  no_live_deployment: true
+  scratch_policy: coalesce pnl_r, ts_pnl_r, then zero; report pnl NULL counts and never drop pnl NULL rows silently
+  hard_bans:
+    - London
+    - broad scans
+    - Crabel
+    - NR7
+    - Stretch
+    - value_area_without_real_VAH_VAL_POC
+    - two_leg_overlay_rescue
+    - relaxed_Topstep_gates
+    - OOS_tuning
+    - post_hoc_filter_addition
+  monte_carlo:
+    horizon_days: 90
+    n_paths: 10000
+    seed: 20260602
+
+account_profile:
+  profile_id: topstep_50k_mnq_auto
+  firm: Topstep
+  account_size_dollars: 50000
+  daily_loss_limit_dollars: 450
+  max_loss_limit_dollars: 2000
+  drawdown_budget_fraction: 0.80
+  max_allowed_backtest_drawdown_dollars: 1600
+  instrument: MNQ
+  sizing_policy: one_contract_per_replacement_lane
+
+candidate_universe:
+  total_primary_trials: 15
+  primary_unit: replacement_scenario
+  candidates:
+    - id: MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10
+      instrument: MNQ
+      session: NYSE_OPEN
+      orb_minutes: 15
+      entry_model: E2
+      rr: 2.0
+      filter: COST_LT10
+    - id: MNQ_US_DATA_1000_O15_E2_RR1_NO_FILTER
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      entry_model: E2
+      rr: 1.0
+      filter: NO_FILTER
+    - id: MNQ_US_DATA_1000_O15_E2_RR1_5_NO_FILTER
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      entry_model: E2
+      rr: 1.5
+      filter: NO_FILTER
+    - id: MNQ_US_DATA_1000_O15_E2_RR2_NO_FILTER
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      entry_model: E2
+      rr: 2.0
+      filter: NO_FILTER
+    - id: MNQ_CME_PRECLOSE_O15_E2_RR2_COST_LT10
+      instrument: MNQ
+      session: CME_PRECLOSE
+      orb_minutes: 15
+      entry_model: E2
+      rr: 2.0
+      filter: COST_LT10
+
+hard_gates:
+  account_survival:
+    monte_carlo_paths: 10000
+    horizon_trading_days: 90
+    minimum_survival_rate: 0.70
+  drawdown:
+    max_drawdown_dollars_lte: 1600
+    trailing_drawdown_breach_rate_eq: 0
+  daily_loss:
+    daily_loss_breach_rate_eq: 0
+    historical_daily_loss_breaches_eq: 0
+  economics:
+    annual_dollars_gt: 0
+    expected_r_after_costs_gt: 0
+  research_state:
+    chordia_hurdle_without_committed_theory_t_stat: 3.79
+    theory_extract_committed: false
+    oos_tuning_allowed: false
+    forward_oos_required_for_deployment: true
