@@ -422,6 +422,53 @@ def _check_notifications(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, f"FAILED: {e}")
 
 
+def _pid_is_alive(pid: int) -> bool | None:
+    """Best-effort liveness for a journal-lock holder PID.
+
+    Returns True (alive), False (provably dead), or None (cannot determine).
+    Self-contained on purpose — this mirrors the canonical
+    ``scripts/tools/worktree_guard.py::_pid_is_alive`` logic but is NOT imported
+    from it, so the live launcher does not couple to that module's lease
+    internals / ``filelock`` dependency for a one-shot diagnostic probe.
+
+    Windows is the load-bearing case: ``os.kill(pid, 0)`` does not reliably
+    raise for a dead PID there, so probe via ``OpenProcess`` + exit code
+    (STILL_ACTIVE == 259 means alive). We only have a bare PID from DuckDB's
+    error text (no creation time), so PID reuse cannot be ruled out — "alive"
+    means "a process with this PID exists", not "definitely the lock holder".
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            STILL_ACTIVE = 259
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not handle:
+                return False  # cannot open → not found / gone
+            try:
+                code = ctypes.c_ulong()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                    return None
+                return code.value == STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:
+            return None
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, owned by another user
+    except OSError:
+        return None
+
+
 def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
     """Trade journal health"""
     # session_orchestrator only enforces journal health when mode == "live", so a
@@ -436,10 +483,34 @@ def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
             return CheckResult(True, f"OK ({LIVE_JOURNAL_DB_PATH.name})")
         err = journal.last_error
         if isinstance(err, TradeJournalLockedError):
-            pid_part = f"PID {err.holder_pid}" if err.holder_pid is not None else "another process"
+            # The "lock" is a DuckDB writer lock held by a LIVE process, not a
+            # lockfile — there is nothing to "clear" if the holder is gone
+            # (DuckDB releases on holder exit). So diagnose the holder PID's
+            # liveness and tell the operator which action actually applies.
+            holder = err.holder_pid
+            if holder is None:
+                return CheckResult(
+                    False,
+                    "LOCKED by another process (PID unknown). "
+                    "Run: scripts/tools/stop_live.ps1 -NoPrompt to clear, then retry.",
+                )
+            alive = _pid_is_alive(holder)
+            if alive is True:
+                return CheckResult(
+                    False,
+                    f"LOCKED by live PID {holder}. "
+                    "Run: scripts/tools/stop_live.ps1 -NoPrompt to stop it, then retry.",
+                )
+            if alive is False:
+                return CheckResult(
+                    False,
+                    f"LOCKED by stale/dead PID {holder} (holder gone — DuckDB should release). "
+                    "Retry; if it persists, run: scripts/tools/stop_live.ps1 -NoPrompt.",
+                )
             return CheckResult(
                 False,
-                f"LOCKED by {pid_part}. Run: scripts/tools/stop_live.ps1 to clear, then retry.",
+                f"LOCKED by PID {holder} (liveness unknown). "
+                "Run: scripts/tools/stop_live.ps1 -NoPrompt to clear, then retry.",
             )
         return CheckResult(False, f"FAILED: TradeJournal could not open {LIVE_JOURNAL_DB_PATH}")
     except Exception as e:

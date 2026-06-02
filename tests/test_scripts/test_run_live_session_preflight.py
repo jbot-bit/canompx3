@@ -974,3 +974,111 @@ def test_no_hardcoded_self_test_stubs():
     # And the new probe functions must exist.
     assert "_probe_brackets" in src
     assert "_probe_fill_poller" in src
+
+
+# --- Journal-lock holder diagnostics (Stage 3 of live-launch hardening) ------
+# The journal "lock" is a DuckDB writer lock held by a LIVE process, not a
+# lockfile. So preflight cannot "clear" it; it diagnoses the holder PID's
+# liveness and tells the operator which action actually applies. These tests
+# pin the three report branches + the self-contained liveness probe.
+
+import os as _os
+
+from trading_app.live.trade_journal import TradeJournalLockedError
+
+
+def _journal_ctx():
+    """Minimal PreflightContext — _check_trade_journal ignores ctx, but the
+    dataclass requires these four fields."""
+    return rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
+
+
+def _locked_journal(holder_pid):
+    """A fake TradeJournal whose open failed with a lock held by holder_pid."""
+    err = TradeJournalLockedError(Path("live_journal.db"), holder_pid, "raw duckdb io error")
+    return SimpleNamespace(is_healthy=False, last_error=err)
+
+
+def _patch_locked(monkeypatch, holder_pid):
+    import trading_app.live.trade_journal as tj
+
+    monkeypatch.setattr(tj, "TradeJournal", lambda *a, **kw: _locked_journal(holder_pid))
+
+
+def test_journal_lock_live_holder_says_stop_live(monkeypatch):
+    """Holder PID is alive → tell the operator to stop it."""
+    _patch_locked(monkeypatch, 4242)
+    monkeypatch.setattr(rls, "_pid_is_alive", lambda pid: True)
+    result = rls._check_trade_journal(_journal_ctx())
+    assert result.passed is False
+    assert "live PID 4242" in result.message
+    assert "stop_live.ps1 -NoPrompt" in result.message
+
+
+def test_journal_lock_dead_holder_says_retry(monkeypatch):
+    """Holder PID is provably dead → DuckDB should release; advise retry."""
+    _patch_locked(monkeypatch, 81372)
+    monkeypatch.setattr(rls, "_pid_is_alive", lambda pid: False)
+    result = rls._check_trade_journal(_journal_ctx())
+    assert result.passed is False
+    assert "stale/dead PID 81372" in result.message
+    assert "Retry" in result.message
+
+
+def test_journal_lock_unknown_liveness_falls_back_to_stop_live(monkeypatch):
+    """Liveness cannot be determined → conservative stop_live advice."""
+    _patch_locked(monkeypatch, 999999)
+    monkeypatch.setattr(rls, "_pid_is_alive", lambda pid: None)
+    result = rls._check_trade_journal(_journal_ctx())
+    assert result.passed is False
+    assert "liveness unknown" in result.message
+    assert "stop_live.ps1 -NoPrompt" in result.message
+
+
+def test_journal_lock_no_holder_pid(monkeypatch):
+    """DuckDB did not name a PID (non-Windows / parse miss) → generic advice,
+    no liveness probe attempted."""
+    _patch_locked(monkeypatch, None)
+    # Probe must NOT be consulted when there is no PID.
+    monkeypatch.setattr(
+        rls, "_pid_is_alive", lambda pid: (_ for _ in ()).throw(AssertionError("probe called with no PID"))
+    )
+    result = rls._check_trade_journal(_journal_ctx())
+    assert result.passed is False
+    assert "PID unknown" in result.message
+    assert "stop_live.ps1 -NoPrompt" in result.message
+
+
+def test_journal_healthy_unaffected(monkeypatch):
+    """Regression: the healthy branch is untouched by the diagnostic change."""
+    import trading_app.live.trade_journal as tj
+
+    monkeypatch.setattr(tj, "TradeJournal", lambda *a, **kw: SimpleNamespace(is_healthy=True))
+    result = rls._check_trade_journal(_journal_ctx())
+    assert result.passed is True
+    assert result.message.startswith("OK (")
+
+
+def test_pid_is_alive_current_process_is_alive():
+    """The probe must report THIS process (guaranteed running) as alive."""
+    assert rls._pid_is_alive(_os.getpid()) is True
+
+
+def test_pid_is_alive_invalid_pid_is_none():
+    """Non-positive / non-int PIDs are undeterminable, not 'alive'."""
+    assert rls._pid_is_alive(0) is None
+    assert rls._pid_is_alive(-1) is None
+
+
+def test_pid_is_alive_dead_pid_is_false():
+    """A PID that is not running reports dead (not 'alive', not 'unknown').
+
+    Find an unused PID by probing upward from a high base; on both POSIX and
+    Windows the probe returns False for a never-allocated PID."""
+    candidate = None
+    for pid in range(2_000_111, 2_000_211):
+        if rls._pid_is_alive(pid) is False:
+            candidate = pid
+            break
+    assert candidate is not None, "expected at least one dead PID in the probe range"
+    assert rls._pid_is_alive(candidate) is False
