@@ -884,6 +884,84 @@ def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
     bot_dashboard._clear_handoff()
 
 
+def _stub_idle_runtime(monkeypatch):
+    """No session running, no locks, no refresh — the orphaned-handoff scenario."""
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "STOPPED",
+            "heartbeat_age_s": 9999.0,
+            "profile": None,
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    monkeypatch.setattr(bot_dashboard, "_journal_lock_status", lambda: {"locked": False, "detail": "ok"})
+    monkeypatch.setattr(bot_dashboard, "_instance_lock_status", lambda: {"locked": False, "locks": []})
+
+
+def test_handoff_snapshot_auto_expires_orphaned_ready_to_start(monkeypatch):
+    """A ready_to_start handoff with no session/locks, older than the staleness
+    floor, must auto-clear so it stops blocking the start buttons forever.
+
+    Regression: 2026-06-02 a prior-night ready_to_start handoff blocked the LIVE
+    button for 11h until a manual dashboard restart.
+    """
+    bot_dashboard._clear_handoff()
+    bot_dashboard._set_handoff("topstep_50k_mnq_auto", "live", "initial")
+    _stub_idle_runtime(monkeypatch)
+    # Backdate requested_at well past the staleness floor.
+    stale_iso = (
+        bot_dashboard.datetime.now(bot_dashboard.UTC)
+        - bot_dashboard.timedelta(seconds=bot_dashboard.HANDOFF_STALE_AFTER_S + 60)
+    ).isoformat()
+    with bot_dashboard._state_lock:
+        bot_dashboard._handoff_state["requested_at"] = stale_iso
+
+    snap = bot_dashboard._handoff_snapshot(data_summary={"status": "ok", "any_stale": False, "instruments": {}})
+    assert snap["active"] is False
+    assert snap["status"] == "idle"
+    assert bot_dashboard._handoff_state["active"] is False
+    bot_dashboard._clear_handoff()
+
+
+def test_handoff_snapshot_keeps_fresh_handoff(monkeypatch):
+    """A recent handoff (within the staleness floor) must NOT be auto-cleared."""
+    bot_dashboard._clear_handoff()
+    bot_dashboard._set_handoff("topstep_50k_mnq_auto", "live", "initial")
+    _stub_idle_runtime(monkeypatch)
+    fresh_iso = bot_dashboard.datetime.now(bot_dashboard.UTC).isoformat()
+    with bot_dashboard._state_lock:
+        bot_dashboard._handoff_state["requested_at"] = fresh_iso
+
+    snap = bot_dashboard._handoff_snapshot(data_summary={"status": "ok", "any_stale": False, "instruments": {}})
+    assert snap["active"] is True
+    assert snap["status"] == "ready_to_start"
+    bot_dashboard._clear_handoff()
+
+
+def test_handoff_snapshot_does_not_expire_when_locked(monkeypatch):
+    """An old handoff that is still mid-cleanup (locks held) is NOT orphaned —
+    a real shutdown is in flight, so it must be preserved, not cleared."""
+    bot_dashboard._clear_handoff()
+    bot_dashboard._set_handoff("topstep_50k_mnq_auto", "live", "initial")
+    _stub_idle_runtime(monkeypatch)
+    monkeypatch.setattr(bot_dashboard, "_journal_lock_status", lambda: {"locked": True, "detail": "held by pid 1234"})
+    stale_iso = (
+        bot_dashboard.datetime.now(bot_dashboard.UTC)
+        - bot_dashboard.timedelta(seconds=bot_dashboard.HANDOFF_STALE_AFTER_S + 60)
+    ).isoformat()
+    with bot_dashboard._state_lock:
+        bot_dashboard._handoff_state["requested_at"] = stale_iso
+
+    snap = bot_dashboard._handoff_snapshot(data_summary={"status": "ok", "any_stale": False, "instruments": {}})
+    assert snap["active"] is True  # preserved — cleanup in flight
+    assert snap["status"] == "waiting_cleanup"
+    bot_dashboard._clear_handoff()
+
+
 def test_preflight_helper_opens_no_duckdb_connection(monkeypatch):
     """Preflight self-test helper must not open any DuckDB connection.
 
@@ -1042,7 +1120,7 @@ def test_dashboard_live_pilot_copy_is_explicit_and_professional():
     assert "HOLD TO GO LIVE" in html
     assert 'id="btn-live-cta"' in html
     assert "function updateLiveCta()" in html
-    assert 'window.attachHoldToFireLive(btn, ring, btn, pilotAcct)' in html
+    assert "window.attachHoldToFireLive(btn, ring, btn, pilotAcct)" in html
     assert "resetHoldToFireButton(btn)" in html
     assert 'id="ops-strip"' in html
     assert 'id="ops-running"' in html

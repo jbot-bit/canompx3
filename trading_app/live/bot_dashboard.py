@@ -54,6 +54,16 @@ HEARTBEAT_STALE_AFTER_S = 120
 # and cheap; destroying a live session's state (300s) needs more certainty so a
 # briefly-unresponsive LIVE session (GC pause, slow tick) is never orphaned.
 SESSION_DEFINITELY_DEAD_AFTER_S = 300
+# A handoff that has reached a terminal-but-not-launched state (ready_to_start /
+# needs_refresh / waiting_cleanup) and has had NO backing session running for
+# longer than this is orphaned — the launch it was prepared for never happened
+# (operator walked away, dashboard outlived the attempt). Auto-clear it so it
+# stops blocking start_signal/start_demo/start_live forever.
+# Rationale: 30 min (1800s) is well past any legitimate cleanup→refresh→launch
+# cycle (each stage is seconds-to-low-minutes) but short enough that a stuck
+# handoff never survives to the next trading day. n=1: 2026-06-02 a ready_to_start
+# handoff from the prior night blocked the LIVE button 11h until manual restart.
+HANDOFF_STALE_AFTER_S = 1800
 LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto"
 LIVE_PILOT_INSTRUMENT = "MNQ"
 LIVE_PILOT_COPIES = 1
@@ -574,6 +584,30 @@ def _handoff_snapshot(
     refresh = _refresh_snapshot()
     journal = _journal_lock_status()
     instance_locks = _instance_lock_status()
+
+    # Auto-expire an orphaned handoff: prepared for a launch that never happened
+    # and now blocking the start buttons forever. Only when nothing is running and
+    # no runtime locks are held (so we never clear a handoff that is legitimately
+    # mid-cleanup) AND it is older than HANDOFF_STALE_AFTER_S. The "stopping" status
+    # is exempt — that means a session IS actively shutting down for the handoff.
+    if not session["running"] and not journal["locked"] and not instance_locks["locked"]:
+        with _state_lock:
+            requested_iso = _handoff_state.get("requested_at")
+        if requested_iso:
+            try:
+                age_s = (datetime.now(UTC) - datetime.fromisoformat(str(requested_iso))).total_seconds()
+            except (TypeError, ValueError):
+                age_s = None
+            if age_s is not None and age_s > HANDOFF_STALE_AFTER_S:
+                log.info(
+                    "Clearing orphaned handoff (age=%.0fs > %ds, no session/locks): %s -> %s",
+                    age_s,
+                    HANDOFF_STALE_AFTER_S,
+                    target_profile,
+                    target_mode,
+                )
+                _clear_handoff()
+                return {"active": False, "status": "idle", "reason": "", "action": None}
 
     if session["running"]:
         status = "stopping"
