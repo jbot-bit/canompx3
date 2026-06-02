@@ -1,0 +1,319 @@
+metadata:
+  name: mnq-single-leg-account-fit-replacement-v1
+  created_by: Codex
+  date_locked: "2026-06-02T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  base_commit_sha: "207734a0b58efc16dfc73cecff09352df824fd7b"
+  research_question_type: conditional_role
+  theory_grant: false
+  testing_mode: family
+  total_expected_trials: 15
+  notes: >
+    Account-fit replacement follow-up after the MNQ two-leg capital-fit and
+    risk-overlay paths failed topstep_50k_mnq_auto constraints. This is an
+    allocator replacement audit over a locked single-leg universe, not a new
+    alpha discovery scan and not a deployment approval.
+
+execution:
+  entrypoint: research/mnq_single_leg_account_fit_replacement_v1.py
+  canonical_inputs:
+    - orb_outcomes
+    - daily_features
+    - trading_app.prop_profiles
+    - trading_app.topstep_scaling_plan
+    - docs/runtime/lane_allocation/topstep_50k_mnq_auto.json
+  output_paths:
+    - docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.md
+    - docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.csv
+
+hypotheses:
+  - id: H1
+    role:
+      kind: allocator
+      parent: topstep_50k_mnq_auto_current_three_lane_book
+      comparator: current_three_lane_book
+      primary_metric: annual_dollars_per_max_drawdown
+      promotion_target: ACCOUNT_FIT_CANDIDATE_ONLY
+      profile_id: topstep_50k_mnq_auto
+    parent_population:
+      symbol: MNQ
+      incumbent_lanes:
+        - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
+        - MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15
+        - MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08
+      replacement_candidates:
+        - MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10
+        - MNQ_US_DATA_1000_O15_E2_RR1_NO_FILTER
+        - MNQ_US_DATA_1000_O15_E2_RR1_5_NO_FILTER
+        - MNQ_US_DATA_1000_O15_E2_RR2_NO_FILTER
+        - MNQ_CME_PRECLOSE_O15_E2_RR2_COST_LT10
+    expected_trial_count: 15
+    selection_rule: >
+      Replace exactly one incumbent lane at a time with one locked candidate
+      lane. Rank replacement scenarios after account gates by 90-day survival,
+      daily-loss breach rate, trailing-DD breach rate, annual dollars per max
+      drawdown, expected R after costs, and Chordia/SR/OOS status.
+    verdict_policy:
+      continue: exactly one replacement scenario clears every hard gate and beats the incumbent book on annual_dollars_per_max_drawdown
+      park: account-fit improvement exists but Chordia, SR, OOS, canonical implementation, or procedural evidence is missing
+      kill: all replacement scenarios fail account gates, economics, banned-evidence checks, or incumbent improvement
+
+controls:
+  frozen_monitoring_window: "2026-01-01+"
+  no_2026_tuning: true
+  no_live_deployment: true
+  scratch_policy: coalesce pnl_r, ts_pnl_r, then zero; report pnl NULL counts and never drop pnl NULL rows silently
+  hard_bans:
+    - London
+    - broad scans
+    - Crabel
+    - NR7
+    - Stretch
+    - value_area_without_real_VAH_VAL_POC
+    - two_leg_overlay_rescue
+    - relaxed_Topstep_gates
+    - OOS_tuning
+    - post_hoc_filter_addition
+  monte_carlo:
+    horizon_days: 90
+    n_paths: 10000
+    seed: 20260602
+
+id: 2026-06-02-mnq-single-leg-account-fit-replacement-v1
+title: MNQ single-leg account-fit replacement audit for topstep_50k_mnq_auto
+date_locked: 2026-06-02
+status: PRE_REGISTERED
+owner: codex
+base_commit_sha: 207734a0b58efc16dfc73cecff09352df824fd7b
+
+purpose: >
+  Test whether exactly one bounded MNQ single-leg candidate can improve the
+  active topstep_50k_mnq_auto account-fit profile without using two-leg rescue,
+  broad scans, relaxed prop gates, OOS tuning, London, Crabel/NR7/Stretch, or
+  value-area shortcuts.
+
+research_question_type: deployment_readiness_account_fit
+decision_role: allocator_replacement
+status_ceiling: ACCOUNT_FIT_CANDIDATE_ONLY
+deployment_claim_allowed: false
+
+source_of_truth:
+  canonical_tables:
+    - orb_outcomes
+    - daily_features
+  runtime_surfaces:
+    - trading_app/prop_profiles.py
+    - docs/runtime/lane_allocation/topstep_50k_mnq_auto.json
+  required_prior_evidence:
+    - docs/audit/results/2026-06-01-mnq-open-book-validation-v1.md
+    - docs/audit/results/2026-06-01-mnq-usdata-rr-leg-choice-v1.md
+    - docs/audit/results/2026-06-01-mnq-usdata-capital-fit-v1.md
+    - docs/audit/results/2026-06-01-mnq-open-book-risk-overlay-v1.md
+    - RESEARCH_RULES.md
+    - docs/institutional/pre_registered_criteria.md
+    - docs/institutional/conditional-edge-framework.md
+  literature_controls:
+    - docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md
+    - docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
+    - docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md
+    - docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md
+
+truth_check_summary:
+  measured_bottleneck: >
+    Prior two-leg MNQ open-book variants and risk overlays failed active account
+    constraints; the documented next research move was lower-risk lane
+    replacement, not additional sizing or overlay rescue.
+  measured_incumbent_state: >
+    The active topstep_50k_mnq_auto allocator surface currently contains three
+    MNQ deploy lanes; this audit does not assume those lanes fail, and uses them
+    only as the incumbent account baseline.
+  unsupported_claims:
+    - Any candidate is live deployable before this audit.
+    - Any candidate has solved Chordia, SR, OOS, and account-death gates.
+    - Any 2026 descriptive behavior may be used for candidate selection.
+
+account_profile:
+  profile_id: topstep_50k_mnq_auto
+  firm: Topstep
+  account_size_dollars: 50000
+  daily_loss_limit_dollars: 450
+  max_loss_limit_dollars: 2000
+  drawdown_budget_fraction: 0.80
+  max_allowed_backtest_drawdown_dollars: 1600
+  copies: 1
+  instrument: MNQ
+  sizing_policy: one_contract_per_candidate_lane
+  no_relaxed_gates: true
+
+incumbent_book:
+  source: docs/runtime/lane_allocation/topstep_50k_mnq_auto.json
+  lanes:
+    - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
+    - MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15
+    - MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08
+
+candidate_universe:
+  total_primary_trials: 15
+  primary_unit: replacement_scenario
+  replacement_rule: >
+    For each candidate below, replace exactly one incumbent lane at a time in
+    the current three-lane book. The baseline current book is a comparator, not
+    a trial. Standalone one-lane diagnostics may be reported but are not
+    selectable outcomes.
+  candidates:
+    - id: MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10
+      instrument: MNQ
+      session: NYSE_OPEN
+      orb_minutes: 15
+      entry_model: E2
+      rr: 2.0
+      filter: COST_LT10
+      mechanism: post-cash-open continuation after low execution-cost opening range
+      prior_status: NARROW_RESEARCH_ONLY
+    - id: MNQ_US_DATA_1000_O15_E2_RR1_NO_FILTER
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      entry_model: E2
+      rr: 1.0
+      filter: NO_FILTER
+      mechanism: scheduled 10:00 US data flow continuation with lower reward-to-risk drawdown load
+      prior_status: NARROW_RESEARCH_ONLY
+    - id: MNQ_US_DATA_1000_O15_E2_RR1_5_NO_FILTER
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      entry_model: E2
+      rr: 1.5
+      filter: NO_FILTER
+      mechanism: scheduled 10:00 US data flow continuation with intermediate reward-to-risk drawdown load
+      prior_status: NARROW_RESEARCH_ONLY
+    - id: MNQ_US_DATA_1000_O15_E2_RR2_NO_FILTER
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      entry_model: E2
+      rr: 2.0
+      filter: NO_FILTER
+      mechanism: scheduled 10:00 US data flow continuation with higher reward-to-risk convexity
+      prior_status: NARROW_RESEARCH_ONLY
+    - id: MNQ_CME_PRECLOSE_O15_E2_RR2_COST_LT10
+      instrument: MNQ
+      session: CME_PRECLOSE
+      orb_minutes: 15
+      entry_model: E2
+      rr: 2.0
+      filter: COST_LT10
+      mechanism: end-of-session positioning and low-cost continuation before CME close
+      prior_status: NARROW_RESEARCH_ONLY
+
+k_budget:
+  primary_trials: 15
+  candidate_count: 5
+  incumbent_slots_replaced_per_candidate: 3
+  informational_standalone_diagnostics: 5
+  no_additional_candidates_allowed: true
+  no_parameter_rescue_allowed: true
+  inherited_selection_bias_policy: >
+    This audit does not reset alpha-discovery K. It may only assess account fit
+    for the locked candidate universe. Chordia, DSR, SR, and OOS states must be
+    reported as inherited or measured; missing clearance caps the verdict at
+    PARK.
+
+pre_entry_safety:
+  allowed_features:
+    - session definition
+    - instrument
+    - orb_minutes
+    - entry_model
+    - reward_to_risk
+    - pre-entry cost filter where explicitly locked
+  banned_features:
+    - realized 2026 performance used for selection
+    - same-day post-entry outcomes
+    - derived value-area proxies
+    - any filter not present in the locked candidate definition
+
+primary_metrics:
+  ranking_order:
+    - ninety_day_account_survival
+    - daily_loss_breach_rate
+    - trailing_drawdown_breach_rate
+    - annual_dollars_per_max_drawdown
+    - expected_r_after_costs
+    - chordia_sr_oos_status
+  required_report_columns:
+    - scenario_id
+    - replaced_incumbent_lane
+    - candidate_lane
+    - ninety_day_account_survival
+    - daily_loss_breach_rate
+    - trailing_drawdown_breach_rate
+    - annual_dollars
+    - max_drawdown_dollars
+    - annual_dollars_per_max_drawdown
+    - expected_r_after_costs
+    - chordia_verdict
+    - sr_regime_status
+    - oos_status
+    - verdict
+
+hard_gates:
+  account_survival:
+    monte_carlo_paths: 10000
+    horizon_trading_days: 90
+    minimum_survival_rate: 0.70
+  drawdown:
+    max_drawdown_dollars_lte: 1600
+    trailing_drawdown_breach_rate_eq: 0
+  daily_loss:
+    daily_loss_breach_rate_eq: 0
+  economics:
+    annual_dollars_gt: 0
+    expected_r_after_costs_gt: 0
+  research_state:
+    chordia_hurdle_without_committed_theory_t_stat: 3.79
+    chordia_hurdle_with_committed_theory_t_stat: 3.00
+    theory_extract_committed: false
+    oos_tuning_allowed: false
+    forward_oos_required_for_deployment: true
+
+decision_rules:
+  continue: >
+    Exactly one replacement scenario passes every hard gate, beats the incumbent
+    book on annual_dollars_per_max_drawdown, and has no hard-fail Chordia, SR,
+    or OOS status. CONTINUE means account-fit candidate only, not live
+    deployment.
+  park: >
+    At least one replacement scenario passes account gates but Chordia, SR, OOS,
+    canonical implementation, or procedural readiness evidence is missing or
+    mixed. No deployment action may follow from PARK.
+  kill: >
+    All replacement scenarios fail account gates, fail economics, depend on
+    banned evidence, or fail to improve the incumbent book on the locked primary
+    ranking metric.
+
+hard_bans:
+  - London
+  - broad scans
+  - Crabel
+  - NR7
+  - Stretch
+  - value_area_without_real_VAH_VAL_POC
+  - two_leg_overlay_rescue
+  - relaxed_Topstep_gates
+  - OOS_tuning
+  - post_hoc_filter_addition
+
+expected_artifacts:
+  result_markdown: docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.md
+  result_csv: docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.csv
+  runner: research/mnq_single_leg_account_fit_replacement_v1.py
+  tests:
+    - tests/test_research/test_mnq_single_leg_account_fit_replacement_v1.py
+
+operator_note: >
+  If this audit returns PARK or KILL, the next action is not to widen the MNQ
+  search. The next action is to clear the specific missing procedural artifact
+  or route capital work to stronger non-London/non-two-leg candidates already
+  passing research gates.

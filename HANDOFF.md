@@ -78,14 +78,17 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Codex + concurrent Claude Code
-- **Date:** 2026-06-02
-- **Commit:** d4c1dd65 — fix(prop): MFFU Flex per-payout cap is size-specific (25k=1000, 50k=2000)
-- **Summary:** Corrected `mffu_flex` profile data so Flex payout caps live under `firm_specific_rules.by_size`: 25k = `$1,000`, 50k = `$2,000`, matching the local 2026-05-31 MFFU snapshots. Removed the old flat top-level `payout_cap_per_cycle=2000` from the Flex spec because it overstated the 25k request cap.
-- **Verification:** `python -m pytest tests/test_prop_profiles_mffu.py tests/test_trading_app/test_prop_firm_policies.py -q` passed 13 tests. Scoped ruff and `git diff --cached --check` passed before the commit. Fast drift was not clean locally because the unrelated `MCP servers answer initialize (sidecar dep-rot guard)` check failed once.
-- **Files changed:** 2 files
-  - `tests/test_prop_profiles_mffu.py`
-  - `trading_app/prop_profiles.py`
+- **Tool:** Claude Code
+- **Date:** 2026-06-03
+- **Commit:** 8d319551 — @ harden(worktree): per-worktree venv isolation (Stage 1)
+- **Summary:** Added per-worktree virtualenv isolation for newly-created worktrees. `scripts/tools/new_session.sh` and `START_WORKTREE.bat` now bootstrap a worktree-local `.venv` with `uv sync --locked --group dev` so one worktree's sync cannot strip another worktree's dev dependencies. `.githooks/pre-commit` keeps the existing local-venv-first probe with canonical sibling fallback for legacy worktrees. Added doctrine in `.claude/rules/worktree-venv-isolation.md` and stage record `docs/runtime/stages/2026-06-03-per-worktree-venv-isolation.md`.
+- **Verification:** `python -m pytest tests/test_tools/test_git_hooks_env.py -q` passed 3 tests. `git diff --check HEAD~1..HEAD` passed. `bash -n .githooks/pre-commit scripts/tools/new_session.sh` should be rerun before push if this note is committed after the syntax gate.
+- **Files changed:** 5 files
+  - `.claude/rules/worktree-venv-isolation.md`
+  - `.githooks/pre-commit`
+  - `START_WORKTREE.bat`
+  - `docs/runtime/stages/2026-06-03-per-worktree-venv-isolation.md`
+  - `scripts/tools/new_session.sh`
 
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
 - **Tool:** Codex
