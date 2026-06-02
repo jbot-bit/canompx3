@@ -426,3 +426,117 @@ def test_fresh_peer_beat_surfaces_in_status(repo: Path):
     snap = wg.status(repo)
     assert snap["fresh_peer_heartbeat"] is True
     assert snap["peer_live"] is True
+
+
+# ---------------------------------------------------------------------------
+# Blocking-window vs observability-window split (n=1 false-block 2026-06-02).
+# A session that ended <10min ago (the `/clear` restart) left a beat the 600s
+# window counted as a "live peer", false-blocking the fresh restart against its
+# own dead predecessor. The blocking path now uses BLOCKING_HEARTBEAT_WINDOW_
+# SECONDS (90s); status() keeps the 600s observability window.
+# ---------------------------------------------------------------------------
+
+
+def test_blocking_window_is_tighter_than_observability_window():
+    """The two windows are deliberately different. If they ever converge, the
+    /clear false-block returns — this guards the constant relationship."""
+    assert wg.BLOCKING_HEARTBEAT_WINDOW_SECONDS == wg.STALE_HEARTBEAT_SECONDS
+    assert wg.BLOCKING_HEARTBEAT_WINDOW_SECONDS < wg.HEARTBEAT_LIVE_WINDOW_SECONDS
+
+
+def test_just_cleared_predecessor_beat_does_not_false_block(repo: Path):
+    """THE FIX. A DIFFERENT session whose beat is in the 90-600s band (ended a
+    few minutes ago, the /clear case) with a dead-ppid stale lease must RECLAIM,
+    not block. Before the window split this returned 'blocked' every /clear."""
+    wg.acquire(repo, pid=99991, session_id="oldClearedSelf", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead — holder process gone
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    # Predecessor's residual beat: older than the 90s blocking window but inside
+    # the 600s observability window — exactly the /clear-restart signature.
+    mid_age = wg.BLOCKING_HEARTBEAT_WINDOW_SECONDS + 60
+    assert mid_age < wg.HEARTBEAT_LIVE_WINDOW_SECONDS  # genuinely in the band
+    _write_beat(repo, "oldClearedSelf", cwd=repo, age_s=mid_age)
+
+    status_str, _, msg = wg.acquire(repo, pid=99992, session_id="newSession", ppid=os.getpid())
+    assert status_str == "reclaimed", msg
+
+
+def test_genuinely_live_peer_within_90s_still_blocks(repo: Path):
+    """The fix must NOT weaken real two-session protection: a peer beating within
+    the 90s blocking window (live sessions re-beat every <=20s) still blocks."""
+    wg.acquire(repo, pid=99991, session_id="livePeer", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead ppid → must rely on the beat to block
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    # A live peer's newest beat is seconds old (throttle is 20s) — inside 90s.
+    _write_beat(repo, "livePeer", cwd=repo, age_s=15.0)
+
+    status_str, payload, msg = wg.acquire(repo, pid=99992, session_id="callerX", ppid=os.getpid())
+    assert status_str == "blocked", msg
+    assert payload is not None and payload["session_id"] == "livePeer"
+
+
+def test_status_keeps_600s_observability_window(repo: Path):
+    """status() must still SURFACE a 90-600s peer beat (peer_live True) — the
+    operator-visible signal is broader than the block trigger on purpose."""
+    wg.acquire(repo, pid=99991, session_id="recentPeer", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead
+    ls.write_text(json.dumps(data), encoding="utf-8")
+    # Beat in the 90-600s band: below the block window, inside observability.
+    _write_beat(repo, "recentPeer", cwd=repo, age_s=wg.BLOCKING_HEARTBEAT_WINDOW_SECONDS + 60)
+
+    snap = wg.status(repo)
+    assert snap["fresh_peer_heartbeat"] is True  # 600s window still sees it
+
+
+def test_reclaim_prunes_dead_holder_beat(repo: Path):
+    """On reclaim, the dead holder's residual beat is deleted so it can't trip
+    the blocking window on the NEXT /clear (self-cleaning, belt-and-braces)."""
+    wg.acquire(repo, pid=99991, session_id="deadHolder", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    beat = _write_beat(repo, "deadHolder", cwd=repo, age_s=wg.BLOCKING_HEARTBEAT_WINDOW_SECONDS + 60)
+    assert beat.exists()
+
+    status_str, _, msg = wg.acquire(repo, pid=99992, session_id="newSession", ppid=os.getpid())
+    assert status_str == "reclaimed", msg
+    assert not beat.exists(), "dead holder's beat should be pruned on reclaim"
+
+
+def test_reclaim_does_not_prune_a_live_callers_own_beat(repo: Path):
+    """Prune targets ONLY the reclaimed holder's beat — never the caller's own,
+    even if the caller already has a beat on disk."""
+    wg.acquire(repo, pid=99991, session_id="goneHolder", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = 2147480000  # dead
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    holder_beat = _write_beat(repo, "goneHolder", cwd=repo, age_s=wg.BLOCKING_HEARTBEAT_WINDOW_SECONDS + 60)
+    caller_beat = _write_beat(repo, "newSession", cwd=repo, age_s=5.0)
+
+    status_str, _, _ = wg.acquire(repo, pid=99992, session_id="newSession", ppid=os.getpid())
+    assert status_str == "reclaimed"
+    assert not holder_beat.exists(), "holder beat pruned"
+    assert caller_beat.exists(), "caller's own beat must survive"

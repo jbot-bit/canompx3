@@ -98,6 +98,21 @@ STALE_HEARTBEAT_SECONDS = 90
 HEARTBEAT_DIRNAME = ".claude-heartbeats"
 HEARTBEAT_LIVE_WINDOW_SECONDS = 10 * 60
 
+# Blocking-path peer-beat window. SEPARATE from HEARTBEAT_LIVE_WINDOW_SECONDS
+# (600s) on purpose. The 600s window is fine for OBSERVABILITY (`status()`
+# reporting "a session touched this tree in the last 10 min"), but it is WRONG
+# as a BLOCK trigger: a session that ended <10min ago (the common `/clear`
+# restart) leaves a beat the 600s window still counts as a "live peer", so the
+# fresh restart false-blocks against its own dead predecessor — even though that
+# predecessor's ppid is provably dead. A live peer re-beats every PreToolUse and
+# self-throttles at 20s (`session-heartbeat.py::_WRITE_THROTTLE_SECS`), so its
+# newest beat is always < ~20s old. Matching the lease's own staleness floor
+# (STALE_HEARTBEAT_SECONDS = 90s) gives a genuine live peer 4.5x throttle
+# headroom while a just-/clear'd predecessor (beat 90-600s old) no longer
+# false-blocks. n=1 false-block incident 2026-06-02 (operator: "freaking out
+# every time"). See feedback_lease_falseblock_clear_window_mismatch_2026_06_02.md.
+BLOCKING_HEARTBEAT_WINDOW_SECONDS = STALE_HEARTBEAT_SECONDS
+
 # Exit codes
 EXIT_OK = 0
 EXIT_BLOCKED = 2
@@ -389,7 +404,11 @@ def _git_common_dir(cwd: Path) -> Path | None:
     return p
 
 
-def _fresh_peer_heartbeat(cwd: Path, exclude_session_id: str = "") -> bool:
+def _fresh_peer_heartbeat(
+    cwd: Path,
+    exclude_session_id: str = "",
+    window_seconds: float = HEARTBEAT_LIVE_WINDOW_SECONDS,
+) -> bool:
     """True iff a DIFFERENT live session has a fresh beat in this repo's tree.
 
     Reads `<git-common-dir>/.claude-heartbeats/*.beat`. A beat counts as a live
@@ -397,8 +416,14 @@ def _fresh_peer_heartbeat(cwd: Path, exclude_session_id: str = "") -> bool:
       - its `session_id` differs from ``exclude_session_id`` (never self-block),
       - its `cwd` canonicalises to THIS worktree root (a beat from a sibling
         worktree is sanctioned parallel work, not a same-tree collision),
-      - its file mtime is within ``HEARTBEAT_LIVE_WINDOW_SECONDS`` (older beats
-        are crashed/abandoned sessions).
+      - its file mtime is within ``window_seconds`` (older beats are
+        crashed/abandoned sessions).
+
+    ``window_seconds`` defaults to ``HEARTBEAT_LIVE_WINDOW_SECONDS`` (600s) for
+    OBSERVABILITY callers (``status()``). The BLOCKING caller (`_peer_is_live`)
+    passes the tighter ``BLOCKING_HEARTBEAT_WINDOW_SECONDS`` (90s) so a session
+    that ended <10min ago — the `/clear`-restart case — is NOT mistaken for a
+    live peer. See the constant's docstring for the n=1 false-block rationale.
 
     Fail-CLOSED-to-safe means: any error → False (no heartbeat evidence). That is
     the SAFE direction here because this function only ever STRENGTHENS the block
@@ -429,8 +454,9 @@ def _fresh_peer_heartbeat(cwd: Path, exclude_session_id: str = "") -> bool:
         except OSError:
             continue
         # Reject clock-skew (future-dated beyond 60s) and beats outside the
-        # live window. Mirrors `_live_heartbeat_lines` in session-start.py.
-        if age < -60 or age > HEARTBEAT_LIVE_WINDOW_SECONDS:
+        # window. Default window mirrors `_live_heartbeat_lines` in
+        # session-start.py; the blocking caller passes the tighter 90s window.
+        if age < -60 or age > window_seconds:
             continue
         try:
             beat = json.loads(bf.read_text(encoding="utf-8"))
@@ -453,6 +479,35 @@ def _fresh_peer_heartbeat(cwd: Path, exclude_session_id: str = "") -> bool:
                 continue
         return True  # a different session is beating in this tree, right now
     return False
+
+
+def _prune_session_beat(cwd: Path, session_id: str) -> None:
+    """Best-effort delete of a specific session's residual `.beat` file.
+
+    Called when we RECLAIM a stale/dead holder's lease: the holder's beat is
+    leftover litter that the BLOCKING-window cross-check could still trip over on
+    the NEXT `/clear` (its mtime decays slowly, the prior session is gone). We
+    remove only the named (reclaimed-holder) beat — never a live peer's beat,
+    because we only reach here after `_peer_is_live` already returned False for
+    this holder. Fail-open on every path: a prune failure must never break
+    acquisition (the tighter blocking window already fixes the false-block; the
+    prune is belt-and-braces self-cleaning).
+    """
+    sid = (session_id or "").strip()
+    if not sid:
+        return
+    safe = "".join(c for c in sid if c.isalnum() or c in "-_")
+    if not safe:
+        return
+    common = _git_common_dir(cwd)
+    if common is None:
+        return
+    beat = common / HEARTBEAT_DIRNAME / f"{safe}.beat"
+    try:
+        if beat.exists():
+            beat.unlink()
+    except OSError:
+        pass
 
 
 def _peer_is_live(existing: dict, cwd: Path | None = None, exclude_session_id: str = "") -> bool:
@@ -494,7 +549,11 @@ def _peer_is_live(existing: dict, cwd: Path | None = None, exclude_session_id: s
     # This is what stops the single lease being reclaimed session-to-session
     # while three terminals are genuinely live. Skipped when cwd is None
     # (legacy callers / unit tests) — a pure superset of the prior logic.
-    if cwd is not None and _fresh_peer_heartbeat(cwd, exclude_session_id=exclude_session_id):
+    if cwd is not None and _fresh_peer_heartbeat(
+        cwd,
+        exclude_session_id=exclude_session_id,
+        window_seconds=BLOCKING_HEARTBEAT_WINDOW_SECONDS,
+    ):
         return True
 
     # No fresh peer beat either. Now the lease's OWN heartbeat is the tiebreaker:
@@ -577,6 +636,11 @@ def acquire(
             _write_lease(ls, payload)
         except OSError as exc:
             return "error", None, f"failed to reclaim stale lease: {exc}"
+        # Prune the dead holder's residual heartbeat so it can't false-trip the
+        # blocking-window cross-check on the NEXT `/clear` (self-cleaning).
+        prior_sid = str(existing.get("session_id") or "")
+        if prior_sid and prior_sid != (session_id or ""):
+            _prune_session_beat(cwd, prior_sid)
         prior = existing.get("session_id") or existing.get("pid")
         return "reclaimed", payload, f"reclaimed stale lease (was {prior})"
 
