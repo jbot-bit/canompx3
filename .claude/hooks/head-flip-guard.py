@@ -28,11 +28,10 @@ See: `.claude/rules/branch-flip-protection.md` (companion rule) +
 
 from __future__ import annotations
 
+import importlib.util as _importlib_util
 import json
 import sys
 from pathlib import Path
-
-import importlib.util as _importlib_util
 
 _HOOKS_DIR = Path(__file__).resolve().parent
 _SPEC = _importlib_util.spec_from_file_location(

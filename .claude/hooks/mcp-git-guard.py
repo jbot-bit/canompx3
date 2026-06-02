@@ -29,13 +29,12 @@ tool name -> exit 0. The guard must never block a session it can't read.
 
 from __future__ import annotations
 
-import json
-import sys
-from pathlib import Path
-
 # Shared canonical helpers — see _branch_state.py for the rationale
 # (institutional-rigor.md rule 4: delegate, never re-encode).
 import importlib.util as _importlib_util
+import json
+import sys
+from pathlib import Path
 
 _HOOKS_DIR = Path(__file__).resolve().parent
 _SPEC = _importlib_util.spec_from_file_location(
@@ -158,7 +157,7 @@ def main() -> None:
         file=sys.stderr,
     )
     print(
-        f"    2. New worktree:  scripts/tools/new_session.sh",
+        "    2. New worktree:  scripts/tools/new_session.sh",
         file=sys.stderr,
     )
     print(

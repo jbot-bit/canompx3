@@ -20,15 +20,14 @@ implementation per `.claude/rules/institutional-rigor.md` rule 4.
 
 from __future__ import annotations
 
-import json
-import sys
-from pathlib import Path
-
 # Import shared helpers via spec_from_file_location because the dotted hooks
 # directory is not a package (`.claude/hooks/` is a flat script tree, not
 # importable as `claude.hooks`). spec_from_file_location is the
 # stdlib-sanctioned way to import a sibling .py without packaging it.
 import importlib.util as _importlib_util
+import json
+import sys
+from pathlib import Path
 
 _HOOKS_DIR = Path(__file__).resolve().parent
 _SPEC = _importlib_util.spec_from_file_location(
@@ -126,7 +125,7 @@ def main() -> None:
         file=sys.stderr,
     )
     print(
-        f"    2. New worktree:  scripts/tools/new_session.sh",
+        "    2. New worktree:  scripts/tools/new_session.sh",
         file=sys.stderr,
     )
     print(

@@ -98,6 +98,13 @@
 - **Safety note:** No backend live-launch relaxation. The button still calls the existing dashboard `launchSession(..., "live", {skipConfirm: true})` only after the hold gesture; server-side `/api/action/start?mode=live` still runs the live preflight and strict live gating before starting `scripts.run_live_session --live --auto-confirm`.
 - **Verification:** Inline dashboard JS parse check passed. `python -m pytest tests\test_trading_app\test_bot_dashboard.py -q` passed 39 tests. Mocked browser render at `127.0.0.1:8093` showed a visible enabled topbar live button in the first viewport; helper server was stopped after the check. `git diff --check` passed.
 
+## Current Codex Follow-up - F4-A/F4-B Closeout
+- **Tool:** Codex
+- **Date:** 2026-06-02
+- **Summary:** Merged the previously pushed F4-A branch `origin/session/joshd-f4a-branch-flip-fix` into `main`. The branch scopes `branch-flip-guard.py`, `mcp-git-guard.py`, and `head-flip-guard.py` to the PostToolUse payload `cwd` via `_branch_state.invoking_cwd(event)`, so the guards inspect the worktree where the tool actually ran instead of the hook process cwd in the main checkout. PR #348 / F4-B was already merged before this closeout, so the stale-MCP-restart warning path is present on main.
+- **Verification:** `python -m pytest tests/test_hooks/test_branch_state.py tests/test_hooks/test_branch_flip_guard.py tests/test_hooks/test_mcp_git_guard.py tests/test_hooks/test_head_flip_guard.py -q` passed 50 tests. Scoped `ruff check` on the changed hook/test files passed after mechanical import/f-string cleanup. `git diff --check` passed. `python scripts/tools/audit_behavioral.py` and `python scripts/tools/audit_integrity.py` passed. `python scripts/tools/project_pulse.py --fast --format json` reported `broken=0`.
+- **Residual gap:** `python pipeline/check_drift.py`, `python pipeline/check_drift.py --skip-crg-advisory --quiet`, and `python pipeline/check_drift.py --fast --quiet` all timed out locally before a summary. A 60s unbuffered probe showed fast drift progressing through `Active micro-only filters run only on real-micro instruments` before stalling on the next drift check; this appears unrelated to the F4-A hook merge but remains unclosed.
+
 ## Durable References
 - `docs/runtime/action-queue.yaml`
 - `docs/runtime/decision-ledger.md`
