@@ -80,9 +80,16 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-06-02
-- **Commit:** 98729538 — chore(vscode): hide generated workspace noise
-- **Files changed:** 1 files
+- **Commit:** 7171e7ca — docs: update handoff after workspace-noise cleanup
+- **Summary:** Landed audit/self-maintenance hardening from isolated worktree `wt-codex-system-wiring-audit`: `audit_integrity.py` now bootstraps repo root for documented direct execution, and `stage_reaper_audit.py --help` no longer crashes on Windows cp1252 consoles when argparse prints Unicode help text. Also kept VS Code generated/cache folders out of explorer/search/watch noise.
+- **Verification:** On `main`, `python scripts/tools/audit_integrity.py`, `python scripts/tools/stage_reaper_audit.py --help`, targeted audit-tool pytest (39 passed), ruff, `git diff --check`, and fast drift (`SUMMARY: clean passed=155 advisory=15`) passed before push. GitHub CI for `b039bf25` passed; newer HEAD CI was still running when this baton was corrected.
+- **Files changed:** 6 files
+  - `scripts/tools/audit_integrity.py`
+  - `scripts/tools/stage_reaper_audit.py`
+  - `tests/test_tools/test_audit_integrity.py`
+  - `tests/test_tools/test_stage_reaper_audit.py`
   - `.vscode/settings.json`
+  - `HANDOFF.md`
 
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
 - **Tool:** Codex
