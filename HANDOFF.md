@@ -78,18 +78,14 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Codex
+- **Tool:** Codex + concurrent Claude Code
 - **Date:** 2026-06-02
-- **Commit:** 7171e7ca — docs: update handoff after workspace-noise cleanup
-- **Summary:** Landed audit/self-maintenance hardening from isolated worktree `wt-codex-system-wiring-audit`: `audit_integrity.py` now bootstraps repo root for documented direct execution, and `stage_reaper_audit.py --help` no longer crashes on Windows cp1252 consoles when argparse prints Unicode help text. Also kept VS Code generated/cache folders out of explorer/search/watch noise.
-- **Verification:** On `main`, `python scripts/tools/audit_integrity.py`, `python scripts/tools/stage_reaper_audit.py --help`, targeted audit-tool pytest (39 passed), ruff, `git diff --check`, and fast drift (`SUMMARY: clean passed=155 advisory=15`) passed before push. GitHub CI for `b039bf25` passed; newer HEAD CI was still running when this baton was corrected.
-- **Files changed:** 6 files
-  - `scripts/tools/audit_integrity.py`
-  - `scripts/tools/stage_reaper_audit.py`
-  - `tests/test_tools/test_audit_integrity.py`
-  - `tests/test_tools/test_stage_reaper_audit.py`
-  - `.vscode/settings.json`
-  - `HANDOFF.md`
+- **Commit:** d4c1dd65 — fix(prop): MFFU Flex per-payout cap is size-specific (25k=1000, 50k=2000)
+- **Summary:** Corrected `mffu_flex` profile data so Flex payout caps live under `firm_specific_rules.by_size`: 25k = `$1,000`, 50k = `$2,000`, matching the local 2026-05-31 MFFU snapshots. Removed the old flat top-level `payout_cap_per_cycle=2000` from the Flex spec because it overstated the 25k request cap.
+- **Verification:** `python -m pytest tests/test_prop_profiles_mffu.py tests/test_trading_app/test_prop_firm_policies.py -q` passed 13 tests. Scoped ruff and `git diff --cached --check` passed before the commit. Fast drift was not clean locally because the unrelated `MCP servers answer initialize (sidecar dep-rot guard)` check failed once.
+- **Files changed:** 2 files
+  - `tests/test_prop_profiles_mffu.py`
+  - `trading_app/prop_profiles.py`
 
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
 - **Tool:** Codex
