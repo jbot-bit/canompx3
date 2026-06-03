@@ -149,6 +149,12 @@ data/
 # Research output (generated analysis artifacts)
 research/output/
 
+# Chordia / lane-bench generated research scratch (batch runs, evidence factory,
+# prereg drafts). 13k+ files / 91 MB rode into main via the chordia merge before
+# this ignore existed (#332). Untracked going forward; history purge is a
+# separate maintenance-window op — see docs/runbooks/artifacts-research-history-purge.md
+artifacts/research/
+
 # Session artifacts (accidental shell stubs, temp notes)
 bash
 cd

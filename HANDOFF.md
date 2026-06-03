@@ -98,14 +98,10 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Codex
-- **Date:** 2026-06-03
-- **Commit:** df9c48b8 — fix(workflow): surface peer-lease worktree escape
-- **Files changed:** 4 files
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-06-03-maximise-no-tunnel-vision-sprint.md`
-  - `scripts/tools/workflow_doctor.py`
-  - `tests/test_tools/test_workflow_doctor.py`
+- **Tool:** Claude Code
+- **Date:** 2026-06-04
+- **Commit:** (rebased) — chore(repo): untrack artifacts/research scratch (13,390 files / 91 MB) + START_WORKTREE.bat self-DOS guard fix
+- **Files changed:** untrack of `artifacts/research/` scratch (deletions only) + `.gitignore` + purge runbook + 3 guard hooks; see section notes below.
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
@@ -113,6 +109,16 @@
 - **Summary:** Completed the remaining high-EV live-readiness/dashboard/drift closeout from the operator prompt. Fresh `account_survival` for `topstep_50k_mnq_auto` passed Criterion 11 at 95.2% operational pass. Fresh `live_readiness_report --strict-zero-warn --proof-pack-only` showed C11 pass age 0d, C12 valid age 1d, three active lanes, zero stale lanes, no missing evidence, and only telemetry maturity advisory (9/30 days). Dashboard test smoke passed 42 tests. Phase 7 live audit passed 11 checks.
 - **Drift fix:** Root-caused the fast drift timeout to stale fast-skip coverage plus repeated relative-volume enrichment in `StrategyTradeWindowResolver`. Added resolver caching for same `(instrument, orb_minutes, orb_label, lookback_days)` relative-volume enrichment and added a focused regression test. Updated `SLOW_CHECK_LABELS` with slow labels measured in this session so `--fast` skips slow checks while full pre-commit/CI still retain coverage.
 - **Verification:** `python -m pytest tests\test_pipeline\test_check_drift_slow_labels.py tests\test_trading_app\test_validation_provenance.py tests\test_pipeline\test_check_drift_db.py::TestActiveMicroOnlyFiltersAfterMicroLaunch -q` passed 8 tests; `python -m pytest tests\test_trading_app\test_bot_dashboard.py -q` passed 42 tests; scoped `ruff check` and `py_compile` passed; `python -u pipeline\check_drift.py --fast --quiet --skip-crg-advisory` completed with `SUMMARY: clean passed=137 advisory=15`; `python scripts\audits\run_all.py --phase 7` passed. Known residual: pytest emitted ignored Windows temp cleanup `PermissionError` after successful runs.
+
+## Worktree-Guard Self-DOS Message Fix (Claude, 2026-06-03)
+- **Tool:** Claude Code
+- **Commit (pre-rebase):** 5e3d6dc3 / 71056eb2 — fix(hooks): name START_WORKTREE.bat in guard BLOCK messages (self-DOS fix)
+- **Files changed:** 4 files
+  - `.claude/hooks/branch-flip-guard.py`
+  - `.claude/hooks/mcp-git-guard.py`
+  - `.claude/hooks/worktree_guard.py`
+  - `docs/runtime/stages/worktree-guard-selfdos-message-fix.md`
+- **Summary:** Guard BLOCK messages told the operator to run `scripts/tools/new_session.sh` through the very Bash tool the guard blocks (self-DOS). Messages now lead with `START_WORKTREE.bat` (the Windows launcher outside the blocked Bash surface). Message-string-only edits — no logic/exit-code/matcher changes. Rebased onto `origin/main` `c7a6ac05`; worktree_guard.py resolution KEEPS main's `2e8f3b59` cwd-scoping/mutation-detection logic AND this branch's START_WORKTREE.bat message.
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code

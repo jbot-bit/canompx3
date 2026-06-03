@@ -157,7 +157,19 @@ def main() -> None:
         file=sys.stderr,
     )
     print(
-        "    2. New worktree:  scripts/tools/new_session.sh",
+        "    2. New worktree:  START_WORKTREE.bat <descriptor>  (run from",
+        file=sys.stderr,
+    )
+    print(
+        "                      Windows, NOT a blocked git/Bash call;",
+        file=sys.stderr,
+    )
+    print(
+        "                      scripts/tools/new_session.sh does the same once",
+        file=sys.stderr,
+    )
+    print(
+        "                      git ops are unblocked.)",
         file=sys.stderr,
     )
     print(
