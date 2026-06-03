@@ -114,6 +114,16 @@
 - **Drift fix:** Root-caused the fast drift timeout to stale fast-skip coverage plus repeated relative-volume enrichment in `StrategyTradeWindowResolver`. Added resolver caching for same `(instrument, orb_minutes, orb_label, lookback_days)` relative-volume enrichment and added a focused regression test. Updated `SLOW_CHECK_LABELS` with slow labels measured in this session so `--fast` skips slow checks while full pre-commit/CI still retain coverage.
 - **Verification:** `python -m pytest tests\test_pipeline\test_check_drift_slow_labels.py tests\test_trading_app\test_validation_provenance.py tests\test_pipeline\test_check_drift_db.py::TestActiveMicroOnlyFiltersAfterMicroLaunch -q` passed 8 tests; `python -m pytest tests\test_trading_app\test_bot_dashboard.py -q` passed 42 tests; scoped `ruff check` and `py_compile` passed; `python -u pipeline\check_drift.py --fast --quiet --skip-crg-advisory` completed with `SUMMARY: clean passed=137 advisory=15`; `python scripts\audits\run_all.py --phase 7` passed. Known residual: pytest emitted ignored Windows temp cleanup `PermissionError` after successful runs.
 
+## Worktree-Guard Self-DOS Message Fix (Claude, 2026-06-03)
+- **Tool:** Claude Code
+- **Commit (pre-rebase):** 5e3d6dc3 / 71056eb2 — fix(hooks): name START_WORKTREE.bat in guard BLOCK messages (self-DOS fix)
+- **Files changed:** 4 files
+  - `.claude/hooks/branch-flip-guard.py`
+  - `.claude/hooks/mcp-git-guard.py`
+  - `.claude/hooks/worktree_guard.py`
+  - `docs/runtime/stages/worktree-guard-selfdos-message-fix.md`
+- **Summary:** Guard BLOCK messages told the operator to run `scripts/tools/new_session.sh` through the very Bash tool the guard blocks (self-DOS). Messages now lead with `START_WORKTREE.bat` (the Windows launcher outside the blocked Bash surface). Message-string-only edits — no logic/exit-code/matcher changes. Rebased onto `origin/main` `c7a6ac05`; worktree_guard.py resolution KEEPS main's `2e8f3b59` cwd-scoping/mutation-detection logic AND this branch's START_WORKTREE.bat message.
+
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
 - **Summary:** Landed the F2-A capital-path fix in isolated worktree `canompx3-f2a-land` (branch `session/joshd-f2a-land` off `origin/main` `fa98bf86`). Merged `origin/session/joshd-f2a-self-funded-sizing` (was 43 behind / 4 ahead). `prop_portfolio.select_for_profile` now makes `contract_budget` firm-aware: `None` for `self_funded` (prop micro-cap no longer gates a personal-capital book — risk/DD/slot budgets still bind), `tier.max_contracts_micro` for prop firms (unchanged). Honors `.claude/rules/self-funded-sizing-doctrine.md`. No schema/trading-logic change beyond the scoped cap-leak fix; gold.db read-only.
