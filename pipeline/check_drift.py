@@ -7228,21 +7228,25 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
     with no firm branch -- a latent leak that would silently throttle real
     personal-capital earnings to a prop-firm-shaped ceiling.
 
-    This is the MARKER layer (the cheap, immediate floor -- not the structural
-    fix). It asserts:
+    This check asserts:
       (a) the doctrine rule file exists (cannot be silently deleted while this
-          check claims to enforce it), and
+          check claims to enforce it),
       (b) every ``self_funded`` entry in ``ACCOUNT_TIERS`` is covered by the
           ``@margin-guard-not-earnings-cap`` marker comment in
           ``trading_app/prop_profiles.py`` -- so a new ``self_funded`` tier added
-          without the marker fails loud at review.
-
-    The structural book-builder firm-branch (prop -> tier cap;
-    self_funded -> risk/margin-derived budget) is a separate
-    adversarial-audit-gated follow-up; this marker does NOT yet prove it.
+          without the marker fails loud at review, and
+      (c) STRUCTURAL (added 2026-05-31, audit finding F2-A): ``select_for_profile``
+          in ``trading_app/prop_portfolio.py`` carries a firm branch that does NOT
+          assign ``contract_budget = tier.max_contracts_micro`` for ``self_funded``.
+          This proves the book-builder firm-branch (prop -> tier cap; self_funded ->
+          prop cap disabled as a selection gate) exists, closing the doctrine's
+          previously-unbuilt "Tier-B follow-up". Static-source assertion (no
+          execution) -- if a future edit removes the firm branch and reverts to the
+          unconditional prop cap, the prop earnings cap silently re-leaks into
+          personal-capital book-building; this fails that loud.
 
     @canonical-source: .claude/rules/self-funded-sizing-doctrine.md,
-    trading_app/prop_profiles.py
+    trading_app/prop_profiles.py, trading_app/prop_portfolio.py
     """
     violations: list[str] = []
 
@@ -7292,6 +7296,74 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
             f"('self_funded', ...) tier at line {first_tier + 1}. The marker must "
             "introduce the self_funded tier block so every cap is covered."
         )
+
+    # (c) STRUCTURAL — the book-builder firm branch must exist (F2-A fix, 2026-05-31).
+    # Parse select_for_profile's source via AST and confirm: (1) it references a
+    # self_funded firm branch, and (2) it does NOT assign
+    # `contract_budget = tier.max_contracts_micro` UNCONDITIONALLY (i.e. that
+    # assignment, if present, lives under a non-self_funded branch). This fails loud
+    # if a future edit reverts to the pre-F2-A unconditional prop cap.
+    portfolio_src = PROJECT_ROOT / "trading_app" / "prop_portfolio.py"
+    try:
+        port_text = portfolio_src.read_text(encoding="utf-8")
+    except OSError as e:
+        return violations + [f"  cannot read trading_app/prop_portfolio.py: {e}"]
+
+    func_node = None
+    try:
+        tree = ast.parse(port_text)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "select_for_profile":
+                func_node = node
+                break
+    except SyntaxError as e:
+        return violations + [f"  cannot parse trading_app/prop_portfolio.py: {e}"]
+
+    if func_node is None:
+        violations.append(
+            "  could not locate select_for_profile in trading_app/prop_portfolio.py — "
+            "layout changed; update check_prop_caps_do_not_leak_into_self_funded to match."
+        )
+        return violations
+
+    # An unconditional `contract_budget = tier.max_contracts_micro` is the pre-F2-A
+    # leak. It is a violation ONLY when it is a direct (module-level) statement of the
+    # function body — i.e. NOT nested inside an If/For/etc. Assignments nested inside a
+    # branch (the post-fix prop `else`) are fine.
+    def _is_tier_micro_assign(stmt: ast.stmt) -> bool:
+        if not isinstance(stmt, ast.Assign):
+            return False
+        if not (
+            len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name) and stmt.targets[0].id == "contract_budget"
+        ):
+            return False
+        val = stmt.value
+        return (
+            isinstance(val, ast.Attribute)
+            and val.attr == "max_contracts_micro"
+            and isinstance(val.value, ast.Name)
+            and val.value.id == "tier"
+        )
+
+    unconditional_leak = any(_is_tier_micro_assign(s) for s in func_node.body)
+    has_self_funded_branch = (
+        "self_funded" in port_text[port_text.find("def select_for_profile") :].split("\ndef ", 1)[0]
+    )
+
+    if unconditional_leak:
+        violations.append(
+            "  select_for_profile assigns `contract_budget = tier.max_contracts_micro` "
+            "UNCONDITIONALLY (not inside a firm branch). This is the pre-F2-A leak — the "
+            "prop contract cap would bound self_funded book-building. Restore the "
+            '`if firm_spec.name == "self_funded"` branch (self_funded -> no prop cap).'
+        )
+    if not has_self_funded_branch:
+        violations.append(
+            "  select_for_profile has NO self_funded firm branch on contract_budget. "
+            "Per self-funded-sizing-doctrine.md the prop contract cap must be disabled as "
+            "a selection gate for self_funded (F2-A). Add the firm branch."
+        )
+
     return violations
 
 

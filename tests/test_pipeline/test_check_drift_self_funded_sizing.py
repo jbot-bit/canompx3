@@ -11,10 +11,14 @@ These tests prove the guard:
   1. passes clean against the real repo state,
   2. has teeth (fails on an injected marker-stripped source),
   3. fails loud if the doctrine file is missing,
-  4. fails loud if the marker sits AFTER the first self_funded tier (scope hole).
+  4. fails loud if the marker sits AFTER the first self_funded tier (scope hole),
+  5. STRUCTURAL (F2-A, 2026-05-31): has teeth on the select_for_profile firm branch —
+     catches a reintroduced unconditional `contract_budget = tier.max_contracts_micro`
+     and a removed self_funded branch; passes the well-formed branched source.
 
-The guard reads source files directly, so the injection tests point it at a
-temp copy via PROJECT_ROOT monkeypatch — no mutation of the real source.
+The guard reads source files directly (both prop_profiles.py AND prop_portfolio.py),
+so the injection tests point it at a temp copy via PROJECT_ROOT monkeypatch — no
+mutation of the real source.
 """
 
 from __future__ import annotations
@@ -52,11 +56,45 @@ ACCOUNT_TIERS = {
 }
 """
 
+# A minimal prop_portfolio.py-shaped source. structural-assertion (c) parses
+# select_for_profile and requires a self_funded firm branch where the prop cap is
+# NOT assigned unconditionally. This is the WELL-FORMED (post-F2-A) shape.
+_GOOD_PORTFOLIO_SRC = """\
+def select_for_profile(profile, strategies):
+    tier = get_account_tier(profile.firm, profile.account_size)
+    slot_budget = profile.max_slots
+    if firm_spec.name == "self_funded":
+        contract_budget = None
+    else:
+        contract_budget = tier.max_contracts_micro
+    return None
+"""
 
-def _fake_root(tmp_path: Path, src: str, *, write_doctrine: bool = True) -> Path:
-    """Build a temp PROJECT_ROOT with a prop_profiles.py and (optionally) the doctrine file."""
+# PRE-F2-A leak: contract_budget = tier.max_contracts_micro assigned UNCONDITIONALLY
+# at the function body level (no firm branch). structural-assertion (c) must catch this.
+_LEAKY_PORTFOLIO_SRC = """\
+def select_for_profile(profile, strategies):
+    tier = get_account_tier(profile.firm, profile.account_size)
+    contract_budget = tier.max_contracts_micro
+    slot_budget = profile.max_slots
+    return None
+"""
+
+
+def _fake_root(
+    tmp_path: Path,
+    src: str,
+    *,
+    write_doctrine: bool = True,
+    portfolio_src: str = _GOOD_PORTFOLIO_SRC,
+) -> Path:
+    """Build a temp PROJECT_ROOT with prop_profiles.py, prop_portfolio.py, and
+    (optionally) the doctrine file. The guard reads all three, so a well-formed
+    prop_portfolio.py is written by default; tests override portfolio_src to probe
+    the structural assertion (c)."""
     (tmp_path / "trading_app").mkdir(parents=True, exist_ok=True)
     (tmp_path / "trading_app" / "prop_profiles.py").write_text(src, encoding="utf-8")
+    (tmp_path / "trading_app" / "prop_portfolio.py").write_text(portfolio_src, encoding="utf-8")
     if write_doctrine:
         rules = tmp_path / ".claude" / "rules"
         rules.mkdir(parents=True, exist_ok=True)
@@ -102,3 +140,46 @@ def test_guard_fails_loud_when_no_self_funded_tiers(tmp_path, monkeypatch):
     monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, src))
     violations = check_prop_caps_do_not_leak_into_self_funded()
     assert any("could not locate any" in v for v in violations)
+
+
+# --- Structural assertion (c) — the select_for_profile firm branch (F2-A) ---
+
+
+def test_structural_guard_catches_unconditional_prop_cap(tmp_path, monkeypatch):
+    """Teeth (RULE 13): a select_for_profile that reasserts the pre-F2-A
+    unconditional `contract_budget = tier.max_contracts_micro` must be caught."""
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _GOOD_SRC, portfolio_src=_LEAKY_PORTFOLIO_SRC))
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+    assert any("UNCONDITIONALLY" in v for v in violations), (
+        "structural check must catch a reintroduced unconditional prop cap; got: " + "; ".join(violations)
+    )
+
+
+def test_structural_guard_passes_on_branched_source(tmp_path, monkeypatch):
+    """The well-formed (post-F2-A) branched select_for_profile must pass cleanly —
+    no false positive on the legitimate prop `else` assignment."""
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _GOOD_SRC, portfolio_src=_GOOD_PORTFOLIO_SRC))
+    assert check_prop_caps_do_not_leak_into_self_funded() == []
+
+
+def test_structural_guard_catches_missing_self_funded_branch(tmp_path, monkeypatch):
+    """A select_for_profile with NO self_funded branch at all (and no unconditional
+    leak either) must still be flagged — the firm branch is required."""
+    no_branch_src = (
+        "def select_for_profile(profile, strategies):\n"
+        "    tier = get_account_tier(profile.firm, profile.account_size)\n"
+        "    contract_budget = some_other_value\n"
+        "    return None\n"
+    )
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _GOOD_SRC, portfolio_src=no_branch_src))
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+    assert any("NO self_funded firm branch" in v for v in violations), (
+        "structural check must require a self_funded firm branch; got: " + "; ".join(violations)
+    )
+
+
+def test_structural_guard_fails_loud_when_function_missing(tmp_path, monkeypatch):
+    """If select_for_profile vanished from prop_portfolio.py, fail loud."""
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _GOOD_SRC, portfolio_src="x = 1\n"))
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+    assert any("could not locate select_for_profile" in v for v in violations)
