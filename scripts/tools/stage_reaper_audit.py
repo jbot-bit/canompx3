@@ -213,9 +213,25 @@ def _build_peer_dirty_cache(peer_roots: list[Path]) -> dict[str, list[str]]:
 
 
 def _peer_dirty_on_cached(cache: AuditCache, scope: list[str]) -> list[str]:
+    """Cache-backed equivalent of `_peer_dirty_on`'s git-pathspec match.
+
+    The non-cached path passed scope entries as git pathspecs, which match by
+    directory PREFIX (`pipeline/` matched `pipeline/foo.py`). The cache keys on
+    the literal dirty path, so a plain exact lookup would MISS a peer-dirty file
+    under a directory scope entry — the UNSAFE direction (could let a contested
+    stage reach DONE_SAFE). We restore prefix semantics: a scope entry ending in
+    `/` matches any cached dirty path beneath it; exact file entries still match
+    exactly. Over-detection here only ever makes the reaper hand off
+    (LIVE_OR_CONTESTED), never wrongly reap.
+    """
     hits: list[str] = []
-    for path in scope:
-        hits.extend(cache.peer_dirty_hits.get(path, []))
+    for entry in scope:
+        if entry.endswith("/"):
+            for dirty_path, markers in cache.peer_dirty_hits.items():
+                if dirty_path.startswith(entry):
+                    hits.extend(markers)
+        else:
+            hits.extend(cache.peer_dirty_hits.get(entry, []))
     return hits
 
 

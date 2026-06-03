@@ -145,6 +145,30 @@ def test_peer_dirty_cache_marks_matching_scope_only():
     assert sra._peer_dirty_on_cached(cache, ["scripts/tools/y.py"]) == []
 
 
+def test_peer_dirty_cache_directory_scope_matches_files_beneath():
+    # A directory scope entry (trailing `/`) must catch a peer-dirty file BENEATH
+    # it — restoring the old git-pathspec prefix semantics. A plain exact-match
+    # cache would MISS this (the UNSAFE direction: a contested stage could reach
+    # DONE_SAFE). Regression guard for the pathspec->exact-match narrowing.
+    cache = sra.AuditCache(peer_dirty_hits={"pipeline/foo.py": ["peer:pipeline/foo.py"]})
+    assert sra._peer_dirty_on_cached(cache, ["pipeline/"]) == ["peer:pipeline/foo.py"]
+    # A non-matching directory yields nothing.
+    assert sra._peer_dirty_on_cached(cache, ["trading_app/"]) == []
+    # A directory entry that is a string-prefix of a sibling FILE name must not
+    # over-match across the boundary (`pipeline/` ⊄ `pipelinex/foo.py`).
+    cache2 = sra.AuditCache(peer_dirty_hits={"pipelinex/foo.py": ["peer:pipelinex/foo.py"]})
+    assert sra._peer_dirty_on_cached(cache2, ["pipeline/"]) == []
+    # Exact file entries are unaffected by the directory branch.
+    assert sra._peer_dirty_on_cached(cache, ["pipeline/foo.py"]) == ["peer:pipeline/foo.py"]
+
+
+def test_porcelain_paths_modified_file_with_arrow_in_name_is_not_a_rename():
+    # A file literally named with " -> " that is MODIFIED (status ` M`, no R/C)
+    # must NOT be misread as a rename — only R/C status triggers the split.
+    # Locks the safe-direction handling of the " -> " heuristic.
+    assert sra._porcelain_paths(" M a -> b.md") == ["a -> b.md"]
+
+
 def test_porcelain_paths_extracts_both_sides_of_rename():
     # Plain lines yield one path.
     assert sra._porcelain_paths(" M docs/runtime/stages/foo.md") == ["docs/runtime/stages/foo.md"]
