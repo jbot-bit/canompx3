@@ -100,11 +100,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-03
-- **Commit:** a90873a6 — chore(plugins): firecrawl default OFF + on-demand toggle
-- **Files changed:** 3 files
-  - `.claude/settings.json`
-  - `HANDOFF.md`
-  - `scripts/tools/firecrawl_mode.ps1`
+- **Commit:** 4909515c — @ fix(stage-reaper): restore directory-prefix peer-dirty match in AuditCache
+- **Files changed:** 2 files
+  - `scripts/tools/stage_reaper_audit.py`
+  - `tests/test_tools/test_stage_reaper_audit.py`
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
