@@ -16,6 +16,7 @@ from trading_app.lane_ctl import (
     pause_lane,
     pause_strategy_id,
     resume_lane,
+    resume_strategy_id,
 )
 from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
@@ -134,6 +135,14 @@ class TestPauseResume:
     def test_pause_strategy_id_idempotent_when_already_paused(self, mock_state):
         assert pause_strategy_id(PROFILE, TEST_SID, reason="first") is True
         assert pause_strategy_id(PROFILE, TEST_SID, reason="second") is False
+
+    def test_resume_strategy_id_removes_override(self, mock_state):
+        assert pause_strategy_id(PROFILE, TEST_SID, reason="dashboard off") is True
+        assert resume_strategy_id(PROFILE, TEST_SID) is True
+        assert get_lane_override(PROFILE, TEST_SID) is None
+
+    def test_resume_strategy_id_returns_false_when_not_paused(self, mock_state):
+        assert resume_strategy_id(PROFILE, TEST_SID) is False
 
 
 class TestPausedIds:

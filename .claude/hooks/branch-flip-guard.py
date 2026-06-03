@@ -20,15 +20,14 @@ implementation per `.claude/rules/institutional-rigor.md` rule 4.
 
 from __future__ import annotations
 
-import json
-import sys
-from pathlib import Path
-
 # Import shared helpers via spec_from_file_location because the dotted hooks
 # directory is not a package (`.claude/hooks/` is a flat script tree, not
 # importable as `claude.hooks`). spec_from_file_location is the
 # stdlib-sanctioned way to import a sibling .py without packaging it.
 import importlib.util as _importlib_util
+import json
+import sys
+from pathlib import Path
 
 _HOOKS_DIR = Path(__file__).resolve().parent
 _SPEC = _importlib_util.spec_from_file_location(
@@ -63,7 +62,13 @@ def main() -> None:
     if not any(op in command for op in branch_ops):
         sys.exit(0)
 
-    git_dir = _git_dir()
+    # Scope the guard to the worktree the Bash command actually ran in, NOT
+    # the hook process's cwd (always the main checkout, per the hardcoded
+    # settings.json command). A peer flipping the main checkout's branch must
+    # not false-fire against an isolated worktree whose lock says otherwise.
+    cwd = _branch_state.invoking_cwd(event)
+
+    git_dir = _git_dir(cwd)
     if git_dir is None:
         sys.exit(0)  # fail-safe: not in a git repo -> pass
 
@@ -75,7 +80,7 @@ def main() -> None:
     if not branch_at_start:
         sys.exit(0)  # fail-safe: corrupted/empty lock -> pass
 
-    current = _current_branch()
+    current = _current_branch(cwd)
     if current is None:
         sys.exit(0)  # fail-safe: detached HEAD / git failure -> pass
 
@@ -120,7 +125,7 @@ def main() -> None:
         file=sys.stderr,
     )
     print(
-        f"    2. New worktree:  scripts/tools/new_session.sh",
+        "    2. New worktree:  scripts/tools/new_session.sh",
         file=sys.stderr,
     )
     print(

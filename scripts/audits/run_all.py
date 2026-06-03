@@ -35,9 +35,13 @@ PHASES = [
 
 # Quick mode: Phase 0B → 1 → 6 → 3A (per SYSTEM_AUDIT.md line 527)
 QUICK_PHASES = {0, 1, 6, 3}
+QUICK_PHASE_ARGS = {
+    1: ["--quick"],
+    3: ["--quick"],
+}
 
 
-def run_phase(phase_num: int, name: str, script: str) -> tuple[int, float]:
+def run_phase(phase_num: int, name: str, script: str, extra_args: list[str] | None = None) -> tuple[int, float]:
     """Run a single phase script. Returns (exit_code, duration_seconds)."""
     script_path = Path(__file__).parent / script
     if not script_path.exists():
@@ -45,8 +49,11 @@ def run_phase(phase_num: int, name: str, script: str) -> tuple[int, float]:
         return -1, 0.0
 
     start = time.time()
+    cmd = [sys.executable, str(script_path)]
+    if extra_args:
+        cmd.extend(extra_args)
     result = subprocess.run(
-        [sys.executable, str(script_path)],
+        cmd,
         cwd=str(PROJECT_ROOT),
         timeout=600,  # 10 min max per phase
     )
@@ -68,15 +75,18 @@ def main():
     if args.quick:
         print("Mode: QUICK (phases 0, 1, 3, 6)")
         phases = [(n, name, script) for n, name, script in PHASES if n in QUICK_PHASES]
+        phase_args = QUICK_PHASE_ARGS
     elif args.phase is not None:
         print(f"Mode: SINGLE PHASE ({args.phase})")
         phases = [(n, name, script) for n, name, script in PHASES if n == args.phase]
+        phase_args = {}
         if not phases:
             print(f"Phase {args.phase} not found. Available: {[n for n, _, _ in PHASES]}")
             sys.exit(1)
     else:
         print(f"Mode: FULL (phases {args.start}-10)")
         phases = [(n, name, script) for n, name, script in PHASES if n >= args.start]
+        phase_args = {}
 
     results = {}
     total_start = time.time()
@@ -86,7 +96,7 @@ def main():
         print(f"  Running Phase {phase_num}: {name}")
         print(f"{'─' * 70}")
 
-        rc, duration = run_phase(phase_num, name, script)
+        rc, duration = run_phase(phase_num, name, script, phase_args.get(phase_num))
         results[phase_num] = (name, rc, duration)
 
         if rc == 1:

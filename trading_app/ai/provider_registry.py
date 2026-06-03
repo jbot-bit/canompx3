@@ -20,6 +20,10 @@ from typing import Any, Literal
 
 from trading_app.ai.claude_client import CLAUDE_REASONING_MODEL, CLAUDE_STRUCTURED_MODEL
 
+# Canonical OpenRouter API base URL. All OpenRouter profiles reference this constant
+# so a version bump is a single-line change rather than a scattered find-and-replace.
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
 ProviderName = Literal["anthropic", "openrouter"]
 ResponseMode = Literal["free_text", "json_schema"]
 RuntimeClass = Literal["read_only_single_turn", "read_only_tool_loop", "interactive_editor"]
@@ -200,7 +204,7 @@ PROFILE_REGISTRY: dict[str, AIProfile] = {
         use_case="repo planning, architecture review, and grounded research synthesis",
         model=None,
         api_key_env="OPENROUTER_API_KEY",
-        base_url="https://openrouter.ai/api/v1",
+        base_url=OPENROUTER_BASE_URL,
         reasoning_enabled=True,
         reasoning_effort="high",
         runtime_class="read_only_tool_loop",
@@ -222,7 +226,7 @@ PROFILE_REGISTRY: dict[str, AIProfile] = {
         use_case="long-context repo research, literature-grounded synthesis, and result interpretation",
         model=None,
         api_key_env="OPENROUTER_API_KEY",
-        base_url="https://openrouter.ai/api/v1",
+        base_url=OPENROUTER_BASE_URL,
         reasoning_enabled=True,
         reasoning_effort="high",
         runtime_class="read_only_tool_loop",
@@ -244,7 +248,7 @@ PROFILE_REGISTRY: dict[str, AIProfile] = {
         use_case="schema-bound extraction and structured research outputs",
         model=None,
         api_key_env="OPENROUTER_API_KEY",
-        base_url="https://openrouter.ai/api/v1",
+        base_url=OPENROUTER_BASE_URL,
         response_mode="json_schema",
         runtime_class="read_only_single_turn",
         context_views=("research",),
@@ -264,7 +268,7 @@ PROFILE_REGISTRY: dict[str, AIProfile] = {
         use_case="repo-native coding-agent edits with claude-side review gating",
         model=None,
         api_key_env="OPENROUTER_API_KEY",
-        base_url="https://openrouter.ai/api/v1",
+        base_url=OPENROUTER_BASE_URL,
         runtime_class="interactive_editor",
         router=ProviderRouting(
             order=("deepseek",),

@@ -332,30 +332,35 @@ async def trade(req: TradeRequest, request: Request):
             detail=f"Unknown instrument '{req.instrument}'. Allowed: {sorted(_ALLOWED_INSTRUMENTS)}",
         )
 
-    # 3. Qty cap — reject oversized orders
-    if req.qty > MAX_ORDER_QTY:
-        log.warning("Rejected webhook: qty %d exceeds max %d", req.qty, MAX_ORDER_QTY)
-        raise HTTPException(
-            status_code=400,
-            detail=f"Qty {req.qty} exceeds max {MAX_ORDER_QTY}",
-        )
-
-    # 4. Dedup check — block identical (instrument, direction, action) within window
+    # 3. Dedup check — block identical (instrument, direction, action) within window
     cached = _check_dedup(req)
     if cached is not None:
         return cached
 
-    # 5. Rate limit
+    # 4. Rate limit
     _check_rate_limit()
 
-    # 6. Position limit (entry only)
+    # 5. Position limit (entry only)
     _check_position_limit(req)
 
-    # 7. Apply optional profile execution mapping, then resolve contract.
+    # 6. Apply optional profile execution mapping, then enforce the broker-side
+    # qty cap that actually reaches the router.
     try:
         execution_instrument, execution_qty = _resolve_execution_request(req.instrument, req.qty)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    if execution_qty > MAX_ORDER_QTY:
+        log.warning(
+            "Rejected webhook: execution qty %d exceeds max %d (request %s qty=%d)",
+            execution_qty,
+            MAX_ORDER_QTY,
+            req.instrument,
+            req.qty,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"Execution qty {execution_qty} exceeds max {MAX_ORDER_QTY}",
+        )
 
     loop = asyncio.get_running_loop()
     try:

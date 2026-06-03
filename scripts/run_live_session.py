@@ -26,6 +26,7 @@ Examples:
 import argparse
 import asyncio
 import io
+import json
 import logging
 import os
 import subprocess
@@ -47,6 +48,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 log = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.tools import sweep_orphan_rings
 from trading_app.live.instance_lock import acquire_instance_lock, release_instance_lock
@@ -417,6 +422,53 @@ def _check_notifications(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, f"FAILED: {e}")
 
 
+def _pid_is_alive(pid: int) -> bool | None:
+    """Best-effort liveness for a journal-lock holder PID.
+
+    Returns True (alive), False (provably dead), or None (cannot determine).
+    Self-contained on purpose — this mirrors the canonical
+    ``scripts/tools/worktree_guard.py::_pid_is_alive`` logic but is NOT imported
+    from it, so the live launcher does not couple to that module's lease
+    internals / ``filelock`` dependency for a one-shot diagnostic probe.
+
+    Windows is the load-bearing case: ``os.kill(pid, 0)`` does not reliably
+    raise for a dead PID there, so probe via ``OpenProcess`` + exit code
+    (STILL_ACTIVE == 259 means alive). We only have a bare PID from DuckDB's
+    error text (no creation time), so PID reuse cannot be ruled out — "alive"
+    means "a process with this PID exists", not "definitely the lock holder".
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            STILL_ACTIVE = 259
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not handle:
+                return False  # cannot open → not found / gone
+            try:
+                code = ctypes.c_ulong()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                    return None
+                return code.value == STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:
+            return None
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, owned by another user
+    except OSError:
+        return None
+
+
 def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
     """Trade journal health"""
     # session_orchestrator only enforces journal health when mode == "live", so a
@@ -431,10 +483,33 @@ def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
             return CheckResult(True, f"OK ({LIVE_JOURNAL_DB_PATH.name})")
         err = journal.last_error
         if isinstance(err, TradeJournalLockedError):
-            pid_part = f"PID {err.holder_pid}" if err.holder_pid is not None else "another process"
+            # The "lock" is a DuckDB writer lock held by a LIVE process, not a
+            # lockfile — there is nothing to "clear" if the holder is gone
+            # (DuckDB releases on holder exit). So diagnose the holder PID's
+            # liveness and tell the operator which action actually applies.
+            holder = err.holder_pid
+            if holder is None:
+                return CheckResult(
+                    False,
+                    "LOCKED by another process (PID unknown). "
+                    "Run: scripts/tools/stop_live.ps1 -NoPrompt to clear, then retry.",
+                )
+            alive = _pid_is_alive(holder)
+            if alive is True:
+                return CheckResult(
+                    False,
+                    f"LOCKED by live PID {holder}. Run: scripts/tools/stop_live.ps1 -NoPrompt to stop it, then retry.",
+                )
+            if alive is False:
+                return CheckResult(
+                    False,
+                    f"LOCKED by stale/dead PID {holder} (holder gone — DuckDB should release). "
+                    "Retry; if it persists, run: scripts/tools/stop_live.ps1 -NoPrompt.",
+                )
             return CheckResult(
                 False,
-                f"LOCKED by {pid_part}. Run: scripts/tools/stop_live.ps1 to clear, then retry.",
+                f"LOCKED by PID {holder} (liveness unknown). "
+                "Run: scripts/tools/stop_live.ps1 -NoPrompt to clear, then retry.",
             )
         return CheckResult(False, f"FAILED: TradeJournal could not open {LIVE_JOURNAL_DB_PATH}")
     except Exception as e:
@@ -448,7 +523,7 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
     if ctx.demo:
         return CheckResult(True, "SKIPPED (demo)")
 
-    root = Path(__file__).resolve().parents[1]
+    root = PROJECT_ROOT
     try:
         result = subprocess.run(
             ["git", "status", "--short", "--branch"],
@@ -469,6 +544,8 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
     changes = lines[1:]
     if "behind" in branch.lower():
         return CheckResult(False, f"FAILED: repo behind origin ({branch})")
+    if "ahead" in branch.lower():
+        return CheckResult(False, f"FAILED: repo ahead of origin ({branch}); push or isolate before live launch")
     if changes:
         return CheckResult(False, f"FAILED: repo dirty ({len(changes)} path(s)); clean or isolate live launch branch")
     return CheckResult(True, f"OK ({branch})")
@@ -488,11 +565,16 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
 
     - signal_only: OK (this is the path that accumulates the count).
     - demo: WARN (no real capital at risk).
-    - live + Express-Funded prop profile (is_express_funded=True): WARN
-      (e.g. Topstep XFA — funded-account wrapper insulates real capital).
+    - live + Express-Funded prop profile (is_express_funded=True): OK —
+      telemetry gate WAIVED. Operator decision 2026-06-01: the funded-account
+      wrapper (Topstep XFA / Tradeify / Bulenox) insulates real personal
+      capital, so the 30-day signal-maturity floor must NEVER block a funded
+      live launch. See docs/governance/decisions/ + .claude/rules/
+      telemetry-maturity-waiver.md.
     - live + real-capital broker (profile is_express_funded=False, unknown
-      profile, or no profile): FAIL — conservative default until the gate
-      is either promoted through proper doctrine or formally retired.
+      profile, or no profile): FAIL — conservative default. Real personal
+      capital still requires the maturity floor; the waiver above is
+      Express-Funded-only and does NOT relax this path.
 
     --all (no single instrument fixed): ctx.instrument may be a single
     symbol or a sentinel like "ALL"; evaluated against MNQ as the primary
@@ -545,11 +627,22 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
                 f"{target_instrument} trading_days; run --signal-only until {floor})",
             )
 
-        mode_label = "demo" if ctx.demo else f"funded profile={ctx.profile_id}"
+        # Express-Funded live (Topstep XFA et al.): telemetry gate WAIVED per
+        # operator decision 2026-06-01 — the funded-account wrapper insulates
+        # real personal capital, so the maturity floor must never block a
+        # funded live launch. Demo stays advisory WARN (no capital, but not a
+        # deliberate waiver). See .claude/rules/telemetry-maturity-waiver.md.
+        if ctx.demo:
+            return CheckResult(
+                True,
+                f"WARN: telemetry below floor ({n}/{floor} distinct {target_instrument} "
+                f"trading_days, demo — advisory; see telemetry_maturity.py module docstring)",
+            )
         return CheckResult(
             True,
-            f"WARN: telemetry below floor ({n}/{floor} distinct {target_instrument} "
-            f"trading_days, {mode_label} — advisory; see telemetry_maturity.py module docstring)",
+            f"OK (telemetry gate waived for Express-Funded profile={ctx.profile_id}; "
+            f"{n}/{floor} distinct {target_instrument} trading_days — funded wrapper "
+            f"insulates real capital, operator decision 2026-06-01)",
         )
     except Exception as e:
         return CheckResult(False, f"FAILED: {e}")
@@ -565,12 +658,18 @@ def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, "FAILED: live launch requires --profile for strict readiness")
 
     try:
-        from scripts.tools.live_readiness_report import build_live_readiness_report
+        from scripts.tools.live_readiness_report import build_live_readiness_report, launch_blocking_strict_warnings
 
         report = build_live_readiness_report(profile_id=ctx.profile_id, effective_copies=ctx.requested_copies)
         strict = report.get("strict_zero_warn") or {}
         blockers = list(strict.get("blockers") or [])
+        blocking_warnings = launch_blocking_strict_warnings(strict)
         if strict.get("green") is True:
+            if not ctx.demo and blocking_warnings:
+                msg = "; ".join(str(warning) for warning in blocking_warnings[:3])
+                if len(blocking_warnings) > 3:
+                    msg += f"; +{len(blocking_warnings) - 3} more"
+                return CheckResult(False, f"FAILED: live readiness has blocking strict warnings ({msg})")
             return CheckResult(True, "OK (strict_zero_warn green)")
         msg = "; ".join(str(blocker) for blocker in blockers[:3])
         if len(blockers) > 3:
@@ -582,6 +681,68 @@ def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
         if ctx.demo:
             return CheckResult(True, f"WARN: live readiness report unavailable in demo ({e})")
         return CheckResult(False, f"FAILED: live readiness report unavailable ({e})")
+
+
+def _check_project_pulse_for_live(ctx: PreflightContext) -> CheckResult:
+    """Project pulse launch blocker for live mode.
+
+    Demo and signal-only are evidence-accrual paths. Real-money launch must
+    fail closed when the operator pulse still reports broken/high live-control
+    findings or an explicit capital recommendation block.
+    """
+    if ctx.signal_only:
+        return CheckResult(True, "SKIPPED (signal-only)")
+    if ctx.demo:
+        return CheckResult(True, "SKIPPED (demo)")
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/tools/project_pulse.py",
+                "--fast",
+                "--format",
+                "json",
+                "--no-cache",
+            ],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return CheckResult(False, f"FAILED: project_pulse unavailable ({exc})")
+
+    stdout = result.stdout.strip()
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        detail = (result.stderr or stdout or str(result.returncode)).strip().splitlines()[-1:]
+        suffix = f": {detail[0]}" if detail else ""
+        return CheckResult(False, f"FAILED: project_pulse JSON parse failed ({exc}){suffix}")
+
+    capital_recommendation = str(payload.get("capital_recommendation") or "")
+    if "blocked" in capital_recommendation.lower():
+        return CheckResult(False, f"FAILED: {capital_recommendation}")
+
+    blocking_items = [
+        item
+        for item in payload.get("items", [])
+        if isinstance(item, dict)
+        and item.get("category") == "broken"
+        and str(item.get("severity") or "").lower() in {"critical", "high"}
+    ]
+    if blocking_items:
+        summaries = "; ".join(str(item.get("summary") or "unknown") for item in blocking_items[:3])
+        if len(blocking_items) > 3:
+            summaries += f"; +{len(blocking_items) - 3} more"
+        return CheckResult(False, f"FAILED: project_pulse blocker(s): {summaries}")
+
+    if result.returncode != 0:
+        return CheckResult(False, f"FAILED: project_pulse exited {result.returncode}")
+
+    return CheckResult(True, "OK (project_pulse no live blockers)")
 
 
 def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
@@ -602,7 +763,13 @@ def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
             return CheckResult(False, f"FAILED: profile {ctx.profile_id!r} not in ACCOUNT_PROFILES")
         n_copies = ctx.requested_copies if ctx.requested_copies > 0 else prof.copies
         if n_copies <= 1:
-            return CheckResult(True, f"SKIPPED (copies={n_copies})")
+            # Single-account pilot: copy-trading is genuinely not applicable, so
+            # this is a clean PASS — not a SKIP. The dashboard maps SKIPPED -> warn
+            # (_normalize_check_status), and the live-launch guard blocks on any
+            # warn under strict-zero-warn parity (bot_dashboard.py action_start),
+            # which would falsely block a single-account funded live launch. Emit
+            # OK so a copies=1 pilot is launchable via the dashboard CTA.
+            return CheckResult(True, f"OK (copies={n_copies}, single-account — copy-trading N/A)")
         if ctx.signal_only:
             return CheckResult(True, "SKIPPED (signal-only — no account resolution needed)")
         if ctx.components is None:
@@ -670,6 +837,7 @@ PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_repo_drift_for_live,
     _check_telemetry_maturity,
     _check_live_readiness_report,
+    _check_project_pulse_for_live,
     _check_copy_trading_accounts,
     _check_shadow_copy_loss_protection,
 ]
@@ -1079,6 +1247,9 @@ def main() -> None:
                 profile_id=args.profile,
                 mode=_mode_label,
                 source="CLI",
+                copies=args.copies or None,
+                instruments=[args.instrument] if args.instrument else None,
+                broker_accounts_count=args.copies or None,
             )
         except Exception as _e:  # noqa: BLE001 — never block the launch on a UI surface
             log.warning("planned_launch write failed: %s", _e)

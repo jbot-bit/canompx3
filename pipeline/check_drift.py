@@ -7214,6 +7214,226 @@ def check_daily_loss_dollars_below_mll() -> list[str]:
     return violations
 
 
+def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
+    """Marker guard for the self-funded sizing doctrine.
+
+    HARD DOCTRINE (.claude/rules/self-funded-sizing-doctrine.md, operator
+    2026-05-31): prop-firm contract caps (``PropFirmAccount.max_contracts_*``)
+    apply ONLY to prop-firm survival / rule-compliance sims. They must NEVER
+    bound ``self_funded`` (personal-capital) book-building or earning capacity.
+    Personal-capital sizing is risk-first (drawdown tolerance -> vol-targeting /
+    Kelly -> broker margin -> liquidity). The system was born on prop firms, so
+    the tier contract cap is wired into the book-builder
+    (``trading_app/prop_portfolio.py``: ``contract_budget = tier.max_contracts_micro``)
+    with no firm branch -- a latent leak that would silently throttle real
+    personal-capital earnings to a prop-firm-shaped ceiling.
+
+    This check asserts:
+      (a) the doctrine rule file exists (cannot be silently deleted while this
+          check claims to enforce it),
+      (b) every ``self_funded`` entry in ``ACCOUNT_TIERS`` is covered by the
+          ``@margin-guard-not-earnings-cap`` marker comment in
+          ``trading_app/prop_profiles.py`` -- so a new ``self_funded`` tier added
+          without the marker fails loud at review, and
+      (c) STRUCTURAL (added 2026-05-31, audit finding F2-A): ``select_for_profile``
+          in ``trading_app/prop_portfolio.py`` carries a firm branch that does NOT
+          assign ``contract_budget = tier.max_contracts_micro`` for ``self_funded``.
+          This proves the book-builder firm-branch (prop -> tier cap; self_funded ->
+          prop cap disabled as a selection gate) exists, closing the doctrine's
+          previously-unbuilt "Tier-B follow-up". Static-source assertion (no
+          execution) -- if a future edit removes the firm branch and reverts to the
+          unconditional prop cap, the prop earnings cap silently re-leaks into
+          personal-capital book-building; this fails that loud.
+
+    @canonical-source: .claude/rules/self-funded-sizing-doctrine.md,
+    trading_app/prop_profiles.py, trading_app/prop_portfolio.py
+    """
+    violations: list[str] = []
+
+    doctrine = PROJECT_ROOT / ".claude" / "rules" / "self-funded-sizing-doctrine.md"
+    if not doctrine.exists():
+        violations.append(
+            "  .claude/rules/self-funded-sizing-doctrine.md is MISSING. The "
+            "self-funded sizing doctrine (prop caps never bound personal-capital "
+            "earnings) must exist while check_prop_caps_do_not_leak_into_self_funded "
+            "claims to enforce it."
+        )
+
+    profiles_src = PROJECT_ROOT / "trading_app" / "prop_profiles.py"
+    try:
+        lines = profiles_src.read_text(encoding="utf-8").splitlines()
+    except OSError as e:
+        return violations + [f"  cannot read trading_app/prop_profiles.py: {e}"]
+
+    marker = "@margin-guard-not-earnings-cap"
+    marker_line = next((i for i, ln in enumerate(lines) if marker in ln), None)
+    self_funded_tier_lines = [i for i, ln in enumerate(lines) if '("self_funded",' in ln and "PropFirmAccount(" in ln]
+
+    if not self_funded_tier_lines:
+        # Layout changed (tiers renamed/moved). Fail loud rather than silently pass.
+        violations.append(
+            "  could not locate any ('self_funded', ...) ACCOUNT_TIERS entries in "
+            "prop_profiles.py — layout changed; update "
+            "check_prop_caps_do_not_leak_into_self_funded to match."
+        )
+        return violations
+
+    if marker_line is None:
+        violations.append(
+            f"  {marker!r} marker comment is ABSENT from prop_profiles.py but "
+            f"{len(self_funded_tier_lines)} ('self_funded', ...) tier(s) exist. Every "
+            "self_funded contract cap must be explicitly labelled a margin/sanity "
+            "guard (not an earnings ceiling) per the doctrine."
+        )
+        return violations
+
+    # The marker must precede the FIRST self_funded tier and there must be no
+    # self_funded tier above it (the marker introduces the whole block).
+    first_tier = min(self_funded_tier_lines)
+    if marker_line > first_tier:
+        violations.append(
+            f"  {marker!r} marker appears at line {marker_line + 1}, AFTER the first "
+            f"('self_funded', ...) tier at line {first_tier + 1}. The marker must "
+            "introduce the self_funded tier block so every cap is covered."
+        )
+
+    # (c) STRUCTURAL — the book-builder firm branch must exist (F2-A fix, 2026-05-31).
+    # Parse select_for_profile's source via AST and confirm: (1) it references a
+    # self_funded firm branch, and (2) it does NOT assign
+    # `contract_budget = tier.max_contracts_micro` UNCONDITIONALLY (i.e. that
+    # assignment, if present, lives under a non-self_funded branch). This fails loud
+    # if a future edit reverts to the pre-F2-A unconditional prop cap.
+    portfolio_src = PROJECT_ROOT / "trading_app" / "prop_portfolio.py"
+    try:
+        port_text = portfolio_src.read_text(encoding="utf-8")
+    except OSError as e:
+        return violations + [f"  cannot read trading_app/prop_portfolio.py: {e}"]
+
+    func_node = None
+    try:
+        tree = ast.parse(port_text)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "select_for_profile":
+                func_node = node
+                break
+    except SyntaxError as e:
+        return violations + [f"  cannot parse trading_app/prop_portfolio.py: {e}"]
+
+    if func_node is None:
+        violations.append(
+            "  could not locate select_for_profile in trading_app/prop_portfolio.py — "
+            "layout changed; update check_prop_caps_do_not_leak_into_self_funded to match."
+        )
+        return violations
+
+    # An unconditional `contract_budget = tier.max_contracts_micro` is the pre-F2-A
+    # leak. It is a violation ONLY when it is a direct (module-level) statement of the
+    # function body — i.e. NOT nested inside an If/For/etc. Assignments nested inside a
+    # branch (the post-fix prop `else`) are fine.
+    def _is_tier_micro_assign(stmt: ast.stmt) -> bool:
+        if not isinstance(stmt, ast.Assign):
+            return False
+        if not (
+            len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name) and stmt.targets[0].id == "contract_budget"
+        ):
+            return False
+        val = stmt.value
+        return (
+            isinstance(val, ast.Attribute)
+            and val.attr == "max_contracts_micro"
+            and isinstance(val.value, ast.Name)
+            and val.value.id == "tier"
+        )
+
+    unconditional_leak = any(_is_tier_micro_assign(s) for s in func_node.body)
+    has_self_funded_branch = (
+        "self_funded" in port_text[port_text.find("def select_for_profile") :].split("\ndef ", 1)[0]
+    )
+
+    if unconditional_leak:
+        violations.append(
+            "  select_for_profile assigns `contract_budget = tier.max_contracts_micro` "
+            "UNCONDITIONALLY (not inside a firm branch). This is the pre-F2-A leak — the "
+            "prop contract cap would bound self_funded book-building. Restore the "
+            '`if firm_spec.name == "self_funded"` branch (self_funded -> no prop cap).'
+        )
+    if not has_self_funded_branch:
+        violations.append(
+            "  select_for_profile has NO self_funded firm branch on contract_budget. "
+            "Per self-funded-sizing-doctrine.md the prop contract cap must be disabled as "
+            "a selection gate for self_funded (F2-A). Add the firm branch."
+        )
+
+    return violations
+
+
+def check_live_funded_firms_declare_max_live_accounts() -> list[str]:
+    """Every firm with a ``live_funded`` payout policy must declare the hard
+    live-account cap as structured data.
+
+    MFFU Layer C (Option A, operator 2026-05-31): prop plans force a staged path
+    (Evaluation -> Sim Funded -> Live Funded) and the live stage caps accounts.
+    The cap is a firm operational FACT (we do not model the promotion event), so
+    it lives as DATA in ``PropFirmSpec.firm_specific_rules["max_live_accounts"]``,
+    not as behavioral logic. This check stops a live_funded firm from leaving that
+    cap as undocumented prose (a silent-failure / lying-field class per
+    ``institutional-rigor.md`` §§ 5-6) — the book-builder / survival sim must be
+    able to READ the cap rather than infer it from a notes string.
+
+    Verbatim sources for the currently-modeled caps:
+      - Topstep: ``docs/research-input/topstep/topstep_xfa_parameters.txt:228``
+        "Reminder: Only 1 Live Funded Account is permitted."
+      - MFFU Builder: ``docs/research-input/mffu/mffu_builder_50k.md`` (article
+        14290805) -> ``prop_profiles.py`` ``firm_specific_rules["max_live_accounts"]``.
+
+    Fail-closed: a ``live_funded`` policy whose ``firm`` has no matching
+    ``PROP_FIRM_SPECS`` entry FAILS loud (not a silent skip).
+
+    Scope: data-only. The forced-transition state machine + payout-count ledger
+    are deliberately NOT built (Layer C Option B, deferred — see
+    ``docs/audit/2026-05-31-mffu-forced-progression-live-cap-memo.md``).
+
+    @canonical-source: trading_app/prop_firm_policies.py (PAYOUT_POLICIES),
+    trading_app/prop_profiles.py (PROP_FIRM_SPECS)
+    """
+    violations: list[str] = []
+    try:
+        from trading_app.prop_firm_policies import PAYOUT_POLICIES
+        from trading_app.prop_profiles import PROP_FIRM_SPECS
+    except Exception as e:  # pragma: no cover - import guard
+        return [f"  cannot import prop policy/spec registries: {type(e).__name__}: {e}"]
+
+    live_funded = [p for p in PAYOUT_POLICIES.values() if p.stage == "live_funded"]
+    if not live_funded:
+        # No live_funded policy modeled yet — nothing to enforce, but say so
+        # rather than silently passing (the universe is expected to be non-empty
+        # while topstep_live_funded is modeled).
+        return [
+            "  no PayoutPolicy with stage='live_funded' found in PAYOUT_POLICIES — "
+            "layout changed (topstep_live_funded removed?); update "
+            "check_live_funded_firms_declare_max_live_accounts to match."
+        ]
+
+    for policy in live_funded:
+        spec = PROP_FIRM_SPECS.get(policy.firm)
+        if spec is None:
+            violations.append(
+                f"  PayoutPolicy {policy.policy_id!r} (stage=live_funded) has "
+                f"firm={policy.firm!r} with no matching PROP_FIRM_SPECS entry — "
+                "cannot verify max_live_accounts (firm-name mismatch is fail-closed)."
+            )
+            continue
+        rules = spec.firm_specific_rules
+        if not rules or rules.get("max_live_accounts") is None:
+            violations.append(
+                f"  PROP_FIRM_SPECS[{policy.firm!r}] backs a live_funded payout policy "
+                f"({policy.policy_id!r}) but does not declare "
+                "firm_specific_rules['max_live_accounts']. The live-account cap must be "
+                "structured data, not prose — populate it from the firm's verbatim source."
+            )
+    return violations
+
+
 def check_validated_setups_writer_allowlist() -> list[str]:
     """Only canonical validator/maintenance paths may mutate validated_setups."""
     violations: list[str] = []
@@ -7518,6 +7738,48 @@ def check_project_pulse_uses_authority_registry() -> list[str]:
     for ref in required_refs:
         if ref not in content:
             violations.append(f"  scripts/tools/project_pulse.py missing canonical identity reference {ref!r}")
+    return violations
+
+
+def check_stale_work_radar_wired_into_pulse() -> list[str]:
+    """The stale-work radar must stay wired into project_pulse (deep pulse).
+
+    A standalone radar nobody runs is itself stale work. This guard fails loud if
+    the auto-fire wiring is removed — the collector, its deep-only call site, and
+    its presence in the aggregated all_items list must all survive. Mirrors the
+    intent-router parity check: keeps an integration from silently rotting.
+    """
+    violations: list[str] = []
+    radar_path = SCRIPTS_DIR / "tools" / "stale_work_radar.py"
+    pulse_path = SCRIPTS_DIR / "tools" / "project_pulse.py"
+    if not radar_path.exists():
+        return ["  scripts/tools/stale_work_radar.py missing (stale-work radar library)"]
+    if not pulse_path.exists():
+        return ["  scripts/tools/project_pulse.py missing"]
+
+    radar_text = radar_path.read_text(encoding="utf-8")
+    for fn in ("def build_reports(", "def base_exists("):
+        if fn not in radar_text:
+            violations.append(f"  stale_work_radar.py missing public entrypoint {fn!r} (project_pulse depends on it)")
+    # The blob_trap breakdown key is the radar→pulse contract for the chordia
+    # `git add -A` artifact trap. If the scorer stops emitting it, the pulse
+    # filter below silently goes blind to the blob trap — guard both ends.
+    if '"blob_trap"' not in radar_text:
+        violations.append("  stale_work_radar.py missing the '\"blob_trap\"' breakdown key (blob-trap loss class)")
+
+    pulse_text = pulse_path.read_text(encoding="utf-8")
+    required = [
+        ("def collect_stale_work(", "collector definition"),
+        ("import stale_work_radar", "radar import"),
+        ("stale_work_items = [] if fast else collect_stale_work(", "deep-only call site"),
+        ("+ stale_work_items", "aggregation into all_items"),
+        # Without this needle, a future edit could drop blob_trap from the at_risk
+        # filter and re-introduce the blind spot the adversarial review caught.
+        ('"blob_trap" in r.risk_breakdown', "blob-trap branch surfaced in at_risk filter"),
+    ]
+    for needle, what in required:
+        if needle not in pulse_text:
+            violations.append(f"  project_pulse.py missing stale-work {what}: {needle!r}")
     return violations
 
 
@@ -11088,6 +11350,11 @@ def check_fast_lane_promote_orphans() -> list[str]:
             violations.append(
                 f"FAST_LANE PROMOTE in ERROR state: {e.strategy_id} -> {e.error_reason} (file: {e.result_md})"
             )
+        if e.pooling_artifact and e.revocation_sidecar is None:
+            violations.append(
+                "FAST_LANE PROMOTE pooling artifact lacks revocation sidecar: "
+                f"{e.strategy_id} status={e.status} (file: {e.result_md})"
+            )
 
     if QUEUE_CACHE.exists():
         diff_lines = diff_against_cache(entries, QUEUE_CACHE)
@@ -12990,6 +13257,8 @@ def check_cherry_pick_journal_integrity(
         hp = qe.get("heavyweight_prereg")
         if not hp:
             continue
+        if qe.get("status") != "ESCALATED":
+            continue
         sid = qe.get("strategy_id")
         if not isinstance(sid, str):
             continue
@@ -14395,6 +14664,228 @@ def check_ci_pytest_no_timeout_plugin(workflows_dir: Path | None = None) -> list
     return violations
 
 
+# Status values a manifest row may declare, and which expected_resource shape each
+# implies. The check enforces this internal consistency in CI-safe mode (no PDF
+# needed) so a green never depends on — nor implies — a binary that wasn't verified.
+_GROUNDING_STATUSES = {
+    "VERIFIED_LOCAL",  # PDF present locally + page count matched (set in strict-local)
+    "WEB_DERIVED",  # source is a URL; provenance recorded in the extract
+    "STUB_LEDGERED",  # extract is a known stub; ledgered, not silent
+    "MISSING_LOCAL",  # PDF cited but absent from resources/ (located elsewhere)
+    "DERIVED_NOTE",  # extract derives from another tracked extract, not a PDF
+    "UNSUPPORTED",  # no source located anywhere
+}
+
+_GROUNDING_SOURCE_LINE_RE = re.compile(r"^\*\*Source:\*\*", re.MULTILINE)
+
+
+def _grounding_extract_dirs(root: Path) -> list[Path]:
+    """The two grounding-extract corpora the integrity check covers.
+
+    docs/institutional/literature/ is canonical; chatgpt_bundle/LIT_*.md is a
+    parallel bundle copy using the same `**Source:**` convention (Blocker B —
+    a literature-only sweep would silently miss the bundle).
+    """
+    return [
+        root / "docs" / "institutional" / "literature",
+        root / "chatgpt_bundle",
+    ]
+
+
+def _iter_grounding_extracts(root: Path) -> list[Path]:
+    """Every on-disk grounding extract that carries a `**Source:**` line.
+
+    A markdown file WITHOUT a Source line (e.g. PENDING_ACQUISITION_*) is a
+    tracking/meta doc, not an extract — excluded so it is never a false
+    missing-source. chatgpt_bundle is restricted to LIT_*.md (the literature
+    bundle); other bundle docs are governance, not extracts.
+    """
+    out: list[Path] = []
+    lit_dir, bundle_dir = _grounding_extract_dirs(root)
+    if lit_dir.is_dir():
+        for p in sorted(lit_dir.glob("*.md")):
+            if _GROUNDING_SOURCE_LINE_RE.search(p.read_text(encoding="utf-8", errors="replace")):
+                out.append(p)
+    if bundle_dir.is_dir():
+        for p in sorted(bundle_dir.glob("LIT_*.md")):
+            if _GROUNDING_SOURCE_LINE_RE.search(p.read_text(encoding="utf-8", errors="replace")):
+                out.append(p)
+    return out
+
+
+def check_literature_source_integrity(
+    *,
+    strict_local: bool | None = None,
+    require_all: bool = False,
+    project_root: Path | None = None,
+) -> list[str]:
+    """Two-mode literature-source grounding-integrity check (plan §C).
+
+    Reads the machine-readable manifest
+    (docs/audit/research_grounding_source_manifest.yaml) — the single source of
+    truth shared with the gap ledger — and verifies that grounding is HONEST:
+    every extract resolves to a declared source whose status is recorded, and no
+    green ever implies a PDF was verified when it wasn't.
+
+    CI-safe (default): manifest <-> extract consistency only. Verifies that
+      - the manifest parses and every row has the required fields;
+      - every extract row points at files that exist on disk;
+      - every on-disk extract (literature/ AND chatgpt_bundle/LIT_*) with a
+        Source line is covered by a manifest row (false-completeness guard);
+      - each declared `status` is internally consistent with its
+        `expected_resource` shape (e.g. WEB_DERIVED must be a URL, not a PDF);
+      - web-derived sources are explicitly declared.
+    Does NOT require any PDF on disk -> passes in a fresh CI clone.
+
+    strict-local: ADDITIONALLY, for rows whose declared PDF is present on disk
+    (or for ALL PDF rows when ``require_all``), verify the file exists and its
+    ``fitz`` page count matches the extract's declared ``expected_pages`` (the
+    "cited pages exist" rule). ``strict_local`` defaults to auto: True when the
+    resources/ dir holds any manifest-declared PDF, else False — so a populated
+    local corpus is verified without a flag, and a bare clone is not.
+
+    A generic title/text overlap is NEVER source proof: only the exact declared
+    filename + page count counts (guards the G12/Pardo false-positive class).
+    """
+    root = project_root or PROJECT_ROOT
+    manifest_path = root / "docs" / "audit" / "research_grounding_source_manifest.yaml"
+    violations: list[str] = []
+
+    if not manifest_path.exists():
+        return [f"  research grounding manifest missing: {manifest_path}"]
+
+    import yaml
+
+    try:
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        return [f"  research grounding manifest does not parse: {exc}"]
+
+    sources = manifest.get("sources") or []
+    if not sources:
+        return ["  research grounding manifest has no `sources` — refusing to pass empty"]
+
+    required_fields = {
+        "source_id",
+        "extract_files",
+        "expected_resource",
+        "source_tier",
+        "tracked",
+        "ci_verifiable",
+        "status",
+    }
+
+    # Map every declared extract -> its source row; flag structural problems.
+    declared_extracts: set[str] = set()
+    for s in sources:
+        sid = s.get("source_id", "<no id>")
+        missing = required_fields - set(s)
+        if missing:
+            violations.append(f"  source [{sid}]: missing required field(s): {sorted(missing)}")
+            continue
+
+        status = s["status"]
+        if status not in _GROUNDING_STATUSES:
+            violations.append(f"  source [{sid}]: unknown status {status!r} (allowed: {sorted(_GROUNDING_STATUSES)})")
+
+        er = str(s["expected_resource"])
+        is_url = er.startswith("http://") or er.startswith("https://")
+
+        # VERIFIED_LOCAL is a RUNTIME-only status: it asserts the PDF is present
+        # and page-matched HERE. A committed VERIFIED_LOCAL whose PDF is absent on
+        # disk (the normal state for an untracked PDF in a fresh clone) would claim
+        # a verification this run cannot reproduce -> drift. This makes the core
+        # honesty guarantee self-enforcing: a green never implies a PDF was
+        # verified when it wasn't. (The local-verification *history* lives in
+        # notes + the gap ledger; the committed status stays MISSING_LOCAL.)
+        if status == "VERIFIED_LOCAL" and not (root / er).exists():
+            violations.append(
+                f"  source [{sid}]: status VERIFIED_LOCAL but {er} is absent on disk — "
+                "VERIFIED_LOCAL is a runtime-only status (the PDF must be present here). "
+                "Commit MISSING_LOCAL and record the local verification in notes/ledger; "
+                "strict-local re-verifies at runtime when the file is present."
+            )
+
+        # status <-> expected_resource shape consistency (CI-safe honesty).
+        if status == "WEB_DERIVED" and not is_url:
+            violations.append(f"  source [{sid}]: status WEB_DERIVED but expected_resource is not a URL ({er!r})")
+        if status == "DERIVED_NOTE":
+            # Must point at a tracked repo path (another extract), not a PDF/URL.
+            if is_url or er.endswith(".pdf"):
+                violations.append(
+                    f"  source [{sid}]: status DERIVED_NOTE but expected_resource is not a tracked repo path ({er!r})"
+                )
+            elif not (root / er).exists():
+                violations.append(f"  source [{sid}]: DERIVED_NOTE points at missing repo path {er!r}")
+
+        # Every declared extract file must exist on disk.
+        for ef in s["extract_files"]:
+            declared_extracts.add(ef.replace("\\", "/"))
+            if not (root / ef).exists():
+                violations.append(f"  source [{sid}]: declared extract_file does not exist: {ef}")
+
+    # False-completeness guard: every on-disk extract (both corpora) with a
+    # Source line MUST be covered by a manifest row.
+    for ext in _iter_grounding_extracts(root):
+        rel = ext.relative_to(root).as_posix()
+        if rel not in declared_extracts:
+            violations.append(
+                f"  grounding extract not in manifest: {rel} "
+                "(every extract with a **Source:** line must have a manifest row)"
+            )
+
+    # ----- strict-local: verify PRESENT PDFs match declared page count --------
+    pdf_rows = [
+        s
+        for s in sources
+        if set(s) >= required_fields
+        and not str(s["expected_resource"]).startswith("http")
+        and str(s["expected_resource"]).endswith(".pdf")
+    ]
+
+    if strict_local is None:
+        # Auto: enable when any declared PDF is present locally.
+        strict_local = any((root / str(s["expected_resource"])).exists() for s in pdf_rows)
+
+    if strict_local:
+        try:
+            import fitz  # PyMuPDF
+        except Exception:
+            fitz = None
+        for s in pdf_rows:
+            sid = s["source_id"]
+            er = str(s["expected_resource"])
+            pdf_path = root / er
+            present = pdf_path.exists()
+            if not present:
+                if require_all:
+                    violations.append(f"  source [{sid}]: strict-local requires {er} but it is absent from disk")
+                # else: untracked-and-absent is the normal local state — skip silently.
+                continue
+            # Present -> verify page count if we can and a count is declared.
+            expected_pages = s.get("expected_pages")
+            if expected_pages is None:
+                continue
+            if fitz is None:
+                violations.append(
+                    f"  source [{sid}]: strict-local cannot verify {er} page count (PyMuPDF/fitz unavailable)"
+                )
+                continue
+            try:
+                with fitz.open(str(pdf_path)) as doc:
+                    actual = doc.page_count
+            except Exception as exc:
+                violations.append(f"  source [{sid}]: strict-local could not open {er}: {exc}")
+                continue
+            if actual != expected_pages:
+                violations.append(
+                    f"  source [{sid}]: {er} page count {actual} != declared expected_pages {expected_pages} "
+                    "(the 'cited pages exist' rule — wrong edition / sampler / stub)"
+                )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -14441,6 +14932,12 @@ CHECKS = [
         False,
     ),
     ("Config filter_type sync", check_config_filter_sync, False, False),
+    (
+        "Literature source-grounding integrity (CI-safe manifest<->extract; strict-local PDF pages)",
+        check_literature_source_integrity,
+        False,
+        False,
+    ),
     ("ENTRY_MODELS sync", check_entry_models_sync, False, False),
     ("Entry price sanity", check_entry_price_sanity, False, False),
     ("Nested subpackage isolation", check_nested_isolation, False, False),
@@ -14832,6 +15329,18 @@ CHECKS = [
         False,
         False,
     ),
+    (
+        "Prop contract caps must not leak into self_funded sizing (margin-guard marker present)",
+        check_prop_caps_do_not_leak_into_self_funded,
+        False,  # blocking — a prop cap silently bounding personal-capital earnings is a silent failure
+        False,
+    ),
+    (
+        "Every live_funded payout policy's firm must declare max_live_accounts (data, not prose)",
+        check_live_funded_firms_declare_max_live_accounts,
+        False,  # blocking — undocumented live-account cap is a silent-failure / lying-field class
+        False,
+    ),
     ("Shared profile fingerprint helper is canonical", check_shared_profile_fingerprint_canonical, False, False),
     ("SR state writer uses derived-state contract envelope", check_sr_state_contract_writer, False, False),
     ("SR state reader validates envelope before trust", check_sr_state_contract_reader, False, False),
@@ -14872,6 +15381,12 @@ CHECKS = [
     (
         "Project pulse exposes repo identity from canonical authority registry",
         check_project_pulse_uses_authority_registry,
+        False,
+        False,
+    ),
+    (
+        "Stale-work radar stays wired into project pulse (deep)",
+        check_stale_work_radar_wired_into_pulse,
         False,
         False,
     ),
@@ -15398,10 +15913,21 @@ def main():
             "semantics unchanged."
         ),
     )
+    parser.add_argument(
+        "--skip-advisory",
+        action="store_true",
+        help=(
+            "Skip every advisory drift check. Used by pre-commit to keep the commit "
+            "path focused on blocking integrity gates. Full drift remains the default "
+            "manual/CI path, and this flag never skips a blocking check because it is "
+            "keyed only on each CHECKS entry's is_advisory flag."
+        ),
+    )
     args = parser.parse_args()
     fast_mode = args.fast
     quiet_mode = args.quiet
     skip_crg_advisory = args.skip_crg_advisory
+    skip_advisory = args.skip_advisory
 
     if not quiet_mode:
         print("=" * 60)
@@ -15431,6 +15957,7 @@ def main():
 
     fast_skipped = 0  # tracks --fast skips separately from DB-unavailable skips
     crg_skipped = 0  # tracks --skip-crg-advisory skips (commit drift gate)
+    advisory_skipped = 0  # tracks --skip-advisory skips (commit drift gate)
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         if fast_mode and label in SLOW_CHECK_LABELS:
             fast_skipped += 1
@@ -15440,6 +15967,13 @@ def main():
             if not quiet_mode:
                 print(f"Check {i}: {label}...")
                 print("  SKIPPED (--skip-crg-advisory; advisory, runs in CI)")
+                print()
+            continue
+        if skip_advisory and is_advisory:
+            advisory_skipped += 1
+            if not quiet_mode:
+                print(f"Check {i}: {label}...")
+                print("  SKIPPED (--skip-advisory; advisory, runs in full drift/CI)")
                 print()
             continue
         if not quiet_mode:
@@ -15519,9 +16053,10 @@ def main():
     # Summary — blocking_count tracks actual passes (not computed from total)
     fast_part = f", {fast_skipped} skipped (--fast)" if fast_skipped else ""
     crg_part = f", {crg_skipped} skipped (--skip-crg-advisory)" if crg_skipped else ""
+    advisory_part = f", {advisory_skipped} skipped (--skip-advisory)" if advisory_skipped else ""
     summary_line = (
         f"{blocking_count} checks passed [OK], "
-        f"{skip_count} skipped (DB unavailable){fast_part}{crg_part}, "
+        f"{skip_count} skipped (DB unavailable){fast_part}{crg_part}{advisory_part}, "
         f"{advisory_count} advisory"
     )
     if all_violations:

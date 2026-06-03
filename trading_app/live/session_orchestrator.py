@@ -324,6 +324,7 @@ class SessionOrchestrator:
         self.auth = components["auth"]
         self._feed_class = components["feed_class"]
         contracts_cls = components["contracts_class"]
+        self._contracts_cls = contracts_cls  # stored for reconnect contract re-resolution
         self._positions_cls = components["positions_class"]
 
         # Stage 4: construct the circuit breaker BEFORE broker components and
@@ -3825,10 +3826,13 @@ class SessionOrchestrator:
 
                     # Re-resolve front-month contract (handles contract roll mid-session)
                     try:
-                        from trading_app.live.projectx.contract_resolver import ProjectXContracts
-
-                        _contracts = ProjectXContracts(auth=self.auth)
-                        _contracts._contract_cache.clear()  # Force fresh resolution
+                        # Use the broker-factory-supplied class (self._contracts_cls) so
+                        # Rithmic/Tradovate reconnects use their own resolution, not ProjectX.
+                        # A fresh instance has an empty cache by construction — no .clear() needed.
+                        # (SO-213-01: prior code hardcoded ProjectXContracts, bypassing broker factory.
+                        #  SO-213-02: _contract_cache.clear() raised AttributeError on TradovateContracts,
+                        #  silently swallowed, causing stale contract symbol on Tradovate reconnect.)
+                        _contracts = self._contracts_cls(auth=self.auth, demo=self.demo)
                         new_symbol = _contracts.resolve_front_month(self.instrument)
                         if new_symbol != self.contract_symbol:
                             log.warning(

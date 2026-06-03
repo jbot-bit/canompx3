@@ -31,10 +31,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+_REPO_ROOT_FOR_IMPORTS = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT_FOR_IMPORTS) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT_FOR_IMPORTS))
+
 import duckdb
 import pandas as pd
 import yaml
 
+from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
 from research.filter_utils import filter_signal
 from scripts.research.fast_lane_structural_hash import compute_structural_hash
@@ -49,7 +54,7 @@ from trading_app.chordia import (
     chordia_threshold,
     compute_chordia_t,
 )
-from trading_app.config import ALL_FILTERS, WF_START_OVERRIDE, CrossAssetATRFilter
+from trading_app.config import ALL_FILTERS, STOP_MULTIPLIERS, WF_START_OVERRIDE, CrossAssetATRFilter, apply_tight_stop
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.hypothesis_loader import check_mode_a_consistency, load_hypothesis_metadata
 from trading_app.strategy_discovery import parse_stop_multiplier
@@ -67,7 +72,10 @@ FAST_LANE_V5_1_N_MIN = 50            # screen.n_IS_on_min
 FAST_LANE_V5_1_FIRE_LO = 0.05        # screen.fire_rate_gate
 FAST_LANE_V5_1_FIRE_HI = 0.95
 
-SUPPORTED_TEMPLATE_VERSIONS = frozenset({"fast_lane_v5.1"})
+# ``chordia_strict_v1`` is the heavyweight exact-lane template emitted by the
+# Chordia evidence factory. It uses the legacy heavyweight verdict branch while
+# still declaring a known template version, so unknown templates remain refused.
+SUPPORTED_TEMPLATE_VERSIONS = frozenset({"chordia_strict_v1", "fast_lane_v5.1"})
 
 
 def _normalize_writable_path(path: Path) -> Path:
@@ -104,6 +112,7 @@ class Cell:
     # are rejected at load time (fail-closed per institutional-rigor § 6).
     template_version: str | None
     direction: str | None
+    stop_multiplier: float = DEFAULT_STOP_MULTIPLIER
 
 
 def _resolve_output_paths(hypothesis_path: Path) -> tuple[Path, Path, Path]:
@@ -130,27 +139,22 @@ def _load_cell(hypothesis_path: Path) -> Cell:
     if not isinstance(hypotheses, list) or len(hypotheses) != 1:
         raise SystemExit("This bounded runner requires exactly one hypothesis entry.")
 
-    # Fail-closed on non-default stop_multiplier. orb_outcomes does not store a
-    # stop_multiplier column — its trade stream is built at the default 1.0 stop.
-    # An S-suffixed strategy_id (e.g. *_S075) refers to a different physical
-    # trade stream that requires outcome_builder rebuild at the target stop.
-    # This runner has no such pathway; silently auditing the default-stop trades
-    # under an S-suffixed id would compute a t-stat against the wrong cohort.
+    # Non-default stops are supported only through the canonical MAE-based
+    # tight-stop transform used by discovery, validation, and allocation.
+    # Unknown stop levels fail closed; do not invent a second stop model here.
     sid = str(scope["strategy_id"])
     sid_stop = parse_stop_multiplier(sid)
-    if sid_stop != DEFAULT_STOP_MULTIPLIER:
+    scope_stop = scope.get("stop_multiplier")
+    if scope_stop is not None and not math.isclose(float(scope_stop), sid_stop, rel_tol=0.0, abs_tol=1e-9):
         sys.stderr.write(
-            f"REFUSE: strategy {sid!r} has stop_multiplier={sid_stop} != {DEFAULT_STOP_MULTIPLIER}. "
-            "This runner audits canonical orb_outcomes which is built at the default stop. "
-            "Non-default stops require an outcome_builder rebuild at the target stop and a "
-            "different runner. Refusing to run rather than audit the wrong trade stream.\n"
+            f"REFUSE: prereg scope.stop_multiplier={scope_stop} disagrees with strategy_id "
+            f"stop_multiplier={sid_stop}. Refusing to audit an ambiguous stop cohort.\n"
         )
         raise SystemExit(2)
-    scope_stop = scope.get("stop_multiplier")
-    if scope_stop is not None and float(scope_stop) != DEFAULT_STOP_MULTIPLIER:
+    if not any(math.isclose(sid_stop, float(s), rel_tol=0.0, abs_tol=1e-9) for s in STOP_MULTIPLIERS):
         sys.stderr.write(
-            f"REFUSE: prereg scope.stop_multiplier={scope_stop} != {DEFAULT_STOP_MULTIPLIER}. "
-            "Same fail-closed reason as above.\n"
+            f"REFUSE: strategy {sid!r} has unsupported stop_multiplier={sid_stop}. "
+            f"Supported values are {STOP_MULTIPLIERS}; refusing to invent stop-model behavior.\n"
         )
         raise SystemExit(2)
 
@@ -207,6 +211,7 @@ def _load_cell(hypothesis_path: Path) -> Cell:
         result_summary_csv=result_summary_csv,
         template_version=template_version,
         direction=direction_str,
+        stop_multiplier=sid_stop,
     )
 
 
@@ -262,7 +267,16 @@ def _load_universe(con: duckdb.DuckDBPyConnection, cell: Cell, *, is_only: bool)
     ]
     if start is not None:
         params.append(start)
-    return con.execute(sql, params).df()
+    df = con.execute(sql, params).df()
+    return _apply_cell_stop_multiplier(df, cell)
+
+
+def _apply_cell_stop_multiplier(df: pd.DataFrame, cell: Cell) -> pd.DataFrame:
+    if df.empty or math.isclose(cell.stop_multiplier, DEFAULT_STOP_MULTIPLIER, rel_tol=0.0, abs_tol=1e-9):
+        return df
+    cost_spec = get_cost_spec(cell.instrument)
+    adjusted = apply_tight_stop(df.to_dict("records"), cell.stop_multiplier, cost_spec)
+    return pd.DataFrame(adjusted).reindex(columns=df.columns)
 
 
 def _inject_cross_asset_atr(

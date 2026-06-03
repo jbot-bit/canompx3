@@ -112,6 +112,60 @@ def _write_fast_lane_prereg(tmp_path: Path, *, template_version: str | None = "f
     return prereg
 
 
+def _write_chordia_strict_prereg(tmp_path: Path, *, strategy_id: str, stop_multiplier: float) -> Path:
+    prereg = tmp_path / "chordia-strict-prereg.yaml"
+    body: dict[str, Any] = {
+        "metadata": {
+            "template_version": "chordia_strict_v1",
+            "name": "synthetic_strict_chordia_test",
+            "date_locked": "2026-05-31T00:00:00+10:00",
+            "holdout_date": "2026-01-01",
+            "testing_mode": "individual",
+            "pathway": "B_individual",
+            "total_expected_trials": 1,
+            "theory_grant": False,
+            "research_question_type": "conditional_role",
+        },
+        "scope": {
+            "strategy_id": strategy_id,
+            "instrument": "MNQ",
+            "session": "NYSE_OPEN",
+            "orb_minutes": 15,
+            "entry_model": "E2",
+            "confirm_bars": 1,
+            "rr_target": 1.0,
+            "filter_type": "NO_FILTER",
+            "direction": "pooled",
+            "stop_multiplier": stop_multiplier,
+        },
+        "grounding": {"filter_grounding_status": {"verdict": "UNSUPPORTED"}},
+        "hypotheses": [
+            {
+                "name": "synthetic strict chordia test",
+                "role": {
+                    "kind": "standalone",
+                    "parent": "synthetic exact-lane replay",
+                    "comparator": "strict Chordia threshold",
+                    "primary_metric": "selected_trade_mean_r",
+                    "promotion_target": "audit-log proposal",
+                },
+                "scope": {
+                    "instruments": ["MNQ"],
+                    "sessions": ["NYSE_OPEN"],
+                    "rr_targets": [1.0],
+                    "entry_models": ["E2"],
+                    "confirm_bars": [1],
+                    "stop_multipliers": [stop_multiplier],
+                    "orb_minutes": [15],
+                },
+                "expected_trial_count": 1,
+            }
+        ],
+    }
+    prereg.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+    return prereg
+
+
 def _cell_for_prereg(tmp_path: Path, prereg: Path, *, template_version: str | None = "fast_lane_v5.1") -> runner.Cell:
     return runner.Cell(
         hypothesis_file=prereg,
@@ -132,6 +186,35 @@ def _cell_for_prereg(tmp_path: Path, prereg: Path, *, template_version: str | No
         template_version=template_version,
         direction="pooled" if template_version else None,
     )
+
+
+def test_load_cell_accepts_supported_non_default_stop_multiplier(tmp_path: Path) -> None:
+    prereg = _write_chordia_strict_prereg(
+        tmp_path,
+        strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER_O15_S075",
+        stop_multiplier=0.75,
+    )
+
+    cell = runner._load_cell(prereg)
+
+    assert cell.strategy_id == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER_O15_S075"
+    assert cell.stop_multiplier == 0.75
+
+
+def test_stop_multiplier_adjustment_uses_canonical_tight_stop_math(tmp_path: Path) -> None:
+    cell = _cell_for_prereg(tmp_path, _write_fast_lane_prereg(tmp_path), template_version=None)
+    cell = runner.Cell(**{**cell.__dict__, "stop_multiplier": 0.75})
+    df = pd.DataFrame(
+        [
+            _make_trade_row(trading_day=dt.date(2025, 1, 2), long=True, pnl_r=1.0, outcome="win") | {"mae_r": 0.2},
+            _make_trade_row(trading_day=dt.date(2025, 1, 3), long=True, pnl_r=1.0, outcome="win") | {"mae_r": 0.9},
+        ]
+    )
+
+    adjusted = runner._apply_cell_stop_multiplier(df, cell)
+
+    assert adjusted["pnl_r"].tolist() == [1.0, -0.75]
+    assert adjusted["outcome"].tolist() == ["win", "loss"]
 
 
 def _write_result_artifacts(cell: runner.Cell) -> None:

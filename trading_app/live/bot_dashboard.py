@@ -48,6 +48,25 @@ BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
 # Rationale: 2x the ~60s bar cadence (SessionOrchestrator._publish_state runs
 # once per 1m bar) — two consecutive missed writes flips the dashboard to STALE.
 HEARTBEAT_STALE_AFTER_S = 120
+# A session whose heartbeat is older than this is "definitely dead" — safe to
+# actively clear its bot_state, not merely hide its controls. Deliberately
+# higher than HEARTBEAT_STALE_AFTER_S: hiding launch buttons (120s) is reversible
+# and cheap; destroying a live session's state (300s) needs more certainty so a
+# briefly-unresponsive LIVE session (GC pause, slow tick) is never orphaned.
+SESSION_DEFINITELY_DEAD_AFTER_S = 300
+# A handoff that has reached a terminal-but-not-launched state (ready_to_start /
+# needs_refresh / waiting_cleanup) and has had NO backing session running for
+# longer than this is orphaned — the launch it was prepared for never happened
+# (operator walked away, dashboard outlived the attempt). Auto-clear it so it
+# stops blocking start_signal/start_demo/start_live forever.
+# Rationale: 30 min (1800s) is well past any legitimate cleanup→refresh→launch
+# cycle (each stage is seconds-to-low-minutes) but short enough that a stuck
+# handoff never survives to the next trading day. n=1: 2026-06-02 a ready_to_start
+# handoff from the prior night blocked the LIVE button 11h until manual restart.
+HANDOFF_STALE_AFTER_S = 1800
+LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto"
+LIVE_PILOT_INSTRUMENT = "MNQ"
+LIVE_PILOT_COPIES = 1
 
 
 def _as_mapping(value: object) -> dict[str, object]:
@@ -102,7 +121,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
         if hb:
             try:
                 age = (datetime.now(UTC) - datetime.fromisoformat(hb)).total_seconds()
-                if age > 300:  # 5 minutes stale = definitely dead
+                if age > SESSION_DEFINITELY_DEAD_AFTER_S:  # definitely dead
                     clear_state()
                     log.info("Startup: cleared stale bot_state (heartbeat %ds old)", int(age))
             except Exception:
@@ -566,6 +585,30 @@ def _handoff_snapshot(
     journal = _journal_lock_status()
     instance_locks = _instance_lock_status()
 
+    # Auto-expire an orphaned handoff: prepared for a launch that never happened
+    # and now blocking the start buttons forever. Only when nothing is running and
+    # no runtime locks are held (so we never clear a handoff that is legitimately
+    # mid-cleanup) AND it is older than HANDOFF_STALE_AFTER_S. The "stopping" status
+    # is exempt — that means a session IS actively shutting down for the handoff.
+    if not session["running"] and not journal["locked"] and not instance_locks["locked"]:
+        with _state_lock:
+            requested_iso = _handoff_state.get("requested_at")
+        if requested_iso:
+            try:
+                age_s = (datetime.now(UTC) - datetime.fromisoformat(str(requested_iso))).total_seconds()
+            except (TypeError, ValueError):
+                age_s = None
+            if age_s is not None and age_s > HANDOFF_STALE_AFTER_S:
+                log.info(
+                    "Clearing orphaned handoff (age=%.0fs > %ds, no session/locks): %s -> %s",
+                    age_s,
+                    HANDOFF_STALE_AFTER_S,
+                    target_profile,
+                    target_mode,
+                )
+                _clear_handoff()
+                return {"active": False, "status": "idle", "reason": "", "action": None}
+
     if session["running"]:
         status = "stopping"
         reason = f"Stopping current session before switching to {target_mode.upper()}."
@@ -617,6 +660,13 @@ def _normalize_check_status(raw_status: str) -> str:
         return "warn"
     if status == "FAILED":
         return "fail"
+    # The "info" fallback is unreachable from scripts/run_live_session.py
+    # --preflight, which emits only OK / FAILED / WARN(S) / SKIPPED (verified
+    # 2026-06-01). It exists for an unrecognized token. CAUTION: an "info" check
+    # does NOT set has_warnings, so it would NOT block a live launch under the
+    # strict-zero-warn gate in action_start. If a new preflight token is ever
+    # added, map it to "warn" or "fail" here (never leave it as "info") so it
+    # cannot silently pass a real-money launch.
     return "info"
 
 
@@ -675,6 +725,13 @@ def _cache_preflight_entry(profile: str, cache_entry: dict[str, object]) -> None
         _preflight_cache[profile] = cache_entry
 
 
+def _live_pilot_cli_args(profile: str) -> list[str]:
+    """Return server-side live pilot routing args for the funded MNQ pilot."""
+    if profile != LIVE_PILOT_PROFILE:
+        return []
+    return ["--instrument", LIVE_PILOT_INSTRUMENT, "--copies", str(LIVE_PILOT_COPIES)]
+
+
 def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, object]:
     cmd = [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"]
     # Match preflight mode to the requested session mode so signal-only's
@@ -683,6 +740,9 @@ def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, obj
     # is meant to clear.
     if mode == "signal":
         cmd.append("--signal-only")
+    elif mode == "live":
+        cmd.append("--live")
+        cmd.extend(_live_pilot_cli_args(profile))
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -1501,10 +1561,31 @@ async def api_planned_launch():
 
 @app.get("/api/status")
 async def api_status():
-    """Read bot state from JSON file."""
+    """Read bot state from JSON file.
+
+    Exposes an authoritative ``is_running`` flag (the canonical
+    ``_session_snapshot()`` truth, which applies the HEARTBEAT_STALE_AFTER_S
+    rule) so the dashboard's running-profile latch never diverges from the
+    server's own notion of "is a session alive". A session that died without a
+    clean STOPPED write leaves ``mode`` mirroring its last value (SIGNAL/LIVE);
+    raw ``mode`` is preserved for back-compat consumers, but ``is_running``
+    tells the UI whether to show launch controls. When the session is
+    definitely dead (no tracked process AND heartbeat older than
+    SESSION_DEFINITELY_DEAD_AFTER_S), the stale state is actively cleared so it
+    stops latching the dashboard — mirroring the lifespan startup cleaner,
+    which only runs at server start.
+    """
+    from trading_app.live.bot_state import clear_state
+
+    snapshot = _session_snapshot()
+    age = _heartbeat_age_s(read_state())
+    if not snapshot["running"] and not snapshot["tracked_alive"] and age > SESSION_DEFINITELY_DEAD_AFTER_S:
+        clear_state()
+        log.info("api_status: cleared definitely-dead bot_state (heartbeat %ds old)", int(age))
+
     state = read_state()
     if not state:
-        return {"mode": "STOPPED", "lanes": {}, "lane_cards": [], "bars_received": 0}
+        return {"mode": "STOPPED", "lanes": {}, "lane_cards": [], "bars_received": 0, "is_running": False}
     # Check heartbeat staleness
     hb = state.get("heartbeat_utc")
     if hb:
@@ -1515,6 +1596,9 @@ async def api_status():
             state["heartbeat_age_s"] = 9999
     else:
         state["heartbeat_age_s"] = 9999
+    # Authoritative running flag — same canonical truth the operator-state and
+    # handoff logic use. The UI keys control visibility off this, not raw mode.
+    state["is_running"] = bool(_session_snapshot()["running"])
     trading_day = None
     raw_trading_day = state.get("trading_day")
     if isinstance(raw_trading_day, str):
@@ -1945,6 +2029,7 @@ async def api_accounts():
                     "profile_id": pid,
                     "firm": firm.display_name,
                     "firm_key": p.firm,
+                    "is_express_funded": bool(getattr(p, "is_express_funded", False)),
                     "account_size": p.account_size,
                     "copies": p.copies,
                     "max_dd": tier.max_dd,
@@ -1972,6 +2057,176 @@ async def api_accounts():
             )
 
     return {"accounts": accounts, "skipped": skipped}
+
+
+def _lane_control_setup_label(meta: dict[str, object]) -> str:
+    rr_target = meta.get("rr_target")
+    rr_label = f"RR{rr_target:g}" if isinstance(rr_target, float) else None
+    parts = [str(part) for part in (meta.get("entry_model"), rr_label, meta.get("filter_type")) if part]
+    return " | ".join(parts) if parts else "Setup unknown"
+
+
+def _lane_control_row(
+    *,
+    profile: str,
+    strategy_id: str,
+    instrument: str | None,
+    session_name: str | None,
+    active_book: bool,
+    override: dict | None,
+) -> dict[str, object]:
+    meta = _strategy_meta(strategy_id)
+    resolved_session = session_name or cast(str | None, meta.get("session_name"))
+    resolved_instrument = instrument or cast(str | None, meta.get("instrument_label"))
+    enabled = active_book and override is None
+    status = "ON" if enabled else ("OFF" if active_book else "PARKED")
+    return {
+        "profile": profile,
+        "strategy_id": strategy_id,
+        "instrument": resolved_instrument,
+        "session": resolved_session,
+        "session_time_brisbane": _get_session_time_brisbane(resolved_session),
+        "label": str(meta.get("lane_label") or strategy_id),
+        "setup_label": _lane_control_setup_label(meta),
+        "active_book": active_book,
+        "enabled": enabled,
+        "status": status,
+        "reason": (override or {}).get("reason") or (None if active_book else "Parked outside active pilot book"),
+        "paused_at": (override or {}).get("paused_at") or None,
+        "expires_on": (override or {}).get("expires") or None,
+    }
+
+
+def _lane_control_payload(profile: str) -> dict[str, object]:
+    """Return dashboard lane-control state from profile authority + lane_ctl."""
+    from trading_app.lane_ctl import get_lane_override, get_paused_strategy_ids
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
+
+    account_profile = ACCOUNT_PROFILES.get(profile)
+    if account_profile is None:
+        raise KeyError(f"Unknown profile: {profile}")
+
+    active_specs = tuple(effective_daily_lanes(account_profile))
+    active_ids = {lane.strategy_id for lane in active_specs}
+    rows: list[dict[str, object]] = []
+
+    for lane in active_specs:
+        rows.append(
+            _lane_control_row(
+                profile=profile,
+                strategy_id=lane.strategy_id,
+                instrument=lane.instrument,
+                session_name=lane.orb_label,
+                active_book=True,
+                override=get_lane_override(profile, lane.strategy_id),
+            )
+        )
+
+    for strategy_id in sorted(get_paused_strategy_ids(profile) - active_ids):
+        rows.append(
+            _lane_control_row(
+                profile=profile,
+                strategy_id=strategy_id,
+                instrument=None,
+                session_name=None,
+                active_book=False,
+                override=get_lane_override(profile, strategy_id),
+            )
+        )
+
+    rows.sort(
+        key=lambda item: (
+            not bool(item.get("active_book")),
+            _sort_time_key(str(item.get("session_time_brisbane") or "")),
+            str(item.get("strategy_id") or ""),
+        )
+    )
+    enabled_count = sum(1 for row in rows if row.get("active_book") and row.get("enabled"))
+    disabled_count = sum(1 for row in rows if row.get("active_book") and not row.get("enabled"))
+    parked_count = sum(1 for row in rows if not row.get("active_book"))
+    session = _session_snapshot()
+    return {
+        "profile": profile,
+        "active_book_count": len(active_specs),
+        "enabled_count": enabled_count,
+        "disabled_count": disabled_count,
+        "parked_count": parked_count,
+        "counts": {
+            "active": len(active_specs),
+            "enabled": enabled_count,
+            "disabled": disabled_count,
+            "parked": parked_count,
+        },
+        "session_running": bool(session.get("running")),
+        "raw_mode": session.get("raw_mode"),
+        "lanes": rows,
+    }
+
+
+@app.get("/api/lane-control")
+async def api_lane_control(profile: str = LIVE_PILOT_PROFILE):
+    try:
+        return _lane_control_payload(profile)
+    except KeyError as exc:
+        return JSONResponse(status_code=404, content={"status": "error", "message": str(exc), "profile": profile})
+    except Exception as exc:
+        log.warning("api/lane-control failed for profile=%s: %s", profile, exc)
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(exc), "profile": profile})
+
+
+@app.post("/api/lane-control/toggle")
+async def api_lane_control_toggle(request_body: dict | None = None):
+    if not request_body:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Request body required"})
+    profile = str(request_body.get("profile") or LIVE_PILOT_PROFILE)
+    strategy_id = str(request_body.get("strategy_id") or "")
+    enabled = request_body.get("enabled")
+    if not strategy_id:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "strategy_id required"})
+    if not isinstance(enabled, bool):
+        return JSONResponse(status_code=400, content={"status": "error", "message": "enabled boolean required"})
+
+    session = _session_snapshot()
+    if session.get("running"):
+        return JSONResponse(
+            status_code=409,
+            content={"status": "blocked", "message": "Stop the running session before changing lanes."},
+        )
+
+    from trading_app.lane_ctl import pause_strategy_id, resume_strategy_id
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
+
+    account_profile = ACCOUNT_PROFILES.get(profile)
+    if account_profile is None:
+        return JSONResponse(status_code=404, content={"status": "error", "message": f"Unknown profile: {profile}"})
+
+    active_ids = {lane.strategy_id for lane in effective_daily_lanes(account_profile)}
+    if strategy_id not in active_ids:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "blocked",
+                "message": "Only active-book lanes can be changed here. Parked lanes require a separate audit/rebalance.",
+                "strategy_id": strategy_id,
+            },
+        )
+
+    if enabled:
+        changed = resume_strategy_id(profile, strategy_id)
+    else:
+        changed = pause_strategy_id(profile, strategy_id, reason="Dashboard lane off", source="dashboard")
+
+    with _state_lock:
+        _preflight_cache.pop(profile, None)
+
+    return {
+        "status": "ok",
+        "profile": profile,
+        "strategy_id": strategy_id,
+        "enabled": enabled,
+        "changed": changed,
+        "lane_control": _lane_control_payload(profile),
+    }
 
 
 # ── Broker connection management ─────────────────────────────────────
@@ -2450,6 +2705,15 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
         return JSONResponse(status_code=400, content={"status": "error", "message": f"Invalid mode: {mode}"})
 
     profile = profile or _resolve_profile()
+    if mode == "live" and profile != LIVE_PILOT_PROFILE:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "blocked",
+                "message": "Dashboard live launch is configured only for the approved Topstep MNQ pilot.",
+                "profile": profile,
+            },
+        )
     session = _session_snapshot()
     refresh = _refresh_snapshot()
     with _state_lock:
@@ -2504,10 +2768,20 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
 
     prepared = await _prepare_profile_for_start(profile, mode)
     prep_status = str(prepared.get("status") or "error")
-    if prep_status in {"fail", "error", "timeout"}:
+    # Live launches restore strict-zero-warn parity with the retired
+    # scripts/tools/start_topstep_live_pilot.py launcher (which ran readiness
+    # with --strict-zero-warn): any preflight WARN — including SKIPPED checks,
+    # which _normalize_check_status maps to "warn" — blocks a real-money launch.
+    # Signal/demo place no live orders, so a warn is advisory there and the
+    # launch proceeds; the operator weighs warnings via the surfaced preflight
+    # output and re-runs once clean.
+    blocking_statuses = {"fail", "error", "timeout"}
+    if mode == "live":
+        blocking_statuses = blocking_statuses | {"warn"}
+    if prep_status in blocking_statuses:
         return {
             "status": "blocked",
-            "message": str(prepared.get("message") or "Automatic readiness checks failed."),
+            "message": str(prepared.get("message") or "Automatic readiness checks did not pass cleanly."),
             "profile": profile,
             "output": prepared.get("output", ""),
         }
@@ -2542,6 +2816,7 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
             mode_label = "DEMO"
         else:  # live
             cmd.extend(["--live", "--auto-confirm"])
+            cmd.extend(_live_pilot_cli_args(profile))
             mode_label = "LIVE"
 
         log_file = None

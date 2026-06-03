@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 from trading_app.live import bot_dashboard
+from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
 
 class _ASGIClient:
@@ -30,6 +31,14 @@ class _ASGIClient:
                 return await client.get(url, **kwargs)
 
         return anyio.run(_get)
+
+    def post(self, url: str, **kwargs) -> httpx.Response:
+        async def _post() -> httpx.Response:
+            transport = httpx.ASGITransport(app=self._app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                return await client.post(url, **kwargs)
+
+        return anyio.run(_post)
 
 
 @pytest.fixture
@@ -322,6 +331,123 @@ def test_lane_status_bad_profile(client):
     else:
         assert body["paused"] == []
         assert body["paused_count"] == 0
+
+
+def test_lane_control_surfaces_active_and_parked_lanes(client, monkeypatch, tmp_path):
+    import trading_app.lane_ctl as lc
+
+    monkeypatch.setattr(lc, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {"running": False, "raw_mode": "STOPPED", "profile": None},
+    )
+    lc.pause_strategy_id(
+        "topstep_50k_mnq_auto",
+        "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+        reason="SR ALARM live-pilot exclusion",
+        source="test",
+    )
+
+    resp = client.get("/api/lane-control", params={"profile": "topstep_50k_mnq_auto"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["profile"] == "topstep_50k_mnq_auto"
+    assert body["enabled_count"] == body["active_book_count"]
+    assert body["parked_count"] == 1
+    assert body["counts"] == {
+        "active": body["active_book_count"],
+        "enabled": body["enabled_count"],
+        "disabled": body["disabled_count"],
+        "parked": body["parked_count"],
+    }
+    parked = next(row for row in body["lanes"] if row["strategy_id"] == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12")
+    assert parked["status"] == "PARKED"
+    assert parked["active_book"] is False
+    assert "SR ALARM" in parked["reason"]
+
+
+def test_dashboard_live_start_blocks_non_pilot_profile(client):
+    resp = client.post("/api/action/start", params={"profile": "self_funded_tradovate", "mode": "live"})
+
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["status"] == "blocked"
+    assert body["profile"] == "self_funded_tradovate"
+    assert "approved Topstep MNQ pilot" in body["message"]
+
+
+def test_lane_control_toggle_pauses_and_resumes_active_lane(client, monkeypatch, tmp_path):
+    import trading_app.lane_ctl as lc
+
+    monkeypatch.setattr(lc, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {"running": False, "raw_mode": "STOPPED", "profile": None},
+    )
+    active_sid = effective_daily_lanes(ACCOUNT_PROFILES["topstep_50k_mnq_auto"])[0].strategy_id
+
+    off = client.post(
+        "/api/lane-control/toggle",
+        json={"profile": "topstep_50k_mnq_auto", "strategy_id": active_sid, "enabled": False},
+    )
+    assert off.status_code == 200
+    assert off.json()["enabled"] is False
+    assert lc.get_lane_override("topstep_50k_mnq_auto", active_sid)["reason"] == "Dashboard lane off"
+
+    on = client.post(
+        "/api/lane-control/toggle",
+        json={"profile": "topstep_50k_mnq_auto", "strategy_id": active_sid, "enabled": True},
+    )
+    assert on.status_code == 200
+    assert on.json()["enabled"] is True
+    assert lc.get_lane_override("topstep_50k_mnq_auto", active_sid) is None
+
+
+def test_lane_control_toggle_blocks_when_session_running(client, monkeypatch, tmp_path):
+    import trading_app.lane_ctl as lc
+
+    monkeypatch.setattr(lc, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {"running": True, "raw_mode": "SIGNAL", "profile": "topstep_50k_mnq_auto"},
+    )
+    active_sid = effective_daily_lanes(ACCOUNT_PROFILES["topstep_50k_mnq_auto"])[0].strategy_id
+
+    resp = client.post(
+        "/api/lane-control/toggle",
+        json={"profile": "topstep_50k_mnq_auto", "strategy_id": active_sid, "enabled": False},
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["status"] == "blocked"
+    assert lc.get_lane_override("topstep_50k_mnq_auto", active_sid) is None
+
+
+def test_lane_control_toggle_blocks_parked_lane(client, monkeypatch, tmp_path):
+    import trading_app.lane_ctl as lc
+
+    monkeypatch.setattr(lc, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {"running": False, "raw_mode": "STOPPED", "profile": None},
+    )
+
+    resp = client.post(
+        "/api/lane-control/toggle",
+        json={
+            "profile": "topstep_50k_mnq_auto",
+            "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            "enabled": True,
+        },
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["status"] == "blocked"
 
 
 # ---------- /api/sessions market_open contract (2026-05-30 TZ fix) ----------

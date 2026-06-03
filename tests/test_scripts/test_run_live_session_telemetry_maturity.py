@@ -137,8 +137,14 @@ def test_below_floor_demo_returns_warn(synthetic_signals_dir):
     assert "29/30" in result.message
 
 
-def test_below_floor_live_xfa_profile_returns_warn(synthetic_signals_dir):
-    """--live + Express-Funded prop profile treats telemetry as advisory."""
+def test_below_floor_live_xfa_profile_returns_ok_waived(synthetic_signals_dir):
+    """--live + Express-Funded prop profile: telemetry gate WAIVED to clean OK.
+
+    Operator decision 2026-06-01 ("remove telemetry from Topstep accounts"):
+    the funded-account wrapper insulates real personal capital, so the maturity
+    floor must NEVER block a funded live launch — and must not even emit WARN
+    noise. See .claude/rules/telemetry-maturity-waiver.md.
+    """
     _write_n_distinct_days(
         synthetic_signals_dir,
         n=MIN_TELEMETRY_TRADING_DAYS - 1,
@@ -147,9 +153,10 @@ def test_below_floor_live_xfa_profile_returns_warn(synthetic_signals_dir):
     # topstep_50k_mnq_auto is the active deployment profile; per
     # prop_profiles.AccountProfile default at line 107, is_express_funded=True.
     result = _check_telemetry_maturity(_ctx(signal_only=False, demo=False, profile_id="topstep_50k_mnq_auto"))
-    assert result.passed is True, "funded/prop live profile must not block on advisory telemetry"
-    assert result.message.startswith("WARN:")
-    assert "funded profile=topstep_50k_mnq_auto" in result.message
+    assert result.passed is True, "funded/prop live profile must not block on telemetry"
+    assert result.message.startswith("OK"), "waived gate must emit clean OK, not WARN"
+    assert "waived" in result.message
+    assert "topstep_50k_mnq_auto" in result.message
     assert "29/30" in result.message
 
 

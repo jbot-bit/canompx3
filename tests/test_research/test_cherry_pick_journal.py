@@ -443,13 +443,29 @@ class TestCheck164Drift:
         queue_payload["entries"].append(
             {
                 "strategy_id": "MNQ_ORPHAN_ESCALATION",
-                "status": "QUEUED",
+                "status": "ESCALATED",
                 "heavyweight_prereg": "docs/audit/hypotheses/2026-05-19-orphan.yaml",
             }
         )
         q.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
         violations = check_cherry_pick_journal_integrity(journal_path=j, queue_path=q)
         assert any("MNQ_ORPHAN_ESCALATION" in v for v in violations)
+
+    def test_revoked_queue_with_heavyweight_prereg_is_exempt(self, tmp_path: Path):
+        from pipeline.check_drift import check_cherry_pick_journal_integrity
+
+        j, q = self._seed_valid_files(tmp_path)
+        queue_payload = yaml.safe_load(q.read_text(encoding="utf-8"))
+        queue_payload["entries"].append(
+            {
+                "strategy_id": "MNQ_REVOKED_AFTER_BRIDGE",
+                "status": "REVOKED",
+                "heavyweight_prereg": "docs/audit/hypotheses/2026-05-19-revoked.yaml",
+            }
+        )
+        q.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+        violations = check_cherry_pick_journal_integrity(journal_path=j, queue_path=q)
+        assert violations == []
 
     def test_missing_required_field_is_caught(self, tmp_path: Path):
         # INJECTION PROBE: drop the components field, assert check catches it.

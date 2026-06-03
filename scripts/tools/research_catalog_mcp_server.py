@@ -35,6 +35,10 @@ LITERATURE_ROOT = PROJECT_ROOT / "docs" / "institutional" / "literature"
 HYPOTHESES_ROOT = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
 RESULTS_ROOT = PROJECT_ROOT / "docs" / "audit" / "results"
 BLUEPRINT_PATH = PROJECT_ROOT / "docs" / "STRATEGY_BLUEPRINT.md"
+# Grounding source-integrity manifest (single source of truth, written by the
+# grounding-integrity work + enforced by pipeline/check_drift.py). The MCP reads
+# it so every literature lookup carries the source's verification status inline.
+MANIFEST_PATH = PROJECT_ROOT / "docs" / "audit" / "research_grounding_source_manifest.yaml"
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 
@@ -457,7 +461,34 @@ def _snippet_for_search(text: str, query_terms: set[str], max_chars: int = 220) 
     return _bounded(_extract_first_paragraph(text), max_chars)
 
 
-def _parse_literature(path: Path) -> Artifact:
+def _grounding_status_map() -> dict[str, dict[str, object]] | None:
+    """Build extract-stem -> {grounding_status, source_tier} from the manifest.
+
+    Returns None when no manifest could be read (missing/unparseable) so callers
+    can distinguish "manifest absent -> UNKNOWN" from "manifest read, this stem
+    not listed -> NOT_IN_MANIFEST". Fail-open: never raises — the MCP is a read
+    surface, not a gate (the drift check is the gate). Keyed by extract filename
+    stem so it matches each literature Artifact's artifact_id (= path.stem).
+    """
+    if not MANIFEST_PATH.exists():
+        return None
+    try:
+        import yaml
+
+        data = yaml.safe_load(MANIFEST_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return None
+    out: dict[str, dict[str, object]] = {}
+    for src in data.get("sources") or []:
+        status = src.get("status")
+        tier = src.get("source_tier")
+        for ef in src.get("extract_files") or []:
+            stem = Path(str(ef)).stem
+            out[stem] = {"grounding_status": status, "source_tier": tier}
+    return out
+
+
+def _parse_literature(path: Path, grounding: dict[str, dict[str, object]] | None = None) -> Artifact:
     text = _read_text(path)
     title = _first_heading(text) or path.stem
     summary = _extract_first_paragraph(text)
@@ -465,10 +496,24 @@ def _parse_literature(path: Path) -> Artifact:
     authors = _extract_markdown_meta(text, "Authors")
     date = _extract_markdown_meta(text, "Date")
     criticality = _extract_markdown_meta(text, "Criticality")
+    # Surface the source's verification status inline. UNKNOWN = no manifest read
+    # (grounding is None); NOT_IN_MANIFEST = manifest read but this stem absent
+    # (mirrors the drift check's false-completeness guard).
+    if grounding is None:
+        grounding_status, source_tier = "UNKNOWN", None
+    else:
+        ground = grounding.get(path.stem)
+        if ground is None:
+            grounding_status, source_tier = "NOT_IN_MANIFEST", None
+        else:
+            grounding_status = ground.get("grounding_status")
+            source_tier = ground.get("source_tier")
     metadata = {
         "source": source,
         "authors": authors,
         "criticality": criticality,
+        "grounding_status": grounding_status,
+        "source_tier": source_tier,
         "path": _display_path(path),
     }
     search_blob = " ".join(filter(None, [title, summary, source, authors, criticality, text[:8000]]))
@@ -588,7 +633,8 @@ def _artifact_index() -> _ArtifactIndex:
         path for path in RESULTS_ROOT.iterdir() if path.is_file() and path.suffix in {".md", ".csv", ".json"}
     )
     result_stems = {path.stem for path in result_paths}
-    literature = [_parse_literature(path) for path in sorted(LITERATURE_ROOT.glob("*.md"))]
+    grounding = _grounding_status_map()
+    literature = [_parse_literature(path, grounding) for path in sorted(LITERATURE_ROOT.glob("*.md"))]
     hypotheses = [
         _parse_hypothesis(path, result_stems)
         for path in sorted(HYPOTHESES_ROOT.iterdir())

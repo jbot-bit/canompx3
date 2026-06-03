@@ -1,0 +1,204 @@
+proposal_only: true
+target: docs/runtime/chordia_audit_log.yaml
+audits:
+- strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_NO_FILTER_O30_S075
+  audit_date: '2026-05-31'
+  verdict: PASS_CHORDIA
+  has_theory: false
+  t_stat: 3.974
+  sample_size: 1539
+  source_result: docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-no-filter-o30-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.221
+  sample_size: 1548
+  source_result: docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-no-filter-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_NO_FILTER_O15_S075
+  audit_date: '2026-05-31'
+  verdict: PASS_CHORDIA
+  has_theory: false
+  t_stat: 3.847
+  sample_size: 1547
+  source_result: docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-5-cb1-no-filter-o15-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_NO_FILTER_O15_S075
+  audit_date: '2026-05-31'
+  verdict: PASS_CHORDIA
+  has_theory: false
+  t_stat: 3.945
+  sample_size: 1547
+  source_result: docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-no-filter-o15-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER_O15_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.854
+  sample_size: 1545
+  source_result: docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-no-filter-o15-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_CME_PRECLOSE_E2_RR1.5_CB1_NO_FILTER_S075
+  audit_date: '2026-05-31'
+  verdict: PARK
+  has_theory: false
+  t_stat: 4.892
+  sample_size: 1479
+  source_result: docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-no-filter-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_COST_LT12_O30_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.856
+  sample_size: 1387
+  source_result: docs/audit/results/2026-05-31-mnq-singapore-open-e2-rr3-0-cb1-cost-lt12-o30-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_TOKYO_OPEN_E2_RR2.5_CB1_ORB_VOL_4K_O15_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_CHORDIA
+  has_theory: false
+  t_stat: 3.134
+  sample_size: 706
+  source_result: docs/audit/results/2026-05-31-mnq-tokyo-open-e2-rr2-5-cb1-orb-vol-4k-o15-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_ATR_P70_O30_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_CHORDIA
+  has_theory: false
+  t_stat: 3.068
+  sample_size: 590
+  source_result: docs/audit/results/2026-05-31-mnq-singapore-open-e2-rr3-0-cb1-atr-p70-o30-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_ATR_P50_O30_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.873
+  sample_size: 858
+  source_result: docs/audit/results/2026-05-31-mnq-singapore-open-e2-rr3-0-cb1-atr-p50-o30-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_TOKYO_OPEN_E2_RR3.0_CB1_ORB_VOL_4K_O15_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.852
+  sample_size: 706
+  source_result: docs/audit/results/2026-05-31-mnq-tokyo-open-e2-rr3-0-cb1-orb-vol-4k-o15-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_VOL_4K_O15_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_CHORDIA
+  has_theory: false
+  t_stat: 3.459
+  sample_size: 706
+  source_result: docs/audit/results/2026-05-31-mnq-tokyo-open-e2-rr2-0-cb1-orb-vol-4k-o15-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P30_O30_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.946
+  sample_size: 1092
+  source_result: docs/audit/results/2026-05-31-mnq-singapore-open-e2-rr1-5-cb1-atr-p30-o30-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_ATR_P30_O30_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.831
+  sample_size: 1092
+  source_result: docs/audit/results/2026-05-31-mnq-singapore-open-e2-rr2-0-cb1-atr-p30-o30-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_CME_PRECLOSE_E2_RR1.5_CB1_X_MES_ATR60_S075
+  audit_date: '2026-05-31'
+  verdict: PARK
+  has_theory: false
+  t_stat: 4.904
+  sample_size: 669
+  source_result: docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-x-mes-atr60-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60_S075
+  audit_date: '2026-05-31'
+  verdict: PASS_CHORDIA
+  has_theory: false
+  t_stat: 4.856
+  sample_size: 669
+  source_result: docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-x-mes-atr60-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_COST_LT15_O30
+  audit_date: '2026-05-31'
+  verdict: FAIL_CHORDIA
+  has_theory: false
+  t_stat: 3.015
+  sample_size: 1482
+  source_result: docs/audit/results/2026-05-31-mnq-singapore-open-e2-rr1-5-cb1-cost-lt15-o30-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_G8_O30
+  audit_date: '2026-05-31'
+  verdict: FAIL_CHORDIA
+  has_theory: false
+  t_stat: 3.047
+  sample_size: 1497
+  source_result: docs/audit/results/2026-05-31-mnq-singapore-open-e2-rr1-5-cb1-orb-g8-o30-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_VOL_2K_O30
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.913
+  sample_size: 1493
+  source_result: docs/audit/results/2026-05-31-mnq-singapore-open-e2-rr1-5-cb1-orb-vol-2k-o30-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_ATR_P50_O15
+  audit_date: '2026-05-31'
+  verdict: FAIL_CHORDIA
+  has_theory: false
+  t_stat: 3.175
+  sample_size: 863
+  source_result: docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-atr-p50-o15-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_O15_S075
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.866
+  sample_size: 698
+  source_result: docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-0-cb1-x-mes-atr60-o15-s075-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_EUROPE_FLOW_E2_RR2.0_CB1_OVNRNG_50
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.971
+  sample_size: 1229
+  source_result: docs/audit/results/2026-05-31-mnq-europe-flow-e2-rr2-0-cb1-ovnrng-50-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G4
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.717
+  sample_size: 1525
+  source_result: docs/audit/results/2026-05-31-mnq-europe-flow-e2-rr1-0-cb1-orb-g4-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_EUROPE_FLOW_E2_RR2.0_CB1_COST_LT12
+  audit_date: '2026-05-31'
+  verdict: FAIL_CHORDIA
+  has_theory: false
+  t_stat: 3.176
+  sample_size: 1024
+  source_result: docs/audit/results/2026-05-31-mnq-europe-flow-e2-rr2-0-cb1-cost-lt12-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+- strategy_id: MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G4
+  audit_date: '2026-05-31'
+  verdict: FAIL_BOTH
+  has_theory: false
+  t_stat: 2.735
+  sample_size: 1525
+  source_result: docs/audit/results/2026-05-31-mnq-europe-flow-e2-rr2-0-cb1-orb-g4-chordia-unlock-v1.md
+  note: PROPOSAL_ONLY from measured result; review before appending to docs/runtime/chordia_audit_log.yaml.
+note: Review before appending to runtime audit log.

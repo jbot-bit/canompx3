@@ -82,6 +82,7 @@ from trading_app.validated_shelf import deployable_validated_relation  # noqa: E
 DEFAULT_ALLOCATION_PATH = legacy_lane_allocation_path()
 DEFAULT_TELEMETRY_INSTRUMENT = "MNQ"
 DEFAULT_SIGNALS_DIR = LIVE_SIGNALS_DIR
+ADVISORY_WARNING_MARKER = "(advisory for express/funded profile)"
 AUTOMATION_TASKS: tuple[dict[str, str], ...] = (
     {
         "task_name": "CanonMPX_DailyRefresh",
@@ -99,6 +100,20 @@ LIVE_STAGE_PATHS: tuple[str, ...] = (
     "docs/runtime/stages/2026-05-22-live-bar-ring-chart.md",
     "docs/runtime/stages/2026-05-26-ring-orphan-startup-sweep.md",
 )
+
+
+def is_launch_blocking_strict_warning(warning: object) -> bool:
+    """Return True when a strict warning should block a launch gate.
+
+    Express/funded telemetry maturity is intentionally advisory. It stays
+    visible in the report, but it must not become a hard blocker via the
+    generic warning path.
+    """
+    return ADVISORY_WARNING_MARKER not in str(warning)
+
+
+def launch_blocking_strict_warnings(strict_zero_warn: dict) -> list[object]:
+    return [warning for warning in strict_zero_warn.get("warnings", []) if is_launch_blocking_strict_warning(warning)]
 
 
 def _git_head(root: Path) -> str | None:
@@ -134,6 +149,129 @@ def _git_branch(root: Path) -> str | None:
         return None
     branch = result.stdout.strip()
     return branch or None
+
+
+def _git_dirty_files(root: Path) -> list[str]:
+    try:
+        result = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ["git status unavailable"]
+    if result.returncode != 0:
+        return [result.stderr.strip() or result.stdout.strip() or "git status failed"]
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def _db_fingerprint(db_path: Path) -> dict[str, Any]:
+    fingerprint: dict[str, Any] = {
+        "path": str(db_path),
+        "exists": db_path.exists(),
+        "size_bytes": None,
+        "mtime_utc": None,
+    }
+    if not db_path.exists():
+        return fingerprint
+    stat = db_path.stat()
+    fingerprint["size_bytes"] = stat.st_size
+    fingerprint["mtime_utc"] = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
+    return fingerprint
+
+
+def _criterion11_proof_state(criterion11: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(criterion11, dict):
+        return {"state": "missing", "age_days": None, "message": "Criterion 11 evidence missing"}
+    gate_ok = criterion11.get("gate_ok")
+    state = "pass" if gate_ok is True else "fail" if gate_ok is False else "unknown"
+    return {
+        "state": state,
+        "age_days": criterion11.get("report_age_days"),
+        "message": criterion11.get("gate_msg"),
+    }
+
+
+def _criterion12_proof_state(criterion12: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(criterion12, dict):
+        return {"state": "missing", "age_days": None, "latest_verdict": "Criterion 12 evidence missing"}
+    valid = criterion12.get("valid")
+    state = "valid" if valid is True else "invalid" if valid is False else "unknown"
+    return {
+        "state": state,
+        "age_days": criterion12.get("state_age_days"),
+        "latest_verdict": criterion12.get("latest_verdict") or criterion12.get("verdict") or state,
+    }
+
+
+def _unsupported_or_missing_evidence(report: dict[str, Any], database: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    if not database["exists"]:
+        missing.append("canonical DB missing")
+    if not isinstance(report.get("criterion11"), dict):
+        missing.append("Criterion 11 evidence missing")
+    if not isinstance(report.get("criterion12"), dict):
+        missing.append("Criterion 12 evidence missing")
+    allocator = report.get("allocator_summary") or {}
+    if allocator.get("available") is False:
+        missing.append("allocator evidence unavailable")
+    telemetry = report.get("telemetry_maturity") or {}
+    if telemetry.get("verdict") is None:
+        missing.append("telemetry maturity verdict missing")
+    return missing
+
+
+def _lane_reason_summary(lanes: list[dict[str, Any]]) -> dict[str, Any]:
+    reason_counts: dict[str, dict[str, Any]] = {}
+    for lane in lanes:
+        reason = str(lane.get("status_reason") or lane.get("lifecycle_block_reason") or "unspecified")
+        bucket = reason_counts.setdefault(reason, {"reason": reason, "count": 0, "examples": []})
+        bucket["count"] += 1
+        if len(bucket["examples"]) < 5:
+            bucket["examples"].append(lane.get("strategy_id"))
+    return {
+        "count": len(lanes),
+        "reason_summary": sorted(reason_counts.values(), key=lambda item: (-item["count"], item["reason"])),
+    }
+
+
+def _build_profile_proof_pack(report: dict[str, Any], *, db_path: Path, command_line: list[str]) -> dict[str, Any]:
+    dirty_files = _git_dirty_files(PROJECT_ROOT)
+    database = _db_fingerprint(db_path)
+    strict_zero_warn = report.get("strict_zero_warn") or {}
+    warnings = strict_zero_warn.get("warnings", [])
+    blocking_warnings = launch_blocking_strict_warnings(strict_zero_warn)
+    advisory_warnings = [warning for warning in warnings if not is_launch_blocking_strict_warning(warning)]
+    allocator = report.get("allocator_summary") or {}
+    return {
+        "schema_version": 1,
+        "profile_id": report["profile_id"],
+        "generated_at": report["generated_at"],
+        "git": {
+            "branch": report.get("git_branch"),
+            "head": report.get("git_head"),
+            "dirty": bool(dirty_files),
+            "dirty_files": dirty_files,
+        },
+        "database": database,
+        "active_lanes": report.get("active_lanes", []),
+        "paused_lanes": _lane_reason_summary(allocator.get("paused_lanes", [])),
+        "stale_lanes": _lane_reason_summary(allocator.get("stale_lanes", [])),
+        "criterion11": _criterion11_proof_state(report.get("criterion11")),
+        "criterion12": _criterion12_proof_state(report.get("criterion12")),
+        "telemetry_maturity": report.get("telemetry_maturity"),
+        "strict_warnings": {
+            "blockers": strict_zero_warn.get("blockers", []),
+            "blocking": blocking_warnings,
+            "advisory": advisory_warnings,
+            "raw": warnings,
+        },
+        "command_line": command_line,
+        "unsupported_or_missing_evidence": _unsupported_or_missing_evidence(report, database),
+    }
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:
@@ -699,12 +837,13 @@ def _build_strict_zero_warn_summary(
         )
 
     if automation_health.get("available") is True and automation_health.get("overall") != "OK":
-        unhealthy = [
-            f"{task.get('task_name')}={task.get('status')}"
-            for task in automation_health.get("tasks", [])
-            if task.get("status") != "OK"
-        ]
-        warnings.append("Automation health not green: " + ", ".join(unhealthy))
+        unhealthy_tasks = [task for task in automation_health.get("tasks", []) if task.get("status") != "OK"]
+        unhealthy = [f"{task.get('task_name')}={task.get('status')}" for task in unhealthy_tasks]
+        warning = "Automation health not green: " + ", ".join(unhealthy)
+        task_names = {str(task.get("task_name") or "") for task in unhealthy_tasks}
+        if telemetry_is_advisory and task_names and task_names <= {"CanonMPX_TopstepTelemetry_SignalOnly"}:
+            warning += f" {ADVISORY_WARNING_MARKER}"
+        warnings.append(warning)
 
     return {
         "green": not blockers,
@@ -719,6 +858,7 @@ def build_live_readiness_report(
     db_path: Path = GOLD_DB_PATH,
     allocation_path: Path = DEFAULT_ALLOCATION_PATH,
     effective_copies: int = 0,
+    command_line: list[str] | None = None,
 ) -> dict[str, Any]:
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
     profile_lanes = get_profile_lane_definitions(resolved_profile_id)
@@ -779,7 +919,7 @@ def build_live_readiness_report(
         automation_health=automation_health,
     )
 
-    return {
+    report = {
         "generated_at": datetime.now(UTC).isoformat(),
         "profile_id": resolved_profile_id,
         "git_branch": _git_branch(PROJECT_ROOT),
@@ -802,6 +942,12 @@ def build_live_readiness_report(
         "strict_zero_warn": strict_zero_warn,
         "conditional_overlays": lifecycle.get("conditional_overlays"),
     }
+    report["proof_pack"] = _build_profile_proof_pack(
+        report,
+        db_path=db_path,
+        command_line=command_line or sys.argv[:],
+    )
+    return report
 
 
 def _render_text(report: dict[str, Any]) -> str:
@@ -932,6 +1078,10 @@ def _render_markdown(report: dict[str, Any]) -> str:
     automation_health = report.get("automation_health") or {}
     profile_launch = report.get("profile_launch") or {}
     strict_zero_warn = report.get("strict_zero_warn") or {}
+    proof_pack = report.get("proof_pack") or {}
+    proof_git = proof_pack.get("git") or {}
+    proof_db = proof_pack.get("database") or {}
+    proof_strict = proof_pack.get("strict_warnings") or {}
 
     lines = [
         f"# Live Readiness Report — `{report['profile_id']}`",
@@ -940,6 +1090,16 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"- Git: `{report.get('git_head') or 'unknown'}` on `{report.get('git_branch') or 'unknown'}`",
         f"- DB: `{report['db_path']}`",
         f"- Allocator source: `{report['allocation_path']}`",
+        "",
+        "## Proof Pack",
+        "",
+        f"- Schema version: `{proof_pack.get('schema_version')}`",
+        f"- Git dirty: `{proof_git.get('dirty')}` files=`{len(proof_git.get('dirty_files', []))}`",
+        f"- DB exists: `{proof_db.get('exists')}` size_bytes=`{proof_db.get('size_bytes')}`",
+        f"- Command line: `{' '.join(proof_pack.get('command_line', []))}`",
+        f"- Blocking strict warnings: `{len(proof_strict.get('blocking', []))}`",
+        f"- Advisory strict warnings: `{len(proof_strict.get('advisory', []))}`",
+        f"- Unsupported/missing evidence: `{len(proof_pack.get('unsupported_or_missing_evidence', []))}`",
         "",
         "## Deployment",
         "",
@@ -1079,6 +1239,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Effective launch copy count for this readiness run (0=profile default).",
     )
+    parser.add_argument(
+        "--proof-pack-only",
+        action="store_true",
+        help="With --format json, emit only the EV proof_pack object.",
+    )
     return parser
 
 
@@ -1090,10 +1255,12 @@ def main() -> None:
         db_path=GOLD_DB_PATH,
         allocation_path=Path(args.allocation_path),
         effective_copies=args.copies,
+        command_line=sys.argv[:],
     )
 
     if args.format == "json":
-        rendered = json.dumps(report, indent=2, sort_keys=True)
+        payload = report["proof_pack"] if args.proof_pack_only else report
+        rendered = json.dumps(payload, indent=2, sort_keys=True)
     elif args.format == "markdown":
         rendered = _render_markdown(report)
     else:
@@ -1106,7 +1273,10 @@ def main() -> None:
     else:
         print(rendered)
 
-    if args.strict_zero_warn and not bool((report.get("strict_zero_warn") or {}).get("green")):
+    strict_zero_warn = report.get("strict_zero_warn") or {}
+    if args.strict_zero_warn and (
+        not bool(strict_zero_warn.get("green")) or bool(launch_blocking_strict_warnings(strict_zero_warn))
+    ):
         raise SystemExit(1)
 
 

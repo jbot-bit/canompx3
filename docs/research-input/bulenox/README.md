@@ -1,9 +1,42 @@
 # Bulenox Canonical Research Corpus
 
 **Created:** 2026-04-15
-**Trigger:** Multi-firm scaling audit (`docs/audit/2026-04-15-topstep-scaling-reality-audit.md`) identified Bulenox as a candidate for parallel deployment. This corpus captures the rules.
-**Next re-fetch:** 2026-07-15 (quarterly)
-**Source mix:** Bulenox help center (canonical where available) + 3rd-party reviewers (TradingToolsHub, PropTradingVibes, QuantVPS, TradersX) cross-referenced
+**Last re-fetch:** 2026-05-31 — **added verbatim help-center snapshots** (`bulenox_*.md`), superseding the paraphrased § 2/§4 values below where they differ.
+**Next re-fetch:** 2026-08-31 (quarterly)
+**Source mix:** Bulenox help center (`bulenox.com/help/*`) **now captured verbatim** (see § 0) + 3rd-party reviewers (TradingToolsHub, PropTradingVibes, QuantVPS, TradersX) for cross-reference only.
+
+---
+
+## 0. Verbatim help-center snapshots (added 2026-05-31)
+
+> **Why added:** the original (2026-04-15) README was built largely from paraphrase + third-party sources — a violation of the verbatim/no-paraphrase constraint. These `bulenox_*.md` files are the **full curl→text dumps** of the official help pages (`curl -sL -A "<browser UA>" | html2text`), so the firm's actual wording is now on disk and the paraphrased sections below can be verified against it. **On any conflict, the verbatim snapshot wins over the prose below.**
+
+| File | Source URL | Coverage (verbatim) |
+|---|---|---|
+| `bulenox_qualification_account.md` | `bulenox.com/help/qualification-account/` | Option 1 (trailing, no DLL) vs Option 2 (EOD/scaling/DLL); **per-size EOD scaling ladders** (contracts by balance tier); **per-size daily-loss limits** (10K $400 … 250K $4500) |
+| `bulenox_master_account.md` | `bulenox.com/help/master-account/` | Master (funded) account rules, payouts, consistency |
+| `bulenox_funded_account.md` | `bulenox.com/help/funded-account/` | Funded account overview (5 imgs = decorative check.png icons) |
+| `bulenox_faq.md` | `bulenox.com/help/frequently-asked-questions/` | FAQ |
+| `bulenox_subscription_payment.md` | `bulenox.com/help/subscription-and-payment/` | Subscription / payment / activation fees |
+| `bulenox_warning.md` | `bulenox.com/help/warning/` | Prohibited-conduct warnings |
+| `bulenox_connection.md` | `bulenox.com/help/connection/` | Platform connection guide (18 imgs = UI screenshots, no rules) |
+
+### Verbatim per-size EOD scaling ladders (from `bulenox_qualification_account.md`)
+
+| Size | Balance tier → max contracts (verbatim) |
+|---|---|
+| 50K | $0–$1,500 (2) · $1,501–$4,000 (4) · $4,001+ (7) |
+| 100K | $0–$2,000 (3) · $2,001–$3,000 (5) · $3,001–$5,000 (8) · $5,001+ (12) |
+| 150K | $0–$4,000 (5) · $4,001–$8,000 (8) · $8,001–$12,000 (10) · $12,001+ (15) |
+| 250K | $0–$5,000 (6) · $5,001–$12,000 (12) · … (see file) |
+
+### Verbatim daily-loss limits (Option 2, from `bulenox_qualification_account.md`)
+
+10K $400 · 25K $500 · 50K $1,100 · 100K $2,200 · 150K $3,300 · 250K $4,500. (These **match** the paraphrased § 2 table below — confirmed verbatim.)
+
+### Image guard (per operator caution)
+
+`bulenox_funded_account.md` flagged 5 images = `themes/bulenox/img/check.png` (decorative checkmarks). `bulenox_connection.md` flagged 18 images = platform-connection UI screenshots. **No Bulenox rule table is image-only** — qualification scaling ladders + daily-loss + drawdown all render as HTML text.
 
 ---
 

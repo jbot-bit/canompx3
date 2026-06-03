@@ -7,6 +7,7 @@ Validates CLAUDE.md, TRADING_RULES.md, RESEARCH_RULES.md, ROADMAP.md,
 REPO_MAP.md, .claude/rules/, and docs/specs/ against canonical code sources.
 """
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -31,10 +32,17 @@ def _read_file(path: Path) -> str:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run Phase 3 documentation audit")
+    parser.add_argument("--quick", action="store_true", help="Run only Phase 3A quick numbers/doc check")
+    args = parser.parse_args()
+
     audit = AuditPhase(phase_num=3, name="Documentation vs Reality")
     audit.print_header()
 
     _check_claude_md(audit)
+    if args.quick:
+        audit.run_and_exit()
+
     _check_trading_rules(audit)
     _check_research_rules(audit)
     _check_roadmap(audit)
@@ -222,29 +230,27 @@ def _check_repo_map(audit: AuditPhase):
         audit.check_info("gen_repo_map.py not found — cannot verify REPO_MAP.md freshness")
         return
 
-    # Run gen_repo_map.py and compare
+    # Use the generator's check mode. Running without --check writes the file
+    # and prints only a status line, which is not comparable to the map body.
     r = subprocess.run(
-        [sys.executable, str(gen_script)],
+        [sys.executable, str(gen_script), "--check"],
         capture_output=True,
         text=True,
         cwd=str(PROJECT_ROOT),
         timeout=30,
     )
     if r.returncode == 0:
-        generated = r.stdout.strip()
-        current = repo_map.read_text(encoding="utf-8").strip()
-        if generated == current:
-            audit.check_passed("REPO_MAP.md is up to date")
-        else:
-            audit.check_failed("REPO_MAP.md is stale (differs from gen_repo_map.py output)")
-            audit.add_finding(
-                Severity.LOW,
-                "REPO_MAP_STALE",
-                claimed="REPO_MAP.md matches gen_repo_map.py output",
-                actual="Files differ",
-                evidence="python scripts/tools/gen_repo_map.py | diff - REPO_MAP.md",
-                fix_type="DOC_FIX",
-            )
+        audit.check_passed("REPO_MAP.md is up to date")
+    elif r.returncode == 1:
+        audit.check_failed("REPO_MAP.md is stale (differs from gen_repo_map.py output)")
+        audit.add_finding(
+            Severity.LOW,
+            "REPO_MAP_STALE",
+            claimed="REPO_MAP.md matches gen_repo_map.py output",
+            actual="Files differ",
+            evidence="python scripts/tools/gen_repo_map.py --check",
+            fix_type="DOC_FIX",
+        )
     else:
         audit.check_info("gen_repo_map.py failed to run — cannot verify")
 

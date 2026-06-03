@@ -773,16 +773,16 @@ def main():
 
                     # INSERT OR REPLACE
                     con.executemany(
-                        """
+                        f"""
                         INSERT OR REPLACE INTO bars_1m
                         (ts_utc, symbol, source_symbol, open, high, low, close, volume)
-                        VALUES (?, 'MGC', ?, ?, ?, ?, ?, ?)
+                        VALUES (?, '{SYMBOL}', ?, ?, ?, ?, ?, ?)
                         """,
                         chunk_rows,
                     )
 
                     # INTEGRITY GATE
-                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol="MGC")
+                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol=SYMBOL)
                     if not int_ok:
                         con.execute("ROLLBACK")
                         checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=int_reason)
@@ -853,15 +853,15 @@ def main():
                 try:
                     con.execute("BEGIN TRANSACTION")
                     con.executemany(
-                        """
+                        f"""
                         INSERT OR REPLACE INTO bars_1m
                         (ts_utc, symbol, source_symbol, open, high, low, close, volume)
-                        VALUES (?, 'MGC', ?, ?, ?, ?, ?, ?)
+                        VALUES (?, '{SYMBOL}', ?, ?, ?, ?, ?, ?)
                         """,
                         chunk_rows,
                     )
 
-                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol="MGC")
+                    int_ok, int_reason = check_merge_integrity(con, chunk_start, chunk_end, symbol=SYMBOL)
                     if not int_ok:
                         con.execute("ROLLBACK")
                         checkpoint_mgr.write_checkpoint(chunk_start, chunk_end, "failed", error=int_reason)
@@ -937,9 +937,9 @@ def main():
 
     if not args.dry_run and con:
         # Get actual DB stats
-        count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = 'MGC'").fetchone()[0]
+        count = con.execute(f"SELECT COUNT(*) FROM bars_1m WHERE symbol = '{SYMBOL}'").fetchone()[0]
         date_range = con.execute(
-            "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = 'MGC'"
+            f"SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = '{SYMBOL}'"
         ).fetchone()
 
         logger.info(f"Database rows (MGC): {count:,}")

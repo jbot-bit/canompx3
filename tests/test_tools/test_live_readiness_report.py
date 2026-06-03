@@ -71,6 +71,7 @@ def _install_happy_path(
     strategy_state: dict[str, object] | None = None,
     telemetry: dict[str, object] | None = None,
     stages: dict[str, object] | None = None,
+    automation_health: dict[str, object] | None = None,
     validated_ids: list[str] | None = None,
 ) -> None:
     _write_allocator(allocation_path)
@@ -184,13 +185,16 @@ def _install_happy_path(
     monkeypatch.setattr(
         live_readiness_report,
         "_load_automation_health",
-        lambda: {
-            "available": True,
-            "platform": "nt",
-            "runtime_root": str(live_readiness_report.DEFAULT_SIGNALS_DIR),
-            "overall": "OK",
-            "tasks": [],
-        },
+        lambda: (
+            automation_health
+            or {
+                "available": True,
+                "platform": "nt",
+                "runtime_root": str(live_readiness_report.DEFAULT_SIGNALS_DIR),
+                "overall": "OK",
+                "tasks": [],
+            }
+        ),
         raising=False,
     )
 
@@ -605,6 +609,94 @@ def test_strict_zero_warn_warns_when_funded_telemetry_below_floor(tmp_path: Path
     assert "Strict warnings" in markdown
 
 
+def test_funded_telemetry_warning_is_not_launch_blocking(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        telemetry={
+            "verdict": "UNVERIFIED_INSUFFICIENT_TELEMETRY",
+            "instrument": "MNQ",
+            "n_unique_trading_days": 8,
+            "min_required": 30,
+            "trading_days": ["2026-05-01", "2026-05-02"],
+            "signal_files_scanned": 2,
+            "records_scanned": 12,
+            "records_qualifying": 8,
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["strict_zero_warn"]["green"] is True
+    assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"]) == []
+
+
+def test_funded_signal_only_telemetry_task_warning_is_not_launch_blocking(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        automation_health={
+            "available": True,
+            "platform": "nt",
+            "runtime_root": str(tmp_path),
+            "overall": "ACTION_REQUIRED",
+            "tasks": [
+                {
+                    "task_name": "CanonMPX_TopstepTelemetry_SignalOnly",
+                    "role": "topstep_signal_only_telemetry",
+                    "status": "FAILED",
+                }
+            ],
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["strict_zero_warn"]["green"] is True
+    assert any("Automation health" in warning for warning in report["strict_zero_warn"]["warnings"])
+    assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"]) == []
+
+
+def test_daily_refresh_automation_warning_blocks_launch(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        automation_health={
+            "available": True,
+            "platform": "nt",
+            "runtime_root": str(tmp_path),
+            "overall": "ACTION_REQUIRED",
+            "tasks": [
+                {
+                    "task_name": "CanonMPX_DailyRefresh",
+                    "role": "daily_data_refresh",
+                    "status": "FAILED",
+                }
+            ],
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["strict_zero_warn"]["green"] is True
+    assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"])
+
+
 def test_strict_zero_warn_blocks_when_real_capital_telemetry_below_floor(tmp_path: Path, monkeypatch) -> None:
     allocation_path = tmp_path / "lane_allocation.json"
     _install_happy_path(
@@ -964,7 +1056,56 @@ def test_main_strict_zero_warn_returns_zero_when_green(monkeypatch, capsys) -> N
         lambda **_kwargs: {
             "profile_id": "topstep_50k_mnq_auto",
             "git_head": "deadbeef",
-            "strict_zero_warn": {"green": True, "blockers": []},
+            "strict_zero_warn": {"green": True, "blockers": [], "warnings": []},
+        },
+    )
+    monkeypatch.setattr(live_readiness_report, "_render_text", lambda _report: "Live Readiness")
+    monkeypatch.setattr("sys.argv", ["live_readiness_report.py", "--strict-zero-warn"])
+
+    live_readiness_report.main()
+
+    assert "Live Readiness" in capsys.readouterr().out
+
+
+def test_main_strict_zero_warn_exits_nonzero_when_blocking_warnings_exist(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        live_readiness_report,
+        "build_live_readiness_report",
+        lambda **_kwargs: {
+            "profile_id": "topstep_50k_mnq_auto",
+            "git_head": "deadbeef",
+            "strict_zero_warn": {
+                "green": True,
+                "blockers": [],
+                "warnings": ["Automation health not green: CanonMPX_TopstepTelemetry_SignalOnly=FAILED"],
+            },
+        },
+    )
+    monkeypatch.setattr(live_readiness_report, "_render_text", lambda _report: "Live Readiness")
+    monkeypatch.setattr("sys.argv", ["live_readiness_report.py", "--strict-zero-warn"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        live_readiness_report.main()
+
+    assert excinfo.value.code == 1
+    assert "Live Readiness" in capsys.readouterr().out
+
+
+def test_main_strict_zero_warn_returns_zero_for_funded_telemetry_advisory(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        live_readiness_report,
+        "build_live_readiness_report",
+        lambda **_kwargs: {
+            "profile_id": "topstep_50k_mnq_auto",
+            "git_head": "deadbeef",
+            "strict_zero_warn": {
+                "green": True,
+                "blockers": [],
+                "warnings": [
+                    "Telemetry not mature: UNVERIFIED_INSUFFICIENT_TELEMETRY (5/30 trading days) "
+                    "(advisory for express/funded profile)"
+                ],
+            },
         },
     )
     monkeypatch.setattr(live_readiness_report, "_render_text", lambda _report: "Live Readiness")
@@ -1010,3 +1151,45 @@ def test_json_cli_stdout_is_parseable_without_warning_preamble(tmp_path: Path) -
     assert result.stdout.lstrip().startswith("{")
     parsed = json.loads(result.stdout)
     assert parsed["profile_id"] == "topstep_50k_mnq_auto"
+
+
+def test_live_readiness_report_includes_profile_proof_pack_contract(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    db_path = tmp_path / "gold.db"
+    db_path.write_text("fake db", encoding="utf-8")
+    _install_happy_path(monkeypatch, allocation_path)
+    monkeypatch.setattr(live_readiness_report, "_git_dirty_files", lambda _root: [" M HANDOFF.md"])
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=db_path,
+        allocation_path=allocation_path,
+        command_line=["python", "scripts/tools/live_readiness_report.py", "--profile", "topstep_50k_mnq_auto"],
+    )
+
+    proof_pack = report["proof_pack"]
+    assert proof_pack["schema_version"] == 1
+    assert proof_pack["profile_id"] == "topstep_50k_mnq_auto"
+    assert proof_pack["git"] == {
+        "branch": "test-branch",
+        "head": "deadbeef",
+        "dirty": True,
+        "dirty_files": [" M HANDOFF.md"],
+    }
+    assert proof_pack["database"]["path"] == str(db_path)
+    assert proof_pack["database"]["exists"] is True
+    assert proof_pack["database"]["size_bytes"] == len("fake db")
+    assert proof_pack["active_lanes"][0]["strategy_id"] == "SID_A"
+    assert proof_pack["paused_lanes"] == {"count": 0, "reason_summary": []}
+    assert proof_pack["stale_lanes"] == {"count": 0, "reason_summary": []}
+    assert proof_pack["criterion11"]["state"] == "pass"
+    assert proof_pack["criterion12"]["state"] == "valid"
+    assert proof_pack["strict_warnings"]["blockers"] == []
+    assert proof_pack["strict_warnings"]["blocking"] == []
+    assert proof_pack["strict_warnings"]["advisory"] == []
+    assert proof_pack["command_line"] == [
+        "python",
+        "scripts/tools/live_readiness_report.py",
+        "--profile",
+        "topstep_50k_mnq_auto",
+    ]
+    assert proof_pack["unsupported_or_missing_evidence"] == []

@@ -1,0 +1,264 @@
+metadata:
+  name: mnq-open-book-validation-v1
+  purpose: "Post-exploratory MNQ ORB book validation and capped challenger scan"
+  date_locked: "2026-06-01T00:00:00+10:00"
+  data_horizon_years_clean: 6.65
+  data_horizon_years_proxy: 0.0
+  holdout_date: "2026-01-01"
+  total_expected_trials: 192
+  research_question_type: conditional_role
+  theory_grant: false
+  legacy_unlinked_citations:
+    - docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md
+    - docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
+    - docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md
+  owner: codex
+  created_at: 2026-06-01
+  base_commit_sha: 2d5e898d3531212b4aa1d1810a5b743d0ce77e9c
+  testing_mode: family
+  route: canompx3-research -> research_discovery -> conditional_role
+  primary_role: standalone_book_candidate
+  status_ceiling: research_provisional_post_exploratory
+  upstream_source:
+    commit: 2d5e898d3531212b4aa1d1810a5b743d0ce77e9c
+    result_doc: docs/audit/results/2026-06-01-best-own-strategy-scan-v1.md
+    inherited_exploratory_k: 1755
+  scope_note: >
+    This is not a clean first discovery. It is a post-exploratory follow-up that
+    keeps the inherited broad-scan burden visible while checking whether the
+    current MNQ O15/E2/RR2 NYSE_OPEN + US_DATA_1000 book is too narrow, or
+    whether a capped open challenger family points somewhere better.
+
+execution:
+  mode: bounded_runner
+  entrypoint: research/mnq_open_book_validation_v1.py
+
+primary_question: >
+  Are we too specific around the MNQ O15/E2/RR2 NYSE_OPEN + US_DATA_1000 book,
+  or can a capped, data-first challenger-book scan identify a better current-stack
+  MNQ ORB candidate without using 2026 for selection?
+
+scope_answer_pre_run:
+  - >
+    The current book is specific enough for confirmation but not enough for a
+    full "best own strategy" answer.
+  - >
+    The follow-up therefore has two locked layers: a two-candidate current-book
+    confirmation and an open capped challenger-book family.
+  - >
+    New filters are not introduced until existing pre-entry-safe filters are
+    diagnosed against their same parent NO_FILTER baseline.
+
+sacred_boundary_discipline:
+  holdout_date: 2026-01-01
+  pre_2026_selection_only: true
+  use_2026_for_selection: false
+  use_2026_for_descriptive_monitoring: true
+  no_oos_re_tuning: true
+  validation_methods:
+    - DSR_FIXED_UNIVERSE_RESEARCH_VALIDATION
+    - EHR_PSEUDO_OOS_ROBUSTNESS_DIAGNOSTIC
+  deployment_note: >
+    DSR can make this rankable now as research-provisional. It does not make the
+    book deployment-ready; deployment-readiness remains a separate route.
+
+canonical_inputs:
+  allowed_tables:
+    - daily_features
+    - orb_outcomes
+  required_join: "(symbol, trading_day, orb_minutes)"
+  banned_truth_surfaces:
+    - validated_setups
+    - edge_families
+    - live_config
+    - docs as current performance truth
+    - memory as current performance truth
+
+scratch_policy:
+  policy: include-as-zero
+  justification: >
+    Current orb_outcomes may contain NULL scratch pnl_r rows. This runner fills
+    them as 0.0 rather than dropping them, preventing sample-selection dropout
+    while preserving the current canonical outcome-builder limitation.
+
+families:
+  current_book_confirmation:
+    role: standalone_book_candidate
+    family_k: 2
+    candidates:
+      - id: CURRENT_COST_LT10
+        legs:
+          - MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10
+          - MNQ_US_DATA_1000_O15_E2_RR2_COST_LT10
+      - id: CURRENT_NO_FILTER
+        legs:
+          - MNQ_NYSE_OPEN_O15_E2_RR2_NO_FILTER
+          - MNQ_US_DATA_1000_O15_E2_RR2_NO_FILTER
+    primary_objective: annual_r_divided_by_max_drawdown
+    sensitivity_objective: raw_annual_r
+    rationale: >
+      The prior broad scan showed a one-sided conflict: NO_FILTER had slightly
+      higher annual R while COST_LT10 had lower drawdown and higher t-stat. This
+      file locks the risk-aware objective before recomputing results.
+
+  open_challenger_pair_books:
+    role: standalone_book_candidate
+    max_pool_size: 20
+    max_pool_per_session: 2
+    max_pool_per_session_orb_rr_shape: 1
+    max_pair_k_if_all_distinct_sessions: 190
+    session_diversity_guard: pair_legs_must_have_distinct_sessions
+    pool_selection_fields:
+      - n_is >= 100
+      - q_global < 0.05
+      - t >= 3.79
+      - WFE >= 0.50
+      - era_ok == true
+      - pool_score = annual_r / max_drawdown
+    note: >
+      Pool selection uses pre-2026 data only. Because the pool is selected from
+      the prior broad universe, every book row also reports inherited DSR under
+      K = upstream 1755 plus this follow-up book family.
+
+  existing_filter_diagnostics:
+    role: diagnostic
+    selectable: false
+    filters:
+      - DIR_LONG
+      - DIR_SHORT
+      - COST_LT08
+      - COST_LT10
+      - COST_LT12
+      - COST_LT15
+      - ATR_P30
+      - ATR_P50
+      - ATR_P70
+      - ATR_VEL_GE105
+      - ORB_SIZE_Q67
+      - ORB_SIZE_Q80
+      - ORB_VOL_Q67
+      - COST10_ATR50
+    comparator: same symbol/session/orb_minutes/rr NO_FILTER parent
+    purpose: >
+      Determine whether existing pre-entry-safe filters have broad book-level
+      value before creating new filters.
+
+lookahead_bans:
+  e2_pre_entry_predictors_forbidden:
+    - rel_vol_{session}
+    - orb_{session}_break_ts
+    - orb_{session}_break_delay_min
+    - orb_{session}_break_bar_volume
+    - orb_{session}_break_bar_continues
+    - orb_{session}_break_dir
+    - outcome
+    - pnl_r
+  allowed_pre_entry_fields:
+    - orb_{session}_size
+    - orb_{session}_volume
+    - atr_20_pct
+    - atr_vel_ratio
+    - entry_price
+    - stop_price
+
+controls:
+  multiple_testing:
+    current_book_bh_k: 2
+    open_challenger_bh_k: actual_generated_pair_books
+    inherited_dsr_k: upstream_1755_plus_actual_generated_pair_books
+  required_metrics:
+    - sample_size
+    - date_span
+    - mean_r
+    - annual_r
+    - max_drawdown
+    - annual_r_divided_by_max_drawdown
+    - t_stat
+    - p_value
+    - BH_q
+    - DSR_family
+    - DSR_inherited
+    - WFE
+    - era_stability
+    - year_detail
+    - 2026_descriptive
+    - leg_correlation
+  leakage_checks:
+    - daily_features_join_must_use_symbol_trading_day_orb_minutes
+    - no_2026_field_used_for_pool_selection_or_ranking
+    - no_where_pnl_r_is_not_null_dropout
+    - no_E2_post_trigger_predictor_as_filter
+
+hypotheses:
+  - id: H1_current_risk_aware_book
+    name: current_risk_aware_book
+    role:
+      kind: standalone
+      parent: MNQ O15 E2 RR2 NYSE_OPEN + US_DATA_1000 book
+      comparator: CURRENT_COST_LT10 versus CURRENT_NO_FILTER
+      primary_metric: annual_r_divided_by_max_drawdown
+      promotion_target: research_provisional_book_candidate
+    expected_trial_count: 2
+    statement: >
+      The risk-aware COST_LT10 version of the MNQ O15/E2/RR2 NYSE_OPEN +
+      US_DATA_1000 book should dominate the NO_FILTER version on annual_r /
+      drawdown, without materially sacrificing raw annual R.
+    kill_if:
+      - COST_LT10 objective_score <= NO_FILTER objective_score
+      - COST_LT10 annual_r is more than 5 percent below NO_FILTER annual_r
+      - COST_LT10 fails family BH, DSR, WFE, or era checks
+  - id: H2_open_challenger_not_pigeonholed
+    name: open_challenger_not_pigeonholed
+    role:
+      kind: standalone
+      parent: capped MNQ E2 two-leg book family from pre-2026-selected pool
+      comparator: challenger pair books versus current COST_LT10 book
+      primary_metric: annual_r_divided_by_max_drawdown
+      promotion_target: followup_prereg_candidate_only
+    expected_trial_count: 190
+    statement: >
+      If the current book is too narrow, a capped pair-book challenger should
+      beat it on the same risk-aware objective without relying on 2026 behavior.
+    kill_if:
+      - no challenger beats current COST_LT10 on objective_score after family BH,
+        DSR, WFE, and era checks
+  - id: H3_new_filters_not_assumed
+    name: new_filters_not_assumed
+    role:
+      kind: filter
+      parent: matched MNQ E2 session/aperture/RR NO_FILTER cells
+      comparator: existing pre-entry-safe filters versus matched NO_FILTER parents
+      primary_metric: median_delta_annual_r_and_median_delta_drawdown
+      promotion_target: diagnostic_only_new_filter_gate
+    expected_trial_count: 0
+    statement: >
+      Existing pre-entry-safe filters must show broad median uplift versus
+      NO_FILTER before new filter engineering is justified.
+    park_if:
+      - current filters are local-only or median-negative
+      - required evidence needs order-flow, footprint, or absorption data
+
+promotion_rule:
+  continue_if_all:
+    - q_family < 0.05
+    - t >= 3.79
+    - dsr_family > 0.95
+    - dsr_inherited > 0.95
+    - WFE >= 0.50
+    - era_ok == true
+    - n_is >= 100
+  narrow_if:
+    - family gates pass but inherited broad-scan DSR does not
+    - challenger is better but post-selection status ceiling applies
+  kill_if:
+    - policy EV is not positive
+    - family signal fails BH, DSR, WFE, or era checks
+    - candidate requires 2026 descriptive behavior to justify selection
+
+deliverables_locked:
+  - research/mnq_open_book_validation_v1.py
+  - tests/test_research/test_mnq_open_book_validation_v1.py
+  - docs/audit/results/2026-06-01-mnq-open-book-validation-v1.md
+  - docs/audit/results/2026-06-01-mnq-open-book-validation-v1-books.csv
+  - docs/audit/results/2026-06-01-mnq-open-book-validation-v1-pool.csv
+  - docs/audit/results/2026-06-01-mnq-open-book-validation-v1-filter-diagnostics.csv

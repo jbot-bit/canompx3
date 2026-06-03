@@ -149,5 +149,7 @@ A per-turn `[CTX: N%]` gauge is injected by `.claude/hooks/context-gauge.py`; fo
 ## Strategy Classification — Behavioral Rules
 Low trade count ≠ bug (G6/G8 filters expected). Verify `trade_days <= eligible_days` first. If `trade_days > eligible_days` → corruption. Never "fix" filters to increase N. Never recommend REGIME as standalone. Trading logic → `TRADING_RULES.md`. Thresholds → `docs/ARCHITECTURE.md`.
 
+Sample tiers: REGIME 30-99; CORE >= 100. Caveats: `RESEARCH_RULES.md`.
+
 
 Do NOT reference unbuilt features in code or tests — see `ROADMAP.md` for what's planned.

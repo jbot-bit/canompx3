@@ -1,0 +1,4 @@
+proposal_only: true
+target: docs/runtime/chordia_audit_log.yaml
+audits: []
+note: Empty audits list means no result MD inputs were supplied.

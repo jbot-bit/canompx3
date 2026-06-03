@@ -1,14 +1,14 @@
 {
-  "total_iterations": 202,
-  "last_updated": "2026-05-30",
-  "consecutive_low_only": 0,
-  "last_high_finding_iter": 212,
+  "total_iterations": 213,
+  "last_updated": "2026-05-31",
+  "consecutive_low_only": 6,
+  "last_high_finding_iter": 217,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 66,
-      "fixed": 53,
+      "found": 71,
+      "fixed": 56,
       "deferred": 4,
-      "fix_rate": 0.8
+      "fix_rate": 0.79
     },
     "silent_failure": {
       "found": 46,
@@ -17,10 +17,10 @@
       "fix_rate": 0.91
     },
     "other": {
-      "found": 32,
-      "fixed": 16,
+      "found": 33,
+      "fixed": 17,
       "deferred": 4,
-      "fix_rate": 0.5
+      "fix_rate": 0.52
     },
     "dead_code": {
       "found": 18,
@@ -35,10 +35,16 @@
       "fix_rate": 0.86
     },
     "stale_metadata": {
-      "found": 5,
+      "found": 6,
       "fixed": 5,
       "deferred": 0,
-      "fix_rate": 1.0
+      "fix_rate": 0.83
+    },
+    "falsy_zero": {
+      "found": 5,
+      "fixed": 3,
+      "deferred": 1,
+      "fix_rate": 0.6
     },
     "lint": {
       "found": 5,
@@ -49,12 +55,6 @@
     "security": {
       "found": 4,
       "fixed": 4,
-      "deferred": 0,
-      "fix_rate": 1.0
-    },
-    "falsy_zero": {
-      "found": 3,
-      "fixed": 3,
       "deferred": 0,
       "fix_rate": 1.0
     },
@@ -71,6 +71,12 @@
       "fix_rate": 1.0
     },
     "connection_leak": {
+      "found": 2,
+      "fixed": 2,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
+    "drift_check_fix": {
       "found": 2,
       "fixed": 2,
       "deferred": 0,
@@ -112,13 +118,13 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
-    "drift_check_fix": {
-      "found": 1,
-      "fixed": 1,
-      "deferred": 0,
-      "fix_rate": 1.0
-    },
     "async_safety": {
+      "found": 1,
+      "fixed": 0,
+      "deferred": 0,
+      "fix_rate": 0.0
+    },
+    "unreachable_code": {
       "found": 1,
       "fixed": 0,
       "deferred": 0,
@@ -126,23 +132,23 @@
     }
   },
   "findings_by_severity": {
-    "CRITICAL": 9,
+    "CRITICAL": 10,
     "HIGH": 14,
-    "MEDIUM": 54,
-    "LOW": 125
+    "MEDIUM": 55,
+    "LOW": 134
   },
   "classifications": {
-    "judgment": 88,
-    "mechanical": 79,
-    "audit-only": 35
+    "judgment": 89,
+    "mechanical": 84,
+    "audit-only": 40
   },
   "files_audited": {
     "trading_app/live/session_orchestrator.py": {
-      "audit_count": 8,
-      "last_iter": 182,
-      "findings": 4,
-      "file_hash": "749ef91b901e4485",
-      "git_sha": "ea0d4fec"
+      "audit_count": 10,
+      "last_iter": 214,
+      "findings": 5,
+      "file_hash": "49c6e2adad6db1f7",
+      "git_sha": "09236046"
     },
     "execution_engine.py": {
       "audit_count": 6,
@@ -152,11 +158,18 @@
       "git_sha": ""
     },
     "pipeline/build_daily_features.py": {
-      "audit_count": 5,
-      "last_iter": 189,
+      "audit_count": 6,
+      "last_iter": 215,
       "findings": 4,
       "file_hash": "c67fb8ca46055e9d",
       "git_sha": "19a344c6"
+    },
+    "trading_app/outcome_builder.py": {
+      "audit_count": 6,
+      "last_iter": 221,
+      "findings": 6,
+      "file_hash": "2410712ab7e947f8",
+      "git_sha": "73ab314a"
     },
     "trading_app/strategy_validator.py": {
       "audit_count": 5,
@@ -172,26 +185,26 @@
       "file_hash": "aab0db06d73080fb",
       "git_sha": "89f8e97b"
     },
-    "trading_app/outcome_builder.py": {
+    "trading_app/live_config.py": {
       "audit_count": 5,
-      "last_iter": 185,
-      "findings": 5,
-      "file_hash": "7a6d9f31f27c4b0a",
-      "git_sha": "9e23de0c"
+      "last_iter": 222,
+      "findings": 3,
+      "file_hash": "351e3730fd2a9c26",
+      "git_sha": "dc3a45c9"
     },
     "trading_app/prop_profiles.py": {
       "audit_count": 5,
       "last_iter": 202,
       "findings": 4,
-      "file_hash": "838762afa139a373",
-      "git_sha": "ea0d4fec"
+      "file_hash": "bc5065c47a884622",
+      "git_sha": "5243f4b7"
     },
     "trading_app/lane_allocator.py": {
       "audit_count": 5,
       "last_iter": 199,
       "findings": 5,
-      "file_hash": "5a1a4504caa54f9e",
-      "git_sha": "009b7fce"
+      "file_hash": "36c5ca6bca52b7fb",
+      "git_sha": "7ee9ef6b"
     },
     "session_orchestrator.py": {
       "audit_count": 4,
@@ -206,13 +219,6 @@
       "findings": 3,
       "file_hash": "",
       "git_sha": ""
-    },
-    "trading_app/live_config.py": {
-      "audit_count": 4,
-      "last_iter": 119,
-      "findings": 3,
-      "file_hash": "351e3730fd2a9c26",
-      "git_sha": "dc3a45c9"
     },
     "trading_app/strategy_discovery.py": {
       "audit_count": 4,
@@ -246,8 +252,8 @@
       "audit_count": 4,
       "last_iter": 210,
       "findings": 3,
-      "file_hash": "fe1e82ea2c3c42ba",
-      "git_sha": "7fefb27e"
+      "file_hash": "807b7025c6cacaea",
+      "git_sha": "1566a43e"
     },
     "webhook_server.py": {
       "audit_count": 3,
@@ -291,6 +297,13 @@
       "file_hash": "391cf52c3063f141",
       "git_sha": "dc3a45c9"
     },
+    "trading_app/portfolio.py": {
+      "audit_count": 3,
+      "last_iter": 217,
+      "findings": 2,
+      "file_hash": "4c7b6807003333a1",
+      "git_sha": "ea0d4fec"
+    },
     "scripts/tools/build_edge_families.py": {
       "audit_count": 3,
       "last_iter": 91,
@@ -302,8 +315,15 @@
       "audit_count": 3,
       "last_iter": 207,
       "findings": 1,
-      "file_hash": "43061637cd65475e",
-      "git_sha": "4bb15372"
+      "file_hash": "d255cbc9d7e6471e",
+      "git_sha": "c20716b6"
+    },
+    "pipeline/asset_configs.py": {
+      "audit_count": 3,
+      "last_iter": 216,
+      "findings": 2,
+      "file_hash": "95df2c060f618c67",
+      "git_sha": "39a0a285"
     },
     "trading_app/pre_session_check.py": {
       "audit_count": 3,
@@ -365,8 +385,8 @@
       "audit_count": 2,
       "last_iter": 158,
       "findings": 2,
-      "file_hash": "d608bfdd37d2e3ae",
-      "git_sha": "fc82afe0"
+      "file_hash": "d8f7c121fd8be25b",
+      "git_sha": "8bf3feb1"
     },
     "trading_app/risk_manager.py": {
       "audit_count": 2,
@@ -374,13 +394,6 @@
       "findings": 1,
       "file_hash": "a96285446a8647db",
       "git_sha": "c9ba1b92"
-    },
-    "trading_app/portfolio.py": {
-      "audit_count": 2,
-      "last_iter": 118,
-      "findings": 2,
-      "file_hash": "4c7b6807003333a1",
-      "git_sha": "ea0d4fec"
     },
     "scripts/tools/audit_behavioral.py": {
       "audit_count": 2,
@@ -452,13 +465,6 @@
       "file_hash": "bd1e001df1a1289d",
       "git_sha": "f1ec4cdf"
     },
-    "pipeline/asset_configs.py": {
-      "audit_count": 2,
-      "last_iter": 182,
-      "findings": 1,
-      "file_hash": "a17e375cc95bb83c",
-      "git_sha": "6aed3f72"
-    },
     "research/research_edge_structure.py": {
       "audit_count": 2,
       "last_iter": 109,
@@ -479,6 +485,20 @@
       "findings": 1,
       "file_hash": "39cb30d5a1a64529",
       "git_sha": "77b3feb1"
+    },
+    "trading_app/live/broker_factory.py": {
+      "audit_count": 2,
+      "last_iter": 220,
+      "findings": 1,
+      "file_hash": "0ab997929e3e15a7",
+      "git_sha": "2a4fd850"
+    },
+    "pipeline/ingest_dbn_mgc.py": {
+      "audit_count": 2,
+      "last_iter": 223,
+      "findings": 1,
+      "file_hash": "cabdb58d20182ea1",
+      "git_sha": "73ab314a"
     },
     "trading_app/live/multi_runner.py": {
       "audit_count": 2,
@@ -974,8 +994,8 @@
       "audit_count": 1,
       "last_iter": 88,
       "findings": 1,
-      "file_hash": "855cf8857ad726d9",
-      "git_sha": "6fe428a7"
+      "file_hash": "0bf483245b55bdd9",
+      "git_sha": "285320dc"
     },
     "scripts/tools/generate_promotion_candidates.py": {
       "audit_count": 1,
@@ -1261,8 +1281,8 @@
       "audit_count": 1,
       "last_iter": 124,
       "findings": 1,
-      "file_hash": "1efede81c487a413",
-      "git_sha": "ea0d4fec"
+      "file_hash": "41e2795f5f314819",
+      "git_sha": "1cc7f4a1"
     },
     "trading_app/live/bar_aggregator.py": {
       "audit_count": 1,
@@ -1291,13 +1311,6 @@
       "findings": 1,
       "file_hash": "",
       "git_sha": ""
-    },
-    "trading_app/live/broker_factory.py": {
-      "audit_count": 1,
-      "last_iter": 127,
-      "findings": 1,
-      "file_hash": "0ab997929e3e15a7",
-      "git_sha": "2a4fd850"
     },
     "trading_app/live/circuit_breaker.py": {
       "audit_count": 1,
@@ -1361,13 +1374,6 @@
       "findings": 1,
       "file_hash": "edbca6ce724c5501",
       "git_sha": "9764078d"
-    },
-    "pipeline/ingest_dbn_mgc.py": {
-      "audit_count": 1,
-      "last_iter": 136,
-      "findings": 1,
-      "file_hash": "0f563fa58efda6a2",
-      "git_sha": "ccb44343"
     },
     "pipeline/ingest_dbn_daily.py": {
       "audit_count": 1,
@@ -1590,15 +1596,15 @@
       "audit_count": 1,
       "last_iter": 190,
       "findings": 1,
-      "file_hash": "6d36eabe35290002",
-      "git_sha": "00ace138"
+      "file_hash": "caeff28e56efd668",
+      "git_sha": "c20716b6"
     },
     "trading_app/deployability.py": {
       "audit_count": 1,
       "last_iter": 193,
       "findings": 1,
       "file_hash": "00fd8f6c15d7c465",
-      "git_sha": "00ace138"
+      "git_sha": "950c375d"
     },
     "trading_app/lane_correlation.py": {
       "audit_count": 1,
@@ -1618,8 +1624,8 @@
       "audit_count": 1,
       "last_iter": 206,
       "findings": 1,
-      "file_hash": "bf85487727eb8d4b",
-      "git_sha": "ecb33f00"
+      "file_hash": "c890884b2dafefdf",
+      "git_sha": "7ee9ef6b"
     },
     "pipeline/db_contracts.py": {
       "audit_count": 1,
@@ -1668,14 +1674,35 @@
       "last_iter": 212,
       "findings": 1,
       "file_hash": "be1b9f9ed1c1b719",
-      "git_sha": "25bc0e70"
+      "git_sha": "fa42337a"
     },
     "trading_app/allocation_promotion.py": {
       "audit_count": 1,
       "last_iter": 212,
       "findings": 1,
       "file_hash": "a145435c9243cfcb",
-      "git_sha": "25bc0e70"
+      "git_sha": "fa42337a"
+    },
+    "pipeline/system_brief.py": {
+      "audit_count": 1,
+      "last_iter": 217,
+      "findings": 0,
+      "file_hash": "53f62261398e4779",
+      "git_sha": "dc3a45c9"
+    },
+    "trading_app/ai/provider_registry.py": {
+      "audit_count": 1,
+      "last_iter": 218,
+      "findings": 1,
+      "file_hash": "95ba1f8f8e5be876",
+      "git_sha": "3b6f3b4e"
+    },
+    "trading_app/conditional_overlays.py": {
+      "audit_count": 1,
+      "last_iter": 224,
+      "findings": 1,
+      "file_hash": "43a079a2d4cb55b6",
+      "git_sha": "1e84a4a0"
     }
   },
   "known_acceptable_patterns": [
@@ -4130,6 +4157,127 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "NONE (pre-commit step 2b blocked by persistent gold.db lock from stale MCP processes \u2014 same known class as MEMORY.md feedback_mcp_venv_sidecar_rot_beartype_authlib_2026_05_30)"
+    },
+    {
+      "iter": 213,
+      "date": "2026-05-31",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:3826-3850",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "a877fc89"
+    },
+    {
+      "iter": 214,
+      "date": "2026-05-31",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/live/session_orchestrator.py (stale re-audit \u2014 hash changed since iter 182)",
+      "finding_type": "falsy_zero",
+      "severity": "LOW",
+      "verdict": "NOTED",
+      "commit": "NONE"
+    },
+    {
+      "iter": 215,
+      "date": "2026-05-31",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/build_daily_features.py (critical centrality, 17 importers, stale re-audit iter 189 + 3 commits)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 216,
+      "date": "2026-05-31",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/asset_configs.py:234",
+      "finding_type": "drift_check_fix",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "0e77cda4"
+    },
+    {
+      "iter": 217,
+      "date": "2026-05-31",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/system_brief.py (P1 unscanned high, 6 importers) + trading_app/portfolio.py (P3 stale re-audit iter 118, findings=2 from old scan)",
+      "finding_type": "canonical_violation",
+      "severity": "CRITICAL",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 218,
+      "date": "2026-05-31",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/ai/provider_registry.py:203,224,248,267",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "0989bde3"
+    },
+    {
+      "iter": 220,
+      "date": "2026-05-31",
+      "phase": "audit-only",
+      "classification": "mechanical",
+      "target": "trading_app/live/broker_factory.py (stale re-audit, last iter 127, findings=1)",
+      "finding_type": "unreachable_code",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 221,
+      "date": "2026-05-31",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/outcome_builder.py:1098 (first full scan, critical centrality 11 importers)",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "aa5963ea (bundled with iter 219)"
+    },
+    {
+      "iter": 222,
+      "date": "2026-05-31",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/live_config.py",
+      "finding_type": "stale_metadata",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 223,
+      "date": "2026-05-31",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/ingest_dbn_mgc.py (high centrality, 9 importers)",
+      "finding_type": "falsy_zero",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 224,
+      "date": "2026-05-31",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/conditional_overlays.py:82",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "1e84a4a0"
     }
   ]
 }

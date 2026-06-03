@@ -1,0 +1,17 @@
+batch_id,batch_index,total_batches,item_count,ready_count,blocked_count,first_rank,last_rank,manifest_path,command_path
+batch_001,1,16,25,25,0,82,106,batches/batch_001.csv,batches/batch_001_commands.ps1
+batch_002,2,16,25,25,0,107,131,batches/batch_002.csv,batches/batch_002_commands.ps1
+batch_003,3,16,25,25,0,132,156,batches/batch_003.csv,batches/batch_003_commands.ps1
+batch_004,4,16,25,25,0,157,181,batches/batch_004.csv,batches/batch_004_commands.ps1
+batch_005,5,16,25,25,0,182,206,batches/batch_005.csv,batches/batch_005_commands.ps1
+batch_006,6,16,25,25,0,207,231,batches/batch_006.csv,batches/batch_006_commands.ps1
+batch_007,7,16,25,25,0,232,256,batches/batch_007.csv,batches/batch_007_commands.ps1
+batch_008,8,16,25,25,0,257,281,batches/batch_008.csv,batches/batch_008_commands.ps1
+batch_009,9,16,25,25,0,282,306,batches/batch_009.csv,batches/batch_009_commands.ps1
+batch_010,10,16,25,25,0,307,331,batches/batch_010.csv,batches/batch_010_commands.ps1
+batch_011,11,16,25,25,0,332,356,batches/batch_011.csv,batches/batch_011_commands.ps1
+batch_012,12,16,25,25,0,357,381,batches/batch_012.csv,batches/batch_012_commands.ps1
+batch_013,13,16,25,25,0,382,406,batches/batch_013.csv,batches/batch_013_commands.ps1
+batch_014,14,16,25,25,0,407,431,batches/batch_014.csv,batches/batch_014_commands.ps1
+batch_015,15,16,25,25,0,432,456,batches/batch_015.csv,batches/batch_015_commands.ps1
+batch_016,16,16,23,23,0,457,479,batches/batch_016.csv,batches/batch_016_commands.ps1

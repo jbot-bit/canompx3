@@ -1,11 +1,13 @@
 """Tests for pipeline.health_check — pipeline health check CLI."""
 
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pipeline import health_check
 from pipeline.health_check import (
     check_database,
     check_dbn_files,
@@ -249,6 +251,41 @@ class TestCheckTests:
         with patch("subprocess.run", return_value=mock_result):
             ok, msg = check_tests()
             assert ok is False
+
+
+class TestHealthCheckCli:
+    def test_quick_mode_skips_slow_subprocess_checks(self, monkeypatch, capsys):
+        calls: list[str] = []
+
+        def ok(name):
+            def _inner():
+                calls.append(name)
+                return True, f"{name} ok"
+
+            return _inner
+
+        def unexpected(name):
+            def _inner():
+                raise AssertionError(f"{name} should not run in quick mode")
+
+            return _inner
+
+        monkeypatch.setattr(health_check, "check_python_deps", ok("deps"))
+        monkeypatch.setattr(health_check, "check_database", ok("db"))
+        monkeypatch.setattr(health_check, "check_dbn_files", unexpected("dbn"))
+        monkeypatch.setattr(health_check, "check_staleness", unexpected("staleness"))
+        monkeypatch.setattr(health_check, "check_git_hooks", ok("hooks"))
+        monkeypatch.setattr(health_check, "check_drift", unexpected("drift"))
+        monkeypatch.setattr(health_check, "check_m25_audit", unexpected("m25"))
+        monkeypatch.setattr(health_check, "check_integrity", unexpected("integrity"))
+        monkeypatch.setattr(health_check, "check_tests", unexpected("tests"))
+        monkeypatch.setattr(sys, "argv", ["health_check.py", "--quick"])
+
+        health_check.main()
+
+        out = capsys.readouterr().out
+        assert "Mode: QUICK" in out
+        assert calls == ["deps", "db", "hooks"]
 
 
 class TestCheckGitHooks:

@@ -165,7 +165,8 @@ def _cli_main(argv: list[str]) -> int:
 
     Usage:
         python -m trading_app.live.planned_launch write \\
-            --profile <id> --mode <SIGNAL|DEMO|LIVE> --source <START_BOT.bat|CLI|dashboard>
+            --profile <id> --mode <SIGNAL|DEMO|LIVE> --source <START_BOT.bat|CLI|dashboard> \\
+            [--copies <n>] [--instrument <symbol>]
 
         python -m trading_app.live.planned_launch read
         python -m trading_app.live.planned_launch clear
@@ -182,10 +183,15 @@ def _cli_main(argv: list[str]) -> int:
 
     args = argv[1:]
     kwargs: dict[str, str] = {}
+    instruments: list[str] = []
     i = 0
     while i < len(args):
         if args[i].startswith("--") and i + 1 < len(args):
-            kwargs[args[i][2:]] = args[i + 1]
+            key = args[i][2:]
+            if key == "instrument":
+                instruments.append(args[i + 1])
+            else:
+                kwargs[key] = args[i + 1]
             i += 2
         else:
             print(f"bad arg {args[i]!r}", file=sys.stderr)
@@ -196,6 +202,8 @@ def _cli_main(argv: list[str]) -> int:
             profile_id=kwargs["profile"],
             mode=kwargs["mode"],
             source=kwargs["source"],
+            copies=int(kwargs["copies"]) if "copies" in kwargs else None,
+            instruments=instruments or None,
         )
     except KeyError as exc:
         print(f"missing required flag: {exc}", file=sys.stderr)

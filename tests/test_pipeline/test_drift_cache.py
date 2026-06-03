@@ -161,6 +161,26 @@ def test_cache_dir_none_disables_cache(isolated_cache, monkeypatch):
     assert _drift_cache.read_pass(LABEL, key) is False
 
 
+def test_cache_dir_uses_git_common_dir_for_linked_worktree(tmp_path, monkeypatch):
+    """A linked worktree has .git as a file; cache still belongs under common .git."""
+    root = tmp_path / "repo"
+    common = tmp_path / "common.git"
+    root.mkdir()
+    common.mkdir()
+    (root / ".git").write_text(f"gitdir: {common / 'worktrees' / 'repo'}\n", encoding="utf-8")
+    monkeypatch.setattr(_drift_cache, "PROJECT_ROOT", root)
+
+    class Result:
+        returncode = 0
+        stdout = str(common)
+
+    monkeypatch.setattr(_drift_cache.subprocess, "run", lambda *args, **kwargs: Result())
+
+    cache_dir = _drift_cache._cache_dir()
+    assert cache_dir == (common / ".drift-cache").resolve()
+    assert cache_dir.exists()
+
+
 def _run_real_dispatch(label, monkeypatch, cache_dir):
     """Replay the runner's exact cache-dispatch decision (check_drift.py:15156-15166)
     against the REAL _drift_cache functions, the REAL CHECK_DEPS entry, and the
