@@ -100,12 +100,19 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-06-03
-- **Commit:** 5cb15909 — fix(workflow): surface peer-lease worktree escape
+- **Commit:** df9c48b8 — fix(workflow): surface peer-lease worktree escape
 - **Files changed:** 4 files
   - `HANDOFF.md`
   - `docs/audit/results/2026-06-03-maximise-no-tunnel-vision-sprint.md`
   - `scripts/tools/workflow_doctor.py`
   - `tests/test_tools/test_workflow_doctor.py`
+
+## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Completed the remaining high-EV live-readiness/dashboard/drift closeout from the operator prompt. Fresh `account_survival` for `topstep_50k_mnq_auto` passed Criterion 11 at 95.2% operational pass. Fresh `live_readiness_report --strict-zero-warn --proof-pack-only` showed C11 pass age 0d, C12 valid age 1d, three active lanes, zero stale lanes, no missing evidence, and only telemetry maturity advisory (9/30 days). Dashboard test smoke passed 42 tests. Phase 7 live audit passed 11 checks.
+- **Drift fix:** Root-caused the fast drift timeout to stale fast-skip coverage plus repeated relative-volume enrichment in `StrategyTradeWindowResolver`. Added resolver caching for same `(instrument, orb_minutes, orb_label, lookback_days)` relative-volume enrichment and added a focused regression test. Updated `SLOW_CHECK_LABELS` with slow labels measured in this session so `--fast` skips slow checks while full pre-commit/CI still retain coverage.
+- **Verification:** `python -m pytest tests\test_pipeline\test_check_drift_slow_labels.py tests\test_trading_app\test_validation_provenance.py tests\test_pipeline\test_check_drift_db.py::TestActiveMicroOnlyFiltersAfterMicroLaunch -q` passed 8 tests; `python -m pytest tests\test_trading_app\test_bot_dashboard.py -q` passed 42 tests; scoped `ruff check` and `py_compile` passed; `python -u pipeline\check_drift.py --fast --quiet --skip-crg-advisory` completed with `SUMMARY: clean passed=137 advisory=15`; `python scripts\audits\run_all.py --phase 7` passed. Known residual: pytest emitted ignored Windows temp cleanup `PermissionError` after successful runs.
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
@@ -130,8 +137,8 @@
 ## Current Codex Follow-up - Highest-Risk Commit Review
 - **Tool:** Codex
 - **Date:** 2026-06-03
-- **Summary:** Reviewed the recent highest-risk work surfaces (self-funded contract-cap fix, live journal-lock diagnostics, MNQ single-leg replacement research, and Slack control-room design). Fixed the research-monitoring bug in `research/mnq_single_leg_account_fit_replacement_v1.py`: replacement verdict gates now remain strictly pre-2026 in-sample while the full locked calendar is still passed through scoring so `mean_2026_*` monitoring fields are populated instead of silently NaN. Added a regression test proving 2026 holdout losses are reported but do not affect account-safe/verdict gates. Follow-up cleanup renamed the scoring inputs from misleading `book_is`/`trades_is` to `book`/`trades` so the API matches the full-calendar monitoring split.
-- **Verification:** `python -m pytest tests/test_research/test_mnq_single_leg_account_fit_replacement_v1.py -q` passed 9 tests. `ruff check` and `ruff format --check` passed on the changed research/test files. `git diff --check` passed. Could not regenerate the MNQ result doc/CSV locally because `/workspace/canompx3/gold.db` is absent in this WSL checkout; `python research/mnq_single_leg_account_fit_replacement_v1.py` and `python scripts/tools/project_pulse.py --fast --format json` both surfaced the missing canonical DB as an environment blocker.
+- **Summary:** Reviewed the recent highest-risk work surfaces (self-funded contract-cap fix, live journal-lock diagnostics, MNQ single-leg replacement research, and Slack control-room design). Fixed the research-monitoring bug in `research/mnq_single_leg_account_fit_replacement_v1.py`: replacement verdict gates now remain strictly pre-2026 in-sample while the full locked calendar is still passed through scoring so `mean_2026_*` monitoring fields are populated instead of silently NaN. Added a regression test proving 2026 holdout losses are reported but do not affect account-safe/verdict gates. Follow-up cleanup renamed the scoring inputs from misleading `book_is`/`trades_is` to `book`/`trades` so the API matches the full-calendar monitoring split. Second review pass fixed the report surface so Markdown rankings also expose `mean_2026_dollars` and `mean_2026_r`, removed transient `HANDOFF.md` conflict markers, and regenerated the MNQ result doc/CSV against `C:\Users\joshd\canompx3\gold.db`.
+- **Verification:** `python -m pytest tests/test_research/test_mnq_single_leg_account_fit_replacement_v1.py -q` passed 10 tests with known pytest config warnings and an ignored Windows temp cleanup `PermissionError` after the pass. `python research\mnq_single_leg_account_fit_replacement_v1.py` wrote 15 scenarios and the report against canonical `gold.db`; result CSV has 15 `KILL` rows, zero `mean_2026_*` nulls, and zero account-safe rows. `ruff check`, `ruff format --check`, `python -m py_compile`, prereg front-door text route, `project_pulse.py --fast --format json` (`broken=0`), and `git diff --check` passed. `python pipeline\check_drift.py --fast --quiet` timed out after 184s before a summary, so full fast-drift remains unclosed in this local run.
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
