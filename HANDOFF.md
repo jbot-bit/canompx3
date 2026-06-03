@@ -100,10 +100,8 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** 0bcdcac7 — chore(repo): untrack artifacts/research scratch + gitignore + purge runbook
-- **Files changed:** 2 files
-  - `.gitignore`
-  - `docs/runbooks/artifacts-research-history-purge.md`
+- **Commit:** (rebased) — chore(repo): untrack artifacts/research scratch (13,390 files / 91 MB) + START_WORKTREE.bat self-DOS guard fix
+- **Files changed:** untrack of `artifacts/research/` scratch (deletions only) + `.gitignore` + purge runbook + 3 guard hooks; see section notes below.
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
