@@ -93,11 +93,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-03
-- **Commit:** a90873a6 — chore(plugins): firecrawl default OFF + on-demand toggle
-- **Files changed:** 3 files
-  - `.claude/settings.json`
-  - `HANDOFF.md`
-  - `scripts/tools/firecrawl_mode.ps1`
+- **Commit:** 5e3d6dc3 — @ fix(hooks): name START_WORKTREE.bat in guard BLOCK messages (self-DOS fix)
+- **Files changed:** 4 files
+  - `.claude/hooks/branch-flip-guard.py`
+  - `.claude/hooks/mcp-git-guard.py`
+  - `.claude/hooks/worktree_guard.py`
+  - `docs/runtime/stages/worktree-guard-selfdos-message-fix.md`
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
