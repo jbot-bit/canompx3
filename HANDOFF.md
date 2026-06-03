@@ -100,23 +100,11 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-06-03
-- **Commit:** c0c86cf7 — fix(stage-reaper): detect peer renames in AuditCache peer-dirty path
-- **Files changed:** 16 files
+- **Commit:** 5cb15909 — fix(workflow): surface peer-lease worktree escape
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/plans/active/2026-06/2026-06-03-workflow-reliability-stage-ownership.md`
-  - `docs/runtime/stages/2026-05-25-ci-live-readiness-db-seed.md`
-  - `docs/runtime/stages/2026-05-26-sr-alarm-strict-double-counting.md`
-  - `docs/runtime/stages/2026-05-29-drift-cache-proof-of-honesty.md`
-  - `docs/runtime/stages/archive/2026-05-25-ci-live-readiness-db-seed.md`
-  - `docs/runtime/stages/archive/2026-05-26-sr-alarm-strict-double-counting.md`
-  - `docs/runtime/stages/archive/2026-05-29-drift-cache-proof-of-honesty.md`
-  - `docs/runtime/stages/archive/ehr-stage-3-validator-hard-fail.md`
-  - `docs/runtime/stages/archive/ralph_iter_212.md`
-  - `docs/runtime/stages/ehr-stage-3-validator-hard-fail.md`
-  - `docs/runtime/stages/ralph_iter_212.md`
-  - `scripts/tools/stage_reaper_audit.py`
+  - `docs/audit/results/2026-06-03-maximise-no-tunnel-vision-sprint.md`
   - `scripts/tools/workflow_doctor.py`
-  - `tests/test_tools/test_stage_reaper_audit.py`
   - `tests/test_tools/test_workflow_doctor.py`
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
@@ -150,3 +138,10 @@
 - `docs/runtime/decision-ledger.md`
 - `docs/runtime/debt-ledger.md`
 - `docs/plans/2026-04-22-handoff-baton-compaction.md`
+
+## Current Codex Follow-up - Maximise No-Tunnel-Vision Sprint
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Branch:** `session/joshd-maximise-no-tunnel-vision`
+- **Summary:** Built the opportunity map across allocation/live-readiness, ASX-open research, worktree/hook friction, dashboard readiness, drift speed, and stale-doc risk. Fresh DB-backed allocation verification is blocked because canonical `/workspace/canompx3/gold.db` is absent in this WSL checkout. Chosen action was the smallest high-EV operational fix: `workflow_doctor` now recommends opening an isolated worktree (`START_WORKTREE.bat <descriptor>` or `scripts/tools/new_session.sh <descriptor>`) for a live `peer_lease` instead of only inspecting the holder. This keeps live peer leases intact and removes the ambiguous force-release temptation.
+- **Verification:** `python -m pytest tests/test_tools/test_workflow_doctor.py -q` passed 22 tests with known pytest config warnings. `python -m pytest tests/test_tools/test_worktree_guard.py tests/test_tools/test_worktree_launch_preflight.py tests/test_tools/test_workflow_doctor.py -q` passed 73 tests / 1 skipped with the same config warnings. `ruff check`, `ruff format --check`, `python -m py_compile scripts/tools/workflow_doctor.py`, and `git diff --check` passed on the changed code paths. A mistaken probe for nonexistent `tests/test_hooks/test_worktree_guard_hook.py` failed with pytest exit 4 before collecting tests; reran the correct guard/launcher/workflow-doctor set successfully.
