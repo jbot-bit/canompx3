@@ -16,6 +16,7 @@ Usage:
 """
 
 import ast
+import concurrent.futures
 import contextlib
 import io
 import re
@@ -16014,6 +16015,56 @@ def _assert_check_dep_dicts_valid() -> None:
 _assert_check_dep_dicts_valid()
 
 
+def _run_one_check_capturing(check_fn) -> tuple[list[str], str]:
+    """Execute one non-DB check, capturing everything it prints.
+
+    Returns (violations, captured_stdout). Used by the Stage-3 parallel batch so
+    that per-check inline prints (advisory WARNINGs, doc-stat dumps) are buffered
+    per-thread and replayed serially in registry order by the caller — concurrent
+    threads must never interleave on the shared real stdout. An exception is
+    converted to a single-line violation (fail-closed; never swallowed), matching
+    the serial path's EXCEPTION handling for non-DB checks.
+
+    DB checks are NEVER run through this helper: the shared duckdb connection is
+    not thread-safe, so requires_db checks stay serial on the caller's thread.
+    """
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            violations = check_fn()
+    except Exception as e:  # noqa: BLE001 — record as a violation, never swallow
+        return ([f"  EXCEPTION: {type(e).__name__}: {e}"], buf.getvalue())
+    return (violations, buf.getvalue())
+
+
+def _drift_worker_count() -> int:
+    """Worker count for the non-DB parallel batch: min(8, cpu_count - 2), floor 1.
+
+    Leaves headroom (-2) so a drift run on a busy box (live bot + peer sessions)
+    does not saturate every core. Capped at 8 — the long tail is I/O-bound
+    (YAML/file reads), so more threads past ~8 yield diminishing returns and add
+    contention on the shared filesystem cache.
+
+    ``DRIFT_WORKERS`` env override: an integer that pins the worker count. Used by
+    the parallel-equivalence test to force serial (1) vs parallel (>1) execution
+    independent of the host CPU count, and available as an operator escape hatch
+    (e.g. ``DRIFT_WORKERS=1`` to debug a check that misbehaves under threading).
+    A non-integer / non-positive value is ignored (falls back to the CPU formula).
+    """
+    import os
+
+    override = os.environ.get("DRIFT_WORKERS", "")
+    if override:
+        try:
+            n = int(override)
+        except ValueError:
+            n = 0
+        if n >= 1:
+            return n
+    cpu = os.cpu_count() or 2
+    return max(1, min(8, cpu - 2))
+
+
 def main():
     import argparse
 
@@ -16092,40 +16143,150 @@ def main():
     fast_skipped = 0  # tracks --fast skips separately from DB-unavailable skips
     crg_skipped = 0  # tracks --skip-crg-advisory skips (commit drift gate)
     advisory_skipped = 0  # tracks --skip-advisory skips (commit drift gate)
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Stage-3 execution model: concurrency for COMPUTE, serial for EFFECTS.
+    #
+    # The per-check side effects (printing, counters, all_violations, the cache
+    # WRITE, and _CACHE_HITS_THIS_RUN ordering) must stay deterministic and in
+    # registry order. So we split the loop into three phases:
+    #
+    #   Phase A (serial, registry order): classify each check → SKIP / DB / NON-DB.
+    #     For NON-DB cacheable checks, compute the key and try read_pass HERE — a
+    #     cheap content-hash read — recording any hit into _CACHE_HITS_THIS_RUN so
+    #     ALL hits are recorded before the meta cold-recheck (which runs last and
+    #     reads that list). Checks needing a real fn() go to a work-list.
+    #   Phase B (parallel): run the NON-DB work-list fn()s concurrently, capturing
+    #     each one's stdout per-thread. DB checks and the meta cold-recheck are
+    #     EXCLUDED (shared duckdb con is not thread-safe; meta-recheck depends on
+    #     the complete cache-hit list — both run serially in Phase C).
+    #   Phase C (serial, registry order): replay print + counters + violation
+    #     collection + cache WRITE using the Phase-A/B results; run DB checks and
+    #     the meta cold-recheck inline here.
+    #
+    # This preserves byte-for-byte output ordering and exit-code semantics while
+    # compressing the I/O-bound non-DB long tail across worker threads.
+    # ──────────────────────────────────────────────────────────────────────────
+
+    META_RECHECK_LABEL = CHECKS[-1][0]  # must run last (import-asserted); reads cache-hit list
+
+    # Phase A — classify + cache-read (serial, registry order).
+    # disposition entries (per surviving check, in registry order):
+    #   ("skip-fast",)                              — counted, no print
+    #   ("skip-crg", i, label)                      — print SKIPPED line
+    #   ("skip-adv", i, label)                      — print SKIPPED line
+    #   ("hit",  i, label, is_advisory)             — cache hit → PASS, no fn() needed
+    #   ("db",   i, label, is_advisory, fn)         — run serially on shared con (Phase C)
+    #   ("meta", i, label, is_advisory, fn)         — run LAST serially (Phase C)
+    #   ("run",  i, label, is_advisory, fn, key)    — needs real fn(); key=None if not cacheable
+    dispositions: list[tuple] = []
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         if fast_mode and label in SLOW_CHECK_LABELS:
             fast_skipped += 1
             continue
         if skip_crg_advisory and label in CRG_ADVISORY_LABELS:
             crg_skipped += 1
-            if not quiet_mode:
-                print(f"Check {i}: {label}...")
-                print("  SKIPPED (--skip-crg-advisory; advisory, runs in CI)")
-                print()
+            dispositions.append(("skip-crg", i, label))
             continue
         if skip_advisory and is_advisory:
             advisory_skipped += 1
+            dispositions.append(("skip-adv", i, label))
+            continue
+        if requires_db:
+            dispositions.append(("db", i, label, is_advisory, check_fn))
+            continue
+        if label == META_RECHECK_LABEL:
+            dispositions.append(("meta", i, label, is_advisory, check_fn))
+            continue
+        # Non-DB check. Content-hash cache: only labels with a declared dep set in
+        # CHECK_DEPS (fixed file list) or CHECK_TREE_DEPS (whole globbed trees) are
+        # eligible. A cache hit returns PASS without re-running. Any miss / disabled
+        # cache / error falls through to the real check (fail-closed). Never used
+        # for requires_db checks — DB-content inputs are not hashed here.
+        deps = CHECK_DEPS.get(label)
+        tree_spec = CHECK_TREE_DEPS.get(label)
+        if deps is not None and tree_spec is not None:
+            # A label in both dicts is a configuration error — the two keys would
+            # race on the same on-disk cache file. Fail closed (no cache).
+            cache_key = None
+            cacheable = False
+        elif tree_spec is not None:
+            cache_key = _drift_cache.tree_cache_key(
+                label, tree_spec.get("file_deps", []), tree_spec.get("tree_deps", [])
+            )
+            cacheable = True
+        elif deps is not None:
+            cache_key = _drift_cache.cache_key(label, deps)
+            cacheable = True
+        else:
+            cache_key = None
+            cacheable = False
+        if cacheable and _drift_cache.read_pass(label, cache_key):
+            _CACHE_HITS_THIS_RUN.append(label)
+            dispositions.append(("hit", i, label, is_advisory))
+        else:
+            # key carried so Phase C can write_pass on a cacheable MISS only.
+            dispositions.append(("run", i, label, is_advisory, check_fn, cache_key if cacheable else None))
+
+    # Phase B — run the NON-DB ("run") work-list concurrently. Each result keyed
+    # by registry index i → (violations, captured_stdout). Pure compute; the only
+    # shared state touched is the results dict, which we write after each future
+    # resolves on the main thread (executor.submit returns futures; we collect).
+    run_items = [d for d in dispositions if d[0] == "run"]
+    results_by_idx: dict[int, tuple[list[str], str]] = {}
+    if run_items:
+        workers = min(_drift_worker_count(), len(run_items))
+        if workers <= 1:
+            for _kind, i, _label, _adv, fn, _key in run_items:
+                results_by_idx[i] = _run_one_check_capturing(fn)
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                future_to_idx = {
+                    pool.submit(_run_one_check_capturing, fn): i for _kind, i, _label, _adv, fn, _key in run_items
+                }
+                for fut in concurrent.futures.as_completed(future_to_idx):
+                    results_by_idx[future_to_idx[fut]] = fut.result()
+
+    # Phase C — replay effects serially in registry order (printing, counters,
+    # all_violations, cache writes), and run the serial-only checks (DB + meta)
+    # inline. In --quiet mode, requires_db / meta inline prints are still routed
+    # through _QuietSink exactly as before; the parallel "run" checks already had
+    # their stdout captured per-thread (we DROP it in quiet mode, replay it
+    # otherwise — same net effect as the old in-line suppress_ctx).
+    for d in dispositions:
+        kind = d[0]
+        if kind == "skip-crg":
+            _i, label = d[1], d[2]
             if not quiet_mode:
-                print(f"Check {i}: {label}...")
+                print(f"Check {_i}: {label}...")
+                print("  SKIPPED (--skip-crg-advisory; advisory, runs in CI)")
+                print()
+            continue
+        if kind == "skip-adv":
+            _i, label = d[1], d[2]
+            if not quiet_mode:
+                print(f"Check {_i}: {label}...")
                 print("  SKIPPED (--skip-advisory; advisory, runs in full drift/CI)")
                 print()
             continue
+
+        i, label, is_advisory = d[1], d[2], d[3]
         if not quiet_mode:
             print(f"Check {i}: {label}...")
 
-        # DB-dependent checks can be skipped if DB unavailable.
-        # duckdb.IOException is NOT a subclass of OSError, so we inspect
-        # the message to distinguish "DB busy" from real code failures.
-        # In --quiet mode, redirect stdout for the duration of the check call
-        # so per-check inline prints (advisory WARNINGs, doc-stat dumps, etc.)
-        # never leak to the sanitized output stream. _QuietSink mimics the
-        # subset of TextIOBase that imported modules call at import-time
-        # (e.g. trading_app.outcome_builder calls sys.stdout.reconfigure()).
-        suppress_ctx = contextlib.redirect_stdout(_QuietSink()) if quiet_mode else contextlib.nullcontext()
-        if requires_db:
+        # Resolve this check's violation list (v) and any captured stdout.
+        captured = ""
+        if kind == "hit":
+            v = []
+        elif kind == "db":
+            fn = d[4]
+            # DB-dependent checks can be skipped if DB unavailable. duckdb.IOException
+            # is NOT a subclass of OSError, so inspect the message to distinguish
+            # "DB busy" from real code failures.
+            suppress_ctx = contextlib.redirect_stdout(_QuietSink()) if quiet_mode else contextlib.nullcontext()
             try:
                 with suppress_ctx:
-                    v = check_fn(con=_shared_con)
+                    v = fn(con=_shared_con)
             except Exception as e:
                 msg = str(e)
                 if "being used by another process" in msg or "Cannot open file" in msg:
@@ -16137,41 +16298,26 @@ def main():
                         print()
                     continue
                 v = [f"  EXCEPTION: {type(e).__name__}: {e}"]
-        else:
-            # Content-hash cache: only labels with a declared dep set in
-            # CHECK_DEPS (fixed file list) or CHECK_TREE_DEPS (whole globbed
-            # trees) are eligible. A cache hit returns a PASS (empty violations)
-            # without re-running. Any miss / disabled cache / error falls through
-            # to the real check (fail-closed). Never used for requires_db checks —
-            # DB-content inputs are not hashed here.
-            deps = CHECK_DEPS.get(label)
-            tree_spec = CHECK_TREE_DEPS.get(label)
-            if deps is not None and tree_spec is not None:
-                # A label in both dicts is a configuration error — the two keys
-                # would race on the same on-disk cache file. Fail closed (no
-                # cache) rather than trust an ambiguous declaration.
-                cache_key = None
-                cacheable = False
-            elif tree_spec is not None:
-                cache_key = _drift_cache.tree_cache_key(
-                    label, tree_spec.get("file_deps", []), tree_spec.get("tree_deps", [])
-                )
-                cacheable = True
-            elif deps is not None:
-                cache_key = _drift_cache.cache_key(label, deps)
-                cacheable = True
-            else:
-                cache_key = None
-                cacheable = False
-            if cacheable and _drift_cache.read_pass(label, cache_key):
-                _CACHE_HITS_THIS_RUN.append(label)
-                v = []
-            else:
+        elif kind == "meta":
+            fn = d[4]
+            # Meta cold-recheck runs LAST and reads the now-complete cache-hit list.
+            suppress_ctx = contextlib.redirect_stdout(_QuietSink()) if quiet_mode else contextlib.nullcontext()
+            try:
                 with suppress_ctx:
-                    v = check_fn()
-                if cacheable:
-                    # Only PASS is persisted; write_pass no-ops on FAIL.
-                    _drift_cache.write_pass(label, cache_key, v)
+                    v = fn()
+            except Exception as e:  # noqa: BLE001 — record, never swallow
+                v = [f"  EXCEPTION: {type(e).__name__}: {e}"]
+        else:  # kind == "run" — parallel result
+            cache_key = d[5]
+            v, captured = results_by_idx[i]
+            if cache_key is not None:
+                # Only PASS is persisted; write_pass no-ops on FAIL. Done HERE
+                # (serial) so concurrent threads never race the cache write.
+                _drift_cache.write_pass(label, cache_key, v)
+            if captured and not quiet_mode:
+                # Replay the check's own inline output before the PASS/FAIL tag,
+                # matching the serial path's ordering.
+                print(captured, end="")
 
         if is_advisory:
             advisory_count += 1

@@ -133,11 +133,75 @@ Stage 2 — wire the slow tree-scanners into the cache  [IN PROGRESS 2026-06-03]
   - POST-FIX VERIFICATION: cold→warm timing re-measured (FAST_LANE no longer cached); 34/34
     non-slow cache tests pass + 2 slow parity tests pass; ruff clean; import guard passes.
 
-Stage 3 — ThreadPoolExecutor over non-DB checks
+Stage 3 — ThreadPoolExecutor over non-DB checks  [IN PROGRESS 2026-06-03 post-clear]
   - Split CHECKS into db / non-db. Run non-db concurrently (workers = min(8, cpu-2)); keep
     db serial. Collect (idx, label, violations) → print in registry order. --fast/--quiet/
     --skip-advisory/--skip-crg-advisory semantics preserved. Exit code unchanged.
   - Test: parallel run produces identical violation set + identical exit code as serial.
+
+  REFINED DESIGN (this session — concurrency for compute, serial for EFFECTS):
+  The main loop currently mutates shared state per-iteration (prints, counters,
+  all_violations, _CACHE_HITS_THIS_RUN). Naive threading races all of it. Correct shape:
+    * Phase A (SERIAL, registry order): classify each check → skip / requires_db / cacheable.
+      For cacheable non-DB checks compute cache_key + read_pass HERE (cheap hash read) and
+      record cache hits into _CACHE_HITS_THIS_RUN. This guarantees ALL hits are recorded
+      before the meta-recheck runs. Build a work-list of (idx,label,fn) needing a real fn().
+    * Phase B (PARALLEL): run the cache-MISS / non-cacheable NON-DB fn()s concurrently into
+      a results dict keyed by idx. Each fn() is pure (returns list[str]); no shared mutation.
+      Each parallel fn() is wrapped so stdout is captured per-thread (advisory checks print
+      inline) — prevents interleaved output. DB checks NOT in this pool.
+    * Phase C (SERIAL, registry order): for each check replay print + counter increment +
+      all_violations.extend, using the Phase-A/B results. Run requires_db fn()s here on the
+      shared con (serial). Run the meta-recheck fn() LAST (it reads the now-complete
+      _CACHE_HITS_THIS_RUN; its sampler already does sorted(set(...)) so it is order-immune).
+  CONSTRAINTS proven from code read:
+    - duckdb _shared_con is NOT thread-safe → all requires_db checks serial (Phase C).
+    - check_drift_cache_meta_recheck MUST run last (import-asserted at CHECKS[-1]) and reads
+      _CACHE_HITS_THIS_RUN → cannot be in the parallel pool; runs last in Phase C.
+    - _drift_cache.write_pass on a cacheable MISS must happen after its fn() returns — do it
+      in Phase C (serial) keyed off the Phase-B result, so cache writes are not raced.
+    - --quiet _QuietSink + per-check stdout: capture per parallel task, replay in Phase C.
+  - Scope additions: scripts/tools/profile_check_drift.py is read-only (verify only).
+
+  IMPLEMENTED (this session, CHECKPOINT — NOT yet stage-closed):
+    * pipeline/check_drift.py: import concurrent.futures; new helpers _run_one_check_capturing
+      (per-thread stdout capture, fail-closed exception→violation) + _drift_worker_count
+      (min(8,cpu-2), DRIFT_WORKERS env override). Main loop rewritten into the A/B/C phases
+      above. requires_db checks + meta cold-recheck stay SERIAL (Phase C). Cache read in
+      Phase A (records _CACHE_HITS_THIS_RUN before meta runs); cache WRITE in Phase C (no race).
+    * tests/test_pipeline/test_check_drift_parallel.py: NEW. 9 tests — serial-vs-parallel
+      verdict+exit-code equivalence (subprocess, DRIFT_WORKERS=1 vs 8); meta-recheck-present;
+      worker-count override + fallback bounds.
+  DELIBERATE BEHAVIOR CHANGE (documented, defensible — NOT pure equivalence):
+    The OLD serial path did NOT wrap non-DB check_fn() in try/except — a raising non-DB check
+    CRASHED the entire drift run (unhandled). The NEW worker catches it → single-line
+    `EXCEPTION:` violation → exit 1, other checks still report. This is STRICTLY fail-closed
+    (exception → violation, never a false PASS) and matches the DB path's pre-existing
+    try/except. Net: one broken check no longer aborts all reporting. Surfaced to operator.
+  VERIFIED:
+    * Serial (DRIFT_WORKERS=1) vs parallel (=8): `diff` of sorted verdict lines = IDENTICAL
+      (198 == 198 lines, both exit 1). This is the load-bearing equivalence proof.
+    * Module imports clean; _assert_check_dep_dicts_valid passes; CHECKS[-1] meta assert holds.
+    * 34/34 non-slow test_drift_cache.py pass (Stage 1/2 cache unaffected); 7 worker-count
+      tests pass; ruff clean.
+    * NOTE: this worktree's full drift is RED for PRE-EXISTING ENVIRONMENTAL reasons (33
+      "All imports resolve" failures from missing local research/output artifacts + 4 unrelated
+      checks) — NOT caused by Stage 3 (serial==parallel both show 170 passed / 37 violations).
+      So "drift exits 0" is NOT a usable closeout gate in this worktree; equivalence is.
+  TEST-HARNESS GOTCHA FIXED: pytest-timeout's `thread` watchdog races pytest's capture
+    manager on subprocess-spawning tests → one full-drift run intermittently returned ZERO
+    captured verdict lines (false FAIL). Fix = run with `-p no:timeout` (UNLOAD the plugin);
+    `mark.timeout(0)` does NOT work (still loads plugin — the n=4 watchdog-race close). Test
+    now asserts-nonempty-with-stderr so a real crash can't hide as an empty mis-compare.
+  OWED BEFORE STAGE CLOSE (could NOT run — PRE-CLEAR blocked subagent spawns):
+    (1) ADVERSARIAL-AUDIT GATE (evidence-auditor) on the Stage-3 commit — MANDATORY
+        (pipeline/ blocking-gate, [judgment]). Focus: thread-safety of the shared duckdb con
+        (must stay serial — verify no DB check leaked into the pool), _CACHE_HITS_THIS_RUN
+        ordering vs meta-recheck, cache-write race in Phase C, output-ordering equivalence,
+        the deliberate exception-handling change.
+    (2) pytest-wrapper confirmation of the 2 slow equivalence tests with -p no:timeout
+        (manual diff already proves the underlying equivalence; this is harness confirmation).
+  NEXT SESSION: /clear, then run the audit on the Stage-3 commit; if PASS, delete this file.
 
 ## STATUS 2026-06-03 (post-clear task #4): AUDIT-FAIL FIXED, commit ca0a2b7e.
 ##   Stage 2 cache: 2 checks cached (theory_grant, DSR); FAST_LANE un-wired (DB leak).
