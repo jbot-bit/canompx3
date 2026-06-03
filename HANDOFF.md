@@ -119,6 +119,12 @@
 - **Verification:** `python -m pytest tests/test_hooks/test_branch_state.py tests/test_hooks/test_branch_flip_guard.py tests/test_hooks/test_mcp_git_guard.py tests/test_hooks/test_head_flip_guard.py -q` passed 50 tests. Scoped `ruff check` on the changed hook/test files passed after mechanical import/f-string cleanup. `git diff --check` passed. `python scripts/tools/audit_behavioral.py` and `python scripts/tools/audit_integrity.py` passed. `python scripts/tools/project_pulse.py --fast --format json` reported `broken=0`.
 - **Residual gap:** `python pipeline/check_drift.py`, `python pipeline/check_drift.py --skip-crg-advisory --quiet`, and `python pipeline/check_drift.py --fast --quiet` all timed out locally before a summary. A 60s unbuffered probe showed fast drift progressing through `Active micro-only filters run only on real-micro instruments` before stalling on the next drift check; this appears unrelated to the F4-A hook merge but remains unclosed.
 
+## Current Codex Follow-up - Highest-Risk Commit Review
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Reviewed the recent highest-risk work surfaces (self-funded contract-cap fix, live journal-lock diagnostics, MNQ single-leg replacement research, and Slack control-room design). Fixed the research-monitoring bug in `research/mnq_single_leg_account_fit_replacement_v1.py`: replacement verdict gates now remain strictly pre-2026 in-sample while the full locked calendar is still passed through scoring so `mean_2026_*` monitoring fields are populated instead of silently NaN. Added a regression test proving 2026 holdout losses are reported but do not affect account-safe/verdict gates. Follow-up cleanup renamed the scoring inputs from misleading `book_is`/`trades_is` to `book`/`trades` so the API matches the full-calendar monitoring split.
+- **Verification:** `python -m pytest tests/test_research/test_mnq_single_leg_account_fit_replacement_v1.py -q` passed 9 tests. `ruff check` and `ruff format --check` passed on the changed research/test files. `git diff --check` passed. Could not regenerate the MNQ result doc/CSV locally because `/workspace/canompx3/gold.db` is absent in this WSL checkout; `python research/mnq_single_leg_account_fit_replacement_v1.py` and `python scripts/tools/project_pulse.py --fast --format json` both surfaced the missing canonical DB as an environment blocker.
+
 ## Durable References
 - `docs/runtime/action-queue.yaml`
 - `docs/runtime/decision-ledger.md`

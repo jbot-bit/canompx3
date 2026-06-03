@@ -262,7 +262,9 @@ def load_lane_trades(
     filtered = base[canonical_filter_mask(base, lane).fillna(False)].copy()
     filtered["pnl_dollars"] = filtered["pnl_r"].astype(float) * filtered["risk_dollars"].astype(float)
     filtered["lane"] = lane.strategy_id
-    return base, filtered[["trading_day", "entry_ts", "pnl_r", "pnl_dollars", "risk_dollars", "pnl_r_was_null", "lane"]].copy()
+    return base, filtered[
+        ["trading_day", "entry_ts", "pnl_r", "pnl_dollars", "risk_dollars", "pnl_r_was_null", "lane"]
+    ].copy()
 
 
 def build_daily_book(calendar: pd.Series | pd.DatetimeIndex | list[Any], legs: list[pd.DataFrame]) -> pd.DataFrame:
@@ -290,7 +292,9 @@ def _calendar_for_lanes(
     lanes: list[IncumbentLane | CandidateLane],
     base_by_lane: dict[str, pd.DataFrame],
 ) -> pd.Series:
-    calendars = [base_by_lane[lane.strategy_id]["trading_day"] for lane in lanes if not base_by_lane[lane.strategy_id].empty]
+    calendars = [
+        base_by_lane[lane.strategy_id]["trading_day"] for lane in lanes if not base_by_lane[lane.strategy_id].empty
+    ]
     if not calendars:
         return pd.Series([], dtype="datetime64[ns]")
     return pd.concat(calendars, ignore_index=True)
@@ -368,7 +372,12 @@ def _research_status_ok(state: LaneResearchState) -> bool:
     chordia = state.chordia_verdict.upper()
     sr = state.sr_status.upper()
     oos = "" if state.oos_status is None else state.oos_status.upper()
-    return chordia in {"PASS_CHORDIA", "PASS_PROTOCOL_A"} and "ALARM" not in sr and "FAIL" not in oos and "NEGATIVE" not in oos
+    return (
+        chordia in {"PASS_CHORDIA", "PASS_PROTOCOL_A"}
+        and "ALARM" not in sr
+        and "FAIL" not in oos
+        and "NEGATIVE" not in oos
+    )
 
 
 def _research_status_missing_or_ambiguous(state: LaneResearchState) -> bool:
@@ -386,22 +395,27 @@ def score_replacement_scenario(
     scenario_id: str,
     replaced_incumbent_lane: str,
     candidate_lane: str,
-    book_is: pd.DataFrame,
-    trades_is: pd.DataFrame,
+    book: pd.DataFrame,
+    trades: pd.DataFrame,
     incumbent_annual_per_max_dd: float,
     research_state: LaneResearchState,
     monte_carlo_paths: int = N_PATHS,
     monte_carlo_seed: int = SEED,
 ) -> dict[str, Any]:
-    _ = trades_is
+    _ = trades
     profile = get_profile(PROFILE_ID)
     tier = get_account_tier(profile.firm, profile.account_size)
     dd_limit = float(tier.max_dd)
     daily_loss_limit = float(profile.daily_loss_dollars or tier.daily_loss_limit or dd_limit)
     freeze_at_balance = dd_limit + 100.0 if profile.is_express_funded else profile.account_size + dd_limit + 100.0
     day1_lots = max_lots_for_xfa(profile.account_size, 0.0) if profile.is_express_funded else math.inf
-    metrics = _score_daily_book(book_is)
-    vals = book_is["pnl_dollars"].to_numpy(dtype=float)
+    # Score the full locked calendar so the report can expose 2026 monitoring
+    # metrics, but keep account-safety / promotion gates strictly in-sample.
+    # The 2026+ sacred holdout is for monitoring only and must not influence
+    # replacement verdicts.
+    metrics = _score_daily_book(book)
+    in_sample_book = book[book["trading_day"] < HOLDOUT_SACRED_FROM].copy()
+    vals = in_sample_book["pnl_dollars"].to_numpy(dtype=float)
     hist_daily_breaches = int(np.sum(vals <= -daily_loss_limit)) if vals.size else 0
     if monte_carlo_paths == N_PATHS:
         survival = _simulate_survival(
@@ -435,7 +449,11 @@ def score_replacement_scenario(
         and survival["daily_loss_breach"] == 0.0
     )
     underpowered = int(metrics["n_is_trades"]) < MIN_POWER_TRADES
-    chordia_severity = "PASS" if math.isfinite(float(metrics["t_stat"])) and float(metrics["t_stat"]) >= NO_THEORY_CHORDIA_T else "MISS"
+    chordia_severity = (
+        "PASS"
+        if math.isfinite(float(metrics["t_stat"])) and float(metrics["t_stat"]) >= NO_THEORY_CHORDIA_T
+        else "MISS"
+    )
     if not account_safe or not improves:
         verdict = "KILL"
     elif underpowered:
@@ -497,8 +515,8 @@ def run(db_path: Path = GOLD_DB_PATH) -> tuple[pd.DataFrame, dict[str, Any]]:
                 scenario_id=scenario.scenario_id,
                 replaced_incumbent_lane=scenario.replaced_incumbent.strategy_id,
                 candidate_lane=scenario.candidate.strategy_id,
-                book_is=book[book["trading_day"] < HOLDOUT_SACRED_FROM].copy(),
-                trades_is=trades[trades["trading_day"] < HOLDOUT_SACRED_FROM].copy(),
+                book=book,
+                trades=trades,
                 incumbent_annual_per_max_dd=incumbent_objective,
                 research_state=status_lookup.get(scenario.candidate.strategy_id, LaneResearchState()),
             )
@@ -546,7 +564,11 @@ def _baseline_account_safe(book: pd.DataFrame) -> dict[str, Any]:
 
 def _write_table(rows: pd.DataFrame, columns: list[str]) -> list[str]:
     header = "| " + " | ".join(columns) + " |"
-    align = "| " + " | ".join("---" if col.endswith("lane") or col in {"scenario_id", "verdict"} else "---:" for col in columns) + " |"
+    align = (
+        "| "
+        + " | ".join("---" if col.endswith("lane") or col in {"scenario_id", "verdict"} else "---:" for col in columns)
+        + " |"
+    )
     lines = [header, align]
     for _, row in rows.iterrows():
         parts: list[str] = []
