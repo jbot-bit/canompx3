@@ -7761,6 +7761,11 @@ def check_stale_work_radar_wired_into_pulse() -> list[str]:
     for fn in ("def build_reports(", "def base_exists("):
         if fn not in radar_text:
             violations.append(f"  stale_work_radar.py missing public entrypoint {fn!r} (project_pulse depends on it)")
+    # The blob_trap breakdown key is the radar→pulse contract for the chordia
+    # `git add -A` artifact trap. If the scorer stops emitting it, the pulse
+    # filter below silently goes blind to the blob trap — guard both ends.
+    if '"blob_trap"' not in radar_text:
+        violations.append("  stale_work_radar.py missing the '\"blob_trap\"' breakdown key (blob-trap loss class)")
 
     pulse_text = pulse_path.read_text(encoding="utf-8")
     required = [
@@ -7768,6 +7773,9 @@ def check_stale_work_radar_wired_into_pulse() -> list[str]:
         ("import stale_work_radar", "radar import"),
         ("stale_work_items = [] if fast else collect_stale_work(", "deep-only call site"),
         ("+ stale_work_items", "aggregation into all_items"),
+        # Without this needle, a future edit could drop blob_trap from the at_risk
+        # filter and re-introduce the blind spot the adversarial review caught.
+        ('"blob_trap" in r.risk_breakdown', "blob-trap branch surfaced in at_risk filter"),
     ]
     for needle, what in required:
         if needle not in pulse_text:

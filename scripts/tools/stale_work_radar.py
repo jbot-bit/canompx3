@@ -47,10 +47,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 W_UNPUSHED_COMMIT = 10.0  # per local commit not on any remote — highest: reflog-only if pruned
 W_UPSTREAM_GONE = 15.0  # tracked remote was deleted — local commits orphaned, look "pushed" but aren't
 W_DIRTY_FLAG = 5.0  # has uncommitted changes at all
+W_BLOB_TRAP = 20.0  # uncommitted path count > BLOB_TRAP_THRESHOLD — probable `git add -A` artifact-blob trap (pollutes commits if staged)
 W_AGE_PER_DAY = 0.1  # gentle decay so a fresh ahead=1 doesn't outrank a stale ahead=5
 W_REBASE_DEBT = 3.0  # applied once when behind > REBASE_DEBT_THRESHOLD
 REBASE_DEBT_THRESHOLD = 100  # commits behind main past which a merge is a conflict minefield
-BLOB_TRAP_THRESHOLD = 1000  # uncommitted changed-line count past which it's probably an `add -A` artifact trap
+BLOB_TRAP_THRESHOLD = (
+    1000  # uncommitted changed-PATH count past which it's probably an `add -A` artifact trap (chordia: 16k files)
+)
 
 
 def _scrubbed_git_env() -> dict[str, str]:
@@ -90,7 +93,7 @@ class BranchReport:
     last_commit_age_days: int
     last_commit_date: str
     worktree_path: str | None  # checked-out worktree, if any
-    dirty_lines: int  # uncommitted changed lines in that worktree (0 if none / not checked out)
+    dirty_paths: int  # uncommitted changed PATHS in that worktree (porcelain lines = files, not source lines; 0 if none / not checked out)
     merged_into_base: bool
     risk_score: float = 0.0
     risk_breakdown: dict[str, float] = field(default_factory=dict)
@@ -214,8 +217,14 @@ def worktree_for_branch() -> dict[str, str]:
     return mapping
 
 
-def dirty_line_count(worktree_path: str) -> int:
-    """Count of uncommitted changed paths in a worktree (porcelain lines)."""
+def dirty_path_count(worktree_path: str) -> int:
+    """Count of uncommitted changed PATHS in a worktree.
+
+    One `git status --porcelain` line == one changed file path, NOT one changed
+    source line. So this is a file/path count, and BLOB_TRAP_THRESHOLD is in
+    paths. The chordia `git add -A` artifact trap was 16k files / 2.99M lines —
+    16k paths trips the 1000-path threshold, which is what we want to catch.
+    """
     res = _run_git("status", "--porcelain", cwd=Path(worktree_path))
     if res.returncode != 0:
         return 0
@@ -239,14 +248,17 @@ def score(report: BranchReport) -> None:
         breakdown["upstream_gone"] = W_UPSTREAM_GONE
         report.flags.append("upstream [gone] — tracked remote was deleted; local commits orphaned")
 
-    if report.dirty_lines > 0:
+    if report.dirty_paths > 0:
         breakdown["dirty"] = W_DIRTY_FLAG
-        if report.dirty_lines > BLOB_TRAP_THRESHOLD:
+        if report.dirty_paths > BLOB_TRAP_THRESHOLD:
+            # Distinct key so consumers (project_pulse) can surface the blob-trap
+            # without re-deriving BLOB_TRAP_THRESHOLD — threshold lives only here.
+            breakdown["blob_trap"] = W_BLOB_TRAP
             report.flags.append(
-                f"{report.dirty_lines} uncommitted paths (>{BLOB_TRAP_THRESHOLD}: probable `git add -A` artifact-blob trap)"
+                f"{report.dirty_paths} uncommitted paths (>{BLOB_TRAP_THRESHOLD}: probable `git add -A` artifact-blob trap)"
             )
         else:
-            report.flags.append(f"{report.dirty_lines} uncommitted path(s)")
+            report.flags.append(f"{report.dirty_paths} uncommitted path(s)")
 
     if report.last_commit_age_days > 0:
         breakdown["age"] = round(report.last_commit_age_days * W_AGE_PER_DAY, 2)
@@ -255,7 +267,7 @@ def score(report: BranchReport) -> None:
         breakdown["rebase_debt"] = W_REBASE_DEBT
         report.flags.append(f"{report.behind} behind base (>{REBASE_DEBT_THRESHOLD}: rebase-conflict risk)")
 
-    if report.merged_into_base and unpushed == 0 and report.dirty_lines == 0 and not report.upstream_gone:
+    if report.merged_into_base and unpushed == 0 and report.dirty_paths == 0 and not report.upstream_gone:
         report.flags.append("merged into base — safe to prune")
 
     report.risk_breakdown = breakdown
@@ -273,7 +285,7 @@ def build_reports(base: str) -> list[BranchReport]:
         age_days, age_date = age_from_iso(bmeta.get("date", ""))
         gone = upstream_gone(bmeta.get("track", ""))
         wt_path = wt_map.get(branch)
-        dirty = dirty_line_count(wt_path) if wt_path else 0
+        dirty = dirty_path_count(wt_path) if wt_path else 0
         merged = is_merged(branch, base)
         rpt = BranchReport(
             branch=branch,
@@ -285,7 +297,7 @@ def build_reports(base: str) -> list[BranchReport]:
             last_commit_age_days=age_days,
             last_commit_date=age_date,
             worktree_path=wt_path,
-            dirty_lines=dirty,
+            dirty_paths=dirty,
             merged_into_base=merged,
         )
         score(rpt)
@@ -302,7 +314,7 @@ def render_table(reports: list[BranchReport], base: str) -> str:
     for r in reports:
         ab = f"{r.ahead}/{r.behind}"
         age = f"{r.last_commit_age_days}d"
-        dirty = str(r.dirty_lines) if r.dirty_lines else "-"
+        dirty = str(r.dirty_paths) if r.dirty_paths else "-"
         flag_str = "; ".join(r.flags) if r.flags else ("clean" if r.risk_score == 0 else "")
         lines.append(f"{r.risk_score:>6.1f}  {r.branch:<48} {ab:>9} {age:>5} {dirty:>6}  {flag_str}")
     return "\n".join(lines)

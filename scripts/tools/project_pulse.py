@@ -1884,10 +1884,15 @@ def collect_stale_work(canonical: Path) -> list[PulseItem]:
     except Exception:
         return items
 
+    # Surface the three loss-bearing classes: unpushed commits (reflog-only if
+    # pruned), [gone] upstreams (orphaned commits), and the `git add -A` blob trap
+    # (a huge uncommitted diff that pollutes the next commit if staged — the
+    # chordia 2.99M-line incident). Plain dirty/age branches are excluded as noise.
     at_risk = [
         r
         for r in reports
-        if r.risk_score > 0 and ("unpushed" in r.risk_breakdown or "upstream_gone" in r.risk_breakdown)
+        if r.risk_score > 0
+        and ("unpushed" in r.risk_breakdown or "upstream_gone" in r.risk_breakdown or "blob_trap" in r.risk_breakdown)
     ]
     if not at_risk:
         return items
@@ -1899,7 +1904,7 @@ def collect_stale_work(canonical: Path) -> list[PulseItem]:
             category="decaying",
             severity="high" if top.risk_score >= 50 else "medium",
             source="stale_work",
-            summary=f"{len(at_risk)} branch(es) with at-risk unpushed work — top: {top.branch} (risk {top.risk_score:.0f})",
+            summary=f"{len(at_risk)} branch(es) with at-risk work (unpushed / orphaned / blob-trap) — top: {top.branch} (risk {top.risk_score:.0f})",
             detail=detail,
             action="python scripts/tools/stale_work_radar.py",
         )

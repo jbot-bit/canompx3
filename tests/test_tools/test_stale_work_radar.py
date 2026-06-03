@@ -81,7 +81,7 @@ class TestScore:
             last_commit_age_days=0,
             last_commit_date="2026-06-03",
             worktree_path=None,
-            dirty_lines=0,
+            dirty_paths=0,
             merged_into_base=False,
         )
         defaults.update(kw)
@@ -100,10 +100,21 @@ class TestScore:
         assert all("LOCAL-ONLY" not in f for f in r.flags)
 
     def test_blob_trap_flagged(self) -> None:
-        r = self._report(dirty_lines=13392)
+        r = self._report(dirty_paths=13392)
         radar.score(r)
         assert any("artifact-blob trap" in f for f in r.flags)
         assert r.risk_breakdown["dirty"] == radar.W_DIRTY_FLAG
+        # blob_trap is a DISTINCT key so project_pulse can surface it without
+        # re-deriving BLOB_TRAP_THRESHOLD (the radar→pulse contract).
+        assert r.risk_breakdown["blob_trap"] == radar.W_BLOB_TRAP
+
+    def test_normal_dirty_is_not_a_blob_trap(self) -> None:
+        # A few uncommitted files is normal work — must NOT carry the blob_trap key.
+        r = self._report(dirty_paths=3)
+        radar.score(r)
+        assert r.risk_breakdown["dirty"] == radar.W_DIRTY_FLAG
+        assert "blob_trap" not in r.risk_breakdown
+        assert all("artifact-blob trap" not in f for f in r.flags)
 
     def test_rebase_debt_only_past_threshold(self) -> None:
         below = self._report(behind=radar.REBASE_DEBT_THRESHOLD)
@@ -114,7 +125,7 @@ class TestScore:
         assert above.risk_breakdown["rebase_debt"] == radar.W_REBASE_DEBT
 
     def test_clean_merged_branch_is_zero_risk_and_prunable(self) -> None:
-        r = self._report(merged_into_base=True, ahead=0, unpushed=0, dirty_lines=0)
+        r = self._report(merged_into_base=True, ahead=0, unpushed=0, dirty_paths=0)
         radar.score(r)
         assert r.risk_score == 0.0
         assert any("safe to prune" in f for f in r.flags)
@@ -163,6 +174,50 @@ class TestBranchMetadata:
         assert radar.age_from_iso("garbage") == (0, "garbage")
 
 
+class TestPulseSurfacesBlobTrap:
+    """Regression for the adversarial-review blind spot: collect_stale_work must
+    surface a blob-trap branch that has NO unpushed commits and NO [gone] upstream.
+    Before the fix the at_risk filter required unpushed/upstream_gone, so the
+    chordia `git add -A` artifact trap (dirty-only) was silently dropped."""
+
+    def _blob_trap_report(self) -> radar.BranchReport:
+        r = radar.BranchReport(
+            branch="blobby",
+            ahead=0,
+            behind=0,
+            unpushed=0,
+            has_remote=True,
+            upstream_gone=False,
+            last_commit_age_days=1,
+            last_commit_date="2026-06-03",
+            worktree_path="/x",
+            dirty_paths=13392,
+            merged_into_base=False,
+        )
+        radar.score(r)
+        return r
+
+    def test_blob_trap_only_branch_surfaces_in_pulse(self) -> None:
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, "scripts/tools")
+        import project_pulse as pp
+
+        rep = self._blob_trap_report()
+        assert "unpushed" not in rep.risk_breakdown  # the case that used to be dropped
+        assert "upstream_gone" not in rep.risk_breakdown
+        assert "blob_trap" in rep.risk_breakdown
+        with (
+            patch.object(radar, "base_exists", return_value=True),
+            patch.object(radar, "build_reports", return_value=[rep]),
+        ):
+            items = pp.collect_stale_work(Path("."))
+        assert len(items) == 1
+        assert "blob-trap" in items[0].summary
+        assert items[0].source == "stale_work"
+
+
 class TestMainExitClean:
     def test_missing_base_exits_zero(self, capsys) -> None:
         with patch.object(radar, "base_exists", return_value=False):
@@ -181,7 +236,7 @@ class TestMainExitClean:
             last_commit_age_days=0,
             last_commit_date="2026-06-03",
             worktree_path=None,
-            dirty_lines=0,
+            dirty_paths=0,
             merged_into_base=False,
         )
         radar.score(rpt)
