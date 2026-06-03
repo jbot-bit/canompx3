@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import asdict
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -8,16 +9,19 @@ from pathlib import Path
 import pytest
 
 from trading_app.account_survival import (
+    STRICT_DD_BUDGET_FRACTION,
     DailyScenario,
     SurvivalRules,
     TradePath,
     _build_profile_fingerprint,
+    _build_rules,
     _current_survival_canonical_inputs,
     _load_lane_daily_pnl,
     _scenario_from_trade_paths,
     check_survival_report_gate,
     evaluate_profile_survival,
     get_survival_report_path,
+    main,
     read_survival_report_state,
     simulate_survival,
 )
@@ -100,6 +104,11 @@ def _survival_envelope(
                 "path_model": "trade_path_conservative",
                 "min_operational_pass_probability": 0.7,
                 "gate_pass": gate_pass,
+                "strict_account_gate_pass": gate_pass,
+                "effective_dd_budget_dollars": 1600.0,
+                "historical_daily_loss_breach_days": [],
+                "historical_daily_loss_breach_count": 0,
+                "historical_max_observed_90d_dd_dollars": 450.0,
                 "p50_final_balance": 200.0,
                 "p05_final_balance": -300.0,
                 "p95_final_balance": 900.0,
@@ -223,6 +232,16 @@ def test_simulate_survival_scaling_breach_blocks_operational_pass():
     assert result["operational_pass_probability"] == 0.0
 
 
+def test_build_rules_uses_profile_daily_loss_and_reports_strict_dd_budget():
+    profile = get_profile("topstep_50k_mnq_auto")
+
+    rules = _build_rules(profile)
+
+    assert rules.daily_loss_limit == 450.0
+    assert rules.dd_limit_dollars == 2000.0
+    assert rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION == 1600.0
+
+
 def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots():
     """Verify _scenario_from_trade_paths aggregates per-instrument contracts.
 
@@ -323,6 +342,30 @@ def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_p
     assert "61.0% < 70%" in msg
 
 
+def test_check_survival_report_gate_blocks_strict_historical_daily_loss_breaches(tmp_path, monkeypatch):
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
+    envelope = _survival_envelope(as_of_date="2026-04-09", operational_pass_probability=0.78, gate_pass=True)
+    envelope["payload"]["summary"]["strict_account_gate_pass"] = False
+    envelope["payload"]["summary"]["historical_daily_loss_breach_days"] = ["2025-03-03", "2025-08-14"]
+    envelope["payload"]["summary"]["historical_daily_loss_breach_count"] = 2
+    envelope["payload"]["summary"]["historical_max_observed_90d_dd_dollars"] = 1701.0
+    report_path = get_survival_report_path("topstep_50k_mnq_auto")
+    report_path.write_text(json.dumps(envelope))
+
+    ok, msg = check_survival_report_gate(
+        "topstep_50k_mnq_auto",
+        today=date(2026, 4, 10),
+    )
+
+    assert ok is False
+    assert "strict account diagnostics failed" in msg
+    assert "historical_daily_loss_days=2" in msg
+    assert "max_90d_dd=$1,701/$1,600" in msg
+
+
 def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
     monkeypatch.setattr(
@@ -340,6 +383,7 @@ def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
 
     assert ok is True
     assert "Criterion 11 pass" in msg
+    assert "strict_account=PASS" in msg
 
 
 def test_check_survival_report_gate_blocks_profile_mismatch(tmp_path, monkeypatch):
@@ -527,3 +571,113 @@ def test_evaluate_profile_survival_writes_report(tmp_path, monkeypatch):
     assert payload["payload"]["summary"]["gate_pass"] is True
     assert payload["payload"]["metadata"]["source_days"] == 1
     assert payload["canonical_inputs"]["profile_fingerprint"] == _canonical_inputs()["profile_fingerprint"]
+
+
+def test_evaluate_profile_survival_records_strict_historical_account_diagnostics(tmp_path, monkeypatch):
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
+
+    def fake_load(_profile_id, *, as_of_date, db_path=None):
+        scenarios = [
+            DailyScenario(
+                trading_day="2025-01-02",
+                total_pnl_dollars=100.0,
+                positive_pnl_dollars=100.0,
+                active_lane_count=1,
+            ),
+            DailyScenario(
+                trading_day="2025-01-03",
+                total_pnl_dollars=-1701.0,
+                positive_pnl_dollars=0.0,
+                active_lane_count=1,
+                min_balance_delta_dollars=-1701.0,
+            ),
+        ]
+        metadata = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "source_start": "2025-01-02",
+            "source_end": str(as_of_date),
+            "source_days": len(scenarios),
+            "lane_ids": ["MNQ_TEST"],
+            "instruments": ["MNQ"],
+        }
+        return scenarios, metadata
+
+    monkeypatch.setattr("trading_app.account_survival._load_profile_daily_scenarios", fake_load)
+
+    summary = evaluate_profile_survival(
+        "topstep_50k_mnq_auto",
+        as_of_date=date(2025, 12, 31),
+        horizon_days=90,
+        n_paths=16,
+        seed=0,
+        write_state=False,
+    )
+
+    assert summary.gate_pass is False
+    assert summary.strict_account_gate_pass is False
+    assert summary.effective_dd_budget_dollars == 1600.0
+    assert summary.historical_daily_loss_breach_days == ["2025-01-03"]
+    assert summary.historical_daily_loss_breach_count == 1
+    assert summary.historical_max_observed_90d_dd_dollars == 1701.0
+    assert not get_survival_report_path("topstep_50k_mnq_auto").exists()
+
+
+def test_account_survival_no_write_state_cli_fails_operational_gate_and_reports_strict_diagnostics(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
+
+    def fake_load(_profile_id, *, as_of_date, db_path=None):
+        scenarios = [
+            DailyScenario(
+                trading_day="2025-01-03",
+                total_pnl_dollars=-1701.0,
+                positive_pnl_dollars=0.0,
+                active_lane_count=1,
+                min_balance_delta_dollars=-1701.0,
+            )
+        ]
+        metadata = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "source_start": "2025-01-03",
+            "source_end": str(as_of_date),
+            "source_days": len(scenarios),
+            "lane_ids": ["MNQ_TEST"],
+            "instruments": ["MNQ"],
+        }
+        return scenarios, metadata
+
+    monkeypatch.setattr("trading_app.account_survival._load_profile_daily_scenarios", fake_load)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "account_survival",
+            "--profile",
+            "topstep_50k_mnq_auto",
+            "--as-of",
+            "2025-12-31",
+            "--paths",
+            "8",
+            "--no-write-state",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main()
+
+    assert excinfo.value.code == 2
+    assert not get_survival_report_path("topstep_50k_mnq_auto").exists()
+    out = capsys.readouterr().out
+    assert "gate=FAIL" in out
+    assert "Expectancy edge: not evaluated by Criterion 11 account survival" in out
+    assert "Strict diagnostics: effective_dd_budget=$1,600" in out
+    assert "Prop-account path safety=FAIL" in out
+    assert "Final deployability gate=FAIL" in out
+    assert "Historical daily-loss breach days (1): 2025-01-03" in out
