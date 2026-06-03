@@ -61,6 +61,10 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "slow: long-running integration or subprocess checks kept out of pre-commit and quick audit paths",
+    "timeout: per-test timeout marker used when pytest-timeout is installed",
+]
 asyncio_mode = "auto"
 norecursedirs = ["local_db", ".venv", "DB", "*.egg-info"]
 # pytest-timeout: convert silent SIGINT / hangs on GH-hosted Windows runners

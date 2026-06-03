@@ -74,6 +74,8 @@ class TestCrgAdvisoryLabelInvariants:
 class TestSkipCrgAdvisoryRuntime:
     """Bounded subprocess: confirm the flag actually skips D1-D5 at runtime."""
 
+    pytestmark = pytest.mark.slow
+
     @pytest.mark.timeout(240)
     def test_flag_skips_crg_checks_and_keeps_exit_semantics(self):
         try:

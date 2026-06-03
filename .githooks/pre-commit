@@ -555,6 +555,12 @@ if [ -z "$TEST_ARGS" ]; then
     echo "  No production .py files staged — tests skipped"
 else
     TEST_TMPFILE=$(mktemp)
+    PYTEST_COMMON_DIR=$(git rev-parse --git-common-dir 2>/dev/null || true)
+    if [ -z "$PYTEST_COMMON_DIR" ]; then
+        PYTEST_COMMON_DIR="$SCRIPT_DIR/.git"
+    fi
+    PYTEST_BASETEMP="$PYTEST_COMMON_DIR/pytest-tmp/precommit-$$"
+    mkdir -p "$PYTEST_COMMON_DIR/pytest-tmp"
     set +e
     # Scrub git env vars that the commit hook inherits — they leak into test
     # subprocesses (e.g. tests calling `git worktree list` from a tmp_path)
@@ -562,7 +568,7 @@ else
     # erroring on the empty tmp_path. See PR #126 postmortem.
     # shellcheck disable=SC2086  # intentional word-splitting for TEST_ARGS
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE \
-        "$PYTHON" -m pytest $TEST_ARGS -x -q > "$TEST_TMPFILE" 2>&1
+        "$PYTHON" -m pytest $TEST_ARGS -m "not slow" --basetemp "$PYTEST_BASETEMP" -x -q > "$TEST_TMPFILE" 2>&1
     TEST_EXIT=$?
     set -e
     tail -5 "$TEST_TMPFILE"

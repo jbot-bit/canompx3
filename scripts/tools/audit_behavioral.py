@@ -57,8 +57,47 @@ def _git_ignored(path: Path) -> bool:
     return result.returncode == 0
 
 
+def _git_source_files(dirs: list[Path], exts: tuple[str, ...]) -> list[Path] | None:
+    """Return tracked + untracked non-ignored files in dirs, or None outside git."""
+    rel_dirs: list[str] = []
+    for directory in dirs:
+        if not directory.exists():
+            continue
+        try:
+            rel_dirs.append(str(directory.relative_to(PROJECT_ROOT)))
+        except ValueError:
+            return None
+    if not rel_dirs:
+        return []
+
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "--", *rel_dirs],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=15,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+
+    files = []
+    for line in result.stdout.splitlines():
+        path = (PROJECT_ROOT / line).resolve()
+        if path.suffix in exts and path.is_file():
+            files.append(path)
+    return sorted(set(files))
+
+
 def _python_files(dirs: list[Path]) -> list[Path]:
     """Collect tracked .py files from given directories (skips git-ignored)."""
+    git_files = _git_source_files(dirs, (".py",))
+    if git_files is not None:
+        return git_files
     files = []
     for d in dirs:
         if d.exists():
@@ -68,6 +107,9 @@ def _python_files(dirs: list[Path]) -> list[Path]:
 
 def _text_files(dirs: list[Path], exts: tuple[str, ...] = (".py", ".yml", ".yaml", ".md")) -> list[Path]:
     """Collect tracked text files from given directories (skips git-ignored)."""
+    git_files = _git_source_files(dirs, exts)
+    if git_files is not None:
+        return git_files
     files = []
     for d in dirs:
         if d.exists():

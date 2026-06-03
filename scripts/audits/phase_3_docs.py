@@ -7,6 +7,7 @@ Validates CLAUDE.md, TRADING_RULES.md, RESEARCH_RULES.md, ROADMAP.md,
 REPO_MAP.md, .claude/rules/, and docs/specs/ against canonical code sources.
 """
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -31,10 +32,17 @@ def _read_file(path: Path) -> str:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run Phase 3 documentation audit")
+    parser.add_argument("--quick", action="store_true", help="Run only Phase 3A quick numbers/doc check")
+    args = parser.parse_args()
+
     audit = AuditPhase(phase_num=3, name="Documentation vs Reality")
     audit.print_header()
 
     _check_claude_md(audit)
+    if args.quick:
+        audit.run_and_exit()
+
     _check_trading_rules(audit)
     _check_research_rules(audit)
     _check_roadmap(audit)

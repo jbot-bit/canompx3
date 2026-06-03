@@ -44,6 +44,16 @@ def test_pre_commit_emits_stage_timing_and_releases_commit_lock():
     assert text.index("_finish_stage_timing") < text.index('commit_serialize.py" release')
 
 
+def test_pre_commit_pytest_fast_path_excludes_slow_tests_and_uses_repo_basetemp():
+    text = (ROOT / ".githooks" / "pre-commit").read_text(encoding="utf-8")
+
+    assert '-m "not slow"' in text
+    assert '--basetemp "$PYTEST_BASETEMP"' in text
+    assert "git rev-parse --git-common-dir" in text
+    assert "pytest-tmp/precommit-$$" in text
+    assert 'mkdir -p "$PYTEST_COMMON_DIR/pytest-tmp"' in text
+
+
 def test_post_commit_prefers_wsl_venv_before_windows_venv_on_posix_shells():
     text = (ROOT / ".githooks" / "post-commit").read_text(encoding="utf-8")
 
