@@ -7741,6 +7741,40 @@ def check_project_pulse_uses_authority_registry() -> list[str]:
     return violations
 
 
+def check_stale_work_radar_wired_into_pulse() -> list[str]:
+    """The stale-work radar must stay wired into project_pulse (deep pulse).
+
+    A standalone radar nobody runs is itself stale work. This guard fails loud if
+    the auto-fire wiring is removed — the collector, its deep-only call site, and
+    its presence in the aggregated all_items list must all survive. Mirrors the
+    intent-router parity check: keeps an integration from silently rotting.
+    """
+    violations: list[str] = []
+    radar_path = SCRIPTS_DIR / "tools" / "stale_work_radar.py"
+    pulse_path = SCRIPTS_DIR / "tools" / "project_pulse.py"
+    if not radar_path.exists():
+        return ["  scripts/tools/stale_work_radar.py missing (stale-work radar library)"]
+    if not pulse_path.exists():
+        return ["  scripts/tools/project_pulse.py missing"]
+
+    radar_text = radar_path.read_text(encoding="utf-8")
+    for fn in ("def build_reports(", "def base_exists("):
+        if fn not in radar_text:
+            violations.append(f"  stale_work_radar.py missing public entrypoint {fn!r} (project_pulse depends on it)")
+
+    pulse_text = pulse_path.read_text(encoding="utf-8")
+    required = [
+        ("def collect_stale_work(", "collector definition"),
+        ("import stale_work_radar", "radar import"),
+        ("stale_work_items = [] if fast else collect_stale_work(", "deep-only call site"),
+        ("+ stale_work_items", "aggregation into all_items"),
+    ]
+    for needle, what in required:
+        if needle not in pulse_text:
+            violations.append(f"  project_pulse.py missing stale-work {what}: {needle!r}")
+    return violations
+
+
 def check_shared_profile_fingerprint_canonical() -> list[str]:
     """Ensure the profile fingerprint helper lives in one canonical runtime module."""
     violations = []
@@ -15339,6 +15373,12 @@ CHECKS = [
     (
         "Project pulse exposes repo identity from canonical authority registry",
         check_project_pulse_uses_authority_registry,
+        False,
+        False,
+    ),
+    (
+        "Stale-work radar stays wired into project pulse (deep)",
+        check_stale_work_radar_wired_into_pulse,
         False,
         False,
     ),

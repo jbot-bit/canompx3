@@ -1863,6 +1863,50 @@ def collect_worktrees(canonical: Path, *, fast: bool = False) -> list[PulseItem]
     return items
 
 
+def collect_stale_work(canonical: Path) -> list[PulseItem]:
+    """Surface cross-branch work at risk of silent loss (deep-only).
+
+    collect_worktrees/collect_git_state see only the CURRENT tree; this collector
+    sweeps EVERY local branch via stale_work_radar to catch unpushed LOCAL-ONLY
+    commits (reflog-only if pruned), [gone] upstreams, and rebase-debt — work that
+    is otherwise invisible until a branch is force-deleted. Deep-only: the sweep is
+    ~N git calls across all branches, too heavy for the fast/live-launch path.
+
+    Fail-open: any import/git error returns no items and never blocks the pulse.
+    """
+    items: list[PulseItem] = []
+    try:
+        import stale_work_radar  # same-dir import (sys.path set at module load)
+
+        if not stale_work_radar.base_exists("origin/main"):
+            return items
+        reports = stale_work_radar.build_reports("origin/main")
+    except Exception:
+        return items
+
+    at_risk = [
+        r
+        for r in reports
+        if r.risk_score > 0 and ("unpushed" in r.risk_breakdown or "upstream_gone" in r.risk_breakdown)
+    ]
+    if not at_risk:
+        return items
+
+    top = at_risk[0]
+    detail = "\n".join(f"{r.branch}: {'; '.join(r.flags)}" for r in at_risk[:5])
+    items.append(
+        PulseItem(
+            category="decaying",
+            severity="high" if top.risk_score >= 50 else "medium",
+            source="stale_work",
+            summary=f"{len(at_risk)} branch(es) with at-risk unpushed work — top: {top.branch} (risk {top.risk_score:.0f})",
+            detail=detail,
+            action="python scripts/tools/stale_work_radar.py",
+        )
+    )
+    return items
+
+
 def collect_session_claims(root: Path) -> list[PulseItem]:
     """Summarize fresh active session claims without dumping full claim state."""
     items: list[PulseItem] = []
@@ -2888,6 +2932,7 @@ def build_pulse(
     worktree_items = collect_worktrees(canonical, fast=fast)
     claim_items = collect_session_claims(root)
     conflict_items = [] if fast else collect_worktree_conflicts(canonical)
+    stale_work_items = [] if fast else collect_stale_work(canonical)
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
     debt_items = collect_debt_ledger(root)
@@ -2932,6 +2977,7 @@ def build_pulse(
         + live_readiness_items
         + claim_items
         + conflict_items
+        + stale_work_items
         + handoff_items
         + worktree_items
         + git_items
