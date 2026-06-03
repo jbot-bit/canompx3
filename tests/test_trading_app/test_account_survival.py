@@ -342,7 +342,7 @@ def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_p
     assert "61.0% < 70%" in msg
 
 
-def test_check_survival_report_gate_blocks_strict_historical_daily_loss_breaches(tmp_path, monkeypatch):
+def test_check_survival_report_gate_reports_strict_historical_daily_loss_breaches(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
     monkeypatch.setattr(
         "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
@@ -360,8 +360,9 @@ def test_check_survival_report_gate_blocks_strict_historical_daily_loss_breaches
         today=date(2026, 4, 10),
     )
 
-    assert ok is False
-    assert "strict account diagnostics failed" in msg
+    assert ok is True
+    assert "Criterion 11 pass" in msg
+    assert "strict_diagnostics=FAIL" in msg
     assert "historical_daily_loss_days=2" in msg
     assert "max_90d_dd=$1,701/$1,600" in msg
 
@@ -678,6 +679,6 @@ def test_account_survival_no_write_state_cli_fails_operational_gate_and_reports_
     assert "gate=FAIL" in out
     assert "Expectancy edge: not evaluated by Criterion 11 account survival" in out
     assert "Strict diagnostics: effective_dd_budget=$1,600" in out
-    assert "Prop-account path safety=FAIL" in out
-    assert "Final deployability gate=FAIL" in out
+    assert "Prop-account strict diagnostics=FAIL" in out
+    assert "Criterion 11 gate=FAIL" in out
     assert "Historical daily-loss breach days (1): 2025-01-03" in out

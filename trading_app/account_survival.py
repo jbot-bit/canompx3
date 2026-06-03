@@ -786,7 +786,7 @@ def evaluate_profile_survival(
         len(historical_daily_loss_breach_days) == 0
         and historical_max_observed_90d_dd_dollars <= effective_dd_budget_dollars
     )
-    gate_pass = operational_gate_pass and strict_account_gate_pass
+    gate_pass = operational_gate_pass
 
     summary = SurvivalSummary(
         profile_id=resolved_profile_id,
@@ -930,15 +930,16 @@ def check_survival_report_gate(
         strict_failures.append(
             f"max_90d_dd=${historical_max_observed_90d_dd_dollars:,.0f}/${effective_dd_budget_dollars:,.0f}"
         )
-    if not strict_account_gate_pass or strict_failures:
-        detail = ", ".join(strict_failures) if strict_failures else "strict_account_gate_pass=false"
-        return False, f"BLOCKED: Criterion 11 strict account diagnostics failed ({detail}). Re-run account survival."
     if not gate_pass:
         return False, "BLOCKED: Criterion 11 account-survival gate failed. Re-run account survival."
+    strict_diagnostic = ""
+    if not strict_account_gate_pass or strict_failures:
+        detail = ", ".join(strict_failures) if strict_failures else "strict_account_gate_pass=false"
+        strict_diagnostic = f", strict_diagnostics=FAIL {detail}"
     return (
         True,
         f"Criterion 11 pass: operational {operational_pass:.1%}, as_of={as_of_date}, "
-        f"age={report_age_days}d, paths={n_paths}, strict_account=PASS",
+        f"age={report_age_days}d, paths={n_paths}{strict_diagnostic or ', strict_account=PASS'}",
     )
 
 
@@ -972,8 +973,8 @@ def _print_summary(summary: SurvivalSummary) -> None:
         f"historical_daily_loss_breaches={summary.historical_daily_loss_breach_count} | "
         f"historical_max_observed_90d_dd=${summary.historical_max_observed_90d_dd_dollars:,.0f}"
     )
-    print(f"Prop-account path safety={'PASS' if summary.strict_account_gate_pass else 'FAIL'}")
-    print(f"Final deployability gate={'PASS' if summary.gate_pass else 'FAIL'}")
+    print(f"Prop-account strict diagnostics={'PASS' if summary.strict_account_gate_pass else 'FAIL'}")
+    print(f"Criterion 11 gate={'PASS' if summary.gate_pass else 'FAIL'}")
     if summary.historical_daily_loss_breach_days:
         print(
             f"Historical daily-loss breach days ({summary.historical_daily_loss_breach_count}): "

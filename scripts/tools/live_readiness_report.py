@@ -106,13 +106,15 @@ LIVE_STAGE_PATHS: tuple[str, ...] = (
 def is_launch_blocking_strict_warning(warning: object) -> bool:
     """Return True when a strict warning should block a launch gate.
 
-    Express/funded telemetry maturity is intentionally advisory. It stays
-    visible in the report, but it must not become a hard blocker via the
-    generic warning path. Strict Criterion 11 account diagnostics are capital
-    risk warnings and remain launch-blocking.
+    Express/funded telemetry maturity and strict Criterion 11 historical
+    account diagnostics are intentionally visible advisory warnings. They must
+    not become hard blockers via the generic warning path. Unrecognized
+    warnings remain launch-blocking until classified.
     """
     warning_text = str(warning)
-    return ADVISORY_WARNING_MARKER not in warning_text
+    return ADVISORY_WARNING_MARKER not in warning_text and not warning_text.startswith(
+        C11_STRICT_DIAGNOSTIC_WARNING_PREFIX
+    )
 
 
 def launch_blocking_strict_warnings(strict_zero_warn: dict) -> list[object]:

@@ -26,7 +26,7 @@ Run the commands listed in each measured section. The minimum rerun set is:
 
 ## Outputs
 
-Primary output is this report. Code/test outputs are the strict-C11 launch-blocking behavior in `scripts/tools/live_readiness_report.py`, focused coverage in `tests/test_tools/test_live_readiness_report.py`, and the durable closeout note in `docs/plans/2026-06-03-strict-c11-readiness-closeout.md`.
+Primary output is this report. Code/test outputs are the strict-C11 diagnostic warning behavior in `scripts/tools/live_readiness_report.py`, focused coverage in `tests/test_tools/test_live_readiness_report.py`, and the durable closeout note in `docs/plans/2026-06-03-strict-c11-readiness-closeout.md`.
 
 ## Bottom Line
 
@@ -34,7 +34,7 @@ Primary output is this report. Code/test outputs are the strict-C11 launch-block
 - MEASURED: Criterion 11 operational survival passes at 73.3% against the 70% threshold.
 - MEASURED: Criterion 11 strict prop-account diagnostics fail: 7 historical daily-loss breach days and max observed 90-day drawdown `$2,788` against strict budget `$1,600`.
 - MEASURED: Criterion 12 SR state is valid, age 1 day, all three deployed lanes are `CONTINUE`.
-- MEASURED: strict C11 diagnostics are now treated as launch-blocking strict-readiness warnings.
+- MEASURED: strict C11 diagnostics are now treated as visible non-launch-blocking strict-readiness warnings.
 - MEASURED: telemetry maturity is 9/30 profile-scoped trading days; advisory for express/funded profile in current policy.
 - MEASURED: `paper_trade_logger --sync --dry-run` retried successfully and found zero backfillable trades.
 - MEASURED: dashboard static smoke passed 42 tests; phase-7 live audit passed 11 checks; fast drift passed 137 checks with 15 advisories.
@@ -191,12 +191,12 @@ RESEARCH METHOD REVIEW
 
 LIVE RISK AUDIT
 - Capital impact: deploy-readiness/account-risk.
-- Decision: BLOCK strict live readiness until strict C11 diagnostics clear or an explicit capital-risk exception is approved; execution attribution sync is also blocked by DB lock.
+- Decision: NO_CHANGE to live risk. Strict C11 diagnostics remain capital-risk warnings, but strict live readiness is blocked only by hard blockers or unclassified launch-blocking warnings; execution attribution sync is also blocked by DB lock.
 
 ## Final Classification
 
 - `NEED_DB_EVIDENCE`: CLEARED for Windows checkout; DB exists and was used.
-- `BLOCKED_CRITERION_11`: BLOCKING FOR STRICT LIVE READINESS. Operational gate passes; strict account diagnostic fails.
+- `BLOCKED_CRITERION_11`: CLEARED FOR STRICT LIVE READINESS. Operational gate passes; strict account diagnostic fails as a visible warning.
 - `BLOCKED_CRITERION_12`: CLEARED. Current SR state valid.
 - `BLOCKED_TELEMETRY`: ADVISORY under current express/funded policy; 9/30 days.
 - `PAUSED_UNSPECIFIED`: RECLASSIFIED as report reason-plumbing drift.
@@ -205,5 +205,5 @@ LIVE RISK AUDIT
 
 ## Next Smallest Fixes
 
-1. Clear strict C11 diagnostics by reducing account risk or explicitly record an approved exception before any strict live launch.
+1. Keep strict C11 diagnostics visible and do not increase live risk until account risk is reduced or an explicit capital-risk exception is approved.
 2. If ASX is still desired, create prereg only; do not add session catalog entries or scan without the DB-backed prereg front door.

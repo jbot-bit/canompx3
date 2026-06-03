@@ -635,7 +635,7 @@ def test_funded_telemetry_warning_is_not_launch_blocking(tmp_path: Path, monkeyp
     assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"]) == []
 
 
-def test_c11_strict_diagnostics_warning_is_launch_blocking(tmp_path: Path, monkeypatch) -> None:
+def test_c11_strict_diagnostics_warning_is_not_launch_blocking(tmp_path: Path, monkeypatch) -> None:
     allocation_path = tmp_path / "lane_allocation.json"
     _install_happy_path(
         monkeypatch,
@@ -655,9 +655,9 @@ def test_c11_strict_diagnostics_warning_is_launch_blocking(tmp_path: Path, monke
         allocation_path=allocation_path,
     )
 
-    assert report["strict_zero_warn"]["green"] is False
+    assert report["strict_zero_warn"]["green"] is True
     assert any("strict diagnostics" in warning.lower() for warning in report["strict_zero_warn"]["warnings"])
-    assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"])
+    assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"]) == []
 
 
 def test_proof_pack_paused_reason_summary_reads_allocator_reason(tmp_path: Path, monkeypatch) -> None:

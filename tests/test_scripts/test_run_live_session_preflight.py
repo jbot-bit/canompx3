@@ -664,6 +664,34 @@ def test_live_readiness_report_funded_telemetry_warning_does_not_block_live(monk
     assert "strict_zero_warn green" in result.message
 
 
+def test_live_readiness_report_c11_strict_diagnostic_warning_does_not_block_live(monkeypatch):
+    def _fake_report(**_kwargs):
+        return {
+            "strict_zero_warn": {
+                "green": True,
+                "blockers": [],
+                "warnings": [
+                    "Criterion 11 strict diagnostics: Criterion 11 pass: operational 73.3%, "
+                    "as_of=2026-06-03, age=0d, paths=10000, strict_diagnostics=FAIL "
+                    "historical_daily_loss_days=7, max_90d_dd=$2,788/$1,600"
+                ],
+            }
+        }
+
+    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
+    ctx = _make_copy_trading_ctx(
+        profile_id="topstep_50k_mnq_auto",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = False
+
+    result = rls._check_live_readiness_report(ctx)
+
+    assert result.passed is True
+    assert "strict_zero_warn green" in result.message
+
+
 def test_live_readiness_report_blocking_warnings_block_live(monkeypatch):
     def _fake_report(**_kwargs):
         return {
