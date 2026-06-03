@@ -430,3 +430,358 @@ def test_runner_dispatch_real_hit_then_meta_recheck_passes(monkeypatch, tmp_path
     assert cd.check_drift_cache_meta_recheck() == [], (
         "cold re-run of the real ENTRY_MODELS sync must reproduce the cached PASS"
     )
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 (2026-06-03): CHECK_TREE_DEPS wiring — the slow tree-scanning checks
+# cache through tree_cache_key. These tests drive the REAL runner dispatch
+# branch for a CHECK_TREE_DEPS label and prove the honesty contract end-to-end.
+# ---------------------------------------------------------------------------
+
+FAST_LANE_LABEL = "FAST_LANE PROMOTE queue: no orphan PROMOTEs, no ERROR entries, cache up to date"
+
+
+def _run_real_tree_dispatch(label, monkeypatch, cache_dir):
+    """Replay the runner's CHECK_TREE_DEPS dispatch branch (check_drift.py main
+    loop) against the REAL tree_cache_key, the REAL CHECK_TREE_DEPS entry, and the
+    REAL registered check_fn — only the cache dir is isolated to tmp. Mirrors
+    _run_real_dispatch but for the tree-dep path."""
+    import pipeline.check_drift as cd
+
+    monkeypatch.setattr(_drift_cache, "_cache_dir", lambda: cache_dir)
+    by_label = {entry[0]: entry[1] for entry in cd.CHECKS}
+    check_fn = by_label[label]
+
+    spec = cd.CHECK_TREE_DEPS.get(label)
+    key = (
+        _drift_cache.tree_cache_key(label, spec.get("file_deps", []), spec.get("tree_deps", []))
+        if spec is not None
+        else None
+    )
+    if spec is not None and _drift_cache.read_pass(label, key):
+        cd._CACHE_HITS_THIS_RUN.append(label)
+        v = []
+    else:
+        v = check_fn()
+        if spec is not None:
+            _drift_cache.write_pass(label, key, v)
+    return v
+
+
+def test_check_dep_dicts_are_mutually_exclusive():
+    """A label in BOTH CHECK_DEPS and CHECK_TREE_DEPS would race on the same
+    on-disk cache file (_safe_name hashes only the label). Forbid it."""
+    import pipeline.check_drift as cd
+
+    overlap = set(cd.CHECK_DEPS) & set(cd.CHECK_TREE_DEPS)
+    assert not overlap, f"labels declared in both dep dicts: {overlap}"
+
+
+def test_check_tree_deps_labels_are_real_and_non_db():
+    """Every CHECK_TREE_DEPS label must be a registered, NON-db check — the cache
+    never serves a requires_db check (DB content is not hashed)."""
+    import pipeline.check_drift as cd
+
+    by_label = {label: requires_db for label, _fn, _adv, requires_db in cd.CHECKS}
+    for label in cd.CHECK_TREE_DEPS:
+        assert label in by_label, f"CHECK_TREE_DEPS label not in CHECKS: {label!r}"
+        assert not by_label[label], f"CHECK_TREE_DEPS label is requires_db (forbidden): {label!r}"
+
+
+def test_check_tree_deps_keys_are_well_formed():
+    """Each CHECK_TREE_DEPS value must be {'file_deps': list, 'tree_deps': list of
+    (root, pattern) 2-tuples} so tree_cache_key receives the shape it expects."""
+    import pipeline.check_drift as cd
+
+    for label, spec in cd.CHECK_TREE_DEPS.items():
+        assert set(spec) <= {"file_deps", "tree_deps"}, f"unexpected keys in {label!r}: {set(spec)}"
+        assert isinstance(spec.get("file_deps", []), list)
+        for pair in spec.get("tree_deps", []):
+            assert isinstance(pair, tuple) and len(pair) == 2, (
+                f"tree_deps entry must be (root, pattern) for {label!r}: {pair!r}"
+            )
+
+
+def test_fast_lane_tree_dep_set_covers_every_file_the_scanner_reads():
+    """ANTI-STALE-PASS STRUCTURAL PROOF: every concrete file the FAST_LANE PROMOTE
+    scanner reads at runtime must be covered by the declared dep set. An input the
+    scanner reads but the key does not hash = a stale-PASS hole. We enumerate the
+    scanner's actual module-level input paths + glob roots and assert each resolves
+    into the declared file_deps or a tree_deps (root, pattern).
+
+    This is a complement to the cold-recheck (which catches incompleteness only when
+    the missed input HAPPENS to change between hit and cold re-run in the same run);
+    this test catches the hole at config time, deterministically."""
+    import fnmatch
+
+    import pipeline.check_drift as cd
+    from scripts.research import fast_lane_promote_queue as flpq
+
+    root = flpq.REPO_ROOT
+    spec = cd.CHECK_TREE_DEPS[FAST_LANE_LABEL]
+    declared_files = {(root / p).resolve() for p in spec["file_deps"]}
+    declared_trees = [((root / r).resolve(), pat) for r, pat in spec["tree_deps"]]
+
+    def covered(path):
+        p = path.resolve()
+        if p in declared_files:
+            return True
+        for troot, pat in declared_trees:
+            if p.parent == troot and fnmatch.fnmatch(p.name, pat):
+                return True
+        return False
+
+    # The scanner's module-level fixed input files (the data half of its reads).
+    fixed_inputs = [
+        flpq.ACTION_QUEUE,
+        flpq.QUEUE_CACHE,
+        flpq.TRIAL_LEDGER_PATH,
+        flpq.TRIAL_CORRECTIONS_PATH,
+        flpq.GRAVEYARD_DIGEST_PATH,
+    ]
+    for f in fixed_inputs:
+        assert covered(f), f"scanner reads {f} but it is not in the declared dep set"
+
+    # The two globbed trees the scanner walks.
+    for sample in flpq.RESULTS_DIR.glob(flpq.FAST_LANE_RESULT_GLOB):
+        assert covered(sample), f"result MD {sample} not covered by declared tree_deps"
+    for sample in list(flpq.HYPOTHESES_DIR.glob("*.yaml"))[:5]:
+        assert covered(sample), f"hypothesis YAML {sample} not covered by declared tree_deps"
+
+
+@pytest.mark.slow  # runs the LIVE ~62s FAST_LANE check twice — full-CI, not pre-commit fast gate
+def test_fast_lane_real_dispatch_hit_then_cold_recheck_parity(monkeypatch, tmp_path):
+    """End-to-end: drive the REAL tree-dep dispatch for the live FAST_LANE check.
+    Cold run → real PASS persisted; warm run → genuine cache HIT (key earned via
+    read_pass against the live repo trees); cold-recheck re-runs the real check and
+    must reproduce the verdict. Only the cache dir is on tmp."""
+    import pipeline.check_drift as cd
+
+    cache_dir = tmp_path / "drift-cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(cd, "_CACHE_HITS_THIS_RUN", [])
+
+    v1 = _run_real_tree_dispatch(FAST_LANE_LABEL, monkeypatch, cache_dir)
+    assert v1 == [], f"live repo must currently PASS the FAST_LANE check (got {v1!r})"
+    assert cd._CACHE_HITS_THIS_RUN == [], "first run is a MISS, not a hit"
+
+    v2 = _run_real_tree_dispatch(FAST_LANE_LABEL, monkeypatch, cache_dir)
+    assert v2 == []
+    assert cd._CACHE_HITS_THIS_RUN.count(FAST_LANE_LABEL) == 1, (
+        "unchanged trees must produce a real cache hit on the second run"
+    )
+
+    assert cd.check_drift_cache_meta_recheck() == [], (
+        "cold re-run of the real FAST_LANE check must reproduce the cached PASS"
+    )
+
+
+def test_fast_lane_cache_invalidates_when_a_declared_dep_changes(monkeypatch, tmp_path):
+    """A real edit to ANY declared dep must change the key → cache MISS → the real
+    check re-runs. We prove it for one fixed dep (the scanner source) and one tree
+    file (a hypothesis YAML), without mutating the real repo: we monkeypatch
+    PROJECT_ROOT to a tmp mirror containing just the declared deps, take the key,
+    edit a dep, and assert the key changes."""
+    import pipeline.check_drift as cd
+
+    spec = cd.CHECK_TREE_DEPS[FAST_LANE_LABEL]
+    mirror = tmp_path / "repo"
+    # Materialise every declared file_dep as a stub under the mirror root.
+    for rel in spec["file_deps"]:
+        p = mirror / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(f"# stub for {rel}\n", encoding="utf-8")
+    # Materialise a couple of tree files under each declared tree root.
+    for r, _pat in spec["tree_deps"]:
+        d = mirror / r
+        d.mkdir(parents=True, exist_ok=True)
+    (mirror / "docs/audit/results" / "x-fast-lane-v1.md").write_text("PROMOTE\n", encoding="utf-8")
+    (mirror / "docs/audit/hypotheses" / "h1.yaml").write_text("id: h1\n", encoding="utf-8")
+
+    monkeypatch.setattr(_drift_cache, "PROJECT_ROOT", mirror)
+
+    k0 = _drift_cache.tree_cache_key(FAST_LANE_LABEL, spec["file_deps"], spec["tree_deps"])
+    assert k0 is not None, "all declared deps exist in the mirror → key must be non-None"
+
+    # Edit a fixed (source) dep → key must change.
+    (mirror / "scripts/research/fast_lane_promote_queue.py").write_text("# EDITED\n", encoding="utf-8")
+    k1 = _drift_cache.tree_cache_key(FAST_LANE_LABEL, spec["file_deps"], spec["tree_deps"])
+    assert k1 != k0, "editing the scanner source must invalidate the cached verdict"
+
+    # Add a hypothesis YAML to the tree → key must change (new trial enters K_global).
+    (mirror / "docs/audit/hypotheses" / "h2.yaml").write_text("id: h2\n", encoding="utf-8")
+    k2 = _drift_cache.tree_cache_key(FAST_LANE_LABEL, spec["file_deps"], spec["tree_deps"])
+    assert k2 != k1, "adding a hypothesis YAML must invalidate (it changes K_global)"
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 (2026-06-03): meta-recheck SAMPLING — the load-bearing change that
+# unlocks the speedup. The cold re-run (expensive) is sampled to ONE label per
+# run; the structural validation (cheap) still runs for EVERY cached-hit label.
+# ---------------------------------------------------------------------------
+
+THEORY_GRANT_LABEL = (
+    "AM3.3 audit-log/prereg theory_grant parity: chordia_audit_log.yaml theory_grants "
+    "must match active prereg metadata.theory_grant (Check #162)"
+)
+DSR_LABEL = (
+    "DSR reference-universe lock declared (Criterion 5 Amendment 3.5: criterion_5 block "
+    "complete when claiming DSR-clearance)"
+)
+
+
+def test_meta_recheck_sample_index_is_deterministic_and_in_range(monkeypatch):
+    """The sample index is a pure function of (labels, HEAD): same inputs → same
+    index, always within [0, n). Pin HEAD so the test is hermetic."""
+    monkeypatch.setattr(_drift_cache, "git_head_sha", lambda: "deadbeef" * 5)
+    labels = ["a", "b", "c", "d", "e"]
+    i1 = _drift_cache.meta_recheck_sample_index(labels)
+    i2 = _drift_cache.meta_recheck_sample_index(labels)
+    assert i1 == i2, "same (labels, HEAD) must yield the same index"
+    assert 0 <= i1 < len(labels)
+
+
+def test_meta_recheck_sample_rotates_across_commits(monkeypatch):
+    """As HEAD changes (commits land), the sampled index must move across the
+    full label set — proving every cached check is eventually cold-rechecked.
+    We sweep many synthetic HEADs and require the index to cover ALL positions."""
+    labels = ["a", "b", "c", "d", "e"]
+    seen = set()
+    for n in range(200):
+        monkeypatch.setattr(_drift_cache, "git_head_sha", lambda n=n: f"{n:040x}")
+        seen.add(_drift_cache.meta_recheck_sample_index(labels))
+    assert seen == set(range(len(labels))), f"rotation must cover every label position; covered {sorted(seen)}"
+
+
+def test_meta_recheck_sample_fails_closed_when_head_unreadable(monkeypatch):
+    """If HEAD cannot be read, the sample must still return a deterministic IN-RANGE
+    index — a recheck always happens (never raise, never skip all). The fallback
+    index need not be 0; the invariant is 'a real recheck occurs'."""
+    monkeypatch.setattr(_drift_cache, "git_head_sha", lambda: None)
+    labels = ["x", "y", "z"]
+    i = _drift_cache.meta_recheck_sample_index(labels)
+    assert 0 <= i < len(labels)
+    # Deterministic: the empty-HEAD fallback yields the same index every call.
+    assert _drift_cache.meta_recheck_sample_index(labels) == i
+
+
+def test_meta_recheck_runs_exactly_one_cold_rerun(monkeypatch):
+    """With multiple cached hits, the EXPENSIVE cold fn() is called for exactly
+    ONE label per run — not all. This is what unlocks the speedup."""
+    import pipeline.check_drift as cd
+
+    labels = [THEORY_GRANT_LABEL, DSR_LABEL, FAST_LANE_LABEL]
+    calls: list[str] = []
+
+    def make_fn(lbl):
+        def _fn():
+            calls.append(lbl)
+            return []
+
+        return _fn
+
+    monkeypatch.setattr(cd, "_CACHE_HITS_THIS_RUN", list(labels))
+    patched = [(lbl, make_fn(lbl) if lbl in labels else fn, adv, rdb) for lbl, fn, adv, rdb in cd.CHECKS]
+    monkeypatch.setattr(cd, "CHECKS", patched)
+    # Pin HEAD so the sampled label is deterministic for the assertion.
+    monkeypatch.setattr(_drift_cache, "git_head_sha", lambda: "0" * 40)
+
+    out = cd.check_drift_cache_meta_recheck()
+    assert out == []
+    assert len(calls) == 1, f"exactly one cold re-run expected, got {len(calls)}: {calls}"
+    assert calls[0] in labels
+
+
+def test_meta_recheck_structural_validation_runs_for_all_hits(monkeypatch):
+    """The CHEAP structural layer (in-CHECKS, non-db) must validate EVERY cached
+    hit every run — sampling applies ONLY to the expensive cold re-run. A bogus
+    label and a requires_db label must BOTH be flagged in the same run, regardless
+    of which label the cold-rerun sample picks."""
+    import pipeline.check_drift as cd
+
+    bogus = "this label is not registered in CHECKS"
+    # Find a real requires_db label to (incorrectly) mark as a cached hit.
+    db_label = next((lbl for lbl, _f, _a, rdb in cd.CHECKS if rdb), None)
+    assert db_label, "precondition: at least one requires_db check exists"
+
+    monkeypatch.setattr(cd, "_CACHE_HITS_THIS_RUN", [bogus, db_label, FAST_LANE_LABEL])
+    monkeypatch.setattr(_drift_cache, "git_head_sha", lambda: "f" * 40)
+
+    out = cd.check_drift_cache_meta_recheck()
+    assert any(bogus in v and "not found in CHECKS" in v for v in out), out
+    assert any(db_label in v and "requires_db" in v for v in out), out
+
+
+def test_meta_recheck_catches_stale_pass_in_sampled_check(monkeypatch):
+    """End-to-end honesty: when the SAMPLED label's cold re-run finds a violation,
+    the meta-recheck emits STALE CACHE. We pin HEAD and construct the label set so
+    the known-stale label is the one sampled."""
+    import pipeline.check_drift as cd
+
+    # Single cached hit → it is necessarily the sampled one (sample of 1).
+    label = FAST_LANE_LABEL
+    monkeypatch.setattr(cd, "_CACHE_HITS_THIS_RUN", [label])
+    monkeypatch.setattr(_drift_cache, "git_head_sha", lambda: "a" * 40)
+    patched = [
+        (lbl, (lambda: ["  injected stale-cache violation"]) if lbl == label else fn, adv, rdb)
+        for lbl, fn, adv, rdb in cd.CHECKS
+    ]
+    monkeypatch.setattr(cd, "CHECKS", patched)
+
+    out = cd.check_drift_cache_meta_recheck()
+    assert any("STALE CACHE" in v and label in v for v in out), out
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 (2026-06-03): the +2 newly-wired tree-dep checks — completeness proofs
+# and real-dispatch hit→cold-recheck parity (mirrors the FAST_LANE coverage).
+# ---------------------------------------------------------------------------
+
+
+def test_theory_grant_tree_dep_set_covers_every_input_the_check_reads():
+    """STRUCTURAL completeness: every concrete input the theory_grant parity check
+    reads must be in the declared dep set. The check reads the audit log + the
+    chordia.py T-constants (file_deps) + every active hypotheses/*.yaml (tree_deps)."""
+    import pipeline.check_drift as cd
+
+    spec = cd.CHECK_TREE_DEPS[THEORY_GRANT_LABEL]
+    assert "docs/runtime/chordia_audit_log.yaml" in spec["file_deps"]
+    assert "trading_app/chordia.py" in spec["file_deps"], (
+        "the T-threshold constants in chordia.py are verdict logic — must be a dep"
+    )
+    assert ("docs/audit/hypotheses", "*.yaml") in spec["tree_deps"]
+
+
+def test_dsr_tree_dep_set_covers_every_input_the_check_reads():
+    """STRUCTURAL completeness: the DSR lock check reads ONLY the active hypotheses
+    tree (its allowed-derivation set is a check_drift.py module constant, covered by
+    the suite re-running on any code edit). No fixed-file or git inputs."""
+    import pipeline.check_drift as cd
+
+    spec = cd.CHECK_TREE_DEPS[DSR_LABEL]
+    assert spec["file_deps"] == []
+    assert spec["tree_deps"] == [("docs/audit/hypotheses", "*.yaml")]
+
+
+@pytest.mark.slow  # runs two LIVE ~25s checks twice each — full-CI, not pre-commit fast gate
+@pytest.mark.parametrize("label", [THEORY_GRANT_LABEL, DSR_LABEL])
+def test_new_tree_checks_real_dispatch_hit_then_cold_recheck_parity(label, monkeypatch, tmp_path):
+    """End-to-end against the LIVE repo: cold MISS persists a real PASS; warm run is
+    a genuine cache HIT; the cold-recheck reproduces the verdict. Only the cache dir
+    is isolated. Proves each newly-wired check caches honestly through the real path."""
+    import pipeline.check_drift as cd
+
+    cache_dir = tmp_path / "drift-cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(cd, "_CACHE_HITS_THIS_RUN", [])
+
+    v1 = _run_real_tree_dispatch(label, monkeypatch, cache_dir)
+    assert v1 == [], f"live repo must currently PASS {label!r} (got {v1!r})"
+    assert cd._CACHE_HITS_THIS_RUN == [], "first run is a MISS, not a hit"
+
+    v2 = _run_real_tree_dispatch(label, monkeypatch, cache_dir)
+    assert v2 == []
+    assert cd._CACHE_HITS_THIS_RUN.count(label) == 1, "unchanged inputs must produce a cache hit"
+
+    # Single recorded hit → it is the sampled label → cold-recheck must reproduce PASS.
+    assert cd.check_drift_cache_meta_recheck() == [], f"cold re-run of {label!r} must reproduce the cached PASS"

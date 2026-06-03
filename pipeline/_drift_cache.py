@@ -78,6 +78,51 @@ def _git_common_dir() -> Path | None:
         return None
 
 
+def git_head_sha() -> str | None:
+    """Current git HEAD sha (full), or None if it cannot be read.
+
+    Used by the meta cold-recheck to rotate its sampled cold re-run per-commit
+    without a persisted (race-prone) counter. Fail-closed identical to
+    ``_git_common_dir``: any subprocess/OS error or non-zero exit returns None so
+    the caller can fall back deterministically (it must never raise here).
+    """
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    return r.stdout.strip()
+
+
+def meta_recheck_sample_index(labels: list[str]) -> int:
+    """Pick ONE label index to cold-recheck this run, deterministically.
+
+    ``labels`` must be non-empty and already sorted by the caller (so the seed is
+    order-stable). The choice is a pure function of (the label set, the current git
+    HEAD sha): stable within a commit, ROTATING as commits land — guaranteeing every
+    cached check is cold-rechecked within a bounded number of commits, with NO
+    persisted counter (which would race between the concurrent drift runs this repo
+    regularly has across worktrees/terminals).
+
+    Fail-closed: if HEAD cannot be read we substitute the empty string, which still
+    yields a deterministic IN-RANGE index — so we always recheck *something*, never
+    zero checks. (The fallback is a valid index, not necessarily 0; the invariant is
+    "a real recheck happens", not "index 0 specifically".) Never raises — the caller
+    treats it as infallible.
+    """
+    head = git_head_sha() or ""
+    seed = ("\n".join(labels) + "|" + head).encode("utf-8")
+    return int(hashlib.sha256(seed).hexdigest(), 16) % len(labels)
+
+
 def _hash_dep(path: Path) -> str:
     """Content hash of a single dependency file. Raises on any read failure so
     the caller's try/except converts it to a MISS (fail-closed)."""
