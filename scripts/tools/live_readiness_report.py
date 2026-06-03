@@ -83,6 +83,7 @@ DEFAULT_ALLOCATION_PATH = legacy_lane_allocation_path()
 DEFAULT_TELEMETRY_INSTRUMENT = "MNQ"
 DEFAULT_SIGNALS_DIR = LIVE_SIGNALS_DIR
 ADVISORY_WARNING_MARKER = "(advisory for express/funded profile)"
+C11_STRICT_DIAGNOSTIC_WARNING_PREFIX = "Criterion 11 strict diagnostics:"
 AUTOMATION_TASKS: tuple[dict[str, str], ...] = (
     {
         "task_name": "CanonMPX_DailyRefresh",
@@ -107,9 +108,11 @@ def is_launch_blocking_strict_warning(warning: object) -> bool:
 
     Express/funded telemetry maturity is intentionally advisory. It stays
     visible in the report, but it must not become a hard blocker via the
-    generic warning path.
+    generic warning path. Strict Criterion 11 account diagnostics are capital
+    risk warnings and remain launch-blocking.
     """
-    return ADVISORY_WARNING_MARKER not in str(warning)
+    warning_text = str(warning)
+    return ADVISORY_WARNING_MARKER not in warning_text
 
 
 def launch_blocking_strict_warnings(strict_zero_warn: dict) -> list[object]:
@@ -227,7 +230,13 @@ def _unsupported_or_missing_evidence(report: dict[str, Any], database: dict[str,
 def _lane_reason_summary(lanes: list[dict[str, Any]]) -> dict[str, Any]:
     reason_counts: dict[str, dict[str, Any]] = {}
     for lane in lanes:
-        reason = str(lane.get("status_reason") or lane.get("lifecycle_block_reason") or "unspecified")
+        reason = str(
+            lane.get("status_reason")
+            or lane.get("lifecycle_block_reason")
+            or lane.get("pause_reason")
+            or lane.get("reason")
+            or "unspecified"
+        )
         bucket = reason_counts.setdefault(reason, {"reason": reason, "count": 0, "examples": []})
         bucket["count"] += 1
         if len(bucket["examples"]) < 5:
@@ -455,6 +464,7 @@ def _normalize_lane_row(
         "allocator_bucket": bucket,
         "status": row.get("status"),
         "status_reason": row.get("status_reason"),
+        "reason": row.get("reason"),
         "chordia_verdict": row.get("chordia_verdict"),
         "chordia_audit_age_days": row.get("chordia_audit_age_days"),
         "lifecycle_blocked": bool(state.get("blocked")),
@@ -756,6 +766,8 @@ def _build_strict_zero_warn_summary(
 
     if c11.get("gate_ok") is not True:
         blockers.append("Criterion 11 gate not OK")
+    elif "strict_diagnostics=FAIL" in str(c11.get("gate_msg") or ""):
+        warnings.append(f"Criterion 11 strict diagnostics: {c11.get('gate_msg')}")
 
     if c12.get("valid") is not True:
         blockers.append("Criterion 12 invalid")
@@ -846,7 +858,7 @@ def _build_strict_zero_warn_summary(
         warnings.append(warning)
 
     return {
-        "green": not blockers,
+        "green": not blockers and not launch_blocking_strict_warnings({"warnings": warnings}),
         "blockers": blockers,
         "warnings": warnings,
     }

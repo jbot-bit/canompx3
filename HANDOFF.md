@@ -98,14 +98,12 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Codex
+- **Tool:** Unknown
 - **Date:** 2026-06-03
-- **Commit:** df9c48b8 — fix(workflow): surface peer-lease worktree escape
-- **Files changed:** 4 files
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-06-03-maximise-no-tunnel-vision-sprint.md`
-  - `scripts/tools/workflow_doctor.py`
-  - `tests/test_tools/test_workflow_doctor.py`
+- **Commit:** c12f43f6 — fix(account): enforce strict survival gate
+- **Files changed:** 2 files
+  - `tests/test_trading_app/test_account_survival.py`
+  - `trading_app/account_survival.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
