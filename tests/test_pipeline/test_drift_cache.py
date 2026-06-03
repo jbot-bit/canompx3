@@ -502,116 +502,30 @@ def test_check_tree_deps_keys_are_well_formed():
             )
 
 
-def test_fast_lane_tree_dep_set_covers_every_file_the_scanner_reads():
-    """ANTI-STALE-PASS STRUCTURAL PROOF: every concrete file the FAST_LANE PROMOTE
-    scanner reads at runtime must be covered by the declared dep set. An input the
-    scanner reads but the key does not hash = a stale-PASS hole. We enumerate the
-    scanner's actual module-level input paths + glob roots and assert each resolves
-    into the declared file_deps or a tree_deps (root, pattern).
+def test_fast_lane_check_is_deliberately_not_cached():
+    """ANTI-REGRESSION (audit finding 2026-06-03): the FAST_LANE PROMOTE check must
+    NOT be cache-eligible. Although its CHECKS tuple declares requires_db=False, its
+    verdict depends on gold.db content — scripts.research.fast_lane_promote_queue.scan()
+    opens the DB via _resolve_oos_window_days() (`SELECT MAX(trading_day) FROM
+    orb_outcomes`) and the resulting oos_window_days flips entries between
+    REJECTED_OOS_UNPOWERED and QUEUED. DB content is not file-content-hashable, so a
+    warmed cache would serve a STALE PASS on this BLOCKING capital gate as new bar data
+    lands. It is in the same non-cacheable class as the Phase4-SHA-manifest check
+    (git-history input) and the doc-hygiene check (entrypoint-existence input).
 
-    This is a complement to the cold-recheck (which catches incompleteness only when
-    the missed input HAPPENS to change between hit and cold re-run in the same run);
-    this test catches the hole at config time, deterministically."""
-    import fnmatch
-
-    import pipeline.check_drift as cd
-    from scripts.research import fast_lane_promote_queue as flpq
-
-    root = flpq.REPO_ROOT
-    spec = cd.CHECK_TREE_DEPS[FAST_LANE_LABEL]
-    declared_files = {(root / p).resolve() for p in spec["file_deps"]}
-    declared_trees = [((root / r).resolve(), pat) for r, pat in spec["tree_deps"]]
-
-    def covered(path):
-        p = path.resolve()
-        if p in declared_files:
-            return True
-        for troot, pat in declared_trees:
-            if p.parent == troot and fnmatch.fnmatch(p.name, pat):
-                return True
-        return False
-
-    # The scanner's module-level fixed input files (the data half of its reads).
-    fixed_inputs = [
-        flpq.ACTION_QUEUE,
-        flpq.QUEUE_CACHE,
-        flpq.TRIAL_LEDGER_PATH,
-        flpq.TRIAL_CORRECTIONS_PATH,
-        flpq.GRAVEYARD_DIGEST_PATH,
-    ]
-    for f in fixed_inputs:
-        assert covered(f), f"scanner reads {f} but it is not in the declared dep set"
-
-    # The two globbed trees the scanner walks.
-    for sample in flpq.RESULTS_DIR.glob(flpq.FAST_LANE_RESULT_GLOB):
-        assert covered(sample), f"result MD {sample} not covered by declared tree_deps"
-    for sample in list(flpq.HYPOTHESES_DIR.glob("*.yaml"))[:5]:
-        assert covered(sample), f"hypothesis YAML {sample} not covered by declared tree_deps"
-
-
-@pytest.mark.slow  # runs the LIVE ~62s FAST_LANE check twice — full-CI, not pre-commit fast gate
-def test_fast_lane_real_dispatch_hit_then_cold_recheck_parity(monkeypatch, tmp_path):
-    """End-to-end: drive the REAL tree-dep dispatch for the live FAST_LANE check.
-    Cold run → real PASS persisted; warm run → genuine cache HIT (key earned via
-    read_pass against the live repo trees); cold-recheck re-runs the real check and
-    must reproduce the verdict. Only the cache dir is on tmp."""
+    If a future change re-adds FAST_LANE to CHECK_TREE_DEPS (or CHECK_DEPS) without a
+    DB-content-aware key, this test fails — re-read the rejection rationale at the head
+    of CHECK_TREE_DEPS in check_drift.py before changing it."""
     import pipeline.check_drift as cd
 
-    cache_dir = tmp_path / "drift-cache"
-    cache_dir.mkdir()
-    monkeypatch.setattr(cd, "_CACHE_HITS_THIS_RUN", [])
-
-    v1 = _run_real_tree_dispatch(FAST_LANE_LABEL, monkeypatch, cache_dir)
-    assert v1 == [], f"live repo must currently PASS the FAST_LANE check (got {v1!r})"
-    assert cd._CACHE_HITS_THIS_RUN == [], "first run is a MISS, not a hit"
-
-    v2 = _run_real_tree_dispatch(FAST_LANE_LABEL, monkeypatch, cache_dir)
-    assert v2 == []
-    assert cd._CACHE_HITS_THIS_RUN.count(FAST_LANE_LABEL) == 1, (
-        "unchanged trees must produce a real cache hit on the second run"
+    assert FAST_LANE_LABEL not in cd.CHECK_TREE_DEPS, (
+        "FAST_LANE PROMOTE check re-added to CHECK_TREE_DEPS — its verdict reads gold.db "
+        "(MAX(trading_day)); caching it serves a stale PASS on a blocking gate. See the "
+        "DELIBERATELY-NOT-CACHED note at the head of CHECK_TREE_DEPS."
     )
-
-    assert cd.check_drift_cache_meta_recheck() == [], (
-        "cold re-run of the real FAST_LANE check must reproduce the cached PASS"
+    assert FAST_LANE_LABEL not in cd.CHECK_DEPS, (
+        "FAST_LANE PROMOTE check added to CHECK_DEPS — same DB-verdict-input stale-PASS hazard."
     )
-
-
-def test_fast_lane_cache_invalidates_when_a_declared_dep_changes(monkeypatch, tmp_path):
-    """A real edit to ANY declared dep must change the key → cache MISS → the real
-    check re-runs. We prove it for one fixed dep (the scanner source) and one tree
-    file (a hypothesis YAML), without mutating the real repo: we monkeypatch
-    PROJECT_ROOT to a tmp mirror containing just the declared deps, take the key,
-    edit a dep, and assert the key changes."""
-    import pipeline.check_drift as cd
-
-    spec = cd.CHECK_TREE_DEPS[FAST_LANE_LABEL]
-    mirror = tmp_path / "repo"
-    # Materialise every declared file_dep as a stub under the mirror root.
-    for rel in spec["file_deps"]:
-        p = mirror / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(f"# stub for {rel}\n", encoding="utf-8")
-    # Materialise a couple of tree files under each declared tree root.
-    for r, _pat in spec["tree_deps"]:
-        d = mirror / r
-        d.mkdir(parents=True, exist_ok=True)
-    (mirror / "docs/audit/results" / "x-fast-lane-v1.md").write_text("PROMOTE\n", encoding="utf-8")
-    (mirror / "docs/audit/hypotheses" / "h1.yaml").write_text("id: h1\n", encoding="utf-8")
-
-    monkeypatch.setattr(_drift_cache, "PROJECT_ROOT", mirror)
-
-    k0 = _drift_cache.tree_cache_key(FAST_LANE_LABEL, spec["file_deps"], spec["tree_deps"])
-    assert k0 is not None, "all declared deps exist in the mirror → key must be non-None"
-
-    # Edit a fixed (source) dep → key must change.
-    (mirror / "scripts/research/fast_lane_promote_queue.py").write_text("# EDITED\n", encoding="utf-8")
-    k1 = _drift_cache.tree_cache_key(FAST_LANE_LABEL, spec["file_deps"], spec["tree_deps"])
-    assert k1 != k0, "editing the scanner source must invalidate the cached verdict"
-
-    # Add a hypothesis YAML to the tree → key must change (new trial enters K_global).
-    (mirror / "docs/audit/hypotheses" / "h2.yaml").write_text("id: h2\n", encoding="utf-8")
-    k2 = _drift_cache.tree_cache_key(FAST_LANE_LABEL, spec["file_deps"], spec["tree_deps"])
-    assert k2 != k1, "adding a hypothesis YAML must invalidate (it changes K_global)"
 
 
 # ---------------------------------------------------------------------------

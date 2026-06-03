@@ -81,35 +81,26 @@ CHECK_DEPS: dict[str, list[str]] = {
 #
 # Each value is {"file_deps": [repo-rel paths], "tree_deps": [(glob_root, pattern)]}.
 CHECK_TREE_DEPS: dict[str, dict[str, list]] = {
-    # Check #171 — the dominant non-DB cost (43.7s): re-parses the whole hypotheses
-    # tree (933 YAMLs) + fast-lane result MDs on every run. Verdict =
-    # scripts.research.fast_lane_promote_queue.scan() diffed against the cache, so
-    # the dep set is BOTH the data it reads AND the source files whose logic
-    # produces the verdict (institutional-rigor § 4 — the verdict tracks the code).
-    "FAST_LANE PROMOTE queue: no orphan PROMOTEs, no ERROR entries, cache up to date": {
-        "file_deps": [
-            # Code whose logic determines the verdict (a logic edit must invalidate).
-            "scripts/research/fast_lane_promote_queue.py",
-            "scripts/research/fast_lane_trial_ledger.py",
-            "research/oos_power.py",
-            "trading_app/config.py",
-            # Fixed data inputs read by scan()/diff_against_cache().
-            "docs/runtime/action-queue.yaml",
-            "docs/runtime/promote_queue.yaml",
-            "docs/runtime/fast_lane_trial_ledger.yaml",
-            "docs/runtime/fast_lane_trial_corrections.yaml",
-            "docs/runtime/fast_lane_graveyard_digest.yaml",
-        ],
-        "tree_deps": [
-            # PROMOTE result MDs AND their <stem>.revocation.md sidecars: the
-            # sidecar of a *fast-lane* result MD is itself named *fast-lane*...
-            # .revocation.md, so this one glob captures both (verified: the only
-            # revocation sidecar on disk matches it).
-            ("docs/audit/results", "*fast-lane*.md"),
-            # The full hypotheses tree — prereg matching + K_global = len(ledger).
-            ("docs/audit/hypotheses", "*.yaml"),
-        ],
-    },
+    # ──────────────────────────────────────────────────────────────────────────
+    # DELIBERATELY NOT CACHED — "FAST_LANE PROMOTE queue: no orphan PROMOTEs ..."
+    # (Check #171, the dominant 43.7s non-DB-FLAGGED cost). It was wired here, but
+    # an adversarial audit (evidence-auditor, 2026-06-03) proved a CRITICAL
+    # stale-PASS hazard: although the check's CHECKS tuple declares requires_db=False,
+    # scripts.research.fast_lane_promote_queue.scan() internally opens gold.db via
+    # _resolve_oos_window_days() (`SELECT MAX(trading_day) FROM orb_outcomes`,
+    # fast_lane_promote_queue.py:337). That value flows straight into the per-entry
+    # verdict: build_entry()'s OOS-power pre-flight returns REJECTED_OOS_UNPOWERED vs
+    # QUEUED based on oos_window_days (fast_lane_promote_queue.py:800-827). As new
+    # bar data lands, the DB advances and a near-threshold entry flips
+    # REJECTED→QUEUED — with NO change to any hashed file. A warmed cache would then
+    # serve a stale PASS on this BLOCKING capital gate (orphan-PROMOTE detection).
+    # gold.db content is not file-content-hashable, so this check is in the SAME
+    # non-cacheable class as the Phase4-SHA-manifest check (git-history verdict input)
+    # and the doc-hygiene check (data-dependent entrypoint-existence input). A
+    # DB-content-aware key (folding MAX(trading_day) into the digest) is a possible
+    # future recovery of the ~62s, but it is its own correctness surface and a
+    # separate audit-gated follow-up — NOT wired here. Do NOT re-add without that.
+    # ──────────────────────────────────────────────────────────────────────────
     # Check #165 — AM3.3 theory_grant parity (25.4s). Reads the audit log + every
     # active prereg's metadata.theory_grant, compares against has_theory. Verdict
     # also depends on the t-threshold constants in trading_app/chordia.py (imported

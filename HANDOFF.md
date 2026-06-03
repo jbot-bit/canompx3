@@ -100,11 +100,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-03
-- **Commit:** 3c205a90 — feat(drift-cache): tree_cache_key for whole-tree dep digests (Stage 1)
-- **Files changed:** 4 files
+- **Commit:** 328d9370 — feat(drift-cache): meta-recheck sampling + 2 more cached checks (Stage 2)
+- **Files changed:** 5 files
   - `HANDOFF.md`
   - `docs/runtime/stages/2026-06-03-drift-tree-cache-and-parallel.md`
   - `pipeline/_drift_cache.py`
+  - `pipeline/check_drift.py`
   - `tests/test_pipeline/test_drift_cache.py`
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)

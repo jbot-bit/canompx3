@@ -109,6 +109,30 @@ Stage 2 — wire the slow tree-scanners into the cache  [IN PROGRESS 2026-06-03]
     Net cacheable set: 3 checks (was 1). Cacheable cost ≈ 80+25+25 = 130s of the 263s total.
   - Adversarial-audit gate (evidence-auditor) REQUIRED before stage close (pipeline/ + blocking-gate).
 
+  - ADVERSARIAL-AUDIT (evidence-auditor, 2026-06-03 post-clear): verdict **FAIL (CRITICAL)** —
+    independently confirmed by the main thread. The FAST_LANE PROMOTE check (#171) was WRONGLY
+    cached: although its CHECKS tuple is requires_db=False, scan() internally opens gold.db via
+    `_resolve_oos_window_days()` (`SELECT MAX(trading_day) FROM orb_outcomes`,
+    fast_lane_promote_queue.py:337) and that value flips entries REJECTED_OOS_UNPOWERED↔QUEUED
+    (build_entry OOS-power pre-flight, fast_lane_promote_queue.py:800-827). DB content is NOT
+    file-hashable → a warmed cache serves a STALE PASS on a BLOCKING capital gate as new bars land.
+    Same non-cacheable class as the already-rejected Phase4-SHA (git-history) + doc-hygiene
+    (entrypoint-existence) checks — the `requires_db=False` flag was the trap (it gates cache
+    eligibility but the check reads the DB internally without the flag set).
+  - FIX (done, operator-approved Option A "un-wire #171"): removed FAST_LANE from CHECK_TREE_DEPS
+    (replaced with a DELIBERATELY-NOT-CACHED rejection note at the dict head documenting the DB
+    verdict-input). Added anti-regression test `test_fast_lane_check_is_deliberately_not_cached`
+    (asserts FAST_LANE ∉ CHECK_TREE_DEPS ∪ CHECK_DEPS). Removed the 3 FAST_LANE-specific cache
+    tests (coverage/invalidation/slow-parity) since the check is no longer cached. The 2 genuinely
+    file-hashable checks (theory_grant #162, DSR) are UNAFFECTED and remain cached.
+  - NET cacheable set CORRECTED: **2 checks** (theory_grant + DSR ≈ 50s), not 3. The auditor's
+    secondary finding (`fast_lane_structural_hash.py` undeclared) is MOOT — un-wiring #171 removes
+    the dep-completeness concern entirely.
+  - FOLLOW-UP (not built, separate audit-gated stage): a gold.db-content-aware key (fold
+    MAX(trading_day) into the digest) could recover #171's ~62s under its own correctness review.
+  - POST-FIX VERIFICATION: cold→warm timing re-measured (FAST_LANE no longer cached); 34/34
+    non-slow cache tests pass + 2 slow parity tests pass; ruff clean; import guard passes.
+
 Stage 3 — ThreadPoolExecutor over non-DB checks
   - Split CHECKS into db / non-db. Run non-db concurrently (workers = min(8, cpu-2)); keep
     db serial. Collect (idx, label, violations) → print in registry order. --fast/--quiet/
