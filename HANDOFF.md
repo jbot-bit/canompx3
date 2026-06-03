@@ -93,6 +93,12 @@
   - `HANDOFF.md`
   - `scripts/tools/firecrawl_mode.ps1`
 
+## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
+- **Tool:** Claude Code
+- **Summary:** Landed the F2-A capital-path fix in isolated worktree `canompx3-f2a-land` (branch `session/joshd-f2a-land` off `origin/main` `fa98bf86`). Merged `origin/session/joshd-f2a-self-funded-sizing` (was 43 behind / 4 ahead). `prop_portfolio.select_for_profile` now makes `contract_budget` firm-aware: `None` for `self_funded` (prop micro-cap no longer gates a personal-capital book — risk/DD/slot budgets still bind), `tier.max_contracts_micro` for prop firms (unchanged). Honors `.claude/rules/self-funded-sizing-doctrine.md`. No schema/trading-logic change beyond the scoped cap-leak fix; gold.db read-only.
+- **Conflicts resolved:** HANDOFF.md (kept current main baton, appended this note); `tests/test_scripts/test_start_topstep_live_pilot.py` (accepted main's delete — dead START_LIVE_PILOT path, not resurrected).
+- **Status:** NOT merged to main — awaiting operator approval.
+
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
 - **Tool:** Codex
 - **Date:** 2026-06-02

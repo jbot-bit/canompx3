@@ -20,6 +20,7 @@ from trading_app.prop_portfolio import (
 )
 from trading_app.prop_profiles import (
     AccountProfile,
+    get_account_tier,
 )
 
 
@@ -137,6 +138,65 @@ class TestSelectForProfile:
         strats = [_make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}") for i in range(5)]
         book = select_for_profile(profile, strats)
         assert book.total_contracts <= 40
+
+    def test_self_funded_book_not_bound_by_prop_contract_cap(self):
+        """A self_funded book must be bounded by RISK (DD/slots), never by the prop-style
+        tier.max_contracts_micro earnings ceiling. self_funded_tradovate's tier carries
+        max_contracts_micro=12 as a *margin/sanity* guard, not an earnings cap. With ample
+        slots and many positive-EV candidates, the book should NOT be throttled to exactly
+        the prop micro-cap with 'Contract cap reached (N/12 micro)' exclusions.
+
+        REGRESSION GUARD for audit finding F2-A (was xfail until the firm-aware sizing
+        branch landed in select_for_profile). Before the fix: total_contracts == 12, 18
+        'Contract cap reached (12/12 micro)' exclusions. After: the prop micro-cap (12) is
+        no longer the binding earnings constraint; the book is bounded by DD-budget + the
+        30-slot cognitive cap instead, so > 12 lanes are admitted.
+        Doctrine: .claude/rules/self-funded-sizing-doctrine.md.
+        Ledger: docs/audit/results/2026-05-31-full-system-correctness-audit.md F2-A.
+        """
+        profile = AccountProfile("sf_test", "self_funded", 30_000, 1, 1.0, max_slots=30)
+        strats = [_make_strategy(strategy_id=f"s{i}", instrument="MNQ", orb_label=f"SESSION_{i}") for i in range(30)]
+        book = select_for_profile(profile, strats)
+        prop_cap_exclusions = [e for e in book.excluded if "contract cap reached" in e.reason.lower()]
+        # Doctrine: a prop-style contract cap must never be the binding earnings constraint
+        # on a self_funded book.
+        assert not prop_cap_exclusions, (
+            f"self_funded book throttled by prop micro-cap: "
+            f"{len(prop_cap_exclusions)} 'Contract cap reached' exclusions, "
+            f"total_contracts={book.total_contracts}"
+        )
+        # The book must actually fill beyond the prop micro-cap (12) — proving the cap was
+        # removed as a binding constraint, not merely renamed. Bound is the slot cap (30).
+        assert book.total_contracts > 12, (
+            f"self_funded book still pinned at/under the prop micro-cap: "
+            f"total_contracts={book.total_contracts} (expected > 12)"
+        )
+
+    def test_prop_book_contract_cap_still_honored_after_f2a(self):
+        """Companion to F2-A: the firm-aware branch must NOT relax the prop-firm contract
+        cap. For a prop firm, contract_budget must remain tier.max_contracts_micro (a real
+        rule/earnings ceiling), so a prop book can never carry more contracts than that cap
+        — regardless of how many slots or candidates are offered. Guards against the F2-A
+        fix over-reaching into prop sizing (where slot_budget could exceed the prop cap).
+
+        Note: in the current tier ladder the DD budget binds before the contract cap for
+        every real prop tier, so the cap is rarely the *active* constraint — but it must
+        still hold as an upper bound. This asserts the invariant, not a specific bind point.
+        """
+        tier = get_account_tier("tradeify", 50_000)
+        # Offer far more slots than the prop micro-cap: if the fix wrongly applied
+        # slot_budget to a prop firm, the book could exceed the cap. It must not.
+        profile = AccountProfile("prop_test", "tradeify", 50_000, 1, 0.75, max_slots=tier.max_contracts_micro + 30)
+        strats = [
+            _make_strategy(strategy_id=f"p{i}", instrument="MNQ", orb_label=f"SESSION_{i}")
+            for i in range(tier.max_contracts_micro + 30)
+        ]
+        book = select_for_profile(profile, strats)
+        assert book.total_contracts <= tier.max_contracts_micro, (
+            f"prop book exceeded its contract cap after F2-A fix: "
+            f"total_contracts={book.total_contracts} > "
+            f"max_contracts_micro={tier.max_contracts_micro} — fix over-reached into prop sizing"
+        )
 
     def test_empty_strategies(self):
         profile = AccountProfile("test", "topstep", 50_000)
