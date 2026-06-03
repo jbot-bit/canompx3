@@ -85,16 +85,13 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Unknown
+- **Tool:** Claude Code
 - **Date:** 2026-06-03
-- **Commit:** ed074218 — research: complete MNQ single-leg replacement audit
-- **Files changed:** 6 files
+- **Commit:** a90873a6 — chore(plugins): firecrawl default OFF + on-demand toggle
+- **Files changed:** 3 files
+  - `.claude/settings.json`
   - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-06-02-mnq-single-leg-account-fit-replacement-v1.yaml`
-  - `docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.csv`
-  - `docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.md`
-  - `research/mnq_single_leg_account_fit_replacement_v1.py`
-  - `tests/test_research/test_mnq_single_leg_account_fit_replacement_v1.py`
+  - `scripts/tools/firecrawl_mode.ps1`
 
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
 - **Tool:** Codex

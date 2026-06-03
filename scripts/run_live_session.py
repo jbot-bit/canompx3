@@ -498,8 +498,7 @@ def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
             if alive is True:
                 return CheckResult(
                     False,
-                    f"LOCKED by live PID {holder}. "
-                    "Run: scripts/tools/stop_live.ps1 -NoPrompt to stop it, then retry.",
+                    f"LOCKED by live PID {holder}. Run: scripts/tools/stop_live.ps1 -NoPrompt to stop it, then retry.",
                 )
             if alive is False:
                 return CheckResult(
