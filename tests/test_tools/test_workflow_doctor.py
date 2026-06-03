@@ -263,6 +263,38 @@ def test_choose_next_prioritizes_peer_lease_over_dirty_tree() -> None:
             {"status": "BLOCK", "code": "dirty_tree", "message": "dirty"},
             {"status": "BLOCK", "code": "peer_lease", "message": "peer"},
         ],
+        "launchers": {
+            "items": {
+                "START_WORKTREE": {"exists": True},
+                "new_session": {"exists": True},
+            }
+        },
+        "drift": {"recommended_probe": "python scripts/tools/profile_check_drift.py"},
+    }
+    result = wd.choose_next(report, "status")
+    assert result["command"] == "START_WORKTREE.bat <descriptor>"
+    assert "force" not in result["reason"].lower()
+
+
+def test_choose_next_peer_lease_uses_bash_worktree_fallback() -> None:
+    report = {
+        "blocks": [{"status": "BLOCK", "code": "peer_lease", "message": "peer"}],
+        "launchers": {
+            "items": {
+                "START_WORKTREE": {"exists": False},
+                "new_session": {"exists": True},
+            }
+        },
+        "drift": {"recommended_probe": "python scripts/tools/profile_check_drift.py"},
+    }
+    result = wd.choose_next(report, "status")
+    assert result["command"] == "scripts/tools/new_session.sh <descriptor> && cd ../canompx3-<descriptor>"
+
+
+def test_choose_next_peer_lease_status_fallback_when_no_launcher_visible() -> None:
+    report = {
+        "blocks": [{"status": "BLOCK", "code": "peer_lease", "message": "peer"}],
+        "launchers": {"items": {}},
         "drift": {"recommended_probe": "python scripts/tools/profile_check_drift.py"},
     }
     result = wd.choose_next(report, "status")

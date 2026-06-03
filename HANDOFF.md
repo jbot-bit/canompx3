@@ -98,13 +98,14 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Unknown
 - **Date:** 2026-06-03
-- **Commit:** a90873a6 — chore(plugins): firecrawl default OFF + on-demand toggle
-- **Files changed:** 3 files
-  - `.claude/settings.json`
+- **Commit:** current branch HEAD — fix(workflow): surface peer-lease worktree escape
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `scripts/tools/firecrawl_mode.ps1`
+  - `docs/audit/results/2026-06-03-maximise-no-tunnel-vision-sprint.md`
+  - `scripts/tools/workflow_doctor.py`
+  - `tests/test_tools/test_workflow_doctor.py`
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
@@ -137,3 +138,10 @@
 - `docs/runtime/decision-ledger.md`
 - `docs/runtime/debt-ledger.md`
 - `docs/plans/2026-04-22-handoff-baton-compaction.md`
+
+## Current Codex Follow-up - Maximise No-Tunnel-Vision Sprint
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Branch:** `session/joshd-maximise-no-tunnel-vision`
+- **Summary:** Built the opportunity map across allocation/live-readiness, ASX-open research, worktree/hook friction, dashboard readiness, drift speed, and stale-doc risk. Fresh DB-backed allocation verification is blocked because canonical `/workspace/canompx3/gold.db` is absent in this WSL checkout. Chosen action was the smallest high-EV operational fix: `workflow_doctor` now recommends opening an isolated worktree (`START_WORKTREE.bat <descriptor>` or `scripts/tools/new_session.sh <descriptor>`) for a live `peer_lease` instead of only inspecting the holder. This keeps live peer leases intact and removes the ambiguous force-release temptation.
+- **Verification:** `python -m pytest tests/test_tools/test_workflow_doctor.py -q` passed 22 tests with known pytest config warnings. `python -m pytest tests/test_tools/test_worktree_guard.py tests/test_tools/test_worktree_launch_preflight.py tests/test_tools/test_workflow_doctor.py -q` passed 73 tests / 1 skipped with the same config warnings. `ruff check`, `ruff format --check`, `python -m py_compile scripts/tools/workflow_doctor.py`, and `git diff --check` passed on the changed code paths. A mistaken probe for nonexistent `tests/test_hooks/test_worktree_guard_hook.py` failed with pytest exit 4 before collecting tests; reran the correct guard/launcher/workflow-doctor set successfully.

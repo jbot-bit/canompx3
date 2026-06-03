@@ -796,6 +796,27 @@ def build_blocks(report: dict[str, Any]) -> list[dict[str, str]]:
     return blocks
 
 
+def _peer_lease_escape_command(report: dict[str, Any]) -> str:
+    """Return the safest operator escape hatch for a live peer lease block.
+
+    A fresh peer lease means the current harness is anchored to a hot worktree.
+    The correct recovery is to open a new isolated session, not to inspect the
+    holder and then be tempted to force-release it. Prefer the Windows Claude
+    launcher when present, fall back to the repo's bash worktree spawner, and
+    include the read-only status command only when no launcher is visible.
+    """
+    launchers = report.get("launchers", {})
+    items = launchers.get("items") if isinstance(launchers, dict) else None
+    if isinstance(items, dict):
+        start_worktree = items.get("START_WORKTREE")
+        if isinstance(start_worktree, dict) and start_worktree.get("exists"):
+            return "START_WORKTREE.bat <descriptor>"
+        new_session = items.get("new_session")
+        if isinstance(new_session, dict) and new_session.get("exists"):
+            return "scripts/tools/new_session.sh <descriptor> && cd ../canompx3-<descriptor>"
+    return "python scripts/tools/worktree_guard.py --status --json"
+
+
 def choose_next(report: dict[str, Any], mode: str) -> dict[str, str]:
     blocks_by_code = {block.get("code"): block for block in report.get("blocks", [])}
     for code in ("hook_path", "peer_lease", "db", "detached_head", "dirty_tree", "dashboard_stale", "stage_bloat"):
@@ -810,8 +831,8 @@ def choose_next(report: dict[str, Any], mode: str) -> dict[str, str]:
         if code == "peer_lease":
             return {
                 "status": "NEXT",
-                "command": "python scripts/tools/worktree_guard.py --status --json",
-                "reason": "inspect holder",
+                "command": _peer_lease_escape_command(report),
+                "reason": "open an isolated worktree while the live peer lease remains intact",
             }
         if code == "db":
             return {
