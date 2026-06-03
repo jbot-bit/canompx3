@@ -1,6 +1,0 @@
-rank,strategy_id,factory_status,next_action,draft_path,runner_command,stop_multiplier,family_priority
-21,MNQ_US_DATA_1000_E2_RR1.0_CB1_NO_FILTER_O30_S075,BLOCKED_NON_DEFAULT_STOP,Requires outcome_builder rebuild at stop_multiplier=0.75 and a stop-specific strict replay runner before Chordia audit.,,,0.75,0
-22,MNQ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER_S075,BLOCKED_NON_DEFAULT_STOP,Requires outcome_builder rebuild at stop_multiplier=0.75 and a stop-specific strict replay runner before Chordia audit.,,,0.75,0
-23,MNQ_US_DATA_1000_E2_RR1.5_CB1_NO_FILTER_O15_S075,BLOCKED_NON_DEFAULT_STOP,Requires outcome_builder rebuild at stop_multiplier=0.75 and a stop-specific strict replay runner before Chordia audit.,,,0.75,0
-24,MNQ_US_DATA_1000_E2_RR1.0_CB1_NO_FILTER_O15_S075,BLOCKED_NON_DEFAULT_STOP,Requires outcome_builder rebuild at stop_multiplier=0.75 and a stop-specific strict replay runner before Chordia audit.,,,0.75,0
-25,MNQ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER_O15_S075,BLOCKED_NON_DEFAULT_STOP,Requires outcome_builder rebuild at stop_multiplier=0.75 and a stop-specific strict replay runner before Chordia audit.,,,0.75,0

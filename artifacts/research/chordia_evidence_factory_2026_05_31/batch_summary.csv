@@ -1,2 +1,0 @@
-batch_id,batch_index,total_batches,item_count,ready_count,blocked_count,first_rank,last_rank,manifest_path,command_path
-batch_001,1,1,12,7,5,18,29,batches/batch_001.csv,batches/batch_001_commands.ps1
