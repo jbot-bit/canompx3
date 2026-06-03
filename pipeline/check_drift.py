@@ -15865,10 +15865,21 @@ def main():
             "semantics unchanged."
         ),
     )
+    parser.add_argument(
+        "--skip-advisory",
+        action="store_true",
+        help=(
+            "Skip every advisory drift check. Used by pre-commit to keep the commit "
+            "path focused on blocking integrity gates. Full drift remains the default "
+            "manual/CI path, and this flag never skips a blocking check because it is "
+            "keyed only on each CHECKS entry's is_advisory flag."
+        ),
+    )
     args = parser.parse_args()
     fast_mode = args.fast
     quiet_mode = args.quiet
     skip_crg_advisory = args.skip_crg_advisory
+    skip_advisory = args.skip_advisory
 
     if not quiet_mode:
         print("=" * 60)
@@ -15898,6 +15909,7 @@ def main():
 
     fast_skipped = 0  # tracks --fast skips separately from DB-unavailable skips
     crg_skipped = 0  # tracks --skip-crg-advisory skips (commit drift gate)
+    advisory_skipped = 0  # tracks --skip-advisory skips (commit drift gate)
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         if fast_mode and label in SLOW_CHECK_LABELS:
             fast_skipped += 1
@@ -15907,6 +15919,13 @@ def main():
             if not quiet_mode:
                 print(f"Check {i}: {label}...")
                 print("  SKIPPED (--skip-crg-advisory; advisory, runs in CI)")
+                print()
+            continue
+        if skip_advisory and is_advisory:
+            advisory_skipped += 1
+            if not quiet_mode:
+                print(f"Check {i}: {label}...")
+                print("  SKIPPED (--skip-advisory; advisory, runs in full drift/CI)")
                 print()
             continue
         if not quiet_mode:
@@ -15986,9 +16005,10 @@ def main():
     # Summary — blocking_count tracks actual passes (not computed from total)
     fast_part = f", {fast_skipped} skipped (--fast)" if fast_skipped else ""
     crg_part = f", {crg_skipped} skipped (--skip-crg-advisory)" if crg_skipped else ""
+    advisory_part = f", {advisory_skipped} skipped (--skip-advisory)" if advisory_skipped else ""
     summary_line = (
         f"{blocking_count} checks passed [OK], "
-        f"{skip_count} skipped (DB unavailable){fast_part}{crg_part}, "
+        f"{skip_count} skipped (DB unavailable){fast_part}{crg_part}{advisory_part}, "
         f"{advisory_count} advisory"
     )
     if all_violations:

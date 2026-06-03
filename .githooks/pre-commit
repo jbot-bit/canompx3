@@ -35,6 +35,38 @@ export PATH="$PATH:$_SAVED_PATH"
 echo "=== PRE-COMMIT CHECKS ==="
 echo ""
 
+_now_ms() {
+    local v
+    v=$(date +%s%3N 2>/dev/null || true)
+    case "$v" in
+        ''|*[!0-9]*) echo "$(($(date +%s) * 1000))" ;;
+        *) echo "$v" ;;
+    esac
+}
+
+_PRECOMMIT_STARTED_MS="$(_now_ms)"
+_CURRENT_STAGE=""
+_CURRENT_STAGE_STARTED_MS=""
+CANOMPX3_PRECOMMIT_LOCK_OWNER="$$:$_PRECOMMIT_STARTED_MS"
+export CANOMPX3_PRECOMMIT_LOCK_OWNER
+
+_finish_stage_timing() {
+    [ -n "$_CURRENT_STAGE" ] || return 0
+    local end_ms elapsed_ms
+    end_ms="$(_now_ms)"
+    elapsed_ms=$((end_ms - _CURRENT_STAGE_STARTED_MS))
+    echo "  TIMING: $_CURRENT_STAGE ${elapsed_ms}ms"
+    _CURRENT_STAGE=""
+    _CURRENT_STAGE_STARTED_MS=""
+}
+
+_stage() {
+    _finish_stage_timing
+    _CURRENT_STAGE="$1"
+    _CURRENT_STAGE_STARTED_MS="$(_now_ms)"
+    echo "$1"
+}
+
 # 0-serialize. Commit serialization — prevent two concurrent pre-commit runs in
 # the same repo from racing git's final ref write. The ~2-minute gate below
 # (CRG + ~172 drift checks + audit + tests) is long enough that a peer terminal
@@ -60,7 +92,7 @@ fi
 # Release the serialization lock on ANY exit from here on (pass, fail, or signal)
 # so a crashed gate never wedges the next commit. The helper only removes a lock
 # it owns, so this is safe even if another step already exited non-zero.
-trap '"$COMMIT_LOCK_PY" "$SCRIPT_DIR/scripts/tools/commit_serialize.py" release >/dev/null 2>&1 || true' EXIT
+trap '_precommit_rc=$?; _finish_stage_timing; _precommit_done_ms="$(_now_ms)"; echo "=== PRE-COMMIT TIMING total: $((_precommit_done_ms - _PRECOMMIT_STARTED_MS))ms ==="; "$COMMIT_LOCK_PY" "$SCRIPT_DIR/scripts/tools/commit_serialize.py" release >/dev/null 2>&1 || true; exit "$_precommit_rc"' EXIT
 
 # 0c. Branch-flip guard — abort if HEAD branch != branch_at_start in session lock.
 # A mid-session `git checkout <other-branch>` would deposit this commit on the
@@ -274,7 +306,7 @@ fi
 # The script is canonical at scripts/tools/claude_review_deepseek.py;
 # drift check `check_deepseek_review_gate_intact` enforces presence.
 if [ "$OPENCODE_AGENT_ACTIVE" = "1" ]; then
-    echo "[0d] DeepSeek review gate (Claude)..."
+    _stage "[0d] DeepSeek review gate (Claude)..."
     if [ -x "$CANONICAL_VENV_PY" ]; then
         REVIEW_PY="$CANONICAL_VENV_PY"
     else
@@ -310,7 +342,7 @@ fi
 
 
 # 1. Ruff lint check (~1 second)
-echo "[1/8] Ruff lint..."
+_stage "[1/8] Ruff lint..."
 RUFF="ruff"
 if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/.venv-wsl/bin/ruff" ]; then
     RUFF="$SCRIPT_DIR/.venv-wsl/bin/ruff"
@@ -334,7 +366,7 @@ fi
 echo "  PASSED"
 
 # 2. Ruff format check — auto-fix and re-stage if needed (~1 second)
-echo "[2/8] Ruff format..."
+_stage "[2/8] Ruff format..."
 if ! "$RUFF" format --check pipeline/ trading_app/ scripts/ tests/ > /dev/null 2>&1; then
     echo "  Auto-formatting..."
     "$RUFF" format pipeline/ trading_app/ scripts/ tests/ > /dev/null 2>&1
@@ -371,7 +403,7 @@ echo "  PASSED"
 # Since validator/builder code already trusts validated_setups, silent backfill
 # failure is a data-integrity risk — fail-stop here per silent-rot T1
 # (docs/runtime/stages/silent-rot-precommit-hygiene.md, 2026-05-17).
-echo "[2b/8] Trade window sync..."
+_stage "[2b/8] Trade window sync..."
 set +e
 "$PYTHON" "$SCRIPT_DIR/scripts/migrations/backfill_validated_trade_windows.py" 2>/dev/null
 BACKFILL_RC=$?
@@ -394,10 +426,10 @@ echo "  PASSED"
 # per-node graph query measured 2026-05-30). These checks NEVER block a commit, so
 # zero blocking coverage is lost: CI runs the full set, and step 3b below rebuilds
 # the CRG graph anyway. Rollback = remove the flag token (flag defaults off).
-echo "[3/8] Drift check..."
+_stage "[3/8] Drift check..."
 DRIFT_TMPFILE=$(mktemp)
 set +e
-"$PYTHON" pipeline/check_drift.py --skip-crg-advisory 2>&1 | tee "$DRIFT_TMPFILE" | awk '
+"$PYTHON" pipeline/check_drift.py --skip-crg-advisory --skip-advisory 2>&1 | tee "$DRIFT_TMPFILE" | awk '
     /^python-dotenv could not parse statement starting at line / { next }
     /^Check [0-9]+:/ || /^  FAILED:/ || /^  WARNING:/ || /^  SKIPPED/ || /^DRIFT / || /^NO DRIFT/ || /^====/ { print }
 '
@@ -421,7 +453,7 @@ echo "  PASSED"
 # at it so all worktrees share ONE full graph rather than fragmenting
 # into per-worktree 4-file partials. Same sibling-detection logic as the
 # dev-deps probe above.
-echo "[3b/8] CRG update..."
+_stage "[3b/8] CRG update..."
 # Failure policy (silent-rot T1, 2026-05-17): single failure stays ADVISORY
 # because CRG is a non-truth navigation surface (per feedback_crg_no_graph_storm.md)
 # and transient flake is real (per feedback_mcp_partial_install_state_2026_05_01.md).
@@ -493,7 +525,7 @@ fi
 #
 # NOTE: Capture output to temp file, NOT command substitution — PIPESTATUS is
 # unreliable in Git Bash command substitutions and can silently return 0.
-echo "[4/8] Fast tests..."
+_stage "[4/8] Fast tests..."
 STAGED_ALL=$(git diff --cached --name-only --diff-filter=ACM)
 STAGED_PIPELINE=$(echo "$STAGED_ALL" | grep '^pipeline/' | grep '\.py$' || true)
 STAGED_TRADING=$(echo "$STAGED_ALL"  | grep '^trading_app/' | grep '\.py$' || true)
@@ -542,7 +574,7 @@ else
 fi
 
 # 5. Checkpoint guard (~1 second)
-echo "[5/8] Checkpoint guard..."
+_stage "[5/8] Checkpoint guard..."
 if ! "$PYTHON" scripts/tools/checkpoint_guard.py > /tmp/canompx3-checkpoint-guard.txt 2>&1; then
     echo "BLOCKED: Checkpoint guard failed."
     cat /tmp/canompx3-checkpoint-guard.txt
@@ -553,7 +585,7 @@ rm -f /tmp/canompx3-checkpoint-guard.txt
 echo "  PASSED"
 
 # 6. Behavioral audit (~1 second)
-echo "[6/8] Behavioral audit..."
+_stage "[6/8] Behavioral audit..."
 if ! "$PYTHON" scripts/tools/audit_behavioral.py > /dev/null 2>&1; then
     echo "BLOCKED: Behavioral audit violations detected."
     "$PYTHON" scripts/tools/audit_behavioral.py
@@ -562,7 +594,7 @@ fi
 echo "  PASSED"
 
 # 7. Claim hygiene for staged result docs (~sub-second)
-echo "[7/8] Claim hygiene..."
+_stage "[7/8] Claim hygiene..."
 STAGED_RESULT_DOCS=$(echo "$STAGED_ALL" | grep '^docs/audit/results/.*\.md$' || true)
 if [ -z "$STAGED_RESULT_DOCS" ]; then
     echo "  No staged result docs"
@@ -590,7 +622,7 @@ EOF
 fi
 
 # 8. Syntax check on staged .py files
-echo "[8/8] Syntax check..."
+_stage "[8/8] Syntax check..."
 STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
 if [ -n "$STAGED_PY" ]; then
     for f in $STAGED_PY; do

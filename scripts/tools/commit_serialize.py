@@ -23,7 +23,8 @@ Contract (called from `.githooks/pre-commit` step 0)
 ----------------------------------------------------
   acquire  -> exit 0 if we took the lock (lock file written with our pid+ts),
               exit 1 if a LIVE peer holds it (caller aborts the commit cleanly).
-  release  -> exit 0 always (idempotent; only removes a lock we own).
+  release  -> exit 0 always (idempotent; only removes a lock owned by this
+              pre-commit shell).
 
 The lock file lives at ``<git-common-dir>/.commit-in-progress.lock`` so all
 worktrees of the repo serialize against ONE lock (a peer worktree committing is
@@ -53,6 +54,7 @@ import time
 from pathlib import Path
 
 LOCK_FILENAME = ".commit-in-progress.lock"
+OWNER_ENV = "CANOMPX3_PRECOMMIT_LOCK_OWNER"
 
 # A held lock older than this is treated as abandoned (crashed pre-commit). The
 # real gate runs ~2 min; 5 min is a comfortable floor above it that still frees
@@ -137,7 +139,8 @@ def _holder_is_dead_or_stale(lock_path: Path) -> bool:
 
 def _try_create(lock_path: Path) -> bool:
     """Atomic O_EXCL create. Returns True if we created (own) the lock."""
-    payload = json.dumps({"pid": os.getpid(), "ppid": os.getppid(), "ts": time.time()}).encode("utf-8")
+    owner = os.environ.get(OWNER_ENV) or f"ppid:{os.getppid()}"
+    payload = json.dumps({"pid": os.getpid(), "ppid": os.getppid(), "owner": owner, "ts": time.time()}).encode("utf-8")
     try:
         fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL)
     except FileExistsError:
@@ -184,14 +187,27 @@ def acquire() -> int:
     return 1
 
 
+def _holder_matches_this_precommit(holder: object) -> bool:
+    """Return True iff this helper belongs to the pre-commit shell that owns the lock."""
+    if not isinstance(holder, dict):
+        return False
+    owner = os.environ.get(OWNER_ENV) or f"ppid:{os.getppid()}"
+    if holder.get("owner") == owner:
+        return True
+    # Backward compatibility for lock files written before the owner token
+    # existed, plus direct in-process unit tests.
+    return holder.get("pid") == os.getpid() or (holder.get("owner") is None and holder.get("ppid") == os.getppid())
+
+
 def release() -> int:
     common = _git_common_dir()
     if common is None:
         return 0
     lock_path = common / LOCK_FILENAME
     holder = _read_holder(lock_path)
-    # Only remove a lock we own (pid match) — never clobber a peer's fresh lock.
-    if isinstance(holder, dict) and holder.get("pid") == os.getpid():
+    # acquire/release are separate helper processes. The helper pid matches only
+    # for direct in-process tests; the parent shell pid is the real hook owner.
+    if _holder_matches_this_precommit(holder):
         try:
             lock_path.unlink()
         except OSError:

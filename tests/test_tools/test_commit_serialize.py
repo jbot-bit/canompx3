@@ -27,12 +27,16 @@ def _init_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _run(arg: str, cwd: Path) -> tuple[int, str]:
+def _run(arg: str, cwd: Path, *, env: dict[str, str] | None = None) -> tuple[int, str]:
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
     r = subprocess.run(
         [sys.executable, str(_HELPER), arg],
         cwd=cwd,
         capture_output=True,
         text=True,
+        env=run_env,
     )
     return r.returncode, r.stderr.strip()
 
@@ -47,12 +51,14 @@ def repo(tmp_path: Path) -> Path:
 
 
 def test_clean_acquire_writes_lock(repo: Path):
-    rc, _ = _run("acquire", repo)
+    token = "test-precommit-owner"
+    rc, _ = _run("acquire", repo, env={cs.OWNER_ENV: token})
     assert rc == 0
     assert _lock(repo).exists()
     holder = json.loads(_lock(repo).read_text(encoding="utf-8"))
     assert isinstance(holder["pid"], int) and holder["pid"] > 0
     assert isinstance(holder["ts"], (int, float))
+    assert holder["owner"] == token
 
 
 def test_live_peer_blocks(repo: Path):
@@ -102,6 +108,16 @@ def test_release_only_removes_own_lock(repo: Path):
     assert _lock(repo).exists()  # not ours → left intact
 
 
+def test_release_only_removes_matching_owner_token(repo: Path):
+    _lock(repo).write_text(
+        json.dumps({"pid": 12345, "ppid": os.getpid(), "owner": "peer-token", "ts": time.time()}),
+        encoding="utf-8",
+    )
+    rc, _ = _run("release", repo, env={cs.OWNER_ENV: "our-token"})
+    assert rc == 0
+    assert _lock(repo).exists()
+
+
 def test_acquire_then_release_roundtrip_same_process(repo: Path):
     """In-process acquire then release removes the lock (pid matches)."""
     os.chdir(repo)
@@ -112,6 +128,18 @@ def test_acquire_then_release_roundtrip_same_process(repo: Path):
         assert not _lock(repo).exists()
     finally:
         os.chdir(Path(__file__).resolve().parents[2])
+
+
+def test_acquire_then_release_roundtrip_subprocess_same_parent(repo: Path):
+    """Hook contract: acquire/release are separate helpers under one pre-commit owner."""
+    token = "same-precommit-shell"
+    rc, _ = _run("acquire", repo, env={cs.OWNER_ENV: token})
+    assert rc == 0
+    assert _lock(repo).exists()
+
+    rc, _ = _run("release", repo, env={cs.OWNER_ENV: token})
+    assert rc == 0
+    assert not _lock(repo).exists()
 
 
 def test_outside_git_repo_fails_open(tmp_path: Path):

@@ -114,3 +114,37 @@ class TestSkipCrgAdvisoryRuntime:
             pytest.skip("check_drift.py did not return in 180s (DB contention)")
         assert result.returncode in (0, 1), f"unexpected exit: {result.stderr}"
         assert "SKIPPED (--skip-crg-advisory" not in result.stdout, "no-flag run must not skip CRG checks"
+
+
+class TestSkipAllAdvisoryRuntime:
+    """Hermetic runtime proof for pre-commit's all-advisory skip path."""
+
+    def test_skip_advisory_runs_blocking_checks_and_skips_advisory_only(self, monkeypatch, capsys):
+        calls: list[str] = []
+
+        def blocking_check() -> list[str]:
+            calls.append("blocking")
+            return []
+
+        def advisory_check() -> list[str]:
+            calls.append("advisory")
+            return []
+
+        monkeypatch.setattr(
+            check_drift,
+            "CHECKS",
+            [
+                ("blocking check", blocking_check, False, False),
+                ("advisory check", advisory_check, True, False),
+            ],
+        )
+        monkeypatch.setattr(sys, "argv", ["check_drift.py", "--skip-advisory"])
+
+        with pytest.raises(SystemExit) as excinfo:
+            check_drift.main()
+
+        assert excinfo.value.code == 0
+        assert calls == ["blocking"]
+        out = capsys.readouterr().out
+        assert "SKIPPED (--skip-advisory; advisory, runs in full drift/CI)" in out
+        assert "1 skipped (--skip-advisory)" in out
