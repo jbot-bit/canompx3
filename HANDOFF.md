@@ -98,13 +98,26 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Codex
 - **Date:** 2026-06-03
-- **Commit:** a90873a6 — chore(plugins): firecrawl default OFF + on-demand toggle
-- **Files changed:** 3 files
-  - `.claude/settings.json`
+- **Commit:** c0c86cf7 — fix(stage-reaper): detect peer renames in AuditCache peer-dirty path
+- **Files changed:** 16 files
   - `HANDOFF.md`
-  - `scripts/tools/firecrawl_mode.ps1`
+  - `docs/plans/active/2026-06/2026-06-03-workflow-reliability-stage-ownership.md`
+  - `docs/runtime/stages/2026-05-25-ci-live-readiness-db-seed.md`
+  - `docs/runtime/stages/2026-05-26-sr-alarm-strict-double-counting.md`
+  - `docs/runtime/stages/2026-05-29-drift-cache-proof-of-honesty.md`
+  - `docs/runtime/stages/archive/2026-05-25-ci-live-readiness-db-seed.md`
+  - `docs/runtime/stages/archive/2026-05-26-sr-alarm-strict-double-counting.md`
+  - `docs/runtime/stages/archive/2026-05-29-drift-cache-proof-of-honesty.md`
+  - `docs/runtime/stages/archive/ehr-stage-3-validator-hard-fail.md`
+  - `docs/runtime/stages/archive/ralph_iter_212.md`
+  - `docs/runtime/stages/ehr-stage-3-validator-hard-fail.md`
+  - `docs/runtime/stages/ralph_iter_212.md`
+  - `scripts/tools/stage_reaper_audit.py`
+  - `scripts/tools/workflow_doctor.py`
+  - `tests/test_tools/test_stage_reaper_audit.py`
+  - `tests/test_tools/test_workflow_doctor.py`
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
