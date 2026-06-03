@@ -14,10 +14,19 @@ Status: NO-GO until live preflight is green with no blocking strict readiness wa
 
 ## Startup Gate
 
-Run these before any live start:
+Primary operator entrypoint on Windows:
+
+```bat
+START_BOT.bat
+```
+
+That launcher starts the dashboard/control-room in signal-only mode. Real-money launch is only from the dashboard's hold-to-confirm `HOLD TO GO LIVE` control. The dashboard server pins the effective pilot to `topstep_50k_mnq_auto`, `MNQ`, and `--copies 1`; runs control refresh and live-session preflight before spawning the canonical live runner; and uses the hold gesture as the final operator confirmation.
+
+Underlying gates, for audit/debug:
 
 ```bash
 git status --short --branch --ahead-behind
+python scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto
 python scripts/tools/live_readiness_report.py --profile topstep_50k_mnq_auto --copies 1 --strict-zero-warn
 python scripts/tools/project_pulse.py --fast --format json
 python scripts/audits/run_all.py --phase 7

@@ -75,7 +75,7 @@ class TestHeadFlipGuard:
         hook = _load_hook()
         _init_git(tmp_path)
         event = _make_event()
-        monkeypatch.setattr(hook, "_git_dir", lambda: tmp_path / ".git")
+        monkeypatch.setattr(hook, "_git_dir", lambda cwd=None: tmp_path / ".git")
         monkeypatch.setattr("sys.stdin", StringIO(json.dumps(event)))
         with pytest.raises(SystemExit) as exc:
             hook.main()
@@ -87,7 +87,7 @@ class TestHeadFlipGuard:
         git_dir = tmp_path / ".git"
         (git_dir / ".claude.pid").write_text("not json", encoding="utf-8")
         event = _make_event()
-        monkeypatch.setattr(hook, "_git_dir", lambda: git_dir)
+        monkeypatch.setattr(hook, "_git_dir", lambda cwd=None: git_dir)
         monkeypatch.setattr("sys.stdin", StringIO(json.dumps(event)))
         with pytest.raises(SystemExit) as exc:
             hook.main()
@@ -100,9 +100,9 @@ class TestHeadFlipGuard:
         git_dir = tmp_path / ".git"
         (git_dir / ".claude.pid").write_text(json.dumps({"pid": 999, "branch_at_start": "main"}), encoding="utf-8")
         event = _make_event()
-        monkeypatch.setattr(hook, "_git_dir", lambda: git_dir)
-        monkeypatch.setattr(hook, "_current_branch", lambda: "main")
-        monkeypatch.setattr(hook, "_current_head_sha", lambda: "a" * 40)
+        monkeypatch.setattr(hook, "_git_dir", lambda cwd=None: git_dir)
+        monkeypatch.setattr(hook, "_current_branch", lambda cwd=None: "main")
+        monkeypatch.setattr(hook, "_current_head_sha", lambda cwd=None: "a" * 40)
         monkeypatch.setattr("sys.stdin", StringIO(json.dumps(event)))
         with pytest.raises(SystemExit) as exc:
             hook.main()
@@ -118,9 +118,9 @@ class TestHeadFlipGuard:
         git_dir = tmp_path / ".git"
         _write_lock(git_dir, branch_at_start="main", head_at_start="a" * 40)
         event = _make_event()
-        monkeypatch.setattr(hook, "_git_dir", lambda: git_dir)
-        monkeypatch.setattr(hook, "_current_branch", lambda: "feature")
-        monkeypatch.setattr(hook, "_current_head_sha", lambda: "b" * 40)
+        monkeypatch.setattr(hook, "_git_dir", lambda cwd=None: git_dir)
+        monkeypatch.setattr(hook, "_current_branch", lambda cwd=None: "feature")
+        monkeypatch.setattr(hook, "_current_head_sha", lambda cwd=None: "b" * 40)
         monkeypatch.setattr("sys.stdin", StringIO(json.dumps(event)))
         with pytest.raises(SystemExit) as exc:
             hook.main()
@@ -137,9 +137,9 @@ class TestHeadFlipGuard:
         sha = "c" * 40
         _write_lock(git_dir, branch_at_start="main", head_at_start=sha)
         event = _make_event()
-        monkeypatch.setattr(hook, "_git_dir", lambda: git_dir)
-        monkeypatch.setattr(hook, "_current_branch", lambda: "main")
-        monkeypatch.setattr(hook, "_current_head_sha", lambda: sha)
+        monkeypatch.setattr(hook, "_git_dir", lambda cwd=None: git_dir)
+        monkeypatch.setattr(hook, "_current_branch", lambda cwd=None: "main")
+        monkeypatch.setattr(hook, "_current_head_sha", lambda cwd=None: sha)
         monkeypatch.setattr("sys.stdin", StringIO(json.dumps(event)))
         with pytest.raises(SystemExit) as exc:
             hook.main()
@@ -159,9 +159,9 @@ class TestHeadFlipGuard:
         new_sha = "6" * 40
         _write_lock(git_dir, branch_at_start="main", head_at_start=start_sha)
         event = _make_event(command="git pull --rebase origin main")
-        monkeypatch.setattr(hook, "_git_dir", lambda: git_dir)
-        monkeypatch.setattr(hook, "_current_branch", lambda: "main")
-        monkeypatch.setattr(hook, "_current_head_sha", lambda: new_sha)
+        monkeypatch.setattr(hook, "_git_dir", lambda cwd=None: git_dir)
+        monkeypatch.setattr(hook, "_current_branch", lambda cwd=None: "main")
+        monkeypatch.setattr(hook, "_current_head_sha", lambda cwd=None: new_sha)
         monkeypatch.setattr("sys.stdin", StringIO(json.dumps(event)))
         with pytest.raises(SystemExit) as exc:
             hook.main()

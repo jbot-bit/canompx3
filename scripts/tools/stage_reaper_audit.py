@@ -37,6 +37,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # Live/capital paths: a stage touching these is only archivable when its scope
 # has been quiet for the full recency window (handled by the recency gate, but
 # named explicitly so the report can flag WHY a live stage was held).

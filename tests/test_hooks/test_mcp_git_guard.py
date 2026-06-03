@@ -70,8 +70,8 @@ def _patch_branch_state(
     current: str | None,
 ) -> None:
     """Override the shared-module helpers on the hook's `_branch_state` ref."""
-    monkeypatch.setattr(hook._branch_state, "git_dir", lambda: git_dir)
-    monkeypatch.setattr(hook._branch_state, "current_branch", lambda: current)
+    monkeypatch.setattr(hook._branch_state, "git_dir", lambda cwd=None: git_dir)
+    monkeypatch.setattr(hook._branch_state, "current_branch", lambda cwd=None: current)
 
 
 class TestToolNameMatching:

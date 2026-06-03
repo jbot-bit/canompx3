@@ -21,6 +21,7 @@ Identify the canonical source for any claim before making it. Never patch downst
 - Prefer the bundled `LIT_*` extracts over training memory. They're verbatim passages from the authors (Bailey, Harvey-Liu, Chordia, Lopez de Prado, Carver, Fitschen) with page citations.
 - If a claim isn't in the bundle and isn't in the resources folder, label it **"from training memory — not verified against local source"**.
 - Do NOT characterise a paper as "irrelevant" / "bibliography-only" based on a single keyword miss. The 2026-04-07 self-review caught a case where `Lopez_de_Prado_ML_for_Asset_Managers` was wrongly dismissed as bibliography-only when pp 6-28 are substantive Chapter 1 content. Read surrounding paragraphs before reporting a finding.
+- **Retrieval ≠ verification.** Holding an extract (retrieval) is NOT proof the cited source exists or says what the extract claims (verification). Every grounding claim must resolve to a present, page-matched source OR a recorded gap — there is no "probably fine". The machine-readable status of every source lives in `docs/audit/research_grounding_source_manifest.yaml` (human view: `docs/audit/research_grounding_gap_ledger.md`); presence + cited-page existence are enforced by `pipeline/check_drift.py::check_literature_source_integrity` (CI-safe by default — a green there means manifest↔extract consistency, NOT that any PDF was opened; strict-local additionally checks page counts when the source is present). Consult the ledger/manifest before relying on a source.
 
 ## 4. Never trust metadata — always verify
 

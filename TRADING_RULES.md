@@ -4,6 +4,11 @@
 Single source of truth for live trading. All claims verified against gold.db.
 Document-role registry: `docs/governance/document_authority.md`.
 For research deep-dives and data tables, see `docs/RESEARCH_ARCHIVE.md`.
+Literature cited inline below by author (e.g. Chordia t>=3.79) resolves to a
+page-cited extract in `docs/institutional/literature/`; source presence is
+verified by `pipeline/check_drift.py::check_literature_source_integrity` and
+ledgered in `docs/audit/research_grounding_gap_ledger.md` (retrieval !=
+verification - absent source => UNSUPPORTED).
 
 ---
 
@@ -20,6 +25,7 @@ All sessions are now dynamic/event-based. Times are resolved per-day from `pipel
 | SINGAPORE_OPEN | Singapore/HK open | 11:00 AM AEST | was 1100, 1130 |
 | LONDON_METALS | London metals open | 8:00 AM UK | was 1800, LONDON_OPEN |
 | US_DATA_830 | US economic data release | 8:30 AM ET | was 2300, US_DATA_OPEN |
+| NYSE_PREOPEN | NYSE order imbalance publication | 9:00 AM ET | 30 min before NYSE cash open |
 | NYSE_OPEN | NYSE equity open | 9:30 AM ET | was 0030, US_EQUITY_OPEN |
 | US_DATA_1000 | US 10 AM data/post-open | 10:00 AM ET | was US_POST_EQUITY |
 | CME_PRECLOSE | CME equity pre-close | 2:45 PM CT | was CME_CLOSE |
@@ -204,9 +210,10 @@ The `day_of_week` column uses the Brisbane trading day. For sessions before midn
 | SINGAPORE_OPEN | ALIGNED | Bris-DOW = Singapore DOW (no DST) |
 | LONDON_METALS | ALIGNED | Bris-DOW = London DOW (08:00 UTC = London morning same day) |
 | US_DATA_830 | ALIGNED | Bris-DOW = US DOW (13:00 UTC = US morning same day) |
+| NYSE_PREOPEN | MISALIGNED (-1) | Bris-Fri 00:00 = UTC Thu 14:00 = US Thursday 9:00 AM |
 | NYSE_OPEN | MISALIGNED (-1) | Bris-Fri 00:30 = UTC Thu 14:30 = US Thursday 9:30 AM |
 
-**Implication for NYSE_OPEN:** Brisbane-Friday at NYSE_OPEN is the US THURSDAY equity open. Any DOW research at NYSE_OPEN using Brisbane DOW is offset by -1 day relative to the US calendar. Currently harmless (NYSE_OPEN has no DOW filter in grid), but MUST be accounted for if DOW filters are ever added. `validate_dow_filter_alignment()` in `dst.py` enforces this at runtime.
+**Implication for NYSE_PREOPEN/NYSE_OPEN:** Brisbane-Friday at these sessions is the US THURSDAY equity pre-open/open. Any DOW research at these sessions using Brisbane DOW is offset by -1 day relative to the US calendar. Currently harmless (NYSE_OPEN has no DOW filter in grid), but MUST be accounted for if DOW filters are ever added. `validate_dow_filter_alignment()` in `dst.py` enforces this at runtime.
 
 **One active DOW filter in discovery grid (Mar 2026):**
 - NOMON@LONDON_METALS → skips London Monday (PLAUSIBLE BUT UNPROVEN, permutation p=0.006)
@@ -217,7 +224,7 @@ NOFRI@CME_REOPEN and NOTUE@TOKYO_OPEN removed Mar 2026 — LIKELY NOISE. See `re
 
 ## DST — FULLY RESOLVED (Feb 2026)
 
-**All sessions are now event-based.** The old fixed-clock sessions (0900/1800/0030/2300) that blended winter+summer market contexts have been replaced with dynamic sessions (CME_REOPEN, LONDON_METALS, NYSE_OPEN, US_DATA_830) that resolve to the correct time per-day. DST contamination is no longer an issue for any session.
+**All sessions are now event-based.** The old fixed-clock sessions (0900/1800/0030/2300) that blended winter+summer market contexts have been replaced with dynamic sessions (CME_REOPEN, LONDON_METALS, NYSE_PREOPEN, NYSE_OPEN, US_DATA_830) that resolve to the correct time per-day. DST contamination is no longer an issue for any session.
 
 **Historical context (for reference):** The old fixed sessions drifted ±1 hour during DST transitions. Winter edges were stronger across instruments (MES +0.35R, MGC +0.18R, MNQ +0.09R). US_DATA_830 (formerly 2300) is WINTER-DOM on MGC G8+ — the quieter pre-data window produces better breakouts.
 

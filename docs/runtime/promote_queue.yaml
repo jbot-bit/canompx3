@@ -24,7 +24,7 @@ entries:
   short_side_verdict: KILL_AS_STANDALONE
   pooling_artifact: true
   revocation_sidecar: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.revocation.md
-  heavyweight_prereg: null
+  heavyweight_prereg: docs/audit/hypotheses/2026-05-31-mnq-comex-settle-e2-rr2-0-cb1-orb-vol-16k-chordia-unlock-v1.yaml
   park_entry: null
   status: REVOKED
   error_reason: null
@@ -67,12 +67,10 @@ entries:
   short_side_verdict: N_A
   pooling_artifact: false
   revocation_sidecar: null
-  heavyweight_prereg: null
+  heavyweight_prereg: docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e1-rr1-0-cb2-pd-clear-long-o30-chordia-unlock-v1.yaml
   park_entry: null
-  status: REJECTED_OOS_UNPOWERED
-  error_reason: expected_n_oos=20 (fire_rate=0.1468 * oos_window_days=138) -> expected_power=0.247
-    < floor=0.50 at cohen_d=0.3; structurally underpowered OOS — pick CPCV / Harvey-Liu
-    haircut / pool with siblings / PARK per backtesting-methodology.md RULE 3.3
+  status: ESCALATED
+  error_reason: null
   structural_hash: ed4cb1058cc25a58
   k_lineage:
     instrument: MNQ

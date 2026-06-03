@@ -1,0 +1,12 @@
+generated_at: '2026-05-30T15:50:02.649974+00:00'
+plan_count: 25
+bridge_status_counts:
+  READY_TO_ACTIVATE: 15
+  SKIP_FACTORY_STATUS: 10
+strict_replay_execution: true
+strict_replay_returncode_counts:
+  0: 1
+proposal_count: 1
+chordia_log_mutation: false
+live_mutation: false
+validated_setups_mutation: false

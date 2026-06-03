@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import csv
+from pathlib import Path
+
 from scripts.tools import chordia_unlock_batch as cub
 from scripts.tools import lane_bench_state as lbs
 
@@ -118,3 +121,49 @@ def test_report_declares_read_only_state_counts() -> None:
     assert "does not mutate live allocation" in report
     assert "state counts" in report
     assert "EXACT_LANE_READY_FOR_REPLAY" in report
+
+
+def test_load_family_hints_from_prior_bench_csv(tmp_path: Path) -> None:
+    path = tmp_path / "bench.csv"
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=[
+                "instrument",
+                "session",
+                "orb_minutes",
+                "entry_model",
+                "rr_target",
+                "filter_type",
+                "family",
+                "family_role",
+                "family_priority",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "instrument": "MNQ",
+                "session": "NYSE_OPEN",
+                "orb_minutes": "15",
+                "entry_model": "E2",
+                "rr_target": "1.5",
+                "filter_type": "NO_FILTER",
+                "family": "MNQ NYSE_OPEN baseline_orb",
+                "family_role": "deployable_candidate",
+                "family_priority": "0",
+            }
+        )
+
+    hints = lbs.load_family_hints_from_bench(path)
+    rows = lbs.build_bench_rows(
+        [_candidate("A")],
+        allowed_instruments=frozenset({"MNQ"}),
+        allowed_sessions=frozenset({"NYSE_OPEN"}),
+        active_strategy_ids=frozenset(),
+        family_hints=hints,
+    )
+
+    assert rows[0].family == "MNQ NYSE_OPEN baseline_orb"
+    assert rows[0].family_role == "deployable_candidate"
+    assert rows[0].family_priority == 0

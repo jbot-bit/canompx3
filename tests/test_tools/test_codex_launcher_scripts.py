@@ -140,3 +140,13 @@ def test_start_bot_prints_checkout_identity_before_launching() -> None:
     assert "WSL/Codex branch pushes do not change this app until merged or pulled here" in start_bot
     assert "git branch --show-current" not in start_bot
     assert "git rev-list --left-right --count" not in start_bot
+
+
+def test_start_bot_is_signal_only_dashboard_entrypoint() -> None:
+    root = Path(__file__).resolve().parents[2]
+    start_bot = (root / "START_BOT.bat").read_text(encoding="utf-8")
+
+    assert "set BOT_MODE_FLAGS=--signal-only" in start_bot
+    assert "set BOT_MODE_FLAGS=--demo" not in start_bot
+    assert "--source START_BOT.bat --copies 1 --instrument MNQ" in start_bot
+    assert not (root / "START_LIVE_PILOT.bat").exists()

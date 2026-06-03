@@ -50,6 +50,14 @@ class PropFirmSpec:
     min_hold_seconds: int | None  # Tradeify: 10s microscalp rule
     banned_instruments: frozenset[str]  # e.g. frozenset({"MGC", "GC"})
     auto_trading: str  # "full" | "semi" | "none"
+    # Plan-specific rules that have no first-class column above. Optional —
+    # defaults None so every existing spec is unchanged (zero migration). Used
+    # when a firm's plan carries parameters the shared schema does not model
+    # (e.g. MFFU Builder's payout cap / sim-payout count / payout-consistency /
+    # soft-pause DLL / post-breach cooldown). Verbatim-sourced; see the spec's
+    # notes= for the canonical article. NOT consumed by the survival sim today
+    # — it is documentation-of-record + a hook for future payout/cooldown logic.
+    firm_specific_rules: Mapping[str, object] | None = None
     notes: str = ""
 
 
@@ -282,6 +290,15 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         min_hold_seconds=None,
         banned_instruments=frozenset(),
         auto_trading="full",
+        firm_specific_rules={
+            # @canonical-source docs/research-input/topstep/topstep_xfa_parameters.txt (article 8284215, 2026-05-31)
+            # @verbatim "Reminder: Only 1 Live Funded Account is permitted." (line 228)
+            # @verbatim "Traders can only have one (1) Live Funded Account when offered a Live trading account." (line 235)
+            # DATA only (MFFU Layer C Option A): the forced-progression state machine and
+            # payout-count ledger are deliberately unbuilt (Option B deferred — see
+            # docs/audit/2026-05-31-mffu-forced-progression-live-cap-memo.md).
+            "max_live_accounts": 1,
+        },
         notes="MGC morning lane. 5 Express + 1 Live (stay Express). ProjectX API. Copier on Express only.",
     ),
     "mffu": PropFirmSpec(
@@ -302,6 +319,121 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
             "$5K reserve held on Live transition. 21-day cooldown after Live blow. "
             "No T1 news in sim. $10K single day = forced Live transition. "
             "Source: help.myfundedfutures.com articles 13134709, 13134718, 13286746, 13745661."
+        ),
+    ),
+    "mffu_builder": PropFirmSpec(
+        name="mffu_builder",
+        display_name="MyFundedFutures Builder",
+        # EOD trailing; MLL locks permanently at +$100 above starting balance.
+        # @canonical-source docs/research-input/mffu/mffu_builder_50k.md (article 14290805, scraped 2026-05-31)
+        # @verbatim "The Maximum Loss Limit (MLL) is an End of Day (EOD) trailing drawdown."
+        # @verbatim "The MLL locks permanently once it reaches $100 above the starting balance."
+        dd_type="eod_trailing",
+        # @verbatim "80% Trader / 20% Firm" (sim + live identical).
+        profit_split_tiers=((float("inf"), 0.80),),
+        # @verbatim "Is there a consistency rule during evaluation? No." Eval/sim = none.
+        # The 50% payout-stage consistency lives in firm_specific_rules + the PayoutPolicy.
+        consistency_rule=None,
+        # @verbatim "News trading is fully unrestricted during the evaluation and sim funded stage."
+        news_restriction=False,
+        close_time_et="16:10",
+        platform="tradovate",
+        min_hold_seconds=None,
+        banned_instruments=frozenset(),
+        auto_trading="full",
+        firm_specific_rules={
+            # All values verbatim from article 14290805 (2026-05-31). $50k-only plan.
+            "plan": "builder",
+            "account_size_only": 50_000,
+            "profit_target": 3_000.0,
+            "mll_options": {"default": 2_000.0, "add_on": 1_500.0},  # Max EOD Drawdown
+            "mll_locks_at_plus": 100.0,  # locks permanently at starting+$100
+            "daily_loss_limit_soft_pause": 1_000.0,  # "$1,000 - soft pause" eval+sim+live
+            "max_contracts_mini": 4,
+            "max_contracts_micro": 40,
+            "payout_consistency_rule": 0.50,  # payout stage only
+            "payout_cap_per_cycle": 2_000.0,
+            "max_sim_payouts": 5,
+            "min_payout_amount": 500.0,
+            "min_qualifying_days_per_cycle": 2,
+            "forced_live_after_sim_payouts": 5,  # promoted to live after 5th approved sim payout
+            "max_live_accounts": 1,
+            "max_sim_accounts": 1,  # "1 Builder Account per user"
+            "post_breach_cooldown_days": 21,
+            "inactivity_days": 7,
+            "overnight_holding": False,  # all positions closed at session end
+        },
+        notes=(
+            "BUILDER PLAN ($50k only). DEPLOY TARGET. EOD trailing, MLL locks +$100, 80/20, "
+            "$2K payout cap, 5 sim payouts then FORCED live, 50% payout consistency, "
+            "$1K soft-pause DLL, 21-day post-breach cooldown, news unrestricted, 4mini/40micro. "
+            "2 MLL options: Default $2,000 / Add-On $1,500. Max 1 live account. "
+            "Source: help.myfundedfutures.com article 14290805 (scraped 2026-05-31)."
+        ),
+    ),
+    "mffu_flex": PropFirmSpec(
+        name="mffu_flex",
+        display_name="MyFundedFutures Flex",
+        # EOD trailing; MLL moves to +$100 and locks after first payout.
+        # @canonical-source docs/research-input/mffu/mffu_flex_50k.md
+        # @canonical-source docs/research-input/mffu/mffu_flex_25k.md  (scraped 2026-05-31)
+        # @verbatim "Drawdown model: End-of-day (EOD) trailing"
+        # @verbatim "Maximum loss limit (MLL) moves to $100 / MLL becomes fixed permanently after the first payout"
+        dd_type="eod_trailing",
+        # @verbatim "Profit split: 80/20 (you keep 80%)"
+        profit_split_tiers=((float("inf"), 0.80),),
+        # @verbatim "Consistency rule: 50% (evaluation stage only)". Funded/payout = None.
+        consistency_rule=None,
+        # @verbatim "News trading: Allowed"
+        news_restriction=False,
+        close_time_et="16:10",
+        platform="tradovate",
+        min_hold_seconds=None,
+        banned_instruments=frozenset(),
+        auto_trading="full",
+        firm_specific_rules={
+            # Per-size values verbatim from mffu_flex_25k.md / mffu_flex_50k.md (2026-05-31).
+            "plan": "flex",
+            "by_size": {
+                25_000: {
+                    "profit_target": 1_500.0,
+                    "mll": 1_000.0,
+                    "max_contracts_mini": 2,
+                    "max_contracts_micro": 20,
+                    "min_payout_amount": 250.0,
+                    # @verbatim (25k) "Maximum payout per request: $1,000"
+                    "payout_cap_per_cycle": 1_000.0,
+                },
+                50_000: {
+                    "profit_target": 3_000.0,
+                    "mll": 2_000.0,
+                    "max_contracts_mini": 3,
+                    "max_contracts_micro": 30,
+                    "min_payout_amount": 500.0,
+                    # @verbatim (50k) "Maximum payout per request: $2,000"
+                    "payout_cap_per_cycle": 2_000.0,
+                },
+            },
+            "mll_moves_to_after_first_payout": 100.0,
+            "eval_consistency_rule": 0.50,  # evaluation stage only
+            "payout_consistency_rule": None,  # "Consistency rule during payout stage: None"
+            # payout_cap_per_cycle is SIZE-SPECIFIC (25k=$1,000, 50k=$2,000) and
+            # lives in by_size above — NOT a single flat value. See verbatim
+            # "Maximum payout per request" in mffu_flex_25k.md / mffu_flex_50k.md.
+            "payout_pct_of_profits": 0.50,  # withdraw up to 50% of total profits per payout
+            "max_sim_payouts": 5,
+            "total_sim_payout_cap": 100_000.0,
+            "winning_days_required": 5,
+            "scaled_contract_ladder": True,  # contracts scale with balance (see verbatim source)
+            "news_restriction": False,
+            "intraday_soft_pause": 1_000.0,
+        },
+        notes=(
+            "FLEX PLAN ($25k/$50k). EOD trailing, MLL→$100 fixed after first payout, 80/20, "
+            "size-specific payout cap ($1K 25k / $2K 50k; 50% of profits), "
+            "5 sim payouts ($100K total cap), 50% consistency "
+            "EVAL-ONLY, scaled contract ladder, $1K intraday soft pause, news allowed. "
+            "Source: help.myfundedfutures.com Flex 25k/50k articles (scraped 2026-05-31)."
         ),
     ),
     "tradeify": PropFirmSpec(
@@ -396,10 +528,39 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     ("topstep", 100_000): PropFirmAccount("topstep", 100_000, 3_000, 10, 100),
     ("topstep", 150_000): PropFirmAccount("topstep", 150_000, 4_500, 15, 150),
     # MFFU Rapid (intraday trailing sim, EOD live). 90/10 split. Official: article 13134709.
-    # Live contracts REDUCED: 4/40, 6/60, 8/80 (official: article 13134718).
+    # Contract caps are the SIM-FUNDED ladder (the sim account is what the survival model
+    # and book-builder reason about), VERBATIM from the per-size Rapid Sim Funded articles
+    # (scraped 2026-05-31): 25k=3/30, 50k=5/50, 100k=10/100, 150k=15/150.
+    # @canonical-source docs/research-input/mffu/mffu_rapid_25k.md
+    # @canonical-source docs/research-input/mffu/mffu_rapid_50k.md
+    # @canonical-source docs/research-input/mffu/mffu_rapid_100k.md
+    # @canonical-source docs/research-input/mffu/mffu_rapid_150k.md
+    # @verbatim (100k) "Max Contracts: 10 minis / 100 micros"
+    # @verbatim (150k) "Max Contracts: 15 minis / 150 micros"
+    # FIX 2026-05-31: 100k was 6/60 and 150k was 8/80 — those are the LIVE-FUNDED reduced
+    # ladder (article 13134718), NOT the sim-funded caps. The repo encoded the wrong ladder
+    # for the sim account. 50k (5/50) was already correct. The live-funded reduced ladder
+    # belongs in firm_specific_rules.live_contract_ladder when a live deploy check is built.
+    ("mffu", 25_000): PropFirmAccount("mffu", 25_000, 1_000, 3, 30),
     ("mffu", 50_000): PropFirmAccount("mffu", 50_000, 2_000, 5, 50),
-    ("mffu", 100_000): PropFirmAccount("mffu", 100_000, 3_000, 6, 60),
-    ("mffu", 150_000): PropFirmAccount("mffu", 150_000, 4_500, 8, 80),
+    ("mffu", 100_000): PropFirmAccount("mffu", 100_000, 3_000, 10, 100),
+    ("mffu", 150_000): PropFirmAccount("mffu", 150_000, 4_500, 15, 150),
+    # MFFU Builder ($50k only). EOD trailing. Two MLL options → two tier keys.
+    # @canonical-source docs/research-input/mffu/mffu_builder_50k.md (article 14290805)
+    # @verbatim "Max Contracts: 4 Minis / 40 Micros"
+    # @verbatim "Max EOD Drawdown (MLL): $2,000 (Default) / $1,500 (Add-On)"
+    ("mffu_builder", 50_000): PropFirmAccount("mffu_builder", 50_000, 2_000, 4, 40),
+    # Add-On MLL variant: identical plan/contracts, tighter $1,500 drawdown.
+    # Use this tier key when the user has purchased the Add-On MLL option.
+    ("mffu_builder_addon", 50_000): PropFirmAccount("mffu_builder_addon", 50_000, 1_500, 4, 40),
+    # MFFU Flex ($25k/$50k). EOD trailing. Contract caps are the TOP of the scaled ladder
+    # (full balance); the scaled ladder lives in firm_specific_rules. MLL per size.
+    # @canonical-source docs/research-input/mffu/mffu_flex_25k.md
+    # @canonical-source docs/research-input/mffu/mffu_flex_50k.md
+    # @verbatim (50k) "Maximum contracts: 3 minis or 30 micros"  "Maximum loss limit (end of day): $2,000"
+    # @verbatim (25k) "Maximum contracts: 2 minis or 20 micros"  "Maximum loss limit (end of day): $1,000"
+    ("mffu_flex", 25_000): PropFirmAccount("mffu_flex", 25_000, 1_000, 2, 20),
+    ("mffu_flex", 50_000): PropFirmAccount("mffu_flex", 50_000, 2_000, 3, 30),
     # Tradeify Select: verified 2026-04-01 via saveonpropfirms.com/blog/tradeify-select-guide
     # Prior values ($4K/$6K on 100K/150K) were from old Growth plan. Select = $2K/$3K/$4.5K.
     ("tradeify", 50_000): PropFirmAccount("tradeify", 50_000, 2_000, 4, 40),

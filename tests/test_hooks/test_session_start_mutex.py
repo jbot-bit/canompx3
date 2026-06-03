@@ -383,6 +383,153 @@ class TestSessionLockMutex:
 
 
 # ---------------------------------------------------------------------------
+# Session-boundary normalization — `source` (official) vs `session_type` (legacy)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionBoundaryRouting:
+    """Regression for the 2026-06-01 reaper-skip bug.
+
+    The SessionStart hook contract's field is `source`
+    (startup/resume/clear/compact). An older read keyed `main()`'s top-level
+    branch on the LEGACY `session_type` only, defaulting to "startup" when
+    absent. A real `/clear` sends `source:"clear"` but often omits
+    `session_type`, so it routed into the cold-start concurrency HARD-BLOCK
+    (`sys.exit(2)`) and never reached the stale-process reaper — at the exact
+    highest-accumulation moment the reaper exists for.
+
+    These tests pin the normalization so the two fields can never diverge
+    again. They run `main()` in-process (stdin/exit stubbed), no subprocess —
+    matching this module's CI-safety constraint (see module docstring).
+    """
+
+    def _run_main(self, hook: ModuleType, monkeypatch: pytest.MonkeyPatch, payload: dict) -> int:
+        """Invoke the hook's `main()` with `payload` on stdin, return its exit code.
+
+        Every side-effecting surfacer below the routing branch is neutralized
+        so the test asserts ONLY the routing/branch decision (which `sys.exit`
+        path is taken), not downstream behaviour. The reaper itself is stubbed
+        to a sentinel line so we can assert it was reached.
+        """
+        import io
+
+        monkeypatch.setattr(hook.sys, "stdin", io.StringIO(json.dumps(payload)), raising=True)
+        # NOTE: `_session_lock_lines` is deliberately NOT stubbed here — each test
+        # sets it explicitly (block vs pass) BEFORE calling _run_main, because
+        # whether the startup branch hard-blocks is exactly what some tests assert.
+        # The lease/sibling gates ARE neutralized — they are not under test and a
+        # clean tmp tree must not block for an unrelated reason.
+        monkeypatch.setattr(hook, "_worktree_lease_lines", lambda sid: ([], False), raising=True)
+        monkeypatch.setattr(hook, "_active_sibling_lines", lambda: ([], False), raising=True)
+        # Stub every context surfacer to empty so output is deterministic.
+        for fn in (
+            "_task_route_lines",
+            "_superpower_lines",
+            "_legacy_startup_lines",
+            "_live_heartbeat_lines",
+            "_origin_drift_lines",
+            "_env_drift_lines",
+            "_action_queue_ready_lines",
+            "_parallel_session_lines",
+            "_startup_packet_lines",
+            "_crg_context_lines",
+            "_literature_corpus_lines",
+            "_main_ci_status_lines",
+            "_stale_mcp_server_lines",
+            "_handoff_next_step_line",
+        ):
+            if hasattr(hook, fn):
+                # _superpower_lines takes one arg; others take none — accept *a.
+                monkeypatch.setattr(hook, fn, lambda *a, **k: [], raising=True)
+        reaper_calls: list[bool] = []
+
+        def _stub_reaper() -> list[str]:
+            reaper_calls.append(True)
+            return ["  Process reaper (dry-run): stub"]
+
+        monkeypatch.setattr(hook, "_stale_process_reaper_lines", _stub_reaper, raising=True)
+        self._reaper_calls = reaper_calls
+
+        code: dict[str, int] = {}
+
+        def _fake_exit(n: int = 0) -> None:
+            code["n"] = n
+            raise SystemExit(n)
+
+        monkeypatch.setattr(hook.sys, "exit", _fake_exit, raising=True)
+        try:
+            hook.main()
+        except SystemExit:
+            pass
+        return code.get("n", 0)
+
+    def test_clear_via_source_only_does_not_hit_startup_block(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Real /clear payload: `source:"clear"`, NO `session_type`.
+
+        Must route to the clear branch (exit 0) and REACH the reaper — NOT the
+        startup hard-block. This is the exact bug this test class guards.
+        """
+        hook = _load_hook(monkeypatch, tmp_path)
+        # Force the startup mutex to block IF reached — proves we don't reach it.
+        monkeypatch.setattr(hook, "_session_lock_lines", lambda: (["BLOCKED"], True), raising=True)
+
+        rc = self._run_main(hook, monkeypatch, {"hook_event_name": "SessionStart", "source": "clear"})
+
+        assert rc == 0, "/clear must not take the startup hard-block exit(2)"
+        assert self._reaper_calls == [True], "/clear must reach the stale-process reaper"
+
+    def test_resume_via_source_only_reaches_reaper(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        hook = _load_hook(monkeypatch, tmp_path)
+        monkeypatch.setattr(hook, "_session_lock_lines", lambda: (["BLOCKED"], True), raising=True)
+
+        rc = self._run_main(hook, monkeypatch, {"hook_event_name": "SessionStart", "source": "resume"})
+
+        assert rc == 0
+        assert self._reaper_calls == [True], "/resume must reach the reaper"
+
+    def test_startup_source_still_enforces_concurrency_block(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The startup mutex MUST stay intact: a cold start with a held lock
+        still hard-blocks (exit 2) and never reaches the reaper.
+        """
+        hook = _load_hook(monkeypatch, tmp_path)
+        monkeypatch.setattr(hook, "_session_lock_lines", lambda: (["BLOCKED"], True), raising=True)
+
+        rc = self._run_main(hook, monkeypatch, {"hook_event_name": "SessionStart", "source": "startup"})
+
+        assert rc == 2, "startup with a held lock must hard-block"
+        assert self._reaper_calls == [], "blocked startup must NOT reach the reaper"
+
+    def test_compact_source_skips_reaper(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Compaction is mid-session — the reaper must be skipped so the live
+        session's own freshly-spawned MCP servers are never disturbed.
+        """
+        hook = _load_hook(monkeypatch, tmp_path)
+
+        rc = self._run_main(hook, monkeypatch, {"hook_event_name": "SessionStart", "source": "compact"})
+
+        assert rc == 0
+        assert self._reaper_calls == [], "compact must NOT run the reaper"
+
+    def test_legacy_session_type_still_honored_when_no_source(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Back-compat: an older harness sending only `session_type` (no
+        `source`) must still route correctly — clear → reaper.
+        """
+        hook = _load_hook(monkeypatch, tmp_path)
+        monkeypatch.setattr(hook, "_session_lock_lines", lambda: (["BLOCKED"], True), raising=True)
+
+        rc = self._run_main(hook, monkeypatch, {"hook_event_name": "SessionStart", "session_type": "clear"})
+
+        assert rc == 0
+        assert self._reaper_calls == [True]
+
+
+# ---------------------------------------------------------------------------
 # _action_queue_ready_lines — surfacer for stale `status: ready` items
 # ---------------------------------------------------------------------------
 

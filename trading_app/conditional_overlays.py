@@ -23,6 +23,7 @@ from trading_app.derived_state import (
     get_git_head,
     validate_state_envelope,
 )
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM  # used at line 83
 from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +80,7 @@ PR48_MGC_CONT_EXEC_V1 = ConditionalOverlaySpec(
     feature_family="rel_vol_session",
     breakpoint_artifact_path=PROJECT_ROOT / "research" / "output" / "pr48_mes_mgc_sizer_rule_breakpoints_v1.csv",
     size_map={1: 0.0, 2: 0.5, 3: 1.0, 4: 1.5, 5: 2.0},
-    holdout_frozen_from="2026-01-01",
+    holdout_frozen_from=HOLDOUT_SACRED_FROM.isoformat(),
     notes="PR48 MGC continuous-exec frozen rel-vol sizer, shadow-only Phase 1 carrier.",
 )
 

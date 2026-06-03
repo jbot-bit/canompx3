@@ -1,0 +1,359 @@
+# Research Grounding — Source Manifest
+#
+# SINGLE SOURCE OF TRUTH for literature-source provenance verification.
+# Read by BOTH:
+#   - pipeline/check_drift.py :: check_literature_source_integrity (the gate)
+#   - docs/audit/research_grounding_gap_ledger.md (the human-facing ledger)
+#
+# Why machine-readable (not prose): the drift check and the ledger must agree on
+# every source's status. A markdown prose ledger forced fragile key-matching
+# (stub label -> ledger row). This YAML is the key. Each `source_id` is stable;
+# the ledger references the same ids.
+#
+# Grounding doctrine (CLAUDE.md § Local Academic / Project-Source Grounding;
+# RESEARCH_RULES § Discovery Layer Discipline):
+#   retrieval (we have the extract) != verification (the cited source is present).
+#   A source absent from disk is UNSUPPORTED, never "probably fine".
+#
+# FIELD CONTRACT
+#   source_id          : stable slug; ledger + check key on this.
+#   extract_files      : list of grounding extracts that cite this source.
+#                        (literature/ is canonical; chatgpt_bundle/LIT_* is a
+#                         parallel bundle copy of the same Source: convention.)
+#   expected_resource  : the filename (under resources/) or URL the extract cites.
+#                        For multi-edition sources the per-extract value is noted
+#                        in `notes`; expected_resource is the canonical citation.
+#   source_tier        : peer-reviewed | unreviewed-preprint | book | web | derived
+#   tracked            : is `expected_resource` committed to git? (y/n)
+#                        n = local-only PDF (copyright/size); NOT gitignored, just
+#                        never committed. CI clones will NOT have it -> CI-safe
+#                        mode must not require it.
+#   ci_verifiable      : can a fresh CI clone verify this row WITHOUT the binary?
+#                        y when the claim resolves to a tracked artifact (extract,
+#                        URL provenance, or another tracked extract).
+#   gap_id             : PASS-1 audit gap id, or null when fully grounded.
+#   status             : VERIFIED_LOCAL  - RUNTIME-ONLY: PDF present on disk HERE and
+#                                          fitz page-count matches. NEVER a committed
+#                                          status for an untracked PDF (it would assert
+#                                          a verification a CI clone cannot reproduce).
+#                                          strict-local emits this as a runtime result;
+#                                          the check FAILS a committed VERIFIED_LOCAL
+#                                          whose PDF is absent on disk.
+#                        WEB_DERIVED      - source is a URL; provenance recorded in extract
+#                        STUB_LEDGERED    - extract is a known stub; ledgered, not silent
+#                        MISSING_LOCAL    - PDF cited but absent from this checkout (located
+#                                          elsewhere / untracked). The honest COMMITTED status
+#                                          for an untracked PDF, even one verified locally.
+#                        DERIVED_NOTE     - extract derives from another tracked extract, not a PDF
+#                        UNSUPPORTED      - no source located anywhere (none currently)
+#
+# STATUS NOTE (this worktree): resources/ here carries ZERO committed PDFs (the
+# ~17-PDF institutional library is local-only on the main checkout, never
+# committed). So in a fresh clone every PDF-backed row is `tracked: n` and absent.
+# The committed status for such rows is MISSING_LOCAL — including G1-G3, which were
+# located + fitz-verified locally and copied into resources/ (untracked). Their
+# local verification is recorded in notes + the gap ledger CLOSED table; strict-local
+# UPGRADES them to a runtime verified-PASS when the PDF is present. A committed
+# VERIFIED_LOCAL is reserved for a tracked (committed) PDF only.
+
+sources:
+  # ----- Multiple-testing / overfitting corpus (peer-reviewed + book) -----
+  - source_id: benjamini_hochberg_1995_fdr
+    extract_files:
+      - docs/institutional/literature/benjamini_hochberg_1995_fdr.md
+      - chatgpt_bundle/LIT_benjamini_hochberg_1995_fdr.md
+    expected_resource: resources/benjamini-and-Hochberg-1995-fdr.pdf
+    source_tier: peer-reviewed
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+    notes: >
+      JSTOR scan, 13 PDF pages = journal pp. 289-300. PDF present on main
+      checkout, not committed. CI-safe verifies extract+manifest consistency.
+
+  - source_id: chordia_2018_two_million
+    extract_files:
+      - docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
+      - chatgpt_bundle/LIT_chordia_2018_two_million_t379.md
+    expected_resource: resources/Two_Million_Trading_Strategies_FDR.pdf
+    source_tier: peer-reviewed
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+    notes: Source of the t>=3.79 empirical multiple-testing bound.
+
+  - source_id: bailey_2013_pseudo_mathematics
+    extract_files:
+      - docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md
+      - chatgpt_bundle/LIT_bailey_2013_pseudo_math_minBTL.md
+    expected_resource: resources/Pseudo-mathematics-and-financial-charlatanism.pdf
+    source_tier: peer-reviewed
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+    notes: MinBTL bound (caps brute-force at <=300 trials).
+
+  - source_id: bailey_lopez_de_prado_2014_deflated_sharpe
+    extract_files:
+      - docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md
+      - docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md
+      - chatgpt_bundle/LIT_bailey_lopez_2014_deflated_sharpe.md
+    expected_resource: resources/deflated-sharpe.pdf
+    source_tier: peer-reviewed
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+    notes: One PDF, three extracts (DSR + sample-selection facets).
+
+  - source_id: lopez_de_prado_bailey_2018_false_strategy
+    extract_files:
+      - docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md
+    expected_resource: resources/false-strategy-lopez.pdf
+    source_tier: peer-reviewed
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+
+  - source_id: harvey_liu_2015_backtesting
+    extract_files:
+      - docs/institutional/literature/harvey_liu_2015_backtesting.md
+      - chatgpt_bundle/LIT_harvey_liu_2015_backtesting_haircut.md
+    expected_resource: resources/backtesting_dukepeople_liu.pdf
+    source_tier: peer-reviewed
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+
+  - source_id: harvey_liu_zhu_2015_cross_section
+    extract_files:
+      - docs/institutional/literature/harvey_liu_zhu_2015_cross_section.md
+    expected_resource: docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
+    source_tier: derived
+    tracked: y
+    ci_verifiable: y
+    gap_id: G4
+    status: DERIVED_NOTE
+    notes: >
+      Not a PDF-backed extract. Quotes Chordia 2018 p5 verbatim via the tracked
+      chordia extract. Grounding resolves to a tracked file -> CI-verifiable.
+
+  - source_id: aronson_2007_ebta
+    extract_files:
+      - docs/institutional/literature/aronson_2007_ebta_data_snooping.md
+      - chatgpt_bundle/LIT_aronson_2007_ebta_data_snooping.md
+    expected_resource: resources/Evidence_Based_Technical_Analysis_Aronson.pdf
+    source_tier: book
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+    notes: 544 PDF pages.
+
+  - source_id: lopez_de_prado_2020_ml_for_asset_managers
+    extract_files:
+      - docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md
+      - chatgpt_bundle/LIT_lopez_2020_ml_asset_managers.md
+    expected_resource: resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf
+    source_tier: book
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+
+  # ----- Method / microstructure / sizing books -----
+  - source_id: chan_2013_algorithmic_trading
+    extract_files:
+      - docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md
+      - docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+      - docs/institutional/literature/chan_2013_ch5_currencies_futures_meanreversion.md
+      - docs/institutional/literature/chan_2013_toc_determination.md
+      - chatgpt_bundle/LIT_chan_2013_ch1_backtesting_invariant.md
+    expected_resource: resources/Algorithmic_Trading_Chan.pdf
+    source_tier: book
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+    notes: One PDF, multiple chapter extracts with page ranges (pp.1-37, 155-168).
+
+  - source_id: chan_2008_quantitative_trading
+    extract_files:
+      - docs/institutional/literature/chan_2008_ch7_regime_switching.md
+      - docs/institutional/literature/chan_2009_ch1_intraday_session_handling.md
+    expected_resource: resources/Quantitative_Trading_Chan_2008.pdf
+    source_tier: book
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+
+  - source_id: harris_2002_microstructure
+    extract_files:
+      - docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md
+      - chatgpt_bundle/LIT_harris_2002_microstructure.md
+    expected_resource: resources/Harris_Trading_Exchanges_Market_Microstructure.pdf
+    source_tier: book
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+    notes: >
+      TWO editions on disk: 620KB March-2002 draft (113pp, cited by the bundle
+      extract) and 41MB OCR'd hardcover (656pp, cited by the literature extract).
+      expected_resource is the draft filename; the OCR variant
+      (Harris_Trading_Exchanges_Market_Microstructure.ocr.pdf) is the
+      literature-extract source. Both extract-specific page cites are internally
+      consistent with their own declared edition -> not a mismatch.
+
+  - source_id: carver_2015_systematic_trading
+    extract_files:
+      - docs/institutional/literature/carver_2015_ch11_portfolios.md
+      - docs/institutional/literature/carver_2015_ch12_speed_and_size.md
+      - docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+    expected_resource: resources/Robert Carver - Systematic Trading.pdf
+    source_tier: book
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+
+  - source_id: fitschen_2013_building_reliable
+    extract_files:
+      - docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+      - chatgpt_bundle/LIT_fitschen_2013_orb_premise.md
+    expected_resource: resources/Building_Reliable_Trading_Systems.pdf
+    source_tier: book
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+    notes: ORB premise (path of least resistance).
+
+  - source_id: pepelyshev_polunchenko_2015_cusum_sr
+    extract_files:
+      - docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md
+    expected_resource: resources/real_time_strategy_monitoring_cusum.pdf
+    source_tier: peer-reviewed
+    tracked: n
+    ci_verifiable: y
+    gap_id: null
+    status: MISSING_LOCAL
+
+  # ----- G1-G3: located-but-uncommitted source PDFs (close in strict-local) -----
+  - source_id: howard_2026_value_area_breakouts_es
+    extract_files:
+      - docs/institutional/literature/howard_2026_value_area_breakouts_es.md
+      - chatgpt_bundle/LIT_howard_2026_value_area_breakouts_es.md
+    expected_resource: resources/Howard_2026_Value_Area_Breakouts_ES.pdf
+    source_tier: unreviewed-preprint
+    tracked: n
+    ci_verifiable: y
+    gap_id: G1
+    status: MISSING_LOCAL
+    expected_pages: 23
+    located_at: "~/Downloads/ssrn-6350238 (1).pdf (and ssrn-6350238.pdf), both 23pp"
+    notes: >
+      SSRN id 6350238, March 2026. NOT peer-reviewed (value-area corpus, t>=3.79
+      gate, theory_grant:false). Located + fitz-verified 23pp == declared 23 and
+      COPIED into resources/ under the cited filename. The PDF stays UNTRACKED
+      (copyright/size) so it is ABSENT in a fresh clone -> committed status is
+      MISSING_LOCAL (the CI-truth), NOT VERIFIED_LOCAL: a committed VERIFIED_LOCAL
+      would assert a verification a CI run cannot reproduce. strict-local UPGRADES
+      this to a runtime verified-PASS when the PDF is present and page-matches.
+      Ledger G1 = CLOSED (local verification done).
+
+  - source_id: tolusic_2026_amt_inventory_dynamics
+    extract_files:
+      - docs/institutional/literature/tolusic_2026_amt_inventory_dynamics.md
+      - chatgpt_bundle/LIT_tolusic_2026_amt_inventory_dynamics.md
+    expected_resource: resources/Tolusic_2026_AMT_Inventory_Dynamics.pdf
+    source_tier: unreviewed-preprint
+    tracked: n
+    ci_verifiable: y
+    gap_id: G2
+    status: MISSING_LOCAL
+    expected_pages: 15
+    located_at: "~/Downloads/ssrn-6616280 (1).pdf (and ssrn-6616280.pdf), both 15pp"
+    notes: >
+      SSRN id 6616280, April 2026. NOT peer-reviewed. Located + fitz-verified 15pp
+      == declared 15 and COPIED into resources/. Untracked -> committed status is
+      MISSING_LOCAL (CI-truth); strict-local upgrades to a verified-PASS at runtime
+      when present. Ledger G2 = CLOSED.
+
+  - source_id: lopez_de_prado_2018_afml
+    extract_files:
+      - docs/institutional/literature/lopez_de_prado_2018_afml_ch_3_7_8.md
+      - chatgpt_bundle/LIT_lopez_de_prado_2018_afml.md
+    expected_resource: resources/Advances_in_Financial_Machine_Learning_Lopez_de_Prado_2018.pdf
+    source_tier: book
+    tracked: n
+    ci_verifiable: y
+    gap_id: G3
+    status: MISSING_LOCAL
+    expected_pages: 393
+    located_at: "~/Downloads/Advances in Financial Machine Learning.pdf (393pp full book)"
+    notes: >
+      FULL Wiley book (393pp). The Downloads stub variant
+      (457059985-Advances-in-Financial-Machine-Learning-b.pdf) is only 3pp -> the
+      plan's "not the sampler" trap; do NOT use it. Located + fitz-verified 393pp
+      == declared 393 and COPIED into resources/ under the cited filename.
+      Untracked -> committed status MISSING_LOCAL (CI-truth); strict-local upgrades
+      to a verified-PASS at runtime when present. Ledger G3 = CLOSED.
+
+  # ----- Web-derived sources (URL provenance, no downloadable artifact) -----
+  - source_id: yordanov_2026_nq_orb
+    extract_files:
+      - docs/institutional/literature/yordanov_2026_nq_orb_value_area_breakouts.md
+    expected_resource: https://researchpaperfilteropen.vercel.app/
+    source_tier: web
+    tracked: y
+    ci_verifiable: y
+    gap_id: G5
+    status: WEB_DERIVED
+    notes: >
+      Web working paper, no DOI. HTML retrieved 2026-05-07; 17/17 load-bearing
+      claims re-verified against source text (recorded in extract). NOT
+      peer-reviewed. Dynamic page (revisable) -> extracted state fixed at capture.
+      Grounding is the extract+provenance, not a fetchable artifact.
+
+  - source_id: topstep_2026_amt_intro
+    extract_files:
+      - docs/institutional/literature/topstep_2026_auction_market_theory_intro.md
+    expected_resource: https://www.topstep.com/blog/intro-to-auction-market-theory-and-market-profile/
+    source_tier: web
+    tracked: y
+    ci_verifiable: y
+    gap_id: G5
+    status: WEB_DERIVED
+    notes: Corporate blog, no individual byline; retrieved via WebFetch 2026-05-07.
+
+# ---------------------------------------------------------------------------
+# OUT-OF-SCOPE FOR PDF VERIFICATION (enumerated, NOT silently excluded).
+# These surfaces ARE grounding surfaces but do not carry a `Source: resources/*.pdf`
+# convention to verify against a binary. Recorded here so a green check never
+# implies they were PDF-verified. See ledger § "Enumerated grounding surfaces".
+out_of_scope:
+  - surface: docs/institutional/literature/PENDING_ACQUISITION_market_profile.md
+    reason: >
+      Acquisition-tracking doc, not an extract. Has no own Source: line. The
+      check skips files without a Source: line (so it is not a false MISSING).
+  - surface: docs/audit/hypotheses/*.yaml (authority blocks)
+    reason: >
+      219 prereg files. Their *_authority: keys point at OTHER repo paths
+      (intra-repo provenance), and they cite literature only by author surname
+      inline. No `resources/*.pdf` to verify. Author->extract grounding is
+      captured by the rows above; config-value provenance is enforced separately
+      by drift #45 (@research-source). Boundary is explicit, not a silence.
+  - surface: inline author-name cites in docs/STRATEGY_BLUEPRINT.md, TRADING_RULES.md,
+      mechanism_priors.md, RESEARCH_RULES.md, chatgpt_bundle/00_INDEX.md, 01_OPERATING_RULES.md
+    reason: >
+      Prose cites by surname (Carver, Fitschen, Chordia, Bailey...). PASS-2 task F
+      adds the missing literature/ cross-links (G7/G8) so a reader can resolve the
+      surname to its extract row above. PDF verification of prose is out of scope;
+      grounding resolves through the named extract.

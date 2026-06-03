@@ -661,6 +661,156 @@ def test_action_start_blocks_when_no_broker_connection(monkeypatch):
     assert result["connection_readiness"]["action"] == "open_connections"
 
 
+def test_action_start_pins_single_copy_live_pilot_command(monkeypatch, tmp_path):
+    bot_dashboard._clear_handoff()
+    bot_dashboard._bg_processes.pop("session", None)
+    bot_dashboard._bg_processes.pop("_session_logfile", None)
+    captured: dict[str, list[str]] = {}
+
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "STOPPED",
+            "heartbeat_age_s": 9999.0,
+            "profile": None,
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_data_status",
+        lambda: {"status": "ok", "any_stale": False, "instruments": {}},
+    )
+    monkeypatch.setattr(bot_dashboard, "_collect_broker_status", lambda: dict(_CONNECTED_BROKER_SUMMARY))
+
+    async def fake_prepare(profile, mode="live"):
+        return {"status": "pass", "output": "preflight ok"}
+
+    monkeypatch.setattr(bot_dashboard, "_prepare_profile_for_start", fake_prepare)
+    monkeypatch.setattr(bot_dashboard, "_ensure_log_dir", lambda: tmp_path)
+
+    class FakePopen:
+        pid = 4242
+
+        def __init__(self, cmd, **_kw):
+            captured["cmd"] = list(cmd)
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(bot_dashboard.subprocess, "Popen", FakePopen)
+
+    result = asyncio.run(bot_dashboard.action_start(profile="topstep_50k_mnq_auto", mode="live"))
+
+    assert result["status"] == "started"
+    assert "--live" in captured["cmd"]
+    assert "--auto-confirm" in captured["cmd"]
+    assert "--instrument" in captured["cmd"]
+    assert "MNQ" in captured["cmd"]
+    assert "--copies" in captured["cmd"]
+    assert "1" in captured["cmd"]
+    assert "--signal-only" not in captured["cmd"]
+
+    log_file = bot_dashboard._bg_processes.pop("_session_logfile", None)
+    if log_file is not None:
+        log_file.close()
+    bot_dashboard._bg_processes.pop("session", None)
+
+
+def _patch_action_start_to_warn(monkeypatch, tmp_path) -> dict[str, list[str]]:
+    """Wire action_start mocks so readiness returns a WARN preflight status.
+
+    Returns the dict that captures the launched command (empty if blocked).
+    """
+    bot_dashboard._clear_handoff()
+    bot_dashboard._bg_processes.pop("session", None)
+    bot_dashboard._bg_processes.pop("_session_logfile", None)
+    captured: dict[str, list[str]] = {}
+
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "STOPPED",
+            "heartbeat_age_s": 9999.0,
+            "profile": None,
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_data_status",
+        lambda: {"status": "ok", "any_stale": False, "instruments": {}},
+    )
+    monkeypatch.setattr(bot_dashboard, "_collect_broker_status", lambda: dict(_CONNECTED_BROKER_SUMMARY))
+
+    async def fake_prepare(profile, mode="live"):
+        # A readiness WARN: returncode 0 but a check emitted WARN/SKIPPED.
+        return {"status": "warn", "output": "preflight: 1 WARN"}
+
+    monkeypatch.setattr(bot_dashboard, "_prepare_profile_for_start", fake_prepare)
+    monkeypatch.setattr(bot_dashboard, "_ensure_log_dir", lambda: tmp_path)
+
+    class FakePopen:
+        pid = 4343
+
+        def __init__(self, cmd, **_kw):
+            captured["cmd"] = list(cmd)
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(bot_dashboard.subprocess, "Popen", FakePopen)
+    return captured
+
+
+def test_action_start_live_blocks_on_preflight_warn(monkeypatch, tmp_path):
+    """Strict-zero-warn parity: a readiness WARN blocks a real-money launch.
+
+    Restores the gate the retired start_topstep_live_pilot.py enforced via
+    --strict-zero-warn. SKIPPED checks normalize to WARN, so this also covers
+    a silently-skipped readiness check sliding into live.
+    """
+    captured = _patch_action_start_to_warn(monkeypatch, tmp_path)
+
+    result = asyncio.run(bot_dashboard.action_start(profile="topstep_50k_mnq_auto", mode="live"))
+
+    assert result["status"] == "blocked"
+    assert "cmd" not in captured  # never launched
+    bot_dashboard._bg_processes.pop("session", None)
+    bot_dashboard._bg_processes.pop("_session_logfile", None)
+
+
+def _assert_non_live_mode_proceeds_on_warn(monkeypatch, tmp_path, mode: str) -> None:
+    """WARN is advisory for signal/demo — they place no live orders, so the
+    launch proceeds (a WARN must NOT block non-live modes)."""
+    captured = _patch_action_start_to_warn(monkeypatch, tmp_path)
+
+    result = asyncio.run(bot_dashboard.action_start(profile="topstep_50k_mnq_auto", mode=mode))
+
+    assert result["status"] == "started"
+    assert captured["cmd"], "expected a launched command for non-live mode on WARN"
+    assert "--live" not in captured["cmd"]
+
+    log_file = bot_dashboard._bg_processes.pop("_session_logfile", None)
+    if log_file is not None:
+        log_file.close()
+    bot_dashboard._bg_processes.pop("session", None)
+
+
+def test_action_start_signal_proceeds_on_preflight_warn(monkeypatch, tmp_path):
+    _assert_non_live_mode_proceeds_on_warn(monkeypatch, tmp_path, "signal")
+
+
+def test_action_start_demo_proceeds_on_preflight_warn(monkeypatch, tmp_path):
+    _assert_non_live_mode_proceeds_on_warn(monkeypatch, tmp_path, "demo")
+
+
 def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
     """Exercise _handoff_snapshot through every transition of the state machine.
 
@@ -731,6 +881,84 @@ def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
     assert snap["action"]["id"] == "continue_handoff"
     assert snap["target_mode"] == "demo"
 
+    bot_dashboard._clear_handoff()
+
+
+def _stub_idle_runtime(monkeypatch):
+    """No session running, no locks, no refresh — the orphaned-handoff scenario."""
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "STOPPED",
+            "heartbeat_age_s": 9999.0,
+            "profile": None,
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    monkeypatch.setattr(bot_dashboard, "_journal_lock_status", lambda: {"locked": False, "detail": "ok"})
+    monkeypatch.setattr(bot_dashboard, "_instance_lock_status", lambda: {"locked": False, "locks": []})
+
+
+def test_handoff_snapshot_auto_expires_orphaned_ready_to_start(monkeypatch):
+    """A ready_to_start handoff with no session/locks, older than the staleness
+    floor, must auto-clear so it stops blocking the start buttons forever.
+
+    Regression: 2026-06-02 a prior-night ready_to_start handoff blocked the LIVE
+    button for 11h until a manual dashboard restart.
+    """
+    bot_dashboard._clear_handoff()
+    bot_dashboard._set_handoff("topstep_50k_mnq_auto", "live", "initial")
+    _stub_idle_runtime(monkeypatch)
+    # Backdate requested_at well past the staleness floor.
+    stale_iso = (
+        bot_dashboard.datetime.now(bot_dashboard.UTC)
+        - bot_dashboard.timedelta(seconds=bot_dashboard.HANDOFF_STALE_AFTER_S + 60)
+    ).isoformat()
+    with bot_dashboard._state_lock:
+        bot_dashboard._handoff_state["requested_at"] = stale_iso
+
+    snap = bot_dashboard._handoff_snapshot(data_summary={"status": "ok", "any_stale": False, "instruments": {}})
+    assert snap["active"] is False
+    assert snap["status"] == "idle"
+    assert bot_dashboard._handoff_state["active"] is False
+    bot_dashboard._clear_handoff()
+
+
+def test_handoff_snapshot_keeps_fresh_handoff(monkeypatch):
+    """A recent handoff (within the staleness floor) must NOT be auto-cleared."""
+    bot_dashboard._clear_handoff()
+    bot_dashboard._set_handoff("topstep_50k_mnq_auto", "live", "initial")
+    _stub_idle_runtime(monkeypatch)
+    fresh_iso = bot_dashboard.datetime.now(bot_dashboard.UTC).isoformat()
+    with bot_dashboard._state_lock:
+        bot_dashboard._handoff_state["requested_at"] = fresh_iso
+
+    snap = bot_dashboard._handoff_snapshot(data_summary={"status": "ok", "any_stale": False, "instruments": {}})
+    assert snap["active"] is True
+    assert snap["status"] == "ready_to_start"
+    bot_dashboard._clear_handoff()
+
+
+def test_handoff_snapshot_does_not_expire_when_locked(monkeypatch):
+    """An old handoff that is still mid-cleanup (locks held) is NOT orphaned —
+    a real shutdown is in flight, so it must be preserved, not cleared."""
+    bot_dashboard._clear_handoff()
+    bot_dashboard._set_handoff("topstep_50k_mnq_auto", "live", "initial")
+    _stub_idle_runtime(monkeypatch)
+    monkeypatch.setattr(bot_dashboard, "_journal_lock_status", lambda: {"locked": True, "detail": "held by pid 1234"})
+    stale_iso = (
+        bot_dashboard.datetime.now(bot_dashboard.UTC)
+        - bot_dashboard.timedelta(seconds=bot_dashboard.HANDOFF_STALE_AFTER_S + 60)
+    ).isoformat()
+    with bot_dashboard._state_lock:
+        bot_dashboard._handoff_state["requested_at"] = stale_iso
+
+    snap = bot_dashboard._handoff_snapshot(data_summary={"status": "ok", "any_stale": False, "instruments": {}})
+    assert snap["active"] is True  # preserved — cleanup in flight
+    assert snap["status"] == "waiting_cleanup"
     bot_dashboard._clear_handoff()
 
 
@@ -808,15 +1036,8 @@ def test_preflight_helper_opens_no_duckdb_connection(monkeypatch):
     assert results["fill_poller"] is True
 
 
-def test_run_preflight_subprocess_omits_signal_only_in_live_mode(monkeypatch):
-    """Live preflight (default) must not pass --signal-only to the subprocess.
-
-    The dashboard's Start Live path and the ad-hoc Preflight button both rely
-    on live-mode preflight that exercises the full telemetry-maturity gate
-    (run_live_session.py:369-378). A regression that injects --signal-only
-    into live preflight would silently auto-pass that gate and break the
-    capital-class invariant the gate was added to enforce.
-    """
+def test_run_preflight_subprocess_pins_single_copy_live_pilot(monkeypatch):
+    """Live preflight must use the same effective config as dashboard launch."""
     captured: dict[str, list[str]] = {}
 
     def fake_run(cmd, **_kw):
@@ -829,6 +1050,11 @@ def test_run_preflight_subprocess_omits_signal_only_in_live_mode(monkeypatch):
 
     assert result["returncode"] == 0
     assert "--signal-only" not in captured["cmd"]
+    assert "--live" in captured["cmd"]
+    assert "--instrument" in captured["cmd"]
+    assert "MNQ" in captured["cmd"]
+    assert "--copies" in captured["cmd"]
+    assert "1" in captured["cmd"]
     assert "--preflight" in captured["cmd"]
     assert "topstep_50k_mnq_auto" in captured["cmd"]
 
@@ -886,6 +1112,53 @@ def test_prepare_profile_for_start_propagates_mode_to_subprocess(monkeypatch):
     assert captured["profile"] == "topstep_50k_mnq_auto"
     assert captured["mode"] == "signal"
     assert result["status"] != "error"
+
+
+def test_dashboard_live_pilot_copy_is_explicit_and_professional():
+    html = (bot_dashboard.PROJECT_ROOT / "trading_app" / "live" / "bot_dashboard.html").read_text(encoding="utf-8")
+
+    assert "HOLD TO GO LIVE" in html
+    assert 'id="btn-live-cta"' in html
+    assert "function updateLiveCta()" in html
+    assert "window.attachHoldToFireLive(btn, ring, btn, pilotAcct)" in html
+    assert "resetHoldToFireButton(btn)" in html
+    assert 'id="ops-strip"' in html
+    assert 'id="ops-running"' in html
+    assert 'id="ops-chart"' in html
+    assert 'id="ops-lanes"' in html
+    assert 'id="ops-accounts"' in html
+    assert "Lane Controls" in html
+    assert "/api/lane-control" in html
+    assert "toggleLane(" in html
+    assert 'data-tab="connections" onclick="switchTab(\'connections\')">Accounts</button>' in html
+    assert "pilot-contract" in html
+    assert "hero-pilot" in html
+    assert "NYSE parked" in html
+    assert "Topstep account &middot; one protected primary" in html
+    assert "Topstep account &middot; MNQ &middot; 1 copy &middot; real orders" in html
+    assert "Live pilot:</b> ${LIVE_PILOT_INSTRUMENT} &middot; 3 lanes" in html
+    assert "isLivePilotProfile(acct.profile_id)" in html
+    assert "not configured for this profile" in html
+    assert "Broker account pending" in html
+    assert "renderAccounts(lastAccountsData)" in html
+    assert "Refreshing. Wait." in html
+    assert "Show gate detail" in html
+    assert "Prop funded" in html
+    assert "Prop sim" in html
+    assert "Prop live" in html
+    assert "Self-funded" in html
+    assert "chartInstrumentLabel" in html
+    assert 'id="ops-chart-sub"' in html
+    assert "a.name || a.broker_display" in html
+    assert '<span class="btn-title">Demo</span><span class="btn-sub">Broker sandbox</span>' in html
+    assert "Demo broker orders." in html
+    assert "No chart data" in html
+    assert "Start signals" in html
+    assert '<span class="btn-title">Paper</span>' not in html
+    assert "Practice only" not in html
+    assert "Combine" not in html
+    assert "Broker Accounts" not in html
+    assert "🔒" not in html
 
 
 # --- live_health dashboard reader (Phase 2 read-only operator visibility) ---------------
@@ -1025,3 +1298,103 @@ def test_write_then_read_live_health_round_trips(tmp_path, monkeypatch):
     assert result["fill_poller_probe"] is False
     assert result["fill_polls_failed"] == 1
     assert "snapshot_ts_utc" in result  # writer stamps it
+
+
+# ── /api/status authoritative is_running + dead-state self-heal ──────────────
+# Regression: a signal/live session that died WITHOUT a clean STOPPED write
+# leaves bot_state.mode=SIGNAL forever, which used to latch the dashboard's
+# runningProfile and hide the Alerts/Demo/GO-LIVE controls behind a permanent
+# "Stop Session" button (2026-06-02). /api/status now exposes is_running from
+# the canonical _session_snapshot truth, and self-heals definitely-dead state.
+
+
+def _status_state_signal():
+    return {
+        "mode": "SIGNAL",
+        "account_name": "profile_topstep_50k_mnq_auto",
+        "heartbeat_utc": "2026-06-01T14:14:00+00:00",
+        "lanes": {},
+        "lane_cards": [],
+        "bars_received": 5,
+    }
+
+
+def test_api_status_is_running_true_when_session_alive(monkeypatch):
+    monkeypatch.setattr(bot_dashboard, "read_state", _status_state_signal)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": True,
+            "raw_mode": "SIGNAL",
+            "heartbeat_age_s": 10.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": True,
+        },
+    )
+    cleared = {"called": False}
+    monkeypatch.setattr("trading_app.live.bot_state.clear_state", lambda: cleared.__setitem__("called", True))
+
+    result = asyncio.run(bot_dashboard.api_status())
+
+    assert result["is_running"] is True
+    assert cleared["called"] is False  # alive session never cleared
+
+
+def test_api_status_is_running_false_on_stale_but_not_dead(monkeypatch):
+    # 200s stale: past HEARTBEAT_STALE_AFTER_S (120, so not running / button
+    # hidden) but BELOW SESSION_DEFINITELY_DEAD_AFTER_S (300) — must NOT clear
+    # state. A briefly-unresponsive LIVE session must keep its state intact.
+    monkeypatch.setattr(bot_dashboard, "read_state", _status_state_signal)
+    monkeypatch.setattr(bot_dashboard, "_heartbeat_age_s", lambda _state: 200.0)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "SIGNAL",
+            "heartbeat_age_s": 200.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": False,
+        },
+    )
+    cleared = {"called": False}
+    monkeypatch.setattr("trading_app.live.bot_state.clear_state", lambda: cleared.__setitem__("called", True))
+
+    result = asyncio.run(bot_dashboard.api_status())
+
+    assert result["is_running"] is False  # controls re-appear
+    assert cleared["called"] is False  # but state preserved (not definitely dead)
+
+
+def test_api_status_self_heals_definitely_dead_state(monkeypatch):
+    # 466s stale + no tracked process = definitely dead → clear_state fires,
+    # and the post-clear read returns the STOPPED fallback with is_running False.
+    states = [_status_state_signal()]  # first read sees stale state, then cleared
+
+    def _read():
+        return states[0]
+
+    def _clear():
+        states[0] = {}  # simulate the file being unlinked
+
+    monkeypatch.setattr(bot_dashboard, "read_state", _read)
+    monkeypatch.setattr(bot_dashboard, "_heartbeat_age_s", lambda _state: 466.0)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "SIGNAL" if states[0] else "STOPPED",
+            "heartbeat_age_s": 466.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr("trading_app.live.bot_state.clear_state", _clear)
+
+    result = asyncio.run(bot_dashboard.api_status())
+
+    assert result["mode"] == "STOPPED"  # post-clear fallback
+    assert result["is_running"] is False
+    assert states[0] == {}  # state was actively cleared

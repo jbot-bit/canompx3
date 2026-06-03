@@ -1,0 +1,107 @@
+{
+  "baselines": {
+    "core_lane": {
+      "all": {
+        "mean_r": 0.088315,
+        "n": 5354,
+        "total_r": 472.8381,
+        "win_rate": 0.480575
+      },
+      "holdout": {
+        "mean_r": 0.119438,
+        "n": 257,
+        "total_r": 30.6955,
+        "win_rate": 0.474708
+      },
+      "train": {
+        "mean_r": 0.086746,
+        "n": 5097,
+        "total_r": 442.1426,
+        "win_rate": 0.480871
+      }
+    },
+    "naive": {
+      "all": {
+        "mean_r": -0.068063,
+        "n": 1742,
+        "total_r": -118.5661,
+        "win_rate": 0.504592
+      },
+      "holdout": {
+        "mean_r": 0.008462,
+        "n": 84,
+        "total_r": 0.7108,
+        "win_rate": 0.535714
+      },
+      "train": {
+        "mean_r": -0.07194,
+        "n": 1658,
+        "total_r": -119.2769,
+        "win_rate": 0.503016
+      }
+    },
+    "trend": {
+      "all": {
+        "mean_r": 0.070261,
+        "n": 1742,
+        "total_r": 122.3942,
+        "win_rate": 0.471871
+      },
+      "holdout": {
+        "mean_r": 0.087239,
+        "n": 84,
+        "total_r": 7.3281,
+        "win_rate": 0.464286
+      },
+      "train": {
+        "mean_r": 0.069401,
+        "n": 1658,
+        "total_r": 115.0661,
+        "win_rate": 0.472256
+      }
+    }
+  },
+  "benchmark_set": [
+    "naive",
+    "trend",
+    "core_lane"
+  ],
+  "constraints": {
+    "all_failed_controls_included": true,
+    "fixed_cost_model": "fixed_commission_slippage_v1",
+    "fixed_date_split_declared_before_run": true,
+    "no_2026_holdout_selection_leakage": true,
+    "no_parameter_rescue": true
+  },
+  "controls": {
+    "cost_model": {
+      "id": "fixed_commission_slippage_v1",
+      "passed": true
+    },
+    "failed_controls": [],
+    "fixed_baselines": {
+      "passed": true,
+      "required": [
+        "naive",
+        "trend",
+        "core_lane"
+      ]
+    },
+    "fixed_split": {
+      "holdout_start": "2026-01-01",
+      "passed": true,
+      "train_end": "2025-12-31"
+    },
+    "holdout_leakage_guard": {
+      "passed": true,
+      "selection_date_lt": "2026-01-01"
+    },
+    "no_parameter_rescue": {
+      "note": "no optimizer or parameter override is exposed",
+      "passed": true
+    }
+  },
+  "generated_at": "2026-05-31T16:55:53.592072+00:00",
+  "schema_version": 1,
+  "source": "docs\\audit\\results\\2026-06-01-bounded-benchmark-input.csv"
+}

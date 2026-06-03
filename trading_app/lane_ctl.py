@@ -133,6 +133,22 @@ def resume_lane(profile_id: str, session_name: str) -> None:
         print(f"Lane {session_name} was not paused.")
 
 
+def resume_strategy_id(profile_id: str, strategy_id: str) -> bool:
+    """Resume a paused lane directly by strategy_id.
+
+    Returns True when an override was removed, False when the strategy was not
+    paused. This is used by dashboard/API callers that already have the
+    canonical strategy_id and should not go through the CLI-oriented
+    session-name path, which exits the process on unknown sessions.
+    """
+    overrides = _load_overrides(profile_id)
+    if strategy_id not in overrides:
+        return False
+    del overrides[strategy_id]
+    _save_overrides(profile_id, overrides)
+    return True
+
+
 def list_overrides(profile_id: str) -> None:
     """Show all active overrides for a profile."""
     overrides = _load_overrides(profile_id)

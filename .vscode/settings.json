@@ -18,6 +18,34 @@
         "**/__pycache__": true,
         "venv": true,
         ".venv": true,
+        ".venv-wsl": true,
+        ".worktrees": true,
+        "data": true,
+        ".ruff_cache": true,
+        ".pytest_cache": true,
         "*.egg-info": true
-    }
+    },
+    "search.exclude": {
+        "**/.venv": true,
+        "**/.venv-wsl": true,
+        "**/.worktrees": true,
+        "**/data": true,
+        "**/.ruff_cache": true,
+        "**/.pytest_cache": true
+    },
+    "files.watcherExclude": {
+        "**/.venv/**": true,
+        "**/.venv-wsl/**": true,
+        "**/.worktrees/**": true,
+        "**/data/**": true,
+        "**/.ruff_cache/**": true,
+        "**/.pytest_cache/**": true
+    },
+    "git.repositoryScanIgnoredFolders": [
+        "node_modules",
+        ".venv",
+        ".venv-wsl",
+        ".worktrees",
+        "data"
+    ]
 }

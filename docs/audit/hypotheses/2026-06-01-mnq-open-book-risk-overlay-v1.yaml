@@ -1,0 +1,79 @@
+metadata:
+  name: mnq-open-book-risk-overlay-v1
+  created_by: Codex
+  date_locked: "2026-06-01T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  base_commit_sha: "eab04802b1957caa405ac53f9c36f686afd976c6"
+  research_question_type: conditional_role
+  theory_grant: false
+  testing_mode: family
+  total_expected_trials: 28
+  bailey_compliance: >
+    MNQ strict Bailey E=1.0 trial bound is documented as N<=28 in
+    docs/institutional/pre_registered_criteria.md. This prereg uses K=28.
+  notes: >
+    Risk-overlay follow-up after raw MNQ NYSE_OPEN + US_DATA_1000 books failed
+    topstep_50k_mnq_auto account-fit constraints. This tests whether structural
+    overlays make the existing book shape account-fit; it is not a new broad
+    alpha search.
+
+execution:
+  entrypoint: research/mnq_open_book_risk_overlay_v1.py
+  canonical_inputs:
+    - orb_outcomes
+    - daily_features
+    - trading_app.config.apply_tight_stop
+    - trading_app.prop_profiles
+    - trading_app.topstep_scaling_plan
+  output_paths:
+    - docs/audit/results/2026-06-01-mnq-open-book-risk-overlay-v1.md
+    - docs/audit/results/2026-06-01-mnq-open-book-risk-overlay-v1-candidates.csv
+
+hypotheses:
+  - id: H1
+    role:
+      kind: execution
+      parent: MNQ_NYSE_OPEN_PLUS_US_DATA_1000_OPEN_BOOK
+      comparator: RAW_TWO_LEG_BOOK_AT_ONE_CONTRACT_PER_LEG
+      primary_metric: profile_safe_annual_dollars
+      promotion_target: NONE_RESEARCH_ONLY
+    parent_population:
+      symbol: MNQ
+      anchor_leg: MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10
+      variable_books:
+        - NYOPEN_USDATA_RR2_COST_LT10
+        - NYOPEN_USDATA_RR2_NO_FILTER
+        - NYOPEN_USDATA_RR1_NO_FILTER
+        - NYOPEN_USDATA_RR1_5_NO_FILTER
+      overlays:
+        - RAW
+        - STOP_075
+        - RISK_CAP_225
+        - RISK_CAP_300
+        - STOP_075_RISK_CAP_225
+        - STOP_075_RISK_CAP_300
+        - REALIZED_LOSS_THROTTLE
+    expected_trial_count: 28
+    selection_rule: >
+      Rank one-contract-per-leg candidates by profile-safe annual dollars after
+      requiring zero historical daily-belt breaches, max drawdown <= 80% of the
+      profile maximum loss limit, Topstep day-one scaling feasibility, and
+      90-day bootstrap operational survival >= 70%. 2026 is descriptive only.
+    verdict_policy:
+      continue: forbidden_from_this_stage
+      narrow: account-fit candidate survives but remains research-only
+      kill: candidate fails account constraints or has non-positive annual dollars
+
+controls:
+  frozen_monitoring_window: "2026-01-01+"
+  no_2026_tuning: true
+  no_live_deployment: true
+  scratch_policy: coalesce pnl_r, ts_pnl_r, then zero; never drop pnl NULL rows silently
+  overlay_constraints:
+    risk_caps_dollars: [225, 300]
+    stop_multipliers: [1.0, 0.75]
+    realized_loss_throttle: only skips trades whose entry_ts is after a prior same-day losing trade exit_ts
+  monte_carlo:
+    horizon_days: 90
+    n_paths: 10000
+    seed: 20260601

@@ -1,0 +1,168 @@
+metadata:
+  name: mnq-usdata-rr-leg-choice-v1
+  purpose: "Post-exploratory US_DATA_1000 RR/filter leg choice inside MNQ NYSE_OPEN book"
+  date_locked: "2026-06-01T00:00:00+10:00"
+  data_horizon_years_clean: 6.65
+  data_horizon_years_proxy: 0.0
+  holdout_date: "2026-01-01"
+  total_expected_trials: 15
+  research_question_type: conditional_role
+  theory_grant: false
+  legacy_unlinked_citations:
+    - docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md
+    - docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
+    - docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md
+  owner: codex
+  created_at: 2026-06-01
+  base_commit_sha: 547d9696e8f81aa61e4a1150cd65cded9cecf952
+  testing_mode: family
+  route: canompx3-research -> research_investigation -> conditional_role
+  primary_role: standalone_book_candidate
+  status_ceiling: research_provisional_post_exploratory
+  upstream_source:
+    commit: 547d9696e8f81aa61e4a1150cd65cded9cecf952
+    result_doc: docs/audit/results/2026-06-01-mnq-open-book-validation-v1.md
+    inherited_exploratory_k: 1755
+
+execution:
+  mode: bounded_runner
+  entrypoint: research/mnq_usdata_rr_leg_choice_v1.py
+
+primary_question: >
+  Holding the NYSE_OPEN O15 E2 RR2 COST_LT10 anchor fixed, which US_DATA_1000
+  O15 E2 RR/filter leg gives the best drawdown-adjusted MNQ book quality without
+  using 2026 for selection?
+
+sacred_boundary_discipline:
+  holdout_date: 2026-01-01
+  pre_2026_selection_only: true
+  use_2026_for_selection: false
+  use_2026_for_descriptive_monitoring: true
+  no_oos_re_tuning: true
+  validation_method: DSR_FIXED_UNIVERSE_RESEARCH_VALIDATION
+
+canonical_inputs:
+  allowed_tables:
+    - daily_features
+    - orb_outcomes
+  required_join: "(symbol, trading_day, orb_minutes)"
+  banned_truth_surfaces:
+    - validated_setups
+    - edge_families
+    - live_config
+    - docs as current performance truth
+    - memory as current performance truth
+
+scratch_policy:
+  policy: include-as-zero
+  justification: >
+    Current orb_outcomes may contain NULL scratch pnl_r rows. This runner fills
+    them as 0.0 rather than dropping them, preventing sample-selection dropout
+    while preserving the current canonical outcome-builder limitation.
+
+family:
+  role: standalone_book_candidate
+  family_k: 15
+  fixed_anchor_leg: MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10
+  variable_leg:
+    symbol: MNQ
+    session: US_DATA_1000
+    orb_minutes: 15
+    entry_model: E2
+    confirm_bars: 1
+    rr_targets:
+      - 1.0
+      - 1.5
+      - 2.0
+    filters:
+      - NO_FILTER
+      - COST_LT08
+      - COST_LT10
+      - COST_LT12
+      - COST_LT15
+  primary_objective: annual_r_divided_by_max_drawdown
+  sensitivity_objective: raw_annual_r
+
+lookahead_bans:
+  e2_pre_entry_predictors_forbidden:
+    - rel_vol_{session}
+    - orb_{session}_break_ts
+    - orb_{session}_break_delay_min
+    - orb_{session}_break_bar_volume
+    - orb_{session}_break_bar_continues
+    - orb_{session}_break_dir
+    - outcome
+    - pnl_r
+  allowed_pre_entry_fields:
+    - orb_{session}_size
+    - orb_{session}_volume
+    - atr_20_pct
+    - atr_vel_ratio
+    - entry_price
+    - stop_price
+
+controls:
+  multiple_testing:
+    family_bh_k: 15
+    inherited_dsr_k: upstream_1755_plus_15
+  required_metrics:
+    - sample_size
+    - date_span
+    - annual_r
+    - max_drawdown
+    - annual_r_divided_by_max_drawdown
+    - t_stat
+    - p_value
+    - BH_q
+    - DSR_family
+    - DSR_inherited
+    - WFE
+    - era_stability
+    - 2026_descriptive
+    - leg_correlation
+  leakage_checks:
+    - daily_features_join_must_use_symbol_trading_day_orb_minutes
+    - no_2026_field_used_for_selection_or_ranking
+    - no_where_pnl_r_is_not_null_dropout
+    - no_E2_post_trigger_predictor_as_filter
+
+hypotheses:
+  - id: H1_usdata_rr_leg_choice
+    name: usdata_rr_leg_choice
+    role:
+      kind: standalone
+      parent: MNQ_NYSE_OPEN_O15_E2_RR2_COST_LT10 plus US_DATA_1000 O15 E2 variable RR/filter leg
+      comparator: 15 US_DATA_1000 RR/filter book variants
+      primary_metric: annual_r_divided_by_max_drawdown
+      promotion_target: research_provisional_book_candidate
+    expected_trial_count: 15
+    statement: >
+      A lower-RR US_DATA_1000 leg may improve book drawdown-adjusted quality
+      relative to the current RR2 COST_LT10 leg.
+    kill_if:
+      - no variant beats current RR2 COST_LT10 on objective_score after family BH, DSR, WFE, and era checks
+      - best variant depends on 2026 descriptive behavior for selection
+      - best variant fails strict no-theory t >= 3.79
+
+promotion_rule:
+  continue_if_all:
+    - q_family < 0.05
+    - t >= 3.79
+    - dsr_family > 0.95
+    - dsr_inherited > 0.95
+    - WFE >= 0.50
+    - era_ok == true
+    - n_is >= 100
+  narrow_if:
+    - family gates pass but inherited broad-scan DSR does not
+    - candidate is better but post-selection status ceiling applies
+  kill_if:
+    - policy EV is not positive
+    - family signal fails BH, DSR, WFE, or era checks
+    - candidate requires 2026 descriptive behavior to justify selection
+
+deliverables_locked:
+  - research/mnq_usdata_rr_leg_choice_v1.py
+  - tests/test_research/test_mnq_usdata_rr_leg_choice_v1.py
+  - docs/audit/results/2026-06-01-mnq-usdata-rr-leg-choice-v1.md
+  - docs/audit/results/2026-06-01-mnq-usdata-rr-leg-choice-v1-books.csv

@@ -252,3 +252,28 @@ def test_broker_accounts_count_explicit_overrides_copies(tmp_artifact: Path) -> 
     )
     assert payload["copies"] == 3
     assert payload["broker_accounts_count"] == 2
+
+
+def test_cli_write_accepts_effective_pilot_copies_and_instrument(tmp_artifact: Path) -> None:
+    rc = planned_launch._cli_main(
+        [
+            "write",
+            "--profile",
+            "topstep_50k_mnq_auto",
+            "--mode",
+            "SIGNAL",
+            "--source",
+            "START_BOT.bat",
+            "--copies",
+            "1",
+            "--instrument",
+            "MNQ",
+        ]
+    )
+
+    assert rc == 0
+    payload = planned_launch.read_planned_launch()
+    assert payload["status"] == "ok"
+    assert payload["copies"] == 1
+    assert payload["broker_accounts_count"] == 1
+    assert payload["instruments"] == ["MNQ"]

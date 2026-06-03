@@ -1,0 +1,226 @@
+strategy_id,hypothesis_path,result_md_path,returncode,stdout_tail,stderr_tail
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT10_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT10_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.893 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt10-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt12-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt12-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt12-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.891 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt12-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt12-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt12-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT15_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt15-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt15-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT15_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt15-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.867 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt15-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt15-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-cost-lt15-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G4_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g4-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g4-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G4_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g4-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.876 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g4-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g4-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g4-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g5-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g5-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g5-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.860 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g5-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g5-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g5-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G8_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g8-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g8-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G8_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g8-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.842 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g8-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g8-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-g8-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_VOL_16K_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_VOL_16K_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.044 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-16k-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_VOL_2K_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-2k-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-2k-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_VOL_2K_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-2k-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.924 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-2k-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-2k-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-2k-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_VOL_4K_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-4k-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-4k-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_VOL_4K_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-4k-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.916 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-4k-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-4k-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-4k-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_VOL_8K_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_VOL_8K_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.852 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-orb-vol-8k-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_25_O15_S075,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-ovnrng-25-o15-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-ovnrng-25-o15-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_25_O15_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-ovnrng-25-o15-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.929 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-ovnrng-25-o15-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-ovnrng-25-o15-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-0-cb1-ovnrng-25-o15-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_VOL_16K_S075,docs/audit/hypotheses/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_VOL_16K_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.840 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-orb-vol-16k-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_CME_PRECLOSE_E2_RR1.5_CB1_COST_LT08_S075,docs/audit/hypotheses/2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt08-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt08-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_CME_PRECLOSE_E2_RR1.5_CB1_COST_LT08_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt08-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PARK
+Heavyweight reason: IS gates clear but OOS sign opposes IS once N_OOS=65 >= 30.
+Result MD: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt08-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt08-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt08-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_COMEX_SETTLE_E2_RR2.5_CB1_COST_LT15,docs/audit/hypotheses/2026-05-31-mnq-comex-settle-e2-rr2-5-cb1-cost-lt15-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-comex-settle-e2-rr2-5-cb1-cost-lt15-chordia-unlock-v1.md,0,"Strategy: MNQ_COMEX_SETTLE_E2_RR2.5_CB1_COST_LT15
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-comex-settle-e2-rr2-5-cb1-cost-lt15-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.841 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-comex-settle-e2-rr2-5-cb1-cost-lt15-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-comex-settle-e2-rr2-5-cb1-cost-lt15-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-comex-settle-e2-rr2-5-cb1-cost-lt15-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR_P30,docs/audit/hypotheses/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-atr-p30-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-atr-p30-chordia-unlock-v1.md,0,"Strategy: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR_P30
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-atr-p30-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PARK
+Heavyweight reason: IS gates clear but OOS sign opposes IS once N_OOS=83 >= 30.
+Result MD: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-atr-p30-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-atr-p30-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-atr-p30-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_TOKYO_OPEN_E2_RR1.0_CB1_NO_FILTER,docs/audit/hypotheses/2026-05-31-mnq-tokyo-open-e2-rr1-0-cb1-no-filter-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-tokyo-open-e2-rr1-0-cb1-no-filter-chordia-unlock-v1.md,0,"Strategy: MNQ_TOKYO_OPEN_E2_RR1.0_CB1_NO_FILTER
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-tokyo-open-e2-rr1-0-cb1-no-filter-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.925 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-tokyo-open-e2-rr1-0-cb1-no-filter-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-tokyo-open-e2-rr1-0-cb1-no-filter-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-tokyo-open-e2-rr1-0-cb1-no-filter-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_CME_PRECLOSE_E2_RR1.5_CB1_COST_LT10_S075,docs/audit/hypotheses/2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt10-s075-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt10-s075-chordia-unlock-v1.md,0,"Strategy: MNQ_CME_PRECLOSE_E2_RR1.5_CB1_COST_LT10_S075
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt10-s075-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PARK
+Heavyweight reason: IS gates clear but OOS sign opposes IS once N_OOS=78 >= 30.
+Result MD: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt10-s075-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt10-s075-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-5-cb1-cost-lt10-s075-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E1_RR1.0_CB3_X_MGC_ATR70_O30,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e1-rr1-0-cb3-x-mgc-atr70-o30-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e1-rr1-0-cb3-x-mgc-atr70-o30-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E1_RR1.0_CB3_X_MGC_ATR70_O30
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e1-rr1-0-cb3-x-mgc-atr70-o30-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.502 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e1-rr1-0-cb3-x-mgc-atr70-o30-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e1-rr1-0-cb3-x-mgc-atr70-o30-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e1-rr1-0-cb3-x-mgc-atr70-o30-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_CLOSE_E2_RR1.0_CB1_COST_LT08_O15,docs/audit/hypotheses/2026-05-31-mnq-nyse-close-e2-rr1-0-cb1-cost-lt08-o15-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-close-e2-rr1-0-cb1-cost-lt08-o15-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_CLOSE_E2_RR1.0_CB1_COST_LT08_O15
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-close-e2-rr1-0-cb1-cost-lt08-o15-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=1.285 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-close-e2-rr1-0-cb1-cost-lt08-o15-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-close-e2-rr1-0-cb1-cost-lt08-o15-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-close-e2-rr1-0-cb1-cost-lt08-o15-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_VOL_4K,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr1-5-cb1-orb-vol-4k-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr1-5-cb1-orb-vol-4k-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_VOL_4K
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr1-5-cb1-orb-vol-4k-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.486 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-5-cb1-orb-vol-4k-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-5-cb1-orb-vol-4k-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr1-5-cb1-orb-vol-4k-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR2.0_CB1_ORB_VOL_16K,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-16k-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-16k-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR2.0_CB1_ORB_VOL_16K
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-16k-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.450 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-16k-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-16k-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-16k-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_EUROPE_FLOW_E2_RR3.0_CB1_PDR_R105,docs/audit/hypotheses/2026-05-31-mnq-europe-flow-e2-rr3-0-cb1-pdr-r105-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-europe-flow-e2-rr3-0-cb1-pdr-r105-chordia-unlock-v1.md,0,"Strategy: MNQ_EUROPE_FLOW_E2_RR3.0_CB1_PDR_R105
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-europe-flow-e2-rr3-0-cb1-pdr-r105-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=2.828 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-europe-flow-e2-rr3-0-cb1-pdr-r105-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-europe-flow-e2-rr3-0-cb1-pdr-r105-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-europe-flow-e2-rr3-0-cb1-pdr-r105-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_NYSE_OPEN_E2_RR2.0_CB1_ORB_VOL_4K,docs/audit/hypotheses/2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-4k-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-4k-chordia-unlock-v1.md,0,"Strategy: MNQ_NYSE_OPEN_E2_RR2.0_CB1_ORB_VOL_4K
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-4k-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.111 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-4k-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-4k-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-nyse-open-e2-rr2-0-cb1-orb-vol-4k-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O30,docs/audit/hypotheses/2026-05-31-mnq-us-data-1000-e2-rr1-5-cb1-vwap-mid-aligned-o30-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-us-data-1000-e2-rr1-5-cb1-vwap-mid-aligned-o30-chordia-unlock-v1.md,0,"Strategy: MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O30
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-us-data-1000-e2-rr1-5-cb1-vwap-mid-aligned-o30-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: PASS_CHORDIA
+Heavyweight reason: IS clears strict threshold 3.79 with N=866 and ExpR=0.1687; OOS sign matches at N_OOS=53.
+Result MD: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-5-cb1-vwap-mid-aligned-o30-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-5-cb1-vwap-mid-aligned-o30-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-us-data-1000-e2-rr1-5-cb1-vwap-mid-aligned-o30-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"
+MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VWAP_BP_ALIGNED_O30,docs/audit/hypotheses/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-vwap-bp-aligned-o30-chordia-unlock-v1.yaml,docs/audit/results/2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-vwap-bp-aligned-o30-chordia-unlock-v1.md,0,"Strategy: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VWAP_BP_ALIGNED_O30
+Prereg: docs\audit\hypotheses\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-vwap-bp-aligned-o30-chordia-unlock-v1.yaml
+Heavyweight Chordia verdict: FAIL_STRICT_CHORDIA
+Heavyweight reason: IS t=3.231 < 3.79.
+Result MD: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-vwap-bp-aligned-o30-chordia-unlock-v1.md
+Result CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-vwap-bp-aligned-o30-chordia-unlock-v1.csv
+Result Summary CSV: docs\audit\results\2026-05-31-mnq-cme-preclose-e2-rr1-0-cb1-vwap-bp-aligned-o30-chordia-unlock-v1.summary.csv
+","[DB] INFO: local worktree has no gold.db; using shared canonical DB at C:\Users\joshd\canompx3\gold.db
+"

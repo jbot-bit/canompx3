@@ -1151,3 +1151,45 @@ def test_json_cli_stdout_is_parseable_without_warning_preamble(tmp_path: Path) -
     assert result.stdout.lstrip().startswith("{")
     parsed = json.loads(result.stdout)
     assert parsed["profile_id"] == "topstep_50k_mnq_auto"
+
+
+def test_live_readiness_report_includes_profile_proof_pack_contract(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    db_path = tmp_path / "gold.db"
+    db_path.write_text("fake db", encoding="utf-8")
+    _install_happy_path(monkeypatch, allocation_path)
+    monkeypatch.setattr(live_readiness_report, "_git_dirty_files", lambda _root: [" M HANDOFF.md"])
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=db_path,
+        allocation_path=allocation_path,
+        command_line=["python", "scripts/tools/live_readiness_report.py", "--profile", "topstep_50k_mnq_auto"],
+    )
+
+    proof_pack = report["proof_pack"]
+    assert proof_pack["schema_version"] == 1
+    assert proof_pack["profile_id"] == "topstep_50k_mnq_auto"
+    assert proof_pack["git"] == {
+        "branch": "test-branch",
+        "head": "deadbeef",
+        "dirty": True,
+        "dirty_files": [" M HANDOFF.md"],
+    }
+    assert proof_pack["database"]["path"] == str(db_path)
+    assert proof_pack["database"]["exists"] is True
+    assert proof_pack["database"]["size_bytes"] == len("fake db")
+    assert proof_pack["active_lanes"][0]["strategy_id"] == "SID_A"
+    assert proof_pack["paused_lanes"] == {"count": 0, "reason_summary": []}
+    assert proof_pack["stale_lanes"] == {"count": 0, "reason_summary": []}
+    assert proof_pack["criterion11"]["state"] == "pass"
+    assert proof_pack["criterion12"]["state"] == "valid"
+    assert proof_pack["strict_warnings"]["blockers"] == []
+    assert proof_pack["strict_warnings"]["blocking"] == []
+    assert proof_pack["strict_warnings"]["advisory"] == []
+    assert proof_pack["command_line"] == [
+        "python",
+        "scripts/tools/live_readiness_report.py",
+        "--profile",
+        "topstep_50k_mnq_auto",
+    ]
+    assert proof_pack["unsupported_or_missing_evidence"] == []

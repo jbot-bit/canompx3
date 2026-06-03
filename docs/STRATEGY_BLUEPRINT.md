@@ -10,6 +10,7 @@ Sections §4-§5, §7-§9 are **CURRENT STATE** — volatile snapshots. Query ca
 - Research methodology → `RESEARCH_RULES.md`
 - Code structure → `CLAUDE.md`
 - Feature specs → `docs/specs/`
+- **Literature grounding** → inline author cites below (Fitschen, Carver, Chordia, Bailey, Aronson, Harris, Howard/Tolušić) resolve to page-cited extracts in `docs/institutional/literature/` (fetch via the `research-catalog` MCP). Source presence + page-count are verified by `pipeline/check_drift.py::check_literature_source_integrity`; provenance/status per source lives in `docs/audit/research_grounding_source_manifest.yaml` (human view: `docs/audit/research_grounding_gap_ledger.md`). **Retrieval ≠ verification:** every cited source resolves to a present, page-matched file or a ledgered gap — if neither, say UNSUPPORTED.
 
 **Freshness:** Last structural audit: 2026-04-13 (4 filter hypotheses exhaustively tested: 425 tests, cross-family BH FDR K=425. Gap-fill DEAD, vol-spike REVERSED+confirmed, narrow-IB REVERSED+MES-signal, VWAP-gate PROMISING 4 survivors. 31 entries). Re-audit after: any NO-GO declaration, new instrument/session/entry model, pipeline rebuild, ML finding, or validated_setups change.
 

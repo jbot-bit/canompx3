@@ -10,6 +10,8 @@ Covers all four classifications and the hard safety gates:
 from __future__ import annotations
 
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -33,6 +35,20 @@ def _load_module():
 
 
 sra = _load_module()
+
+
+def test_help_output_survives_narrow_console_encoding() -> None:
+    """`--help` must not crash on Windows consoles with cp1252-style output."""
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "tools" / "stage_reaper_audit.py"), "--help"],
+        cwd=REPO_ROOT,
+        env={"PYTHONIOENCODING": "cp1252"},
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "DONE_SAFE" in result.stdout
 
 
 def _stage(tmp_path: Path, name: str, mode: str, scope: list[str]) -> Path:

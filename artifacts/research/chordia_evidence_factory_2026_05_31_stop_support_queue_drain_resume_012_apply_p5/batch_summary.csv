@@ -1,0 +1,8 @@
+batch_id,batch_index,total_batches,item_count,ready_count,blocked_count,first_rank,last_rank,manifest_path,command_path
+batch_001,1,7,25,25,0,143,167,batches/batch_001.csv,batches/batch_001_commands.ps1
+batch_002,2,7,25,25,0,168,192,batches/batch_002.csv,batches/batch_002_commands.ps1
+batch_003,3,7,25,25,0,193,217,batches/batch_003.csv,batches/batch_003_commands.ps1
+batch_004,4,7,25,25,0,218,242,batches/batch_004.csv,batches/batch_004_commands.ps1
+batch_005,5,7,25,25,0,243,267,batches/batch_005.csv,batches/batch_005_commands.ps1
+batch_006,6,7,25,25,0,268,292,batches/batch_006.csv,batches/batch_006_commands.ps1
+batch_007,7,7,23,23,0,293,315,batches/batch_007.csv,batches/batch_007_commands.ps1

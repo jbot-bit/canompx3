@@ -5,6 +5,36 @@
 
 ---
 
+## Iteration 224 — 2026-05-31
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/conditional_overlays.py:82
+- Cluster: 1 finding, severity=[LOW]
+- Finding: holdout_frozen_from="2026-01-01" inlined HOLDOUT_SACRED_FROM date; replaced with HOLDOUT_SACRED_FROM.isoformat() import
+- Doctrine cited: integrity-guardian.md § 2 / institutional-rigor.md § 10
+- Action: imported HOLDOUT_SACRED_FROM from trading_app.holdout_policy; replaced literal at line 82
+- Blast radius: 1 file; 2 importers unaffected (field is metadata-only)
+- Verification gate: fast drift
+- Verification: PASS
+- Commit: 1e84a4a0
+
+---
+
+## Iteration 223 — 2026-05-31
+- Phase: audit-only
+- Classification: N/A (no fix)
+- Target: pipeline/ingest_dbn_mgc.py (high centrality, 9 importers)
+- Cluster: 0 actionable findings
+- Finding: stale re-audit clean — prior findings DF-12 (iter 136) and SYMBOL DRY (iter 219) both verified fixed; remaining patterns are ACCEPTABLE
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources); institutional-rigor.md § 10
+- Action: audit-only, ledger stale findings=1 entry cleared
+- Blast radius: 9 importers (utility functions only, no SYMBOL/CHECKPOINT_DIR used externally)
+- Verification gate: fast drift PASS + ruff PASS (baseline only, no fix)
+- Verification: PASS
+- Commit: NONE
+
+---
+
 ## Iteration 222 — 2026-05-31
 - Phase: audit-only
 - Classification: audit-only

@@ -29,13 +29,12 @@ tool name -> exit 0. The guard must never block a session it can't read.
 
 from __future__ import annotations
 
-import json
-import sys
-from pathlib import Path
-
 # Shared canonical helpers — see _branch_state.py for the rationale
 # (institutional-rigor.md rule 4: delegate, never re-encode).
 import importlib.util as _importlib_util
+import json
+import sys
+from pathlib import Path
 
 _HOOKS_DIR = Path(__file__).resolve().parent
 _SPEC = _importlib_util.spec_from_file_location(
@@ -88,7 +87,13 @@ def main() -> None:
     if tool_name not in WRITE_TOOLS:
         sys.exit(0)
 
-    git_dir = _branch_state.git_dir()
+    # Scope to the worktree the MCP git tool ran in, not the hook process's
+    # cwd (always the main checkout). Critical here: this guard HARD-BLOCKS
+    # (exit 2) and is the only commit-safety layer for mcp__git__git_commit,
+    # so a cross-worktree false-fire would block a legitimate commit.
+    cwd = _branch_state.invoking_cwd(event)
+
+    git_dir = _branch_state.git_dir(cwd)
     if git_dir is None:
         sys.exit(0)  # fail-safe: not in a git repo -> pass
 
@@ -100,7 +105,7 @@ def main() -> None:
     if not branch_at_start:
         sys.exit(0)  # fail-safe: corrupted/empty lock -> pass
 
-    current = _branch_state.current_branch()
+    current = _branch_state.current_branch(cwd)
     if current is None:
         sys.exit(0)  # fail-safe: detached HEAD / git failure -> pass
 
@@ -152,7 +157,7 @@ def main() -> None:
         file=sys.stderr,
     )
     print(
-        f"    2. New worktree:  scripts/tools/new_session.sh",
+        "    2. New worktree:  scripts/tools/new_session.sh",
         file=sys.stderr,
     )
     print(

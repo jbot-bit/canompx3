@@ -80,18 +80,23 @@
      Source: data/bot_planned_launch.json (canonical). When the bot is running, bot_state.json takes
      over and this banner hides. Fail-visible: unknown/stale states are explicitly labelled. */
   .planned-launch-banner {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 4px 10px; border-radius: 6px;
+    display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    flex: 0 0 auto; min-width: 340px;
+    padding: 5px 10px; border-radius: 6px;
+    line-height: 1.35;
     font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
     border: 1px solid var(--border); background: var(--surface); color: var(--muted);
-    max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 620px; overflow: hidden; text-overflow: ellipsis; white-space: normal;
   }
+  .planned-launch-banner > span { white-space: nowrap; }
   .planned-launch-banner.signal { border-color: rgba(34,197,94,0.35); background: var(--green-soft); color: var(--green); }
   .planned-launch-banner.demo   { border-color: rgba(59,130,246,0.35); background: var(--blue-soft);  color: var(--blue);  }
   .planned-launch-banner.live   { border-color: rgba(220,38,38,0.45);  background: var(--red-soft);   color: var(--red); font-weight: 800; }
   .planned-launch-banner.stale,
   .planned-launch-banner.unknown { border-color: rgba(255,193,7,0.35); background: var(--yellow-soft); color: var(--yellow); font-weight: 700; }
   .planned-launch-banner b { font-weight: 800; letter-spacing: 0.06em; }
+  .planned-launch-banner .plb-pilot { color: var(--text); border-left: 1px solid currentColor; padding-left: 10px; opacity: 0.92; }
+  .planned-launch-banner .plb-source { opacity: 0.66; }
   .topbar-spacer { flex: 1; }
   .topbar-btn {
     padding: 5px 12px; border-radius: var(--r); border: 1px solid var(--border);
@@ -99,12 +104,81 @@
     cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em; transition: all 0.12s;
   }
   .topbar-btn:hover { border-color: var(--border-hi); color: var(--text); }
+  .topbar-btn:disabled { opacity: 0.46; cursor: not-allowed; filter: saturate(0.55); }
   .topbar-btn.primary { border-color: rgba(0,212,255,0.20); color: var(--cyan); }
   .topbar-btn.primary:hover { background: var(--cyan-soft); }
   .topbar-btn.warn { border-color: rgba(255,193,7,0.20); color: var(--yellow); }
   .topbar-btn.warn:hover { background: var(--yellow-soft); }
   .topbar-btn.danger { border-color: rgba(255,92,92,0.25); color: var(--red); }
   .topbar-btn.danger:hover { background: var(--red-soft); }
+
+  /* Operator controls: one-line access to the things you actually change. */
+  .ops-strip {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px;
+    background: var(--border); border: 1px solid var(--border); border-radius: var(--r-lg);
+    overflow: hidden; margin: 10px 0;
+  }
+  .ops-tile {
+    min-height: 58px; padding: 10px 12px; background: var(--surface);
+    border: 0; color: var(--text); text-align: left;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  }
+  button.ops-tile { cursor: pointer; transition: background 0.12s, color 0.12s; }
+  button.ops-tile:hover { background: var(--surface-2); }
+  .ops-label {
+    color: var(--dim); font-size: 10px; font-weight: 800;
+    letter-spacing: 0.10em; text-transform: uppercase;
+  }
+  .ops-value {
+    min-width: 0; color: var(--text); font: 700 15px/1.2 var(--mono);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ops-sub { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ops-value.ok { color: var(--green); }
+  .ops-value.warn { color: var(--yellow); }
+  .ops-value.bad { color: var(--red); }
+  .ops-value.info { color: var(--cyan); }
+  .lane-control-panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin: -2px 0 10px; overflow: hidden;
+  }
+  .lane-control-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+  }
+  .lane-control-title { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+  .lane-control-sub { color: var(--muted); font-size: 11px; text-align: right; }
+  .lane-control-list { display: grid; gap: 1px; background: var(--border); }
+  .lane-control-row {
+    display: grid; grid-template-columns: 86px minmax(0, 1fr) 82px 92px; gap: 10px;
+    align-items: center; padding: 9px 12px; background: var(--surface-2);
+  }
+  .lane-control-time { color: var(--cyan); font: 700 12px/1.2 var(--mono); }
+  .lane-control-name { min-width: 0; }
+  .lane-control-name b {
+    display: block; color: var(--text); font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lane-control-name span {
+    display: block; color: var(--muted); font-size: 10px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lane-status-pill {
+    justify-self: start; padding: 4px 8px; border-radius: 999px;
+    font: 800 10px/1 var(--mono); letter-spacing: 0.08em;
+  }
+  .lane-status-pill.on { background: var(--green-soft); color: var(--green); }
+  .lane-status-pill.off { background: var(--yellow-soft); color: var(--yellow); }
+  .lane-status-pill.parked { background: rgba(71,85,105,0.18); color: var(--muted); }
+  .lane-toggle-btn {
+    min-height: 30px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-2); font-size: 11px; font-weight: 800;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .lane-toggle-btn:hover { border-color: var(--border-hi); color: var(--text); }
+  .lane-toggle-btn.off { color: var(--yellow); border-color: rgba(255,193,7,0.25); }
+  .lane-toggle-btn.on { color: var(--green); border-color: rgba(0,214,143,0.25); }
+  .lane-toggle-btn:disabled { opacity: 0.42; cursor: not-allowed; }
 
   /* ── METRICS STRIP ──────────────────── */
   .metrics {
@@ -210,9 +284,9 @@
   .lane-time { font-family: var(--mono); color: var(--cyan); font-weight: 600; font-size: 11px; }
   .lane-title { font-weight: 600; font-size: 11px; }
   .lane-subtitle { color: var(--muted); font-size: 10px; }
-  .actions-row { display: flex; gap: 5px; margin-top: 10px; }
+  .actions-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
   .pf-btn {
-    flex: 1; border-radius: var(--r); padding: 8px 6px; border: 1px solid var(--border);
+    min-height: 52px; border-radius: var(--r); padding: 8px 10px; border: 1px solid var(--border);
     cursor: pointer; font-weight: 700; font-size: 11px;
     background: var(--surface); color: var(--text); transition: all 0.12s;
     display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.15;
@@ -224,11 +298,20 @@
   .pf-btn.live { color: var(--red); border-color: rgba(255,92,92,0.20); }
   .pf-btn.stop { color: #fff; background: rgba(185,28,28,0.5); border-color: rgba(255,92,92,0.3); text-transform: uppercase; letter-spacing: 0.04em; }
   .pf-btn:disabled { cursor: not-allowed; opacity: 0.3; }
-  .mode-legend { margin-top: 8px; padding: 6px 8px; background: rgba(0,0,0,0.15); border-radius: 6px; font-size: 10px; color: var(--dim); line-height: 1.5; }
+  .mode-legend { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); font-size: 10px; color: var(--dim); line-height: 1.5; }
   .mode-legend b { color: var(--text); font-weight: 600; }
   .mode-legend .lg-signal { color: var(--green); }
   .mode-legend .lg-demo { color: var(--blue); }
   .mode-legend .lg-live { color: var(--red); }
+  .pilot-contract { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .pilot-contract-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .pilot-label { color: var(--text); font-size: 11px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase; }
+  .pilot-state { color: var(--yellow); font-size: 10px; font-family: var(--mono); }
+  .pilot-contract-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .pilot-contract-grid span { min-width: 0; border-left: 2px solid var(--border); padding-left: 8px; }
+  .pilot-contract-grid b { display: block; color: var(--text); font: 700 12px/1.2 var(--mono); }
+  .pilot-contract-grid em { display: block; margin-top: 2px; color: var(--dim); font-size: 9px; font-style: normal; letter-spacing: 0.06em; text-transform: uppercase; }
+  .pilot-exclusion { margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.35; }
   .live-gate { margin-top: 6px; }
   .live-gate label { display: block; font-size: 10px; color: var(--dim); margin-bottom: 3px; }
   .live-gate input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text); font-size: 11px; }
@@ -496,20 +579,31 @@
   #chart-fb-start:disabled { opacity: 0.5; cursor: not-allowed; animation: none; }
 
   /* ── GO LIVE hold-to-confirm button ──── */
-  .go-live-wrap { position: relative; display: inline-block; margin-top: 8px; }
+  .go-live-wrap { position: relative; display: block; margin-top: 12px; }
+  .go-live-copy {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-bottom: 7px; color: var(--muted); font-size: 10px; line-height: 1.2;
+  }
+  .go-live-copy strong {
+    color: var(--red); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  }
   .go-live-btn {
     position: relative; z-index: 1;
-    background: linear-gradient(180deg, #ff3838 0%, #c40000 100%);
-    color: #fff; border: 2px solid #ff5c5c;
-    border-radius: 8px; padding: 14px 32px;
-    font: 800 14px/1 var(--mono); letter-spacing: 0.12em;
+    width: 100%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, rgba(239,68,68,0.94) 0%, rgba(153,27,27,0.96) 100%);
+    color: #fff; border: 1px solid rgba(248,113,113,0.72);
+    border-radius: 8px; padding: 14px 20px;
+    font: 800 13px/1 var(--mono); letter-spacing: 0.06em;
     cursor: pointer; text-transform: uppercase;
-    box-shadow: 0 2px 8px rgba(196,0,0,0.4);
+    box-shadow: 0 8px 22px rgba(127,29,29,0.24);
     user-select: none; -webkit-user-select: none;
     touch-action: none;
   }
-  .go-live-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .go-live-btn .lock { margin-right: 8px; }
+  .go-live-btn:hover:not(:disabled) { filter: brightness(1.06); }
+  .go-live-btn:disabled { opacity: 0.48; cursor: not-allowed; box-shadow: none; }
+  .go-live-btn .lock { display: inline-flex; width: 15px; height: 15px; margin-right: 8px; vertical-align: -2px; }
+  .go-live-btn .lock svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .go-live-ring {
     position: absolute; inset: -4px;
     border-radius: 12px;
@@ -519,7 +613,14 @@
     pointer-events: none;
   }
   .go-live-wrap.holding .go-live-ring { opacity: 1; }
-  .go-live-hint { display: block; font-size: 10px; color: var(--dim); margin-top: 6px; letter-spacing: 0.06em; text-align: center; }
+  .go-live-hint { display: block; font-size: 10px; color: var(--dim); margin-top: 7px; letter-spacing: 0.02em; text-align: center; }
+  .go-live-wrap.blocked .go-live-hint {
+    color: var(--yellow);
+    text-align: left;
+    padding: 6px 8px;
+    border-left: 2px solid var(--yellow);
+    background: rgba(245,158,11,0.08);
+  }
 
   /* ── P&L STRIP ──────────────────────── */
   .pnl-strip {
@@ -1354,6 +1455,68 @@
     text-transform: none;
   }
   #btn-primary-cta.stop .cta-sub { color: rgba(254, 202, 202, 0.65); }
+  #btn-live-cta {
+    position: relative;
+    overflow: hidden;
+    min-width: 168px;
+    justify-content: center;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    line-height: 1.1;
+  }
+  #btn-live-cta.live-hold {
+    border-color: rgba(239, 68, 68, 0.54);
+    color: #fff;
+    background: linear-gradient(180deg, rgba(239,68,68,0.90) 0%, rgba(127,29,29,0.94) 100%);
+  }
+  #btn-live-cta.live-hold:hover:not(:disabled) {
+    border-color: rgba(248, 113, 113, 0.78);
+    filter: brightness(1.06);
+  }
+  #btn-live-cta:disabled {
+    opacity: 0.54;
+    cursor: not-allowed;
+  }
+  #btn-live-cta .topbar-live-ring {
+    position: absolute;
+    inset: 2px;
+    border-radius: calc(var(--r) - 2px);
+    background: conic-gradient(var(--accent) calc(var(--p, 0) * 1%), transparent 0);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s;
+  }
+  #btn-live-cta.holding .topbar-live-ring { opacity: 0.42; }
+  #btn-live-cta .topbar-live-label,
+  #btn-live-cta .cta-sub {
+    position: relative;
+    z-index: 1;
+  }
+  #btn-live-cta .topbar-live-label {
+    font-weight: 800;
+  }
+  #btn-live-cta .cta-sub {
+    color: rgba(254, 226, 226, 0.72);
+    display: block;
+    margin-left: 0;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (max-width: 1500px) {
+    body.cockpit .topbar { flex-wrap: wrap; }
+    body.cockpit #planned-launch-banner {
+      order: 20;
+      flex: 1 0 100%;
+      max-width: none;
+      min-width: 0;
+    }
+    body.cockpit #btn-primary-cta { min-width: 160px; max-width: 220px; }
+    body.cockpit #btn-live-cta { min-width: 168px; }
+  }
 
   /* 1.3 — Connection health dot */
   .conn-health-dot {
@@ -1616,6 +1779,7 @@
   .hero[data-state="in_trade"] .hero-state-badge { color: var(--accent); background: var(--accent-strong); }
   .hero[data-state="blocked"] .hero-state-badge,
   .hero[data-state="error"]   .hero-state-badge { color: var(--red); background: var(--red-soft); }
+  .hero[data-state="refreshing"] .hero-state-badge,
   .hero[data-state="warn"]    .hero-state-badge { color: var(--yellow); background: var(--yellow-soft); }
 
   .hero-head-hint {
@@ -1762,6 +1926,44 @@
   .book-chip.next .time,
   .book-chip.armed .time { color: currentColor; opacity: 0.75; }
   .book-empty { color: var(--dim); font-size: var(--fs-small); font-style: italic; }
+  .hero-pilot {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: auto repeat(4, minmax(0, 1fr));
+    align-items: center;
+    gap: 8px;
+  }
+  .hero-pilot[hidden] { display: none; }
+  .hero-pilot-label {
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .hero-pilot-item {
+    min-width: 0;
+    color: var(--text-2);
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  .hero-pilot-item b {
+    display: block;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .hero-pilot-item span {
+    display: block;
+    color: var(--muted);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .hero-pilot-item.excluded b { color: var(--yellow); }
 
   /* default-collapse sections in cockpit mode */
   body.cockpit #profiles-section:not(.user-expanded),
@@ -2091,6 +2293,23 @@
     body.cockpit .topbar-brand {
       order: 1;
     }
+    body.cockpit #planned-launch-banner {
+      order: 0;
+      flex: 1 0 100%;
+      min-width: 0;
+      max-width: 100%;
+      overflow: visible;
+    }
+    body.cockpit #planned-launch-banner > span {
+      white-space: normal;
+    }
+    body.cockpit #planned-launch-banner .plb-pilot {
+      border-left: 0;
+      padding-left: 0;
+    }
+    body.cockpit #planned-launch-banner .plb-source {
+      display: none;
+    }
     body.cockpit #acct-select {
       order: 2;
       flex: 1 1 220px;
@@ -2170,18 +2389,22 @@
     }
   }
 
-  @media (max-width: 430px) {
+  @media (max-width: 600px) {
     .shell {
       padding-left: 20px;
       padding-right: 20px;
     }
     body.cockpit #btn-trade-book,
     body.cockpit #btn-preflight,
-    body.cockpit #btn-refresh {
+    body.cockpit #btn-refresh,
+    body.cockpit #btn-kill {
       flex-basis: calc(50% - 6px);
     }
     body.cockpit #btn-kill {
-      flex-basis: 82px;
+      flex-grow: 1;
+    }
+    body.cockpit #header-mode-badge {
+      flex: 1 0 calc(100% - 28px);
     }
     body.cockpit .hero-metrics {
       grid-template-columns: 1fr 1fr;
@@ -2199,6 +2422,33 @@
     .hero-head { flex-direction: column; align-items: stretch; gap: 8px; }
     .hm-val { font-size: 22px; }
     .hero-book { flex-direction: column; align-items: stretch; gap: 8px; }
+    .hero-pilot { grid-template-columns: 1fr 1fr; }
+    .hero-pilot-label { grid-column: 1 / -1; }
+  }
+  @media (max-width: 600px) {
+    .ops-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .lane-control-row {
+      grid-template-columns: 64px minmax(0, 1fr) 74px;
+      gap: 8px;
+    }
+    .lane-control-row .lane-toggle-btn {
+      grid-column: 2 / 4;
+      width: 100%;
+    }
+    body.cockpit #header-mode-badge {
+      flex: 1 0 calc(100% - 28px);
+    }
+    body.cockpit #btn-trade-book,
+    body.cockpit #btn-preflight,
+    body.cockpit #btn-refresh,
+    body.cockpit #btn-kill {
+      flex-basis: calc(50% - 6px);
+    }
+    body.cockpit #btn-kill {
+      flex-grow: 1;
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -2272,6 +2522,51 @@
   /* explicit overrides for key text nodes */
   .operator-check-detail, .operator-reason { font-size: 13px; }
   .operator-headline { font-size: 15px; font-weight: 600; }
+  .operator-checks.compact { grid-template-columns: 1fr; }
+  .operator-detail-toggle {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .operator-detail-toggle summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .operator-detail-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .operator-detail-row {
+    display: grid;
+    grid-template-columns: 140px 56px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    color: var(--text-2);
+    font-size: 12px;
+  }
+  .operator-detail-row b {
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+  .operator-detail-row span {
+    color: var(--dim);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .operator-detail-row em {
+    color: var(--text-2);
+    font-style: normal;
+    overflow-wrap: anywhere;
+  }
   .hm-lbl, .pnl-cell-lbl { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
   /* Bloomberg-scale figures — quiet labels, loud numbers. The four that decide
      a trade: balance, P&L today, DD-used headroom, next-session countdown. */
@@ -2319,7 +2614,8 @@
   .hero[data-state="in_trade"] { border-left-color: var(--accent) !important; }
   .hero[data-state="blocked"],
   .hero[data-state="error"]    { border-left-color: var(--red) !important; }
-  .hero[data-state="warn"]     { border-left-color: var(--yellow) !important; }
+  .hero[data-state="warn"],
+  .hero[data-state="refreshing"] { border-left-color: var(--yellow) !important; }
   .hero[data-state="ready"]    { border-left-color: var(--accent) !important; }
   .pf-card.active-auto         { border-left-color: var(--green) !important; background: linear-gradient(90deg, rgba(34,197,94,0.04), transparent 60%), var(--surface-2); }
   .sec:hover { border-left-color: var(--border-hi); }
@@ -2633,6 +2929,17 @@
       white-space: nowrap;
     }
   }
+  @media (max-width: 600px) {
+    body.cockpit #header-mode-badge {
+      flex: 1 0 calc(100% - 28px);
+    }
+    body.cockpit #btn-trade-book,
+    body.cockpit #btn-preflight,
+    body.cockpit #btn-refresh,
+    body.cockpit #btn-kill {
+      flex: 1 1 calc(50% - 6px);
+    }
+  }
 </style>
 </head>
 <body>
@@ -2653,8 +2960,9 @@
     <span id="running-profile" class="compat-hidden">Idle</span>
     <span id="running-profile-detail" class="compat-hidden"></span>
     <span class="topbar-spacer"></span>
-    <span id="planned-launch-banner" class="planned-launch-banner" style="display:none" title="Source of truth: data/bot_planned_launch.json — written by START_BOT.bat or run_live_session.py"></span>
+    <span id="planned-launch-banner" class="planned-launch-banner" style="display:none" title="Launch plan"></span>
     <button id="btn-primary-cta" class="topbar-btn primary" style="display:none" type="button"></button>
+    <button id="btn-live-cta" class="topbar-btn live-hold" style="display:none" type="button" title="Hold 2 seconds to start the pinned Topstep MNQ live pilot."></button>
     <input type="checkbox" id="focus-toggle" tabindex="-1" aria-hidden="true">
     <label for="focus-toggle" class="show-all-label" title="Toggle FOCUS / SHOW ALL — reveals demoted panels (specs, profiles, brokers, live-session duplicate block)"></label>
     <button id="btn-trade-book" class="topbar-btn" type="button" onclick="toggleTradeBook()">Trade Book</button>
@@ -2677,11 +2985,44 @@
   <!-- TAB BAR -->
   <nav class="tab-bar">
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
-    <button class="tab-btn" data-tab="connections" onclick="switchTab('connections')">Connections</button>
+    <button class="tab-btn" data-tab="connections" onclick="switchTab('connections')">Accounts</button>
   </nav>
 
   <!-- ═══ DASHBOARD TAB ═══ -->
   <div id="tab-dashboard" class="tab-content active">
+
+  <section id="ops-strip" class="ops-strip" aria-label="Operator controls">
+    <div class="ops-tile">
+      <span class="ops-label">Running</span>
+      <strong id="ops-running" class="ops-value">Stopped</strong>
+      <span id="ops-running-sub" class="ops-sub">no session</span>
+    </div>
+    <button class="ops-tile" type="button" onclick="focusChart()">
+      <span class="ops-label">Chart</span>
+      <strong id="ops-chart" class="ops-value info">MNQ</strong>
+      <span id="ops-chart-sub" class="ops-sub">candles</span>
+    </button>
+    <button class="ops-tile" type="button" onclick="toggleLaneControls()">
+      <span class="ops-label">Lanes</span>
+      <strong id="ops-lanes" class="ops-value">Loading</strong>
+      <span id="ops-lanes-sub" class="ops-sub">control book</span>
+    </button>
+    <button class="ops-tile" type="button" onclick="openAccountsControl()">
+      <span class="ops-label">Accounts</span>
+      <strong id="ops-accounts" class="ops-value">Loading</strong>
+      <span class="ops-sub">enable / disable</span>
+    </button>
+  </section>
+
+  <section id="lane-control-panel" class="lane-control-panel hidden">
+    <div class="lane-control-head">
+      <span class="lane-control-title">Lane Controls</span>
+      <span id="lane-control-sub" class="lane-control-sub">Loading</span>
+    </div>
+    <div id="lane-control-list" class="lane-control-list">
+      <div class="empty">Loading lanes...</div>
+    </div>
+  </section>
 
   <!-- ═══ COCKPIT GRID ═══ -->
   <div class="cockpit-grid">
@@ -2703,9 +3044,9 @@
     <div class="chart-cockpit-body">
       <div id="chart-host"></div>
       <div id="chart-cockpit-fallback" class="chart-cockpit-fallback">
-        <div id="chart-fb-title" style="font-size:20px;font-weight:800;color:var(--red,#ff5c5c);letter-spacing:0.04em;margin-bottom:6px;">NO LIVE FEED</div>
-        <div id="chart-fb-detail" style="font-size:13px;color:var(--dim);margin-bottom:14px;text-align:center;max-width:420px;">No recent bars. Start the feed to begin streaming candles.</div>
-        <button id="chart-fb-start" type="button" style="background:var(--cyan,#00d4ff);color:#000;border:none;border-radius:6px;padding:12px 28px;font:700 14px/1 var(--mono);letter-spacing:0.08em;cursor:pointer;text-transform:uppercase;animation:pulse-cyan 1.6s ease-in-out infinite;">▶ START FEED</button>
+        <div id="chart-fb-title" style="font-size:15px;font-weight:700;color:var(--muted);letter-spacing:0.02em;margin-bottom:6px;">No chart data</div>
+        <div id="chart-fb-detail" style="font-size:12px;color:var(--dim);margin-bottom:14px;text-align:center;max-width:360px;">Start signals to stream candles.</div>
+        <button id="chart-fb-start" type="button" style="background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px 22px;font:700 12px/1 var(--mono);letter-spacing:0.06em;cursor:pointer;text-transform:uppercase;">Start signals</button>
         <div style="font-size:11px;color:var(--dim);margin-top:10px;">Signal mode — bar feed only, no orders, zero risk.</div>
       </div>
     </div>
@@ -2744,7 +3085,7 @@
       <div id="connection-summary-title" class="connection-summary-title">Connection</div>
       <div id="connection-summary-message" class="connection-summary-message">Loading broker connection state...</div>
     </div>
-    <button id="connection-summary-action" class="connection-summary-action" type="button">Connections</button>
+    <button id="connection-summary-action" class="connection-summary-action" type="button">Accounts</button>
   </section>
 
   <!-- ═══ COCKPIT HERO — state-adaptive top card ═══ -->
@@ -2795,6 +3136,13 @@
       <div class="hero-book-label">Book</div>
       <div id="hero-book-lanes" class="hero-book-lanes"><span class="book-empty">Loading deployed lanes…</span></div>
     </div>
+    <div id="hero-pilot" class="hero-pilot" hidden>
+      <div class="hero-pilot-label">Live pilot</div>
+      <div class="hero-pilot-item"><b>MNQ</b><span>Instrument</span></div>
+      <div class="hero-pilot-item"><b>3 lanes</b><span>Active book</span></div>
+      <div class="hero-pilot-item"><b>1 copy</b><span>Primary only</span></div>
+      <div class="hero-pilot-item excluded"><b>NYSE parked</b><span>SR alarm</span></div>
+    </div>
   </section>
 
   <!-- OPERATOR STATE -->
@@ -2830,7 +3178,7 @@
 
   <!-- DRAWER HANDLE STRIP — Stage 4.1 quick-access pills (open drawer to specific tab) -->
   <div id="drawer-handle-strip" class="drawer-handle-strip">
-    <button class="drawer-handle" data-drawer-tab="brokers" type="button">Brokers <span id="dh-brokers-count" class="drawer-handle-count">—</span></button>
+    <button class="drawer-handle" data-drawer-tab="brokers" type="button">Accounts <span id="dh-brokers-count" class="drawer-handle-count">—</span></button>
     <button class="drawer-handle" data-drawer-tab="trades" type="button">Trades <span id="dh-trades-count" class="drawer-handle-count">0</span></button>
     <button class="drawer-handle" data-drawer-tab="profiles" type="button">Profiles</button>
     <button class="drawer-handle" data-drawer-tab="specs" type="button">Account Specs</button>
@@ -2892,7 +3240,7 @@
   <section id="broker-accounts-section" class="sec collapsed">
     <div class="sec-hd" onclick="toggleSection('broker')">
       <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
-      <span class="sec-ttl">Broker Accounts</span>
+      <span class="sec-ttl">Accounts</span>
       <span id="broker-acct-badge" class="sec-badge"></span>
       <div class="sec-right">
         <button id="btn-toggle-archived" class="toggle-btn" onclick="event.stopPropagation();toggleArchived()">Show Archived</button>
@@ -3020,7 +3368,7 @@
           <tbody id="trade-book-live-body"><tr><td colspan="12" class="muted">Loading...</td></tr></tbody>
         </table>
       </div>
-      <h4 style="margin:18px 0 4px; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;" class="muted">Paper trades (gold.db)</h4>
+      <h4 style="margin:18px 0 4px; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;" class="muted">Historical paper log (gold.db)</h4>
       <div id="trade-book-paper-note" class="muted" style="font-size:11px; margin-bottom:6px"></div>
       <div class="tbl-wrap">
         <table class="blotter">
@@ -3063,7 +3411,7 @@
 
     <!-- CONNECTION LIST -->
     <div class="conn-header">
-      <span class="conn-header-title">Broker Connections</span>
+      <span class="conn-header-title">Accounts</span>
       <button class="conn-add-btn" onclick="openAddForm()">+ Add Connection</button>
     </div>
     <div id="conn-list"></div>
@@ -3088,6 +3436,8 @@ let showArchived = false;
 let lastEquityData = null;  // cached for re-renders
 let lastOperatorState = null;
 let lastAlertsData = null;
+let lastLaneControlData = null;
+let laneControlOpen = false;
 
 const $ = id => document.getElementById(id);
 const setText = (id, t) => { const e = $(id); if (e) e.textContent = t; };
@@ -3111,6 +3461,133 @@ function operatorTone(status) { return status === "READY" || status.startsWith("
 function operatorButtonTone(actionId) { return actionId === "start_signal" ? "success" : actionId === "stop_session" ? "danger" : actionId === "refresh_data" || actionId === "run_preflight" ? "warn" : ""; }
 function alertTone(level) { return level === "critical" ? "critical" : level === "warning" ? "warning" : "info"; }
 function getProfileRecord(profileId) { return (lastAccountsData || []).find(a => a.profile_id === profileId) || activeProfileData || null; }
+const LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto";
+const LIVE_PILOT_INSTRUMENT = "MNQ";
+const LIVE_PILOT_COPY_COUNT = 1;
+function isLivePilotProfile(profileId) { return String(profileId || "") === LIVE_PILOT_PROFILE; }
+function currentOperatorProfile() {
+  return runningProfile || activeProfileData?.profile_id || _lastPlannedLaunch?.profile_id || LIVE_PILOT_PROFILE;
+}
+function profileInstrumentsLabel(acct, fallback) {
+  const values = Array.isArray(acct?.instruments) ? acct.instruments.filter(Boolean) : [];
+  if (values.length) return values.join("+");
+  const laneInstruments = Array.isArray(lastLaneControlData?.lanes)
+    ? [...new Set(lastLaneControlData.lanes.map(l => l.instrument).filter(Boolean))]
+    : [];
+  if (laneInstruments.length) return laneInstruments.join("+");
+  const planInstruments = Array.isArray(_lastPlannedLaunch?.instruments)
+    ? _lastPlannedLaunch.instruments.filter(Boolean)
+    : [];
+  if (planInstruments.length) return planInstruments.join("+");
+  return fallback || "All";
+}
+function chartInstrumentLabel() {
+  try {
+    if (typeof ChartCockpit !== "undefined" && typeof ChartCockpit.getInstrument === "function") {
+      const inst = ChartCockpit.getInstrument();
+      if (inst) return inst;
+    }
+  } catch (_) {}
+  return profileInstrumentsLabel(getProfileRecord(currentOperatorProfile()), LIVE_PILOT_INSTRUMENT);
+}
+function capitalContextLabel(acct, profileId) {
+  const profile = String(profileId || acct?.profile_id || "").toLowerCase();
+  const firmKey = String(acct?.firm_key || acct?.firm || "").toLowerCase();
+  if (!acct && profile.includes("topstep")) return "Prop sim";
+  if (!acct) return "Capital unknown";
+  const notes = String(acct.notes || "").toLowerCase();
+  if (firmKey.includes("self") || profile.includes("self_funded")) return "Self-funded";
+  if (notes.includes("live funded") || notes.includes("lfa")) return "Prop live";
+  if (acct.is_express_funded === true || notes.includes("express funded") || notes.includes("xfa") || notes.includes("funded")) return "Prop funded";
+  if (notes.includes("combine") || notes.includes("evaluation") || notes.includes("eval")) return "Prop sim";
+  if (firmKey.includes("topstep") || firmKey.includes("tradeify") || firmKey.includes("bulenox") || firmKey.includes("mffu")) return "Prop sim";
+  if (firmKey || acct.firm) return "Broker";
+  return "Capital unknown";
+}
+function orderModeLabel(mode) {
+  const m = String(mode || "STOPPED").toUpperCase();
+  if (m === "SIGNAL") return "Signal-only.";
+  if (m === "DEMO") return "Demo.";
+  if (m === "LIVE") return "Live route.";
+  return "Stopped.";
+}
+function isRefreshBusy(data) {
+  const action = data?.recommended_action?.id;
+  const refresh = data?.resource_locks?.refresh || data?.refresh || {};
+  const reason = String(data?.reason || data?.busy_reason || "").toLowerCase();
+  return action === "wait_refresh" || refresh.running === true || reason.includes("refresh");
+}
+function isSessionRunningState(data) {
+  const rawMode = String(data?.raw_mode || data?.resource_locks?.session?.mode || "").toUpperCase();
+  const sessionRunning = data?.resource_locks?.session?.running === true;
+  return sessionRunning || ["SIGNAL", "DEMO", "LIVE"].includes(rawMode) || String(data?.top_state || "").startsWith("RUNNING_");
+}
+function operatorShortCopy(data, connectionBlocked) {
+  const topState = String(data?.top_state || "ERROR");
+  const rawMode = String(data?.raw_mode || data?.resource_locks?.session?.mode || "").toUpperCase();
+  if (connectionBlocked) {
+    return {tone: "fail", badge: "BROKER", headline: "Connect broker.", reason: "", hideAction: true};
+  }
+  if (isSessionRunningState(data)) {
+    const mode = rawMode === "LIVE" ? "LIVE" : rawMode === "DEMO" ? "DEMO" : rawMode === "SIGNAL" ? "SIGNAL" : "RUNNING";
+    return {tone: mode === "LIVE" ? "fail" : "pass", badge: mode, headline: orderModeLabel(mode), reason: "", hideAction: false};
+  }
+  if (isRefreshBusy(data)) {
+    return {tone: "warn", badge: "WAIT", headline: "Refreshing. Wait.", reason: "", hideAction: true};
+  }
+  if (topState === "READY") {
+    return {tone: "pass", badge: "READY", headline: "Ready.", reason: "", hideAction: false};
+  }
+  if (topState === "DEGRADED" || topState === "STALE") {
+    return {tone: "warn", badge: "CHECK", headline: "Check gates.", reason: "", hideAction: false};
+  }
+  if (topState === "BLOCKED") {
+    return {tone: "fail", badge: "BLOCKED", headline: "Blocked.", reason: "", hideAction: false};
+  }
+  return {tone: operatorTone(topState), badge: topState.replace(/_/g, " "), headline: topState.replace(/_/g, " "), reason: "", hideAction: false};
+}
+function renderGateDetails(checks) {
+  if (!checks.length) return "";
+  return `
+    <details class="operator-detail-toggle">
+      <summary>Show gate detail</summary>
+      <div class="operator-detail-list">
+        ${checks.map(check => `
+          <div class="operator-detail-row">
+            <b>${escapeHtml(check.name || "Check")}</b>
+            <span>${escapeHtml(String(check.status || "info").toUpperCase())}</span>
+            <em>${escapeHtml(check.detail || "")}</em>
+          </div>
+        `).join("")}
+      </div>
+    </details>
+  `;
+}
+function renderCompactOperatorChecks(data, wrap) {
+  const checks = Array.isArray(data?.checks) ? data.checks : [];
+  wrap.className = "operator-checks compact";
+  if (isRefreshBusy(data)) {
+    wrap.innerHTML = '<div class="operator-check warn"><div class="operator-check-detail">Refresh running. Wait.</div></div>' + renderGateDetails(checks);
+    return;
+  }
+  if (isSessionRunningState(data)) {
+    wrap.innerHTML = '<div class="operator-check info"><div class="operator-check-detail">Session running. Refresh blocked.</div></div>' + renderGateDetails(checks);
+    return;
+  }
+  if (!checks.length) {
+    wrap.innerHTML = '<div class="operator-check info"><div class="operator-check-detail">No cached gates yet.</div></div>';
+    return;
+  }
+  const hard = checks.filter(c => ["fail", "error"].includes(String(c.status || "").toLowerCase()));
+  const warn = checks.filter(c => String(c.status || "").toLowerCase() === "warn");
+  const line = hard.length
+    ? `${hard.length} blocker${hard.length === 1 ? "" : "s"}: ${hard.map(c => c.name || "gate").slice(0, 3).join(", ")}.`
+    : warn.length
+      ? `${warn.length} warning${warn.length === 1 ? "" : "s"}: ${warn.map(c => c.name || "gate").slice(0, 3).join(", ")}.`
+      : "Hard gates clear.";
+  const tone = hard.length ? "fail" : warn.length ? "warn" : "pass";
+  wrap.innerHTML = `<div class="operator-check ${tone}"><div class="operator-check-detail">${escapeHtml(line)}</div></div>` + renderGateDetails(checks);
+}
 function fmtAlertTime(v) {
   if (!v) return "—";
   try {
@@ -3146,6 +3623,152 @@ function toggleArchived() {
   if (lastEquityData) renderBrokerAccounts(lastEquityData);
 }
 
+function focusChart() {
+  const chart = $("chart-cockpit");
+  if (chart) chart.scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function openAccountsControl() {
+  switchTab("connections");
+  fetchBrokerList();
+  fetchEquity();
+}
+
+function toggleLaneControls() {
+  laneControlOpen = !laneControlOpen;
+  const panel = $("lane-control-panel");
+  if (panel) panel.classList.toggle("hidden", !laneControlOpen);
+  if (laneControlOpen) fetchLaneControl();
+}
+
+function compactLaneName(lane) {
+  const raw = String(lane?.session || lane?.label || lane?.strategy_id || "Lane");
+  return raw.replace(/_/g, " ").replace("OPEN", "").replace("SETTLE", "").trim() || raw;
+}
+
+function renderOpsStrip() {
+  const mode = ($("summary-mode")?.textContent || "Stopped").trim() || "Stopped";
+  const running = $("ops-running");
+  if (running) {
+    running.textContent = mode;
+    running.className = `ops-value ${mode === "Stopped" || mode === "Offline" ? "" : mode === "LIVE" ? "bad" : mode === "DEMO" ? "info" : "ok"}`;
+  }
+  setText("ops-running-sub", runningProfile || (mode === "Stopped" ? "no session" : ""));
+  const chartValue = $("ops-chart");
+  if (chartValue) {
+    const inst = chartInstrumentLabel();
+    chartValue.textContent = inst;
+    chartValue.className = `ops-value ${inst && inst !== "All" ? "info" : ""}`;
+    setText("ops-chart-sub", inst && inst !== "All" ? "candles" : "select profile");
+  }
+
+  const connList = Array.isArray(_lastBrokerHealth?.connections) ? _lastBrokerHealth.connections : [];
+  const enabledConns = connList.filter(c => c.enabled !== false);
+  const connectedConns = enabledConns.filter(c => String(c.status || "").toLowerCase() === "connected");
+  const acctValue = $("ops-accounts");
+  if (acctValue) {
+    acctValue.textContent = enabledConns.length ? `${connectedConns.length}/${enabledConns.length} on` : "0 on";
+    acctValue.className = `ops-value ${enabledConns.length && connectedConns.length === enabledConns.length ? "ok" : enabledConns.length ? "warn" : ""}`;
+  }
+
+  const laneValue = $("ops-lanes");
+  const laneSub = $("ops-lanes-sub");
+  if (laneValue) {
+    const data = lastLaneControlData;
+    if (!data) {
+      laneValue.textContent = "Loading";
+      laneValue.className = "ops-value";
+    } else {
+      const on = Number(data.enabled_count || 0);
+      const off = Number(data.disabled_count || 0);
+      const parked = Number(data.parked_count || 0);
+      laneValue.textContent = off ? `${on} on / ${off} off` : `${on} on`;
+      laneValue.className = `ops-value ${off ? "warn" : "ok"}`;
+      if (laneSub) laneSub.textContent = parked ? `${parked} parked` : "active book";
+    }
+  }
+}
+
+function renderLaneControls(data) {
+  lastLaneControlData = data;
+  const list = $("lane-control-list");
+  const sub = $("lane-control-sub");
+  if (!list) return;
+  const lanes = Array.isArray(data?.lanes) ? data.lanes : [];
+  const locked = !!data?.session_running;
+  if (sub) {
+    const mode = data?.raw_mode && data.raw_mode !== "STOPPED" ? `${data.raw_mode} running` : "stopped";
+    sub.textContent = `${data?.enabled_count ?? 0} on · ${data?.disabled_count ?? 0} off · ${data?.parked_count ?? 0} parked · ${mode}`;
+  }
+  if (!lanes.length) {
+    list.innerHTML = '<div class="empty">No lanes found.</div>';
+    renderOpsStrip();
+    return;
+  }
+  list.innerHTML = lanes.map((lane) => {
+    const status = String(lane.status || (lane.enabled ? "ON" : "OFF")).toLowerCase();
+    const parked = !lane.active_book;
+    const disabled = locked || parked;
+    const nextEnabled = !lane.enabled;
+    const title = locked ? "Stop the running session before changing lanes."
+      : parked ? "Parked lanes require a separate audit/rebalance."
+        : (lane.reason || "");
+    const btnText = lane.enabled ? "Turn off" : "Turn on";
+    const statusText = parked ? "PARKED" : lane.enabled ? "ON" : "OFF";
+    return `
+      <div class="lane-control-row" data-strategy-id="${escapeHtml(lane.strategy_id || "")}">
+        <div class="lane-control-time">${escapeHtml(lane.session_time_brisbane || "??:??")}</div>
+        <div class="lane-control-name">
+          <b>${escapeHtml(compactLaneName(lane))}</b>
+          <span>${escapeHtml(lane.instrument || "MNQ")} · ${escapeHtml(lane.setup_label || lane.strategy_id || "")}${lane.reason ? " · " + escapeHtml(lane.reason) : ""}</span>
+        </div>
+        <span class="lane-status-pill ${status}">${statusText}</span>
+        <button class="lane-toggle-btn ${nextEnabled ? "on" : "off"}" type="button"
+          ${disabled ? "disabled" : ""}
+          title="${escapeHtml(title)}"
+          onclick="toggleLane('${escapeHtml(lane.strategy_id || "")}', ${nextEnabled ? "true" : "false"})">${btnText}</button>
+      </div>`;
+  }).join("");
+  renderOpsStrip();
+}
+
+async function fetchLaneControl() {
+  const profile = currentOperatorProfile();
+  try {
+    const q = new URLSearchParams({profile});
+    const data = await (await fetch(`/api/lane-control?${q.toString()}`)).json();
+    if (data?.status === "error") throw new Error(data.message || "lane-control failed");
+    renderLaneControls(data);
+  } catch (e) {
+    lastLaneControlData = null;
+    setText("ops-lanes", "Error");
+    const laneValue = $("ops-lanes");
+    if (laneValue) laneValue.className = "ops-value bad";
+    const list = $("lane-control-list");
+    if (list) list.innerHTML = `<div class="empty">Lane controls unavailable: ${escapeHtml(e.message || e)}</div>`;
+  }
+}
+
+async function toggleLane(strategyId, enabled) {
+  const profile = lastLaneControlData?.profile || currentOperatorProfile();
+  showToast("Lane", enabled ? "Turning lane on..." : "Turning lane off...", "busy", {id: "lane"});
+  try {
+    const resp = await fetch("/api/lane-control/toggle", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({profile, strategy_id: strategyId, enabled}),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.status !== "ok") throw new Error(data.message || "toggle failed");
+    renderLaneControls(data.lane_control);
+    showToast("Lane saved", enabled ? "Lane on." : "Lane off.", "success", {id: "lane"});
+    fetchOperatorState();
+    fetchLaneStatus();
+  } catch (e) {
+    showToast("Lane blocked", e.message || String(e), "error", {id: "lane"});
+  }
+}
+
 /* ── Account Selector ───────────────── */
 function initAccountSelector() {
   try { selectedAccountId = parseInt(localStorage.getItem("orb_selected_acct")) || null; } catch (_) {}
@@ -3170,7 +3793,7 @@ function renderAccountSummary(accounts) {
   if (active) {
     const fc = (FIRM_STYLES[active.firm] || FIRM_STYLES["Self-Funded"]).color;
     $("topbar-acct").innerHTML = `<span style="color:${fc}">${active.firm}</span> ${fmtDollar(active.account_size)}`;
-    $("topbar-acct-detail").textContent = `${active.instruments.join("+")} · ${active.lane_count} lanes · ${active.platform || ""}`;
+    $("topbar-acct-detail").textContent = `${capitalContextLabel(active)} · ${active.instruments.join("+")} · ${active.lane_count}L`;
     $("metric-balance").textContent = fmtDollar(active.account_size);
     $("metric-balance-sub").textContent = "starting capital";
     $("metric-dd-sub").textContent = `of ${fmtDollar(active.max_dd)} max`;
@@ -3194,6 +3817,7 @@ function renderAccountSummary(accounts) {
   }
   // Tier 1.1 — active profile may have changed, refresh CTA
   try { updatePrimaryCta(); } catch (_) {}
+  try { updateLiveCta(); } catch (_) {}
   // Cockpit — hero + summaries
   try { renderHero(); } catch (_) {}
   try { updateCockpitSummaries(); } catch (_) {}
@@ -3268,11 +3892,11 @@ function renderAccounts(accounts) {
       } else {
         const ar = document.createElement("div"); ar.className = "actions-row";
         ar.innerHTML =
-          '<button class="pf-btn signal" title="Bot watches the market and sends Telegram alerts when a lane fires. You place orders manually on the TopStep platform. No orders are sent. Safe to run anytime — no money, no Combine impact.">' +
+          '<button class="pf-btn signal" title="Bot watches the market and sends Telegram alerts when a lane fires. You place orders manually on the Topstep platform. No orders are sent. Safe to run anytime.">' +
             '<span class="btn-title">Alerts</span><span class="btn-sub">Telegram only</span>' +
           '</button>' +
-          '<button class="pf-btn demo" title="Bot places PRACTICE orders on a separate ProjectX demo/sandbox account. No real money. Does NOT trade your Combine — use this only to rehearse the full order round-trip.">' +
-            '<span class="btn-title">Paper</span><span class="btn-sub">Practice, no $$</span>' +
+          '<button class="pf-btn demo" title="Bot places demo orders on a separate ProjectX demo/sandbox account. No real money. Use this only to rehearse the full order round-trip.">' +
+            '<span class="btn-title">Demo</span><span class="btn-sub">Broker sandbox</span>' +
           '</button>';
         const [bs, bd] = ar.querySelectorAll("button");
         const signalBlocked = blockedActionReason("start_signal");
@@ -3286,24 +3910,44 @@ function renderAccounts(accounts) {
 
         const legend = document.createElement("div"); legend.className = "mode-legend";
         legend.innerHTML =
-          '<div><b class="lg-signal">Alerts</b> — Telegram only. You trade manually. <em>Zero risk.</em></div>' +
-          '<div><b class="lg-demo">Paper</b> — fake orders on a practice account. Rehearses the bot without touching your Combine.</div>' +
-          '<div><b class="lg-live">Live</b> — real orders on your Combine. <b>Hold the red button 2 seconds to fire.</b></div>';
+          '<div><b class="lg-signal">Alerts</b> - Telegram only. You trade manually. <em>No broker orders.</em></div>' +
+          '<div><b class="lg-demo">Demo</b> - broker sandbox orders. No real money.</div>';
         card.appendChild(legend);
 
-        // Hold-to-confirm GO LIVE button (replaces type-LIVE-then-click gate).
-        const wrap = document.createElement("div"); wrap.className = "go-live-wrap";
-        wrap.innerHTML =
-          '<div class="go-live-ring"></div>' +
-          '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch REAL orders on this Combine account.">' +
-            '<span class="lock">🔒</span>GO LIVE — HOLD 2s' +
-          '</button>' +
-          '<span class="go-live-hint">Real Combine $$ — press AND HOLD for 2 seconds</span>';
-        const goLiveBtn = wrap.querySelector("button");
-        const goLiveRing = wrap.querySelector(".go-live-ring");
-        if (liveBlocked) { goLiveBtn.disabled = true; goLiveBtn.title = liveBlocked; }
-        else { window.attachHoldToFireLive(goLiveBtn, goLiveRing, wrap, acct); }
-        card.appendChild(wrap);
+        if (isLivePilotProfile(acct.profile_id)) {
+          const pilot = document.createElement("div"); pilot.className = "pilot-contract";
+          pilot.innerHTML =
+            '<div class="pilot-contract-top"><span class="pilot-label">Live pilot</span><span class="pilot-state">Gates run first</span></div>' +
+            '<div class="pilot-contract-grid">' +
+              `<span><b>${LIVE_PILOT_INSTRUMENT}</b><em>Instrument</em></span>` +
+              '<span><b>3 lanes</b><em>Active book</em></span>' +
+              `<span><b>${LIVE_PILOT_COPY_COUNT} copy</b><em>Primary only</em></span>` +
+            '</div>' +
+            '<div class="pilot-exclusion">NYSE_OPEN parked for SR alarm; no replacement lane in this pilot.</div>';
+          card.appendChild(pilot);
+
+          // Hold-to-confirm GO LIVE button. Only the pilot profile exposes this
+          // real-order control; other profiles remain viewable without implying
+          // live-launch eligibility.
+          const wrap = document.createElement("div"); wrap.className = "go-live-wrap";
+          wrap.innerHTML =
+            '<div class="go-live-ring"></div>' +
+            '<div class="go-live-copy"><strong>Real orders</strong><span>Topstep account &middot; one protected primary</span></div>' +
+            '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch the supervised Topstep MNQ route on one protected primary account.">' +
+              '<span class="lock" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>HOLD TO GO LIVE' +
+            '</button>' +
+            '<span class="go-live-hint">Topstep account &middot; MNQ &middot; 1 copy &middot; real orders</span>';
+          const goLiveBtn = wrap.querySelector("button");
+          const goLiveRing = wrap.querySelector(".go-live-ring");
+          if (liveBlocked) {
+            goLiveBtn.disabled = true;
+            goLiveBtn.title = liveBlocked;
+            wrap.classList.add("blocked");
+            wrap.querySelector(".go-live-hint").textContent = `Blocked: ${liveBlocked}`;
+          }
+          else { window.attachHoldToFireLive(goLiveBtn, goLiveRing, wrap, acct); }
+          card.appendChild(wrap);
+        }
       }
     } else if (!isActive) {
       const n = document.createElement("div"); n.className = "pf-meta"; n.style.cssText = "margin-top:8px;font-style:italic"; n.textContent = "Inactive"; card.appendChild(n);
@@ -3313,6 +3957,7 @@ function renderAccounts(accounts) {
     grid.appendChild(card);
   }
   $("profiles-badge").textContent = `${activeCount} active`;
+  try { updateLiveCta(); } catch (_) {}
   const tb = $("btn-toggle-inactive");
   if (inactiveCount > 0) { tb.style.display = ""; tb.textContent = showInactive ? `Hide ${inactiveCount} Inactive` : `Show ${inactiveCount} Inactive`; }
   else { tb.style.display = "none"; }
@@ -3471,6 +4116,59 @@ function blockedActionReason(actionId) {
   return lastOperatorState?.busy_reason || lastOperatorState?.reason || "Unavailable right now";
 }
 
+function resetHoldToFireButton(button) {
+  if (!button) return;
+  if (button._holdToFireCleanup) button._holdToFireCleanup();
+  button.classList.remove("holding");
+  const ring = button.querySelector(".topbar-live-ring");
+  if (ring) ring.style.setProperty("--p", 0);
+}
+
+function updateLiveCta() {
+  const btn = $("btn-live-cta");
+  if (!btn) return;
+  resetHoldToFireButton(btn);
+
+  const pilotAcct = (lastAccountsData || []).find(a => isLivePilotProfile(a.profile_id))
+    || (isLivePilotProfile(activeProfileData?.profile_id) ? activeProfileData : null);
+  const statusMode = ($("summary-mode")?.textContent || "Stopped").toString();
+  const isRunning = runningProfile || (statusMode !== "Stopped" && statusMode !== "Offline" && statusMode !== "—");
+
+  if (isRunning || !pilotAcct) {
+    btn.style.display = "none";
+    btn.onclick = null;
+    return;
+  }
+
+  let disabledReason = "";
+  if (!pilotAcct.active) {
+    disabledReason = "Live pilot profile is inactive.";
+  } else if (!(pilotAcct.auto_trading === "full" || pilotAcct.auto_trading === "semi")) {
+    disabledReason = "Live pilot profile is not automation-enabled.";
+  } else if (!pilotAcct.lane_count) {
+    disabledReason = "Live pilot has no active lanes.";
+  } else if (!lastOperatorState) {
+    disabledReason = "Checking live gates...";
+  } else {
+    disabledReason = blockedActionReason("start_live");
+  }
+
+  btn.style.display = "";
+  btn.className = "topbar-btn live-hold";
+  btn.disabled = !!disabledReason;
+  btn.title = disabledReason || "Hold 2 seconds to start the pinned Topstep MNQ live pilot.";
+  btn.setAttribute("aria-label", disabledReason ? `Live launch blocked: ${disabledReason}` : "Hold to go live. Topstep MNQ one copy.");
+  const sub = disabledReason ? `Blocked: ${disabledReason}` : `${LIVE_PILOT_PROFILE} · ${LIVE_PILOT_INSTRUMENT} · ${LIVE_PILOT_COPY_COUNT} copy`;
+  btn.innerHTML =
+    '<span class="topbar-live-ring"></span>' +
+    '<span class="topbar-live-label">HOLD TO GO LIVE</span>' +
+    `<span class="cta-sub">${escapeHtml(sub)}</span>`;
+  if (disabledReason) return;
+
+  const ring = btn.querySelector(".topbar-live-ring");
+  window.attachHoldToFireLive(btn, ring, btn, pilotAcct);
+}
+
 async function handleOperatorAction(action, data) {
   if (!action || !action.id) return;
 
@@ -3549,21 +4247,24 @@ function renderOperatorState(data) {
   try { renderHero(); } catch (_) {}
   try { renderConnectionReadiness(data?.connection_readiness); } catch (_) {}
   const topState = data?.top_state || "ERROR";
-  const tone = operatorTone(topState);
   const connectionBlocked = data?.recommended_action?.id === "open_connections"
     || data?.connection_readiness?.action === "open_connections";
+  const short = operatorShortCopy(data, connectionBlocked);
   $("operator-shell")?.classList.toggle("connection-blocked", !!connectionBlocked);
   const badge = $("operator-state-badge");
-  badge.className = `operator-state-badge ${tone}`;
-  badge.textContent = topState.replace(/_/g, " ");
+  badge.className = `operator-state-badge ${short.tone}`;
+  badge.textContent = short.badge;
 
-  setText("operator-headline", connectionBlocked ? "Broker connection required" : topState === "READY" ? "Ready to start" : topState.replace(/_/g, " "));
-  setText("operator-reason", data?.reason || "No operator summary available.");
-  setText("operator-profile", data?.profile ? `Profile: ${data.profile}` : "Profile: none");
+  setText("operator-headline", short.headline);
+  setText("operator-reason", short.reason);
+  const reasonEl = $("operator-reason");
+  if (reasonEl) reasonEl.style.display = short.reason ? "" : "none";
+  const profileRecord = getProfileRecord(data?.profile);
+  setText("operator-profile", data?.profile ? `${capitalContextLabel(profileRecord, data.profile)} · ${data.profile}` : "Profile: none");
 
   const btn = $("operator-primary-action");
   const action = data?.recommended_action || null;
-  if (action && action.id && !connectionBlocked) {
+  if (action && action.id && !connectionBlocked && !short.hideAction && !["wait_refresh", "wait_cleanup"].includes(action.id)) {
     btn.style.display = "";
     btn.textContent = action.label || "Continue";
     btn.className = `operator-primary-btn ${operatorButtonTone(action.id)}`.trim();
@@ -3574,26 +4275,21 @@ function renderOperatorState(data) {
   }
 
   const blocked = new Set(data?.blocked_action_ids || []);
-  $("btn-refresh").disabled = blocked.has("refresh_data") && action?.id !== "refresh_data";
-  $("btn-preflight").disabled = blocked.has("run_preflight") && action?.id !== "run_preflight";
-  $("btn-refresh").title = $("btn-refresh").disabled ? (data?.reason || "Unavailable right now") : "";
-  $("btn-preflight").title = $("btn-preflight").disabled ? (data?.reason || "Unavailable right now") : "";
-
-  const checks = Array.isArray(data?.checks) ? data.checks : [];
-  const wrap = $("operator-checks");
-  if (!checks.length) {
-    wrap.innerHTML = '<div class="operator-check info"><div class="operator-check-detail">No readiness checks available.</div></div>';
-    return;
+  const refreshBtn = $("btn-refresh");
+  const preflightBtn = $("btn-preflight");
+  refreshBtn.disabled = blocked.has("refresh_data") && action?.id !== "refresh_data";
+  preflightBtn.disabled = blocked.has("run_preflight") && action?.id !== "run_preflight";
+  refreshBtn.title = refreshBtn.disabled ? (data?.reason || "Unavailable right now") : "";
+  preflightBtn.title = preflightBtn.disabled ? (data?.reason || "Unavailable right now") : "";
+  if (!refreshPolling && !refreshBtn.classList.contains("is-busy")) {
+    refreshBtn.textContent = (refreshBtn.disabled && isRefreshBusy(data)) ? "Refreshing" : "Refresh";
   }
-  wrap.innerHTML = checks.map(check => `
-    <div class="operator-check ${check.status || "info"}">
-      <div class="operator-check-top">
-        <span class="operator-check-name">${escapeHtml(check.name || "Check")}</span>
-        <span class="operator-check-status">${escapeHtml(String(check.status || "info").toUpperCase())}</span>
-      </div>
-      <div class="operator-check-detail">${escapeHtml(check.detail || "")}</div>
-    </div>
-  `).join("");
+  const wrap = $("operator-checks");
+  renderCompactOperatorChecks(data, wrap);
+  if (Array.isArray(lastAccountsData) && lastAccountsData.length) {
+    try { renderAccounts(lastAccountsData); } catch (_) {}
+  }
+  try { updateLiveCta(); } catch (_) {}
 }
 
 function renderConnectionReadiness(connection) {
@@ -3792,7 +4488,17 @@ function updateStatus(state) {
 
   const acctName = state.account_name || "";
   const profileId = acctName.startsWith("profile_") ? acctName.slice(8) : null;
-  if (profileId !== runningProfile) { runningProfile = mode === "STOPPED" ? null : profileId; fetchAccounts(); }
+  // A session that died without a clean STOPPED write leaves mode=SIGNAL/LIVE
+  // forever, which used to latch runningProfile and hide the Alerts/Demo/GO-LIVE
+  // controls behind a permanent "Stop Session" button. Trust the server's
+  // authoritative is_running flag (canonical _session_snapshot truth) and, as a
+  // client-side guard against a missing flag, treat a stale heartbeat as
+  // not-running using the same STALE_AFTER_S the stale-banner already trusts.
+  const sessionAlive = state.is_running !== undefined
+    ? state.is_running === true
+    : (mode !== "STOPPED" && Number(state.heartbeat_age_s ?? 9999) < STALE_AFTER_S);
+  const nextRunning = sessionAlive ? profileId : null;
+  if (nextRunning !== runningProfile) { runningProfile = nextRunning; fetchAccounts(); fetchLaneControl(); }
   setText("running-profile", runningProfile || "Idle");
 
   $("mode-badge").className = `topbar-mode ${modeClass(mode)}`;
@@ -3800,6 +4506,7 @@ function updateStatus(state) {
 
   // Tier 1.1 — refresh primary CTA based on new status
   try { updatePrimaryCta(); } catch (_) {}
+  try { updateLiveCta(); } catch (_) {}
   // Cockpit — hero card reflects new status
   try { renderHero(); } catch (_) {}
 
@@ -4020,7 +4727,15 @@ async function fetchAlerts() {
     $("alerts-shell-sub").textContent = e.message || "Failed to load runtime alerts";
   }
 }
-async function fetchAccounts() { try { renderAccounts((await (await fetch("/api/accounts")).json()).accounts || []); } catch (_) { $("accounts-grid").innerHTML = '<div class="empty">Could not load.</div>'; } }
+async function fetchAccounts() {
+  try {
+    const data = await (await fetch("/api/accounts")).json();
+    renderAccounts(data.accounts || []);
+    renderOpsStrip();
+  } catch (_) {
+    $("accounts-grid").innerHTML = '<div class="empty">Could not load.</div>';
+  }
+}
 
 /* Tier 1.1b — planned-launch surface (data/bot_planned_launch.json).
    This is the authoritative pre-start record of what START_BOT.bat / the CLI
@@ -4034,6 +4749,7 @@ async function fetchPlannedLaunch() {
   }
   renderPlannedLaunchBanner();
   try { updatePrimaryCta(); } catch (_) {}
+  try { updateLiveCta(); } catch (_) {}
 }
 
 function renderPlannedLaunchBanner() {
@@ -4057,16 +4773,29 @@ function renderPlannedLaunchBanner() {
   const profile = p.profile_id || "?";
   const instr = (Array.isArray(p.instruments) && p.instruments.length) ? p.instruments.join("+") : "ALL";
   const copies = Number(p.broker_accounts_count || p.copies || 1);
-  const acctTxt = copies > 1 ? `${copies} broker accounts` : `1 broker account`;
-  const realMoney = mode === "LIVE" ? " · REAL MONEY" : "";
-  const sourceTxt = p.source ? ` · src:${escapeHtml(p.source)}` : "";
+  const acctTxt = copies > 1 ? `${copies} acct` : `1 acct`;
+  const acct = getProfileRecord(profile) || activeProfileData;
+  const capitalTxt = capitalContextLabel(acct, profile);
+  const stateTxt = isRefreshBusy(lastOperatorState)
+    ? '<span class="plb-pilot"><b>Refreshing. Wait.</b></span>'
+    : "";
+  const pilotTxt = isLivePilotProfile(profile)
+    ? `<span class="plb-pilot"><b>Live pilot:</b> ${LIVE_PILOT_INSTRUMENT} &middot; 3 lanes &middot; ${LIVE_PILOT_COPY_COUNT} copy</span><span class="plb-pilot"><b>NYSE:</b> parked</span>`
+    : "";
   if (p.status === "stale") {
     el.className = "planned-launch-banner stale";
-    el.innerHTML = `Next launch: <b>STALE</b> — last set as <b>${escapeHtml(mode)}</b> · ${escapeHtml(profile)} · ${escapeHtml(instr)} · ${acctTxt}${sourceTxt} · re-run START_BOT.bat`;
+    el.title = `Profile: ${profile}`;
+    el.innerHTML = `<span><b>STALE</b> &middot; ${escapeHtml(mode)} &middot; ${escapeHtml(capitalTxt)} &middot; ${escapeHtml(instr)} &middot; ${acctTxt}</span>${stateTxt}`;
     return;
   }
   el.className = `planned-launch-banner ${cls}`;
-  el.innerHTML = `Next launch: <b>${escapeHtml(mode)}</b> · ${escapeHtml(profile)} · ${escapeHtml(instr)} · ${acctTxt}${realMoney}${sourceTxt}`;
+  const current = mode === "SIGNAL" ? "Signal" : mode === "DEMO" ? "Demo" : "Live";
+  el.title = `Profile: ${profile}`;
+  const currentLabel = mode === "SIGNAL" ? "Signal-only" : current;
+  const currentDetail = isLivePilotProfile(profile)
+    ? `${currentLabel} · ${capitalTxt}`
+    : `${currentLabel} · ${capitalTxt} · ${instr} · ${acctTxt}`;
+  el.innerHTML = `<span><b>Current:</b> ${escapeHtml(currentDetail)}</span>${pilotTxt}${stateTxt}`;
 }
 
 /* Tier 1.1 — primary CTA in topbar (Start / Stop context-aware) */
@@ -4105,6 +4834,11 @@ function updatePrimaryCta() {
 
   if (recommended && recommended.id && recommended.id !== "start_signal") {
     if (recommended.id === "open_connections") {
+      btn.style.display = "none";
+      btn.onclick = null;
+      return;
+    }
+    if (recommended.id === "wait_refresh" || recommended.id === "wait_cleanup") {
       btn.style.display = "none";
       btn.onclick = null;
       return;
@@ -4149,6 +4883,13 @@ function updatePrimaryCta() {
     const planProfile = planned.profile_id || acct.profile_id;
     const copies = Number(planned.broker_accounts_count || planned.copies || 1);
     const acctSub = copies > 1 ? `${escapeHtml(planProfile)} · ${copies} accts` : escapeHtml(planProfile);
+    if (planMode === "LIVE") {
+      btn.disabled = true;
+      const liveSub = isLivePilotProfile(planProfile) ? "use HOLD TO GO LIVE" : "not configured for this profile";
+      btn.innerHTML = `LIVE ARMED <span class="cta-sub">${escapeHtml(liveSub)}</span>`;
+      btn.onclick = null;
+      return;
+    }
     btn.innerHTML = `${modeLabel} <span class="cta-sub">${acctSub}</span>`;
     btn.onclick = () => {
       if (_primaryCtaBusy) return;
@@ -4183,6 +4924,7 @@ let _lastPlannedLaunch = null;  // cached from /api/planned-launch — authorita
 function _heroDeriveState() {
   const mode = ($("summary-mode")?.textContent || "Stopped").toString();
   const op = lastOperatorState?.top_state || "";
+  if (isRefreshBusy(lastOperatorState)) return "refreshing";
   if (mode === "Stopped" || mode === "Offline" || mode === "—") {
     if (op === "BLOCKED" || op === "ERROR") return "blocked";
     if (op === "DEGRADED" || op === "STALE") return "warn";
@@ -4198,6 +4940,7 @@ function _heroStateLabel(state) {
     loading: "Loading",
     stopped: "Stopped",
     ready:   "Ready",
+    refreshing: "Refreshing",
     warn:    "Warning",
     blocked: "Blocked",
     error:   "Error",
@@ -4325,20 +5068,27 @@ function renderHero() {
           ` <span class="sub">· heartbeat ${escapeHtml(ageStr)}</span>`;
       }
     }
-  } else if ((state === "blocked" || state === "warn") && lastOperatorState?.recommended_action?.id !== "open_connections") {
+  } else if ((state === "blocked" || state === "warn" || state === "refreshing") && lastOperatorState?.recommended_action?.id !== "open_connections") {
     nowEl.style.display = "";
-    const reason = lastOperatorState?.reason || _heroStateLabel(state);
-    $("hero-now-body").innerHTML = `<span class="mono">${escapeHtml(_heroStateLabel(state).toUpperCase())}</span> <span class="sub">· ${escapeHtml(String(reason).slice(0, 180))}</span>`;
+    const short = operatorShortCopy(lastOperatorState || {}, false);
+    $("hero-now-body").innerHTML = `<span class="mono">${escapeHtml(short.badge)}</span> <span class="sub">· ${escapeHtml(short.headline)}</span>`;
   } else {
     nowEl.style.display = "none";
   }
 
   renderHeroBook();
+  renderHeroPilot(acct);
 }
 
 /* Book row: show ONLY deployed lanes of the active profile, filtered to
    UPCOMING + IMMINENT sessions (past lanes hidden). Sorted by time-to-fire.
    Chip state: armed (≤30min — strong visual) / next (first upcoming) / default. */
+function renderHeroPilot(acct) {
+  const el = $("hero-pilot");
+  if (!el) return;
+  el.hidden = acct?.profile_id !== "topstep_50k_mnq_auto";
+}
+
 function renderHeroBook() {
   const el = $("hero-book-lanes");
   if (!el) return;
@@ -4554,6 +5304,7 @@ function renderConnHealthDot(connections, errorMsg) {
   if (errorMsg) {
     dot.className = "conn-health-dot err";
     dot.title = `Broker connections: ${errorMsg}`;
+    try { renderOpsStrip(); } catch (_) {}
     return;
   }
   const list = Array.isArray(connections) ? connections : [];
@@ -4561,6 +5312,7 @@ function renderConnHealthDot(connections, errorMsg) {
   if (enabled.length === 0) {
     dot.className = "conn-health-dot unknown";
     dot.title = list.length === 0 ? "No broker connections configured" : "All broker connections disabled";
+    try { renderOpsStrip(); } catch (_) {}
     return;
   }
   const connected = enabled.filter(c => String(c.status || "").toLowerCase() === "connected");
@@ -4581,6 +5333,7 @@ function renderConnHealthDot(connections, errorMsg) {
   }
   dot.className = `conn-health-dot ${cls}`;
   dot.title = title;
+  try { renderOpsStrip(); } catch (_) {}
 }
 
 async function fetchSessions() {
@@ -4741,7 +5494,8 @@ function getSelectedAccount(data) {
     const match = tradeable.find(a => a.id === selectedAccountId);
     if (match) return match;
     // Selected account went non-tradeable (blown/restricted) — warn and fallback
-    showEquityError(`Account ${selectedAccountId} no longer tradeable — switched to ${tradeable[0].name}`);
+    const fallbackName = tradeable[0].name || tradeable[0].broker_display || `Account ${tradeable[0].id}`;
+    showEquityError(`Account ${selectedAccountId} no longer tradeable — switched to ${fallbackName}`);
     selectedAccountId = tradeable[0].id;
     try { localStorage.setItem("orb_selected_acct", String(selectedAccountId)); } catch (_) {}
   }
@@ -4756,7 +5510,7 @@ function updateMetricsFromEquity(data) {
   if (!acct) {
     balanceEl.textContent = "—";
     balanceEl.className = "metric-val muted";
-    balanceSubEl.textContent = "no tradeable accounts";
+    balanceSubEl.textContent = activeProfileData ? "broker account pending" : "no active profile";
     return;
   }
 
@@ -4779,8 +5533,9 @@ function updateMetricsFromEquity(data) {
 
   // Update topbar display
   $("topbar-acct").textContent = acct.broker_display || "";
-  $("topbar-acct-detail").textContent = acct.name || "";
+  $("topbar-acct-detail").textContent = [activeProfileData ? capitalContextLabel(activeProfileData) : "Broker account", acct.name || ""].filter(Boolean).join(" · ");
   try { renderHero(); } catch (_) {}
+  try { renderOpsStrip(); } catch (_) {}
 }
 
 function renderAccountSelector(data) {
@@ -4788,13 +5543,14 @@ function renderAccountSelector(data) {
   const tradeable = getTradeableAccounts(data);
   sel.innerHTML = "";
   if (!tradeable.length) {
-    sel.innerHTML = '<option value="">No tradeable accounts</option>';
+    sel.innerHTML = '<option value="">Broker account pending</option>';
     return;
   }
   for (const a of tradeable) {
     const opt = document.createElement("option");
     opt.value = String(a.id);
-    const shortName = a.name.replace(/-V2-\d+-/, " #").substring(0, 30);
+    const rawName = a.name || a.broker_display || `Account ${a.id}`;
+    const shortName = rawName.replace(/-V2-\d+-/, " #").substring(0, 30);
     opt.textContent = `${shortName} · ${fmtDollar(a.balance)}`;
     if (a.id === selectedAccountId) opt.selected = true;
     sel.appendChild(opt);
@@ -4907,7 +5663,7 @@ async function fetchEquity() {
 /* ── Actions ────────────────────────── */
 async function launchSession(pid, firm, instr, mode, opts) {
   const lbl = {signal: "SIGNAL-ONLY", demo: "DEMO", live: "LIVE"};
-  const warn = mode === "live" ? "\n\nREAL MONEY." : mode === "demo" ? "\n\nPaper orders." : "\n\nSignals only.";
+  const warn = mode === "live" ? "\n\nNon-demo broker route." : mode === "demo" ? "\n\nDemo broker orders." : "\n\nSignals only.";
   // Skip the JS confirm() prompt when the caller has already done its own
   // physical-gesture confirmation (e.g. hold-to-confirm on GO LIVE).
   const skipConfirm = opts && opts.skipConfirm === true;
@@ -4933,7 +5689,7 @@ async function launchSession(pid, firm, instr, mode, opts) {
 
 // Used by the chart "START FEED" button. Resolves the currently-selected
 // account (localStorage key set by the Dashboard tab) and launches signal
-// mode — no orders, no money, no Combine impact.
+// mode - no orders and no real-capital routing.
 window.startSignalForSelected = function() {
   const accts = Array.isArray(lastAccountsData) ? lastAccountsData : [];
   // Prefer an active+auto account; fall back to any active account; final fallback = first.
@@ -4942,7 +5698,7 @@ window.startSignalForSelected = function() {
           || accts[0]
           || null;
   if (!acct) {
-    showToast("No account", "Configure an account on the Connections tab first.", "warning");
+    showToast("No account", "Configure an account on the Accounts tab first.", "warning");
     return;
   }
   const instr = (acct.instruments || []).join("+") || "ALL";
@@ -4954,6 +5710,7 @@ window.startSignalForSelected = function() {
 window.attachHoldToFireLive = function(button, ring, wrap, acct) {
   const HOLD_MS = 2000;
   let startTs = 0, raf = 0, fired = false;
+  if (button._holdToFireCleanup) button._holdToFireCleanup();
   function tick(now) {
     if (!startTs) return;
     const p = Math.min(100, ((now - startTs) / HOLD_MS) * 100);
@@ -4961,8 +5718,7 @@ window.attachHoldToFireLive = function(button, ring, wrap, acct) {
     if (p >= 100 && !fired) {
       fired = true;
       cancel();
-      const instr = (acct.instruments || []).join("+") || "ALL";
-      launchSession(acct.profile_id, acct.firm, instr, "live", {skipConfirm: true});
+      launchSession(LIVE_PILOT_PROFILE, acct.firm, LIVE_PILOT_INSTRUMENT, "live", {skipConfirm: true});
       return;
     }
     raf = requestAnimationFrame(tick);
@@ -4982,10 +5738,20 @@ window.attachHoldToFireLive = function(button, ring, wrap, acct) {
     wrap.classList.remove("holding");
     ring.style.setProperty("--p", 0);
   }
+  const onPointerUp = () => { if (!fired) cancel(); };
+  const onPointerLeave = () => { if (!fired) cancel(); };
   button.addEventListener("pointerdown", start);
-  button.addEventListener("pointerup", () => { if (!fired) cancel(); });
-  button.addEventListener("pointerleave", () => { if (!fired) cancel(); });
+  button.addEventListener("pointerup", onPointerUp);
+  button.addEventListener("pointerleave", onPointerLeave);
   button.addEventListener("pointercancel", cancel);
+  button._holdToFireCleanup = () => {
+    cancel();
+    button.removeEventListener("pointerdown", start);
+    button.removeEventListener("pointerup", onPointerUp);
+    button.removeEventListener("pointerleave", onPointerLeave);
+    button.removeEventListener("pointercancel", cancel);
+    delete button._holdToFireCleanup;
+  };
 };
 
 wireStaleBanner();
@@ -5432,7 +6198,7 @@ initCockpit();
 // drawer tab is opened (Stage 4.2). fetchStatus/fetchAlerts/fetchLaneStatus
 // also bootstrapped once so the no-SSE path has a baseline; SSE events take
 // over on first connect.
-fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus(); fetchPlannedLaunch();
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus(); fetchLaneControl(); fetchPlannedLaunch();
 
 /* Stage 4.2 poller taxonomy:
    _COCKPIT_POLLERS      = always-on (SSE-paused on OPEN, resumed on CLOSED>10s).
@@ -5450,6 +6216,7 @@ const _COCKPIT_POLLERS = [
   setInterval(fetchOperatorState, 5000),
   // Tier 1.3 — broker health dot (topbar) polled regardless of tab
   setInterval(fetchBrokerHealth, 30000),
+  setInterval(fetchLaneControl, 30000),
   // Planned-launch surface — 10s suffices since it only changes when the
   // operator re-runs START_BOT.bat or shells the CLI. Cheap stat-then-read.
   setInterval(fetchPlannedLaunch, 10000),
@@ -5732,13 +6499,15 @@ const ChartCockpit = (() => {
     const detailEl = document.getElementById("chart-fb-detail");
     const btn = document.getElementById("chart-fb-start");
     const o = opts || {};
-    if (titleEl) titleEl.textContent = o.title || "NO LIVE FEED";
-    if (detailEl) detailEl.textContent = msg || "No recent bars. Start the feed to begin streaming candles.";
+    if (titleEl) titleEl.textContent = o.title || "No chart data";
+    if (detailEl) detailEl.textContent = msg || "Start signals to stream candles.";
     if (btn) {
       // Disable START FEED only when the failure is non-recoverable by starting a session
       // (e.g. Lightweight Charts CDN failed to load). For data-empty cases, leave it active.
       const recoverable = o.recoverable !== false;
-      btn.disabled = !recoverable;
+      const waiting = isRefreshBusy(lastOperatorState);
+      btn.disabled = waiting || !recoverable;
+      btn.textContent = waiting ? "Refreshing" : recoverable ? "Start signals" : "Unavailable";
       btn.onclick = recoverable ? () => {
         if (typeof window.startSignalForSelected === "function") {
           window.startSignalForSelected();
@@ -5752,7 +6521,7 @@ const ChartCockpit = (() => {
   function init() {
     if (initialized) return true;
     if (typeof window.LightweightCharts === "undefined") {
-      _showFallback("Chart library failed to load (CDN unreachable). Restart the dashboard or check internet.", {title: "CHART UNAVAILABLE", recoverable: false});
+      _showFallback("Chart unavailable.", {title: "No chart data", recoverable: false});
       return false;
     }
     const host = document.getElementById(HOST_ID);
@@ -5794,6 +6563,7 @@ const ChartCockpit = (() => {
     if (!init()) return;
     currentInstrument = instrument;
     document.getElementById("chart-cockpit-instr").textContent = instrument;
+    try { renderOpsStrip(); } catch (_) {}
     // Try a tight window first; widen to the last 24h if nothing recent (weekend / overnight / paused session).
     const windows = [LOOKBACK_MIN, 60 * 24];
     let loaded = false;
@@ -5835,7 +6605,7 @@ const ChartCockpit = (() => {
         }
       } catch (e) {
         console.error("ChartCockpit.loadInitial failed (window=" + win + ")", e);
-        _showFallback("Could not reach bars API: " + (e.message || "fetch failed"), {title: "API ERROR", recoverable: false});
+        _showFallback("Chart unavailable.", {title: "No chart data", recoverable: false});
         return;
       }
     }
@@ -5847,7 +6617,7 @@ const ChartCockpit = (() => {
         const ageStr = ageMin >= 60 ? (Math.round(ageMin / 60) + "h") : (ageMin + "m");
         ageLine = "Last bar " + ageStr + " ago — feed is stopped.";
       }
-      _showFallback(ageLine + " Press START FEED to begin streaming " + instrument + ".");
+      _showFallback(ageLine);
     }
   }
 
@@ -6039,6 +6809,7 @@ const ChartCockpit = (() => {
 
   function setInstrument(instrument) {
     if (instrument && instrument !== currentInstrument) { loadInitial(instrument); }
+    else if (instrument) { try { renderOpsStrip(); } catch (_) {} }
   }
 
   function applyOrbFromState(state) {
@@ -6189,6 +6960,7 @@ const SseClient = (() => {
         setInterval(fetchDataStatus, 30000),
         setInterval(fetchOperatorState, 5000),
         setInterval(fetchBrokerHealth, 30000),
+        setInterval(fetchLaneControl, 30000),
         setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000),
       );
       pollersActive = true;

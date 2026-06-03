@@ -85,6 +85,39 @@ def _family_hint_for(
     )
 
 
+def load_family_hints_from_bench(path: Path) -> dict[tuple[str, str, int, str, str, str], FamilyHint]:
+    hints: dict[tuple[str, str, int, str, str, str], FamilyHint] = {}
+    with path.open("r", encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            family = (row.get("family") or "").strip()
+            family_role = (row.get("family_role") or "").strip()
+            priority_raw = row.get("family_priority")
+            if not family and not family_role and priority_raw in (None, ""):
+                continue
+            key = candidate_key(
+                str(row["instrument"]),
+                str(row["session"]),
+                int(float(row["orb_minutes"])),
+                str(row["entry_model"]),
+                float(row["rr_target"]),
+                str(row["filter_type"]),
+            )
+            hints[key] = FamilyHint(
+                instrument=str(row["instrument"]),
+                session=str(row["session"]),
+                orb_minutes=int(float(row["orb_minutes"])),
+                entry_model=str(row["entry_model"]),
+                rr_target=float(row["rr_target"]),
+                filter_type=str(row["filter_type"]),
+                family=family or "UNSPECIFIED",
+                family_role=family_role or "unknown",
+                family_median_exp_r=None,
+                family_oos_median=None,
+                priority=int(float(priority_raw if priority_raw not in (None, "") else 5)),
+            )
+    return hints
+
+
 def _profile_blocker(
     candidate: UnlockCandidate,
     *,
@@ -355,6 +388,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--profile", default="topstep_50k_mnq_auto")
     parser.add_argument("--rebalance-date", default=date.today().isoformat())
     parser.add_argument("--inventory-cells", type=Path)
+    parser.add_argument("--family-hints-csv", type=Path)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--db-path", type=Path)
     parser.add_argument("--format", choices=("text", "json"), default="text")
@@ -371,6 +405,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.inventory_cells:
         family_hints = load_family_hints_from_cells(args.inventory_cells)
         source_notes.append(f"inventory_cells={args.inventory_cells}")
+    if args.family_hints_csv:
+        family_hints.update(load_family_hints_from_bench(args.family_hints_csv))
+        source_notes.append(f"family_hints_csv={args.family_hints_csv}")
 
     scores = compute_lane_scores(rebalance_date, db_path=args.db_path)
     scores = apply_live_tradeability_gate(apply_c8_gate(scores))

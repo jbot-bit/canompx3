@@ -5,6 +5,8 @@ Covers all 10 checks. Each test creates a temp DuckDB with injected data
 and passes the connection directly (checks take `con` parameter).
 """
 
+import subprocess
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -61,6 +63,32 @@ EXPERIMENTAL_SCHEMA = """
 """
 
 ALL_SCHEMAS = VALIDATED_SCHEMA + OUTCOMES_SCHEMA + EXPERIMENTAL_SCHEMA
+
+
+def test_script_path_bootstraps_project_root_without_pytest_path() -> None:
+    """Direct script execution must resolve `pipeline.*` imports.
+
+    This is a regression guard for the documented command
+    `python scripts/tools/audit_integrity.py`. Pytest normally puts the repo
+    root on sys.path, so test the script bootstrap in a subprocess that removes
+    cwd/repo-root from sys.path before `run_path()`.
+    """
+    repo = Path(__file__).resolve().parents[2]
+    script = repo / "scripts" / "tools" / "audit_integrity.py"
+    code = (
+        "import runpy, sys; "
+        f"repo = {str(repo)!r}; "
+        "sys.path = [p for p in sys.path if p not in ('', repo)]; "
+        f"runpy.run_path({str(script)!r})"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 @contextmanager
