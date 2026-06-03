@@ -635,6 +635,78 @@ def test_funded_telemetry_warning_is_not_launch_blocking(tmp_path: Path, monkeyp
     assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"]) == []
 
 
+def test_c11_strict_diagnostics_warning_is_launch_blocking(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        criterion11={
+            "gate_ok": True,
+            "gate_msg": (
+                "Criterion 11 pass: operational 73.3%, as_of=2026-06-03, age=0d, "
+                "paths=10000, strict_diagnostics=FAIL daily_loss_days=7 max_90d_dd=$2,788/$1,600"
+            ),
+            "report_age_days": 0,
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["strict_zero_warn"]["green"] is False
+    assert any("strict diagnostics" in warning.lower() for warning in report["strict_zero_warn"]["warnings"])
+    assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"])
+
+
+def test_proof_pack_paused_reason_summary_reads_allocator_reason(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(monkeypatch, allocation_path, validated_ids=["SID_A", "SID_B"])
+    allocation_path.write_text(
+        json.dumps(
+            {
+                "profile_id": "topstep_50k_mnq_auto",
+                "rebalance_date": "2026-05-03",
+                "lanes": [
+                    {
+                        "strategy_id": "SID_A",
+                        "instrument": "MNQ",
+                        "orb_label": "COMEX_SETTLE",
+                        "orb_minutes": 5,
+                        "rr_target": 1.0,
+                        "filter_type": "OVNRNG_100",
+                        "status": "DEPLOY",
+                    }
+                ],
+                "paused": [
+                    {
+                        "strategy_id": "SID_B",
+                        "status": "PAUSE",
+                        "reason": "strict live gate: SR status UNKNOWN is not CONTINUE",
+                    }
+                ],
+                "stale": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    reason_summary = report["proof_pack"]["paused_lanes"]["reason_summary"]
+    assert reason_summary == [
+        {
+            "reason": "strict live gate: SR status UNKNOWN is not CONTINUE",
+            "count": 1,
+            "examples": ["SID_B"],
+        }
+    ]
+
+
 def test_funded_signal_only_telemetry_task_warning_is_not_launch_blocking(
     tmp_path: Path,
     monkeypatch,
@@ -693,7 +765,7 @@ def test_daily_refresh_automation_warning_blocks_launch(tmp_path: Path, monkeypa
         allocation_path=allocation_path,
     )
 
-    assert report["strict_zero_warn"]["green"] is True
+    assert report["strict_zero_warn"]["green"] is False
     assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"])
 
 
