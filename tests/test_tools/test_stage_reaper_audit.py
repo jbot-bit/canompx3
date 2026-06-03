@@ -139,6 +139,62 @@ def test_peer_dirty_is_live_or_contested(tmp_path, parsers, monkeypatch):
     assert "peer dirty" in v.reasons[0]
 
 
+def test_peer_dirty_cache_marks_matching_scope_only():
+    cache = sra.AuditCache(peer_dirty_hits={"scripts/tools/x.py": ["peer:scripts/tools/x.py"]})
+    assert sra._peer_dirty_on_cached(cache, ["scripts/tools/x.py"]) == ["peer:scripts/tools/x.py"]
+    assert sra._peer_dirty_on_cached(cache, ["scripts/tools/y.py"]) == []
+
+
+def test_porcelain_paths_extracts_both_sides_of_rename():
+    # Plain lines yield one path.
+    assert sra._porcelain_paths(" M docs/runtime/stages/foo.md") == ["docs/runtime/stages/foo.md"]
+    assert sra._porcelain_paths("?? scripts/new.py") == ["scripts/new.py"]
+    assert sra._porcelain_paths("A  added.py") == ["added.py"]
+    assert sra._porcelain_paths("UU both.md") == ["both.md"]
+    # Rename/copy lines yield BOTH old and new (git porcelain v1: `old -> new`).
+    assert sra._porcelain_paths("R  a/old.md -> a/archive/old.md") == ["a/old.md", "a/archive/old.md"]
+    assert sra._porcelain_paths("C  src.py -> copy.py") == ["src.py", "copy.py"]
+    # R/C can sit in EITHER status column per the spec (X=index, Y=work tree).
+    assert sra._porcelain_paths(" R old.md -> new.md") == ["old.md", "new.md"]
+    assert sra._porcelain_paths("MR staged.md -> renamed.md") == ["staged.md", "renamed.md"]
+    # C-quoted paths (whitespace/specials) have their wrapping quotes stripped.
+    assert sra._porcelain_paths('R  "old name.md" -> "new name.md"') == ["old name.md", "new name.md"]
+    assert sra._porcelain_paths(' M "sp ace.md"') == ["sp ace.md"]
+    # Malformed / empty lines yield nothing.
+    assert sra._porcelain_paths("") == []
+    assert sra._porcelain_paths("XY") == []
+
+
+def test_peer_dirty_cache_detects_renamed_scope_file():
+    # A peer that git-mv'd a scope file emits `R old -> new`. The reaper MUST
+    # still see the OLD path as dirty (hands off) — missing it would let a
+    # contested stage be reaped. Regression guard for the pathspec->exact-match
+    # narrowing introduced with AuditCache.
+    porcelain_line = "R  docs/runtime/stages/foo.md -> docs/runtime/stages/archive/foo.md"
+    dirty: dict[str, list[str]] = {}
+    for path in sra._porcelain_paths(porcelain_line):
+        dirty.setdefault(path, []).append(f"peer:{path}")
+    cache = sra.AuditCache(peer_dirty_hits=dirty)
+    assert sra._peer_dirty_on_cached(cache, ["docs/runtime/stages/foo.md"]) == ["peer:docs/runtime/stages/foo.md"]
+    assert sra._peer_dirty_on_cached(cache, ["docs/runtime/stages/archive/foo.md"]) == [
+        "peer:docs/runtime/stages/archive/foo.md"
+    ]
+
+
+def test_commit_age_cache_calls_git_once(monkeypatch):
+    cache = sra.AuditCache()
+    calls = []
+
+    def fake_age(root, rel_path):
+        calls.append(rel_path)
+        return 100.0
+
+    monkeypatch.setattr(sra, "_git_last_commit_age_hours", fake_age)
+    assert sra._git_last_commit_age_hours_cached(cache, REPO_ROOT, "scripts/tools/x.py") == 100.0
+    assert sra._git_last_commit_age_hours_cached(cache, REPO_ROOT, "scripts/tools/x.py") == 100.0
+    assert calls == ["scripts/tools/x.py"]
+
+
 def test_quiet_tracked_no_peer_is_done_safe(tmp_path, parsers, monkeypatch):
     pf, psl = parsers
     monkeypatch.setattr(sra, "_git_last_commit_age_hours", lambda root, sp: 9999.0)

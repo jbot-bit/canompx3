@@ -13,6 +13,13 @@
 - **Result truth:** All 15 replacement scenarios are `KILL`. Best ranked scenario was `R02_C05`, replacing `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15` with `MNQ_CME_PRECLOSE_O15_E2_RR2_COST_LT10`; it improved annual dollars/maxDD but failed account-safety gates due daily-loss breach evidence. No scenario is live-valid, validated, deployable, or an allocation change from this artifact.
 - **Verification:** YAML parse passed; `prereg_front_door.py --format text` passed; `python -m py_compile research\mnq_single_leg_account_fit_replacement_v1.py` passed; focused pytest passed 8 tests; runner execution wrote 15 scenarios; scoped ruff passed; `git diff --check` passed; `project_pulse.py --fast` reported broken=0; `pipeline\check_drift.py --fast --quiet` passed with advisories only.
 
+## Current Codex Follow-up - Workflow Reliability And Stage Ownership
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Actioned the workflow-control-plane cleanup as a reliability job, not a stage-count cleanup. Verified the main-worktree lease holder PID/PPID were absent and `peer_live=false`, then released the stale lease. Archived only the approved Batch A stage `2026-05-29-drift-cache-proof-of-honesty.md`; no contested/live/drift/capital/unverifiable stages were moved. Added durable phased plan `docs/plans/active/2026-06/2026-06-03-workflow-reliability-stage-ownership.md` grounding the remaining work in worktree/branch/DB/port/dashboard/drift/lease ownership.
+- **Current blockers:** main remains dirty until this workflow-tooling diff is committed; dashboard port 8080 is open from `C:\Users\joshd\canompx3-live-launch-tokyo` with stale heartbeat; `gold.db` read-only probe is OK but hardlink count is 2; drift/precommit work remains owned by dirty peer `codex/precommit-drift-speed`.
+- **Verification:** `python -m pytest tests\test_tools\test_workflow_doctor.py tests\test_tools\test_stage_reaper_audit.py -q` passed 34 tests; scoped `ruff check` passed; `git diff --check` passed; `workflow_doctor.py status` showed no live peer lease block but did show dirty tree/dashboard stale/stage bloat; `stage_reaper_audit.py` reported `DONE_SAFE=0 LIVE_OR_CONTESTED=24 UNVERIFIABLE=8 CLOSED=23 total=55`.
+
 ## Previous Session
 - **Tool:** Codex
 - **Date:** 2026-05-30

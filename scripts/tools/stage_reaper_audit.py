@@ -73,6 +73,14 @@ class StageVerdict:
     reasons: list[str] = field(default_factory=list)
 
 
+@dataclass
+class AuditCache:
+    """Per-run cache so the reaper stays report-only but not O(stages*peers)."""
+
+    peer_dirty_hits: dict[str, list[str]] = field(default_factory=dict)
+    commit_age_hours: dict[str, float | None] = field(default_factory=dict)
+
+
 def _git_last_commit_age_hours(root: Path, rel_path: str) -> float | None:
     """Hours since the newest commit touching rel_path, or None if no history."""
     try:
@@ -135,11 +143,86 @@ def _peer_dirty_on(peer_roots: list[Path], scope: list[str]) -> list[str]:
             )
         except (subprocess.SubprocessError, OSError):
             continue
+        if out.returncode != 0:
+            continue
         for line in out.stdout.splitlines():
-            path = line[3:].strip()
-            if path:
+            for path in _porcelain_paths(line):
                 hits.append(f"{peer.name}:{path}")
     return hits
+
+
+def _porcelain_paths(line: str) -> list[str]:
+    """Extract every scope-relevant path from one `git status --porcelain` line.
+
+    Per the git-status porcelain v1 spec, a line is `<xy> <path>`, except a
+    rename/copy which is `<xy> <orig-path> -> <path>` (old -> new order, literal
+    " -> " separator). BOTH old and new are keyed so a peer that renamed a scope
+    file is still detected as dirty on that scope (the original pathspec form
+    matched either side). The rename/copy code `R`/`C` can appear in EITHER the
+    index column (X) or the work-tree column (Y) — e.g. `R `, ` R`, `MR` — so we
+    detect on either column AND on the unambiguous " -> " separator (which never
+    appears in a non-rename porcelain line). Paths with whitespace/specials are
+    C-quoted (surrounded by double quotes) — strip the wrapping quotes so the key
+    matches the unquoted scope_lock entry. Over-detection here is the SAFE
+    direction: an extra key can only make the reaper hand off
+    (LIVE_OR_CONTESTED), never wrongly reap.
+    """
+    body = line[3:].strip()
+    if not body:
+        return []
+    status = line[:2]
+    is_rename = ("R" in status or "C" in status) and " -> " in body
+    parts = [body]
+    if is_rename:
+        old, _, new = body.partition(" -> ")
+        parts = [old.strip(), new.strip()]
+    return [_strip_porcelain_quotes(p) for p in parts if _strip_porcelain_quotes(p)]
+
+
+def _strip_porcelain_quotes(path: str) -> str:
+    """Strip the wrapping C-quote double-quotes git adds to special-char paths.
+
+    Only strips a matched leading+trailing pair (the quoting git applies to the
+    whole field); an interior quote in an unquoted path is left untouched.
+    """
+    path = path.strip()
+    if len(path) >= 2 and path[0] == '"' and path[-1] == '"':
+        return path[1:-1]
+    return path
+
+
+def _build_peer_dirty_cache(peer_roots: list[Path]) -> dict[str, list[str]]:
+    """Map dirty path -> peer markers with one git-status call per peer."""
+    dirty: dict[str, list[str]] = {}
+    for peer in peer_roots:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(peer), "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (subprocess.SubprocessError, OSError):
+            continue
+        if out.returncode != 0:
+            continue
+        for line in out.stdout.splitlines():
+            for path in _porcelain_paths(line):
+                dirty.setdefault(path, []).append(f"{peer.name}:{path}")
+    return dirty
+
+
+def _peer_dirty_on_cached(cache: AuditCache, scope: list[str]) -> list[str]:
+    hits: list[str] = []
+    for path in scope:
+        hits.extend(cache.peer_dirty_hits.get(path, []))
+    return hits
+
+
+def _git_last_commit_age_hours_cached(cache: AuditCache, root: Path, rel_path: str) -> float | None:
+    if rel_path not in cache.commit_age_hours:
+        cache.commit_age_hours[rel_path] = _git_last_commit_age_hours(root, rel_path)
+    return cache.commit_age_hours[rel_path]
 
 
 def classify_stage(
@@ -149,6 +232,7 @@ def classify_stage(
     peer_roots: list[Path],
     recency_hours: float,
     root: Path,
+    cache: AuditCache | None = None,
 ) -> StageVerdict:
     try:
         content = path.read_text(encoding="utf-8")
@@ -175,14 +259,18 @@ def classify_stage(
     reasons: list[str] = []
 
     # Gate 1: peer-dirty on any scope file → hands off.
-    peer_hits = _peer_dirty_on(peer_roots, scope)
+    peer_hits = _peer_dirty_on_cached(cache, scope) if cache is not None else _peer_dirty_on(peer_roots, scope)
     if peer_hits:
         reasons.append("peer dirty: " + ", ".join(peer_hits[:4]))
         return StageVerdict(path.name, mode, "LIVE_OR_CONTESTED", reasons)
 
     # Gate 2: every scope file must have git history older than recency window.
     for sp in scope:
-        age = _git_last_commit_age_hours(root, sp)
+        age = (
+            _git_last_commit_age_hours_cached(cache, root, sp)
+            if cache is not None
+            else _git_last_commit_age_hours(root, sp)
+        )
         if age is None:
             reasons.append(f"no git history: {sp}")
             return StageVerdict(path.name, mode, "UNVERIFIABLE", reasons)
@@ -199,10 +287,11 @@ def classify_stage(
 def audit(recency_hours: float, root: Path = REPO_ROOT) -> list[StageVerdict]:
     parse_field, parse_scope_lock = _load_stage_parsers()
     peer_roots = _peer_worktrees(root)
+    cache = AuditCache(peer_dirty_hits=_build_peer_dirty_cache(peer_roots))
     stages_dir = root / "docs" / "runtime" / "stages"
     verdicts: list[StageVerdict] = []
     for f in sorted(stages_dir.glob("*.md")):
-        verdicts.append(classify_stage(f, parse_field, parse_scope_lock, peer_roots, recency_hours, root))
+        verdicts.append(classify_stage(f, parse_field, parse_scope_lock, peer_roots, recency_hours, root, cache))
     return verdicts
 
 
