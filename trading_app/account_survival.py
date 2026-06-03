@@ -54,6 +54,8 @@ MIN_SURVIVAL_PROBABILITY = 0.70
 DEFAULT_REPORT_MAX_AGE_DAYS = 30
 CRITERION11_STATE_TYPE = "account_survival"
 CRITERION11_STATE_SCHEMA_VERSION = 1
+STRICT_DD_BUDGET_FRACTION = 0.80
+STRICT_DD_HORIZON_DAYS = 90
 
 
 @dataclass(frozen=True)
@@ -98,6 +100,11 @@ class SurvivalSummary:
     path_model: str
     min_operational_pass_probability: float
     gate_pass: bool
+    strict_account_gate_pass: bool
+    effective_dd_budget_dollars: float
+    historical_daily_loss_breach_days: list[str]
+    historical_daily_loss_breach_count: int
+    historical_max_observed_90d_dd_dollars: float
     p50_final_balance: float
     p05_final_balance: float
     p95_final_balance: float
@@ -550,6 +557,10 @@ def _build_rules(profile: AccountProfile) -> SurvivalRules:
     if profile.firm == "topstep" and profile.is_express_funded:
         topstep_day1_max_lots = max_lots_for_xfa(profile.account_size, starting_balance)
 
+    daily_loss_limit = profile.daily_loss_dollars
+    if daily_loss_limit is None:
+        daily_loss_limit = float(tier.daily_loss_limit) if tier.daily_loss_limit is not None else None
+
     return SurvivalRules(
         profile_id=profile.profile_id,
         firm=profile.firm,
@@ -557,7 +568,7 @@ def _build_rules(profile: AccountProfile) -> SurvivalRules:
         dd_type=firm_spec.dd_type,
         starting_balance=starting_balance,
         dd_limit_dollars=float(tier.max_dd),
-        daily_loss_limit=float(tier.daily_loss_limit) if tier.daily_loss_limit is not None else None,
+        daily_loss_limit=float(daily_loss_limit) if daily_loss_limit is not None else None,
         consistency_rule=None,
         freeze_at_balance=freeze_at,
         # Current project daily lanes are 1-contract micro lanes per account.
@@ -714,6 +725,36 @@ def simulate_survival(
     }
 
 
+def _historical_daily_loss_breach_days(scenarios: list[DailyScenario], rules: SurvivalRules) -> list[str]:
+    """Return historical days that would trip the effective daily-loss belt."""
+    if rules.daily_loss_limit is None:
+        return []
+    breach_days: list[str] = []
+    for scenario in scenarios:
+        day_min_delta = min(scenario.min_balance_delta_dollars, scenario.total_pnl_dollars)
+        if day_min_delta <= -rules.daily_loss_limit:
+            breach_days.append(scenario.trading_day)
+    return breach_days
+
+
+def _max_observed_rolling_drawdown(scenarios: list[DailyScenario], *, horizon_days: int) -> float:
+    """Return max observed close-to-close drawdown over rolling horizon windows."""
+    if horizon_days <= 0:
+        raise ValueError("horizon_days must be positive")
+    max_dd = 0.0
+    for start_idx in range(len(scenarios)):
+        balance = 0.0
+        peak = 0.0
+        for scenario in scenarios[start_idx : start_idx + horizon_days]:
+            balance += scenario.total_pnl_dollars
+            if balance > peak:
+                peak = balance
+            dd_used = peak - balance
+            if dd_used > max_dd:
+                max_dd = dd_used
+    return round(max_dd, 2)
+
+
 def evaluate_profile_survival(
     profile_id: str | None = None,
     *,
@@ -734,7 +775,18 @@ def evaluate_profile_survival(
     rules = _with_consistency_rule(_build_rules(profile), profile)
     result = simulate_survival(scenarios, rules, horizon_days=horizon_days, n_paths=n_paths, seed=seed)
     operational_pass_probability = round(result["operational_pass_probability"], 4)
-    gate_pass = operational_pass_probability >= float(min_survival_probability)
+    effective_dd_budget_dollars = round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION, 2)
+    historical_daily_loss_breach_days = _historical_daily_loss_breach_days(scenarios, rules)
+    historical_max_observed_90d_dd_dollars = _max_observed_rolling_drawdown(
+        scenarios,
+        horizon_days=STRICT_DD_HORIZON_DAYS,
+    )
+    operational_gate_pass = operational_pass_probability >= float(min_survival_probability)
+    strict_account_gate_pass = (
+        len(historical_daily_loss_breach_days) == 0
+        and historical_max_observed_90d_dd_dollars <= effective_dd_budget_dollars
+    )
+    gate_pass = operational_gate_pass and strict_account_gate_pass
 
     summary = SurvivalSummary(
         profile_id=resolved_profile_id,
@@ -762,6 +814,11 @@ def evaluate_profile_survival(
         path_model=result["path_model"],
         min_operational_pass_probability=float(min_survival_probability),
         gate_pass=gate_pass,
+        strict_account_gate_pass=strict_account_gate_pass,
+        effective_dd_budget_dollars=effective_dd_budget_dollars,
+        historical_daily_loss_breach_days=historical_daily_loss_breach_days,
+        historical_daily_loss_breach_count=len(historical_daily_loss_breach_days),
+        historical_max_observed_90d_dd_dollars=historical_max_observed_90d_dd_dollars,
         p50_final_balance=result["p50_final_balance"],
         p05_final_balance=result["p05_final_balance"],
         p95_final_balance=result["p95_final_balance"],
@@ -838,6 +895,11 @@ def check_survival_report_gate(
         scaling_feasible = bool(summary.get("scaling_feasible", False))
         intraday_approximated = bool(summary.get("intraday_approximated", False))
         path_model = str(summary.get("path_model", "daily_close"))
+        gate_pass = bool(summary["gate_pass"])
+        strict_account_gate_pass = bool(summary["strict_account_gate_pass"])
+        historical_daily_loss_breach_count = int(summary["historical_daily_loss_breach_count"])
+        effective_dd_budget_dollars = float(summary["effective_dd_budget_dollars"])
+        historical_max_observed_90d_dd_dollars = float(summary["historical_max_observed_90d_dd_dollars"])
     except (KeyError, TypeError, ValueError) as exc:
         return False, f"BLOCKED: unreadable Criterion 11 survival summary ({exc})"
 
@@ -861,11 +923,22 @@ def check_survival_report_gate(
             False,
             f"BLOCKED: Criterion 11 operational pass {operational_pass:.1%} < {min_survival_probability:.0%}",
         )
-
+    strict_failures: list[str] = []
+    if historical_daily_loss_breach_count > 0:
+        strict_failures.append(f"historical_daily_loss_days={historical_daily_loss_breach_count}")
+    if historical_max_observed_90d_dd_dollars > effective_dd_budget_dollars:
+        strict_failures.append(
+            f"max_90d_dd=${historical_max_observed_90d_dd_dollars:,.0f}/${effective_dd_budget_dollars:,.0f}"
+        )
+    if not strict_account_gate_pass or strict_failures:
+        detail = ", ".join(strict_failures) if strict_failures else "strict_account_gate_pass=false"
+        return False, f"BLOCKED: Criterion 11 strict account diagnostics failed ({detail}). Re-run account survival."
+    if not gate_pass:
+        return False, "BLOCKED: Criterion 11 account-survival gate failed. Re-run account survival."
     return (
         True,
         f"Criterion 11 pass: operational {operational_pass:.1%}, as_of={as_of_date}, "
-        f"age={report_age_days}d, paths={n_paths}",
+        f"age={report_age_days}d, paths={n_paths}, strict_account=PASS",
     )
 
 
@@ -893,6 +966,19 @@ def _print_summary(summary: SurvivalSummary) -> None:
         f"scaling={summary.scaling_breach_probability:.1%} | "
         f"consistency={summary.consistency_breach_probability:.1%}"
     )
+    print("Expectancy edge: not evaluated by Criterion 11 account survival")
+    print(
+        f"Strict diagnostics: effective_dd_budget=${summary.effective_dd_budget_dollars:,.0f} | "
+        f"historical_daily_loss_breaches={summary.historical_daily_loss_breach_count} | "
+        f"historical_max_observed_90d_dd=${summary.historical_max_observed_90d_dd_dollars:,.0f}"
+    )
+    print(f"Prop-account path safety={'PASS' if summary.strict_account_gate_pass else 'FAIL'}")
+    print(f"Final deployability gate={'PASS' if summary.gate_pass else 'FAIL'}")
+    if summary.historical_daily_loss_breach_days:
+        print(
+            f"Historical daily-loss breach days ({summary.historical_daily_loss_breach_count}): "
+            + ", ".join(summary.historical_daily_loss_breach_days)
+        )
     print(
         f"Final balance p05/p50/p95 = ${summary.p05_final_balance:,.0f} / "
         f"${summary.p50_final_balance:,.0f} / ${summary.p95_final_balance:,.0f}"
@@ -932,7 +1018,7 @@ def main() -> None:
         min_survival_probability=args.fail_under,
     )
     _print_summary(summary)
-    if summary.operational_pass_probability < args.fail_under:
+    if not summary.gate_pass:
         raise SystemExit(2)
 
 
