@@ -20,6 +20,12 @@
 - **⚠ Truth note (Claude, 2026-05-30, verified):** the `--strict-live-clean` flag and the lane_allocator `feature_cache` opt described above are **NOT committed on any branch** (`git log --all -S` = 0 hits). They live only in `stash@{0}` + `docs/runtime/rescued/2026-05-30-*` (see RESCUE-MANIFEST). Capital-path, Codex-owned — must be committed by its owner, not dropped. The regenerated `lane_allocation*.json` is the OUTPUT of that un-landed code, so canonical `docs/runtime/lane_allocation.json` on HEAD does NOT reflect it.
 - **✅ Drift CLEAN — RETRACTION of an earlier false claim (Claude, 2026-05-30, execution-verified):** an earlier version of this note (commit `82721bcc`) claimed `check_active_native_trade_windows_match_provenance` was FAILING on lane `MNQ_COMEX_SETTLE_...OVNRNG_100`. **That was wrong** — I wrote it from a stale memory note without executing, violating Rule 11 (never trust metadata). Direct call returns `VIOLATIONS: 0`; full `check_drift.py --skip-crg-advisory` = **NO DRIFT DETECTED, 170 passed, 0 failed** (incl. Check 191 cold-recheck PASSED). The COMEX_SETTLE lane IS present in canonical `lane_allocation.json` (one of the 3 active lanes). `backfill_validated_trade_windows.py` (live write) = `inspected=848 drifted=0 updated=0`. Trade-window provenance is canonical. No action owed.
 
+## Current Codex Follow-up - Rescue Cleanup
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Continued rescue review from clean branch `review/rescue-2026-06-03` after `origin/main` advanced to `f505b69a`. Landed only connected low-risk documentation: `docs/plans/active/2026-05/2026-05-23-slack-control-room-design.md`, an observer-only Slack control-room plan with active-plan lifecycle frontmatter. Excluded stale rescue `HANDOFF.md` changes; no Slack install/posting, no live trading, no DB writes, and no allocator/profile/broker/journal/webhook changes.
+- **Remaining:** Rescue refs remain undeleted. Live-capital, DB/MCP, allocator, webhook, journal/profile, broad hook/drift, and research/OOS branches stay parked for separate focused review.
+
 ## Current Codex Follow-up - ORB Execution Research
 - **Tool:** Codex
 - **Date:** 2026-06-01
