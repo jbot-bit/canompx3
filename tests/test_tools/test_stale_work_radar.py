@@ -209,6 +209,7 @@ class TestPulseSurfacesBlobTrap:
         assert "upstream_gone" not in rep.risk_breakdown
         assert "blob_trap" in rep.risk_breakdown
         with (
+            patch.dict(sys.modules, {"stale_work_radar": radar}),
             patch.object(radar, "base_exists", return_value=True),
             patch.object(radar, "build_reports", return_value=[rep]),
         ):

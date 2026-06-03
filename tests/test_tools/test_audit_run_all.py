@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -20,7 +21,7 @@ def test_run_all_quick_forwards_quick_to_quick_aware_phases(monkeypatch):
         run_all.main()
 
     assert excinfo.value.code == 0
-    phase_cmds = {cmd[1].split("\\")[-1]: cmd[2:] for cmd in calls}
+    phase_cmds = {Path(cmd[1]).name: cmd[2:] for cmd in calls}
     assert phase_cmds["phase_1_automated.py"] == ["--quick"]
     assert phase_cmds["phase_3_docs.py"] == ["--quick"]
     assert phase_cmds["phase_0_triage.py"] == []
