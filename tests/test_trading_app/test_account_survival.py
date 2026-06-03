@@ -17,6 +17,7 @@ from trading_app.account_survival import (
     _build_rules,
     _current_survival_canonical_inputs,
     _load_lane_daily_pnl,
+    _load_lane_trade_paths,
     _scenario_from_trade_paths,
     check_survival_report_gate,
     evaluate_profile_survival,
@@ -342,7 +343,7 @@ def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_p
     assert "61.0% < 70%" in msg
 
 
-def test_check_survival_report_gate_reports_strict_historical_daily_loss_breaches(tmp_path, monkeypatch):
+def test_check_survival_report_gate_blocks_strict_historical_daily_loss_breaches(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
     monkeypatch.setattr(
         "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
@@ -360,9 +361,8 @@ def test_check_survival_report_gate_reports_strict_historical_daily_loss_breache
         today=date(2026, 4, 10),
     )
 
-    assert ok is True
-    assert "Criterion 11 pass" in msg
-    assert "strict_diagnostics=FAIL" in msg
+    assert ok is False
+    assert "strict account diagnostics failed" in msg
     assert "historical_daily_loss_days=2" in msg
     assert "max_90d_dd=$1,701/$1,600" in msg
 
@@ -527,6 +527,116 @@ def test_load_lane_daily_pnl_uses_effective_profile_stop_multiplier(monkeypatch)
     assert daily == {date(2026, 1, 2): 50.0}
 
 
+def test_load_lane_trade_paths_applies_orb_cap_skip_boundary_like_live(monkeypatch):
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_snapshot",
+        lambda _con, _sid: {
+            "instrument": "MNQ",
+            "orb_label": "NYSE_OPEN",
+            "orb_minutes": 5,
+            "entry_model": "E2",
+            "rr_target": 1.5,
+            "confirm_bars": 1,
+            "filter_type": "COST_LT10",
+            "stop_multiplier": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_outcomes",
+        lambda *_args, **_kwargs: [
+            {
+                "trading_day": date(2026, 1, 2),
+                "outcome": "win",
+                "entry_price": 20000.0,
+                "stop_price": 19851.0,
+                "pnl_r": 1.0,
+            },
+            {
+                "trading_day": date(2026, 1, 3),
+                "outcome": "win",
+                "entry_price": 20000.0,
+                "stop_price": 19850.0,
+                "pnl_r": 1.0,
+            },
+            {
+                "trading_day": date(2026, 1, 4),
+                "outcome": "win",
+                "entry_price": 20000.0,
+                "stop_price": 19849.0,
+                "pnl_r": 1.0,
+            },
+        ],
+    )
+    monkeypatch.setattr("trading_app.account_survival.get_cost_spec", lambda _instrument: object())
+    monkeypatch.setattr("trading_app.account_survival.risk_in_dollars", lambda *_args, **_kwargs: 100.0)
+
+    capped = _load_lane_trade_paths(
+        con=None,
+        strategy_id="MNQ_TEST",
+        as_of_date=date(2026, 4, 9),
+        max_orb_size_pts=150.0,
+    )
+    uncapped = _load_lane_trade_paths(
+        con=None,
+        strategy_id="MNQ_TEST",
+        as_of_date=date(2026, 4, 9),
+        max_orb_size_pts=None,
+    )
+
+    assert [trade.trading_day for trade in capped] == [date(2026, 1, 2)]
+    assert [trade.trading_day for trade in uncapped] == [
+        date(2026, 1, 2),
+        date(2026, 1, 3),
+        date(2026, 1, 4),
+    ]
+
+
+def test_load_lane_trade_paths_applies_orb_cap_after_tight_stop(monkeypatch):
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_snapshot",
+        lambda _con, _sid: {
+            "instrument": "MNQ",
+            "orb_label": "NYSE_OPEN",
+            "orb_minutes": 5,
+            "entry_model": "E2",
+            "rr_target": 1.5,
+            "confirm_bars": 1,
+            "filter_type": "COST_LT10",
+            "stop_multiplier": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_outcomes",
+        lambda *_args, **_kwargs: [
+            {
+                "trading_day": date(2026, 1, 2),
+                "outcome": "win",
+                "entry_price": 20000.0,
+                "stop_price": 19700.0,
+                "pnl_r": 1.0,
+            }
+        ],
+    )
+    monkeypatch.setattr("trading_app.account_survival.get_cost_spec", lambda _instrument: object())
+    monkeypatch.setattr("trading_app.account_survival.risk_in_dollars", lambda *_args, **_kwargs: 100.0)
+
+    def fake_apply_tight_stop(outcomes, stop_multiplier, _cost_spec):
+        assert stop_multiplier == 0.5
+        return [{**outcomes[0], "stop_price": 19851.0}]
+
+    monkeypatch.setattr("trading_app.account_survival.apply_tight_stop", fake_apply_tight_stop)
+
+    trades = _load_lane_trade_paths(
+        con=None,
+        strategy_id="MNQ_TEST",
+        as_of_date=date(2026, 4, 9),
+        effective_stop_multiplier=0.5,
+        max_orb_size_pts=150.0,
+    )
+
+    assert [trade.trading_day for trade in trades] == [date(2026, 1, 2)]
+
+
 def test_evaluate_profile_survival_writes_report(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
     monkeypatch.setattr(
@@ -679,6 +789,6 @@ def test_account_survival_no_write_state_cli_fails_operational_gate_and_reports_
     assert "gate=FAIL" in out
     assert "Expectancy edge: not evaluated by Criterion 11 account survival" in out
     assert "Strict diagnostics: effective_dd_budget=$1,600" in out
-    assert "Prop-account strict diagnostics=FAIL" in out
-    assert "Criterion 11 gate=FAIL" in out
+    assert "Prop-account path safety=FAIL" in out
+    assert "Final deployability gate=FAIL" in out
     assert "Historical daily-loss breach days (1): 2025-01-03" in out

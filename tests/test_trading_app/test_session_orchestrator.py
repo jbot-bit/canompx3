@@ -3863,6 +3863,115 @@ class TestBracketOrders:
         assert record is not None
         assert record.bracket_order_ids == [100, 101]
 
+    async def test_native_bracket_merge_uses_event_risk_without_reapplying_stop_multiplier(self):
+        """event.risk_points is already the effective stop distance from execution_engine."""
+        router = FakeBracketRouter(fill_price=100.0)
+        router.build_bracket_spec = MagicMock(wraps=router.build_bracket_spec)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        strategy = replace(list(orch._strategy_map.values())[0], stop_multiplier=0.75, rr_target=2.0)
+        orch._strategy_map[strategy.strategy_id] = strategy
+        event = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=6.0,
+        )
+
+        await orch._handle_event(event)
+
+        assert len(router.submitted) == 1
+        kwargs = router.build_bracket_spec.call_args.kwargs
+        assert kwargs["stop_price"] == pytest.approx(94.0)
+        assert kwargs["target_price"] == pytest.approx(112.0)
+
+    async def test_post_fill_bracket_submit_uses_event_risk_without_reapplying_stop_multiplier(self):
+        """Separate bracket submit path must share the same risk-distance convention."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=100.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value={"type": "OCO"})
+        orch.order_router.submit = MagicMock(return_value={"order_ids": [100, 101]})
+        strategy = replace(list(orch._strategy_map.values())[0], stop_multiplier=0.75, rr_target=2.0)
+        event = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=6.0,
+        )
+
+        await orch._submit_bracket(event, strategy, 100.0)
+
+        kwargs = orch.order_router.build_bracket_spec.call_args.kwargs
+        assert kwargs["stop_price"] == pytest.approx(94.0)
+        assert kwargs["target_price"] == pytest.approx(112.0)
+
+    async def test_native_bracket_merge_applies_stop_multiplier_to_median_fallback(self):
+        """Fallback median_risk_points must become the same effective stop distance."""
+        router = FakeBracketRouter(fill_price=100.0)
+        router.build_bracket_spec = MagicMock(wraps=router.build_bracket_spec)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        strategy = replace(
+            list(orch._strategy_map.values())[0],
+            median_risk_points=8.0,
+            stop_multiplier=0.75,
+            rr_target=2.0,
+        )
+        orch._strategy_map[strategy.strategy_id] = strategy
+        event = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=None,
+        )
+
+        await orch._handle_event(event)
+
+        kwargs = router.build_bracket_spec.call_args.kwargs
+        assert kwargs["stop_price"] == pytest.approx(94.0)
+        assert kwargs["target_price"] == pytest.approx(112.0)
+
+    async def test_post_fill_bracket_submit_applies_stop_multiplier_to_median_fallback(self):
+        """Post-fill fallback path must match native merged bracket math."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=100.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value={"type": "OCO"})
+        orch.order_router.submit = MagicMock(return_value={"order_ids": [100, 101]})
+        strategy = replace(
+            list(orch._strategy_map.values())[0],
+            median_risk_points=8.0,
+            stop_multiplier=0.75,
+            rr_target=2.0,
+        )
+        event = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=None,
+        )
+
+        await orch._submit_bracket(event, strategy, 100.0)
+
+        kwargs = orch.order_router.build_bracket_spec.call_args.kwargs
+        assert kwargs["stop_price"] == pytest.approx(94.0)
+        assert kwargs["target_price"] == pytest.approx(112.0)
+
     async def test_bracket_cancelled_before_exit(self):
         """Exit signal -> bracket parent order cancelled -> exit submitted."""
         router = FakeBracketRouter(fill_price=2351.0)

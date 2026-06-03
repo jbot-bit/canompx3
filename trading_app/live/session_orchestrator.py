@@ -2160,6 +2160,17 @@ class SessionOrchestrator:
             }
         )
 
+    @staticmethod
+    def _bracket_stop_distance(event, strategy) -> float | None:
+        event_risk = getattr(event, "risk_points", None)
+        if event_risk:
+            return float(event_risk)
+        median_risk = getattr(strategy, "median_risk_points", None)
+        if not median_risk:
+            return None
+        mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
+        return float(median_risk) * float(mult)
+
     async def _submit_bracket(self, event, strategy, entry_price: float) -> None:
         """Submit broker-side stop/target bracket after entry fill. Never raises.
 
@@ -2181,8 +2192,8 @@ class SessionOrchestrator:
             return
         try:
             execution_contract, execution_qty = self._resolve_execution_order(event.contracts)
-            risk_pts = event.risk_points or strategy.median_risk_points
-            if not risk_pts:
+            stop_dist = self._bracket_stop_distance(event, strategy)
+            if not stop_dist:
                 # F4-1: Cannot compute stop/target without risk_points.
                 # Bracket would be placed at wrong price; safer to flatten immediately.
                 msg = (
@@ -2195,8 +2206,6 @@ class SessionOrchestrator:
                 self._fire_kill_switch()
                 await self._emergency_flatten()
                 return
-            mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
-            stop_dist = risk_pts * mult
             sign = 1 if event.direction == "long" else -1
             stop_price = entry_price - sign * stop_dist
             target_price = entry_price + sign * stop_dist * strategy.rr_target
@@ -2623,10 +2632,8 @@ class SessionOrchestrator:
             # Merge bracket into entry for atomic submission (native brackets only)
             _bracket_merged = False
             if self.order_router.supports_native_brackets():
-                risk_pts = event.risk_points or strategy.median_risk_points
-                if risk_pts:
-                    mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
-                    stop_dist = risk_pts * mult
+                stop_dist = self._bracket_stop_distance(event, strategy)
+                if stop_dist:
                     sign = 1 if event.direction == "long" else -1
                     stop_price = event.price - sign * stop_dist
                     target_price = event.price + sign * stop_dist * strategy.rr_target
