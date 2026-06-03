@@ -6,6 +6,41 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Current Codex Follow-up - Bracket Risk Parity Closeout
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Completed the next bounded stage after C11 replay alignment: fixed only the measured replay/live broker-bracket risk-distance parity defect and saved `docs/audit/results/2026-06-03-bracket-risk-parity-closeout.md`. `SessionOrchestrator` now uses `event.risk_points` directly for broker bracket stop/target distances when present, preserving `median_risk_points * stop_multiplier` only as the missing-event-risk fallback. No live_config/allocation/profile threshold/stop_multiplier/lane/session/RR/deployment changes.
+- **C11 result:** Fresh `python -m trading_app.account_survival --profile topstep_50k_mnq_auto --no-write-state` still fails strict C11: op pass `99.7%`, DD survival `99.7%`, daily-loss `0.0%`, trailing-DD `0.3%`, max observed 90d DD `$2,039` versus strict budget `$1,600`. Do not rank promotion candidates.
+- **Verification:** New red-first parity tests failed before patch (`95.5` stop vs expected `94.0`) and passed after patch. `test_account_survival.py` passed 21 tests; `TestBracketOrders` + `TestF4BracketNakedPosition` passed 16 tests; `py_compile`, scoped `ruff`, phase 7, behavioral audit, integrity audit, `git diff --check`, and fast drift passed. The broad two-file pytest timed out in the noisy Windows process environment and left two access-denied Python PIDs; focused impacted suites passed. `live_readiness_report --strict-zero-warn` remains nonzero because C11 state/fingerprint is stale and C11 is still not green; current run also reports `CanonMPX_TopstepTelemetry_SignalOnly=FAILED` as an advisory automation-health warning.
+- **Next best move:** Do not commit without user approval. If approved, commit only this bounded parity diff plus the artifact and any prior explicitly-approved C11 replay-alignment files. State refresh is a separate operator decision because this pass used `--no-write-state`.
+
+## Current Codex Follow-up - C11 Attribution Closeout
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Ran the requested no-live, no-allocation/profile/schema-write closeout for `topstep_50k_mnq_auto` and saved `docs/audit/results/2026-06-03-c11-attribution-closeout.md`. Current measured verdict is NO-GO: C11 no-write exits 2, strict max observed 90d DD is `$2,039` versus `$1,600`, `project_pulse` still flags stale US_DATA attribution, and `live_journal.db` is locked by the active `--signal-only` process.
+- **Parity blocker:** Replay/live parity now has a direct blocker before any stop-sizing remediation can be trusted: `ExecutionEngine` appears to emit tight-stop `event.risk_points`, while live broker bracket code multiplies that risk distance by `strategy.stop_multiplier` again. Fix/test this canonical risk-distance convention first.
+- **Next best move:** Do not deploy or rank allocation. Fix only the bracket stop-distance parity issue, then rerun focused tests, no-write C11, strict live-readiness, and `project_pulse` after the signal-only journal holder finishes or is explicitly operator-stopped.
+
+## Current Codex Follow-up - C11 ORB Cap Replay Alignment
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Implemented replay-alignment only for Criterion 11: `trading_app/account_survival.py` now applies profile lane `max_orb_size_pts` with the same inclusive `risk_points >= cap` skip semantics as live `SessionOrchestrator` `ORB_CAP_SKIP`. No profile/allocation/live_config/stop_multiplier/lane/session/RR changes. `gold.db` use was read-only and `account_survival` was run with `--no-write-state`.
+- **C11 result:** Current aligned C11 for `topstep_50k_mnq_auto` remains `FAIL`: operational pass `99.7%`, daily-loss breach `0.0%`, trailing-DD breach `0.3%`, historical DLL breach days `0`, but strict max observed 90d DD is `$2,039` versus strict budget `$1,600`.
+- **Verification:** Added focused account-survival replay cap tests. `tests/test_trading_app/test_account_survival.py` passed 21 tests; live `TestOrbCapGate` passed 10 tests; `test_prop_profiles.py` passed 97 tests; scoped `ruff`, `py_compile`, and `git diff --check` passed with only pre-existing CRLF warnings.
+
+## Current Codex Follow-up - Strict C11 Remediation Pass
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Ran the strict C11 remediation pass for `topstep_50k_mnq_auto` from current repo/DB truth and saved `docs/audit/results/2026-06-03-c11-remediation-topstep-50k-mnq-auto.md`. Current canonical C11 remains `NO-GO_CURRENT_PROFILE`; no promotion candidates were ranked. Fresh `account_survival --no-write-state` fails due 7 historical daily-loss breach days and observed 90d DD `$2,788.33` above strict `$1,600` budget. Topstep official-doc check supports repo 50K MLL `$2,000`; profile `$450` DLL is stricter/internal and not enough to explain the failure alone.
+- **Remediation truth:** Cap-emulated replay proved live runtime ORB caps materially change the C11 path (0 DLL breach days, op 99.72%) but still fail at current stop 0.75 because max90 DD remains `$2,038.84`. Cap-emulated smaller-stop diagnostics clear at 0.5, but that is not canonical or implemented. After user correction against narrow framing, the artifact was widened to include other bounded remediation tracks: tighter caps, daily dollar breaker semantics, one-loss/day throttle, scheduling, account class, staged buffer, cooldowns, and accept-no-go.
+- **Next best move:** Choose one bounded remediation family and prereg/implement only that path; first high-EV family is canonical C11/runtime parity for ORB caps, not direct promotion or allocation novelty.
+
+## Current Codex Follow-up - Plan v2 Current Execution
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Re-ran Plan v2 properly as a sequential blocker-taxonomy pass and rewrote `docs/audit/results/2026-06-03-plan-v2-current-execution.md`. Current DB exists and read-only evidence is available. Live readiness remains blocked by Criterion 11 strict account diagnostics; Criterion 12 is valid; telemetry remains 9/30 advisory; paused-lane reasons are explicit; allocation ranking was intentionally skipped because C11 failed. Execution attribution is **not cleared**: `paper_trade_logger --sync --dry-run` cannot acquire a write handle while active DB readers exist, and `project_pulse` still flags stale US_DATA attribution plus an unreadable `live_journal.db` while a signal-only run holds it.
+- **Verification:** `account_survival` failed C11 as expected; `live_readiness_report --strict-zero-warn --proof-pack-only` exited nonzero due C11 with C12 valid; allocation JSONs show 3 lanes / 845 paused / 0 stale / 0 displaced; dashboard pytest passed 42 tests; phase 7 audit passed 11 checks; dashboard GET smoke returned 200 with API `mode=STOPPED`; `check_drift.py --fast --quiet --skip-crg-advisory` passed 137 checks with 15 advisories; bounded `profile_check_drift.py` timed out after 90s and hit a Windows cp1252 decode issue.
+
 ## This Session
 - **Tool:** Codex
 - **Date:** 2026-06-03

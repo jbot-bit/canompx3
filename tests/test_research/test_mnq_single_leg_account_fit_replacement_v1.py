@@ -5,6 +5,7 @@ import json
 import pandas as pd
 import pytest
 
+import research.mnq_single_leg_account_fit_replacement_v1 as replacement
 from research.filter_utils import filter_signal
 from research.mnq_single_leg_account_fit_replacement_v1 import (
     EXPECTED_PRIMARY_TRIALS,
@@ -244,3 +245,61 @@ def test_score_replacement_scenario_reports_2026_monitoring_without_gating_on_it
     # account-safety or verdict gates. The ambiguous research state still parks.
     assert row["account_safe"] is True
     assert row["verdict"] == "PARK"
+
+
+def test_write_report_surfaces_2026_monitoring_columns(tmp_path, monkeypatch) -> None:
+    result_doc = tmp_path / "result.md"
+    result_csv = tmp_path / "result.csv"
+    monkeypatch.setattr(replacement, "RESULT_DIR", tmp_path)
+    monkeypatch.setattr(replacement, "RESULT_DOC", result_doc)
+    monkeypatch.setattr(replacement, "RESULT_CSV", result_csv)
+    row = {
+        "scenario_id": "S1",
+        "replaced_incumbent_lane": "INCUMBENT",
+        "candidate_lane": "CANDIDATE",
+        "n_is_days": 120,
+        "active_trade_days_is": 120,
+        "n_is_trades": 120,
+        "expected_r_after_costs": 0.25,
+        "annual_dollars": 1000.0,
+        "max_drawdown_dollars": 500.0,
+        "annual_dollars_per_max_drawdown": 2.0,
+        "win_rate": 0.55,
+        "sharpe": 0.2,
+        "t_stat": 4.0,
+        "p_value": 0.01,
+        "mean_2026_dollars": -25.0,
+        "mean_2026_r": -0.25,
+        "historical_daily_loss_breaches": 0,
+        "ninety_day_account_survival": 0.75,
+        "daily_loss_breach_rate": 0.0,
+        "trailing_drawdown_breach_rate": 0.0,
+        "scaling_ok": True,
+        "account_safe": True,
+        "improves_incumbent": True,
+        "incumbent_annual_dollars_per_max_drawdown": 1.0,
+        "chordia_severity": "PASS",
+        "chordia_verdict": "MISSING",
+        "sr_regime_status": "UNKNOWN",
+        "oos_status": "UNKNOWN",
+        "verdict": "PARK",
+    }
+    meta = {
+        "incumbent_metrics": {
+            "annual_dollars": 500.0,
+            "max_drawdown_dollars": 400.0,
+            "annual_dollars_per_max_drawdown": 1.25,
+        },
+        "incumbent_account_safe": {
+            "ninety_day_account_survival": 0.8,
+            "daily_loss_breach_rate": 0.0,
+            "trailing_drawdown_breach_rate": 0.0,
+        },
+    }
+
+    replacement.write_report(pd.DataFrame([row]), meta)
+
+    text = result_doc.read_text(encoding="utf-8")
+    assert "mean_2026_dollars" in text
+    assert "mean_2026_r" in text
+    assert "-25.0000" in text

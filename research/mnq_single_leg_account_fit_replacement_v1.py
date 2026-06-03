@@ -616,6 +616,8 @@ def write_report(results: pd.DataFrame, meta: dict[str, Any]) -> None:
         "expected_r_after_costs",
         "win_rate",
         "t_stat",
+        "mean_2026_dollars",
+        "mean_2026_r",
         "ninety_day_account_survival",
         "daily_loss_breach_rate",
         "trailing_drawdown_breach_rate",

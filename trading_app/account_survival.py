@@ -302,6 +302,7 @@ def _load_lane_daily_pnl(
     *,
     as_of_date: date,
     effective_stop_multiplier: float | None = None,
+    max_orb_size_pts: float | None = None,
 ) -> dict[date, float]:
     """Load one lane's historical daily PnL in dollars from canonical outcomes."""
     daily: dict[date, float] = {}
@@ -310,6 +311,7 @@ def _load_lane_daily_pnl(
         strategy_id,
         as_of_date=as_of_date,
         effective_stop_multiplier=effective_stop_multiplier,
+        max_orb_size_pts=max_orb_size_pts,
     ):
         daily[trade.trading_day] = daily.get(trade.trading_day, 0.0) + trade.pnl_dollars
     return daily
@@ -321,6 +323,7 @@ def _load_lane_trade_paths(
     *,
     as_of_date: date,
     effective_stop_multiplier: float | None = None,
+    max_orb_size_pts: float | None = None,
 ) -> list[TradePath]:
     """Load one lane's trade history in dollars from canonical outcomes."""
     params = _load_strategy_snapshot(con, strategy_id)
@@ -361,7 +364,12 @@ def _load_lane_trade_paths(
         pnl_r = outcome.get("pnl_r")
         if entry_price is None or stop_price is None or pnl_r is None:
             continue
-        risk_dollars = risk_in_dollars(cost_spec, float(entry_price), float(stop_price))
+        entry_price_f = float(entry_price)
+        stop_price_f = float(stop_price)
+        risk_points = abs(entry_price_f - stop_price_f)
+        if max_orb_size_pts is not None and risk_points >= float(max_orb_size_pts):
+            continue
+        risk_dollars = risk_in_dollars(cost_spec, entry_price_f, stop_price_f)
         pnl_dollars = float(pnl_r) * risk_dollars
         mae_r = max(0.0, float(outcome.get("mae_r") or 0.0))
         mfe_r = max(0.0, float(outcome.get("mfe_r") or 0.0))
@@ -493,6 +501,7 @@ def _load_profile_daily_scenarios(
                 lane["strategy_id"],
                 as_of_date=as_of_date,
                 effective_stop_multiplier=effective_stop_by_strategy.get(lane["strategy_id"]),
+                max_orb_size_pts=lane.get("max_orb_size_pts"),
             )
             daily: dict[date, float] = {}
             for trade in trade_paths:
