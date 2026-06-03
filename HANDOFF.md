@@ -98,14 +98,11 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Codex
+- **Tool:** Claude Code
 - **Date:** 2026-06-03
-- **Commit:** 5cb15909 — fix(workflow): surface peer-lease worktree escape
-- **Files changed:** 4 files
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-06-03-maximise-no-tunnel-vision-sprint.md`
-  - `scripts/tools/workflow_doctor.py`
-  - `tests/test_tools/test_workflow_doctor.py`
+- **Commit:** 94085955 — Merge commit '7111b62c' into _reaper_integ
+- **Files changed:** 0
+0 files
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
