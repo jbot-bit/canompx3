@@ -93,24 +93,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-03
-- **Commit:** 6fee3349 — chore(repo): untrack artifacts/research scratch (13,390 files / 91 MB)
-- **Files changed:** 20 files
+- **Commit:** a8928b4c — docs(handoff): correct Last Session block to landing commit 6fee3349
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001/activation_plan.csv`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001/audit_log_proposal.yaml`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001/manifest.json`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001/manifest.yaml`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001/strict_replay_runs.csv`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001b/activation_plan.csv`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001b/audit_log_proposal.yaml`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001b/manifest.json`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001b/manifest.yaml`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_broad_batch_001b/strict_replay_runs.csv`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_stop_support_batch_001/activation_plan.csv`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_stop_support_batch_001/audit_log_proposal.yaml`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_stop_support_batch_001/manifest.json`
-  - `artifacts/research/chordia_batch_cycle_2026_05_31_stop_support_batch_001/manifest.yaml`
-  - ... and 5 more
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
