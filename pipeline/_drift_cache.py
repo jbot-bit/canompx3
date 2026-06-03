@@ -103,6 +103,72 @@ def cache_key(label: str, dep_paths: list[str]) -> str | None:
     return digest
 
 
+def tree_cache_key(
+    label: str,
+    file_deps: list[str],
+    tree_deps: list[tuple[str, str]],
+) -> str | None:
+    """Content-hash cache key for a check whose inputs include whole file *trees*.
+
+    Generalises :func:`cache_key` for scanners that read both a fixed set of
+    files (``file_deps`` -- repo-relative paths) AND every file under one or more
+    globbed trees (``tree_deps`` -- a list of ``(glob_root, pattern)`` pairs, each
+    relative to ``PROJECT_ROOT``, expanded with ``Path.glob``).
+
+    The digest folds in, for every matched file, the pair ``relpath:content-hash``
+    over the **sorted union** of file_deps and all tree matches. Sorting makes the
+    key a pure function of tree *state*, independent of filesystem iteration order.
+    Because each file's *path* is in the digest (not just its bytes), the key
+    changes when a file is added, removed, or renamed within a tree -- not only when
+    an existing file is edited. An empty tree is a valid state with a stable key
+    distinct from any non-empty tree (its matched set is simply empty).
+
+    Fail-closed, identical to :func:`cache_key`: returns ``None`` (--> MISS, real
+    check runs) if any declared file is missing/unreadable, any tree match cannot
+    be hashed, any glob raises, OR any declared tree root is not a real directory
+    (a missing/typo'd ``glob_root`` globs empty with NO error — that phantom-empty
+    tree must not yield a usable key). There is no path where a misconfiguration or
+    error yields a key that could produce a blind PASS.
+    """
+    try:
+        # Resolve the full, sorted set of (relpath, abspath) to hash. tree_deps
+        # are expanded first so a glob error fails closed before any hashing.
+        rel_to_abs: dict[str, Path] = {}
+        for rel in file_deps:
+            rel_to_abs[rel] = (PROJECT_ROOT / rel).resolve()
+        for glob_root, pattern in tree_deps:
+            root = (PROJECT_ROOT / glob_root).resolve()
+            # Fail-closed on a missing/typo'd tree root. Path.glob() on a
+            # non-existent directory (or a path that is a file) returns an EMPTY
+            # iterator with NO error — which would silently produce a valid key
+            # over a phantom-empty tree, serving a stale PASS while the real check
+            # reads files the key never hashed. A declared tree root that is not a
+            # real directory is a misconfiguration, never a legitimately-empty
+            # tree, so treat it as a MISS (audit finding 2026-06-03).
+            if not root.is_dir():
+                return None
+            for match in root.glob(pattern):
+                if not match.is_file():
+                    continue
+                # Key the match by its path relative to PROJECT_ROOT so the digest
+                # is stable across absolute-path/worktree differences and so an
+                # add/remove/rename changes the key.
+                rel = match.resolve().relative_to(PROJECT_ROOT).as_posix()
+                rel_to_abs[rel] = match.resolve()
+    except (OSError, ValueError):
+        # ValueError: relative_to() when a match escapes PROJECT_ROOT -- treat any
+        # such surprise as a miss rather than silently dropping it from the digest.
+        return None
+
+    parts = [_CACHE_VERSION, "tree", label]
+    try:
+        for rel in sorted(rel_to_abs):
+            parts.append(f"{rel}:{_hash_dep(rel_to_abs[rel])}")
+    except OSError:
+        return None
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
 def read_pass(label: str, key: str | None) -> bool:
     """Return True iff a cached PASS exists for (label, key).
 

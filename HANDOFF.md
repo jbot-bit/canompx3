@@ -100,9 +100,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-03
-- **Commit:** 94085955 — Merge commit '7111b62c' into _reaper_integ
-- **Files changed:** 0
-0 files
+- **Commit:** 56c554ee — docs(stage): plan check_drift.py speed fix (tree-cache + threadpool)
+- **Files changed:** 2 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/2026-06-03-drift-tree-cache-and-parallel.md`
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
