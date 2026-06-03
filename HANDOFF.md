@@ -100,11 +100,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-03
-- **Commit:** 328d9370 — feat(drift-cache): meta-recheck sampling + 2 more cached checks (Stage 2)
-- **Files changed:** 5 files
+- **Commit:** ca0a2b7e — fix(drift-cache): un-wire FAST_LANE check — DB verdict-input stale-PASS hazard
+- **Files changed:** 4 files
   - `HANDOFF.md`
   - `docs/runtime/stages/2026-06-03-drift-tree-cache-and-parallel.md`
-  - `pipeline/_drift_cache.py`
   - `pipeline/check_drift.py`
   - `tests/test_pipeline/test_drift_cache.py`
 

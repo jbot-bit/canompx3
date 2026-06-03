@@ -139,6 +139,19 @@ Stage 3 — ThreadPoolExecutor over non-DB checks
     --skip-advisory/--skip-crg-advisory semantics preserved. Exit code unchanged.
   - Test: parallel run produces identical violation set + identical exit code as serial.
 
+## STATUS 2026-06-03 (post-clear task #4): AUDIT-FAIL FIXED, commit ca0a2b7e.
+##   Stage 2 cache: 2 checks cached (theory_grant, DSR); FAST_LANE un-wired (DB leak).
+##   DO NOT DELETE THIS FILE YET. Remaining before close:
+##   (1) confirmatory adversarial audit of the FIX commit ca0a2b7e (un-wire #171) —
+##       a [judgment] pipeline/ blocking-gate change; was BLOCKED by PRE-CLEAR context
+##       (no subagent spawns). The fix is a REMOVAL (reduces cache surface, closes the
+##       hazard, cannot add a stale-PASS path) + fully tested, so risk is low, but the
+##       gate is still owed. Run evidence-auditor on ca0a2b7e next session.
+##   (2) Stage 3 (ThreadPoolExecutor over non-DB checks) — NOT STARTED. Optional; the
+##       real long-tail compression. The cache speedup alone is now small (~25s net,
+##       2 checks) so Stage 3 is where the remaining wall-time win lives.
+##   Then delete this file.
+
 ## Verify (per stage + final)
 - python -m scripts.tools.profile_check_drift (before/after wall-time)
 - targeted: pytest pipeline/tests/test_drift_cache.py pipeline/tests/test_check_drift_parallel.py
