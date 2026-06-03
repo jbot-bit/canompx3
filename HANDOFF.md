@@ -99,13 +99,12 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-03
-- **Commit:** ca0a2b7e — fix(drift-cache): un-wire FAST_LANE check — DB verdict-input stale-PASS hazard
-- **Files changed:** 4 files
-  - `HANDOFF.md`
+- **Date:** 2026-06-04
+- **Commit:** 4edf7522 — perf(drift): Stage 3 — ThreadPoolExecutor over non-DB checks
+- **Files changed:** 3 files
   - `docs/runtime/stages/2026-06-03-drift-tree-cache-and-parallel.md`
   - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_drift_cache.py`
+  - `tests/test_pipeline/test_check_drift_parallel.py`
 
 ## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
 - **Tool:** Claude Code
