@@ -85,14 +85,16 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Codex + concurrent Claude Code
-- **Date:** 2026-06-02
-- **Commit:** d4c1dd65 — fix(prop): MFFU Flex per-payout cap is size-specific (25k=1000, 50k=2000)
-- **Summary:** Corrected `mffu_flex` profile data so Flex payout caps live under `firm_specific_rules.by_size`: 25k = `$1,000`, 50k = `$2,000`, matching the local 2026-05-31 MFFU snapshots. Removed the old flat top-level `payout_cap_per_cycle=2000` from the Flex spec because it overstated the 25k request cap.
-- **Verification:** `python -m pytest tests/test_prop_profiles_mffu.py tests/test_trading_app/test_prop_firm_policies.py -q` passed 13 tests. Scoped ruff and `git diff --cached --check` passed before the commit. Fast drift was not clean locally because the unrelated `MCP servers answer initialize (sidecar dep-rot guard)` check failed once.
-- **Files changed:** 2 files
-  - `tests/test_prop_profiles_mffu.py`
-  - `trading_app/prop_profiles.py`
+- **Tool:** Unknown
+- **Date:** 2026-06-03
+- **Commit:** ed074218 — research: complete MNQ single-leg replacement audit
+- **Files changed:** 6 files
+  - `HANDOFF.md`
+  - `docs/audit/hypotheses/2026-06-02-mnq-single-leg-account-fit-replacement-v1.yaml`
+  - `docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.csv`
+  - `docs/audit/results/2026-06-02-mnq-single-leg-account-fit-replacement-v1.md`
+  - `research/mnq_single_leg_account_fit_replacement_v1.py`
+  - `tests/test_research/test_mnq_single_leg_account_fit_replacement_v1.py`
 
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
 - **Tool:** Codex
