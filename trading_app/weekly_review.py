@@ -152,14 +152,16 @@ def section_1_forward_performance(con, week_start: date):
         # This week
         wk = con.execute(
             """SELECT COUNT(*), COALESCE(ROUND(SUM(pnl_r), 2), 0)
-               FROM paper_trades WHERE orb_label = ? AND trading_day >= ? AND pnl_r IS NOT NULL""",
+               FROM paper_trades WHERE orb_label = ? AND trading_day >= ? AND pnl_r IS NOT NULL
+                 AND execution_source != 'shadow'""",
             [session, week_start],
         ).fetchone()
         # Total
         tot = con.execute(
             """SELECT COUNT(*), COALESCE(ROUND(SUM(pnl_r), 2), 0),
                       ROUND(AVG(CASE WHEN pnl_r > 0 THEN 1.0 ELSE 0.0 END)*100, 1)
-               FROM paper_trades WHERE orb_label = ? AND pnl_r IS NOT NULL""",
+               FROM paper_trades WHERE orb_label = ? AND pnl_r IS NOT NULL
+                 AND execution_source != 'shadow'""",
             [session],
         ).fetchone()
         print(f"  {session:<25} {wk[0]:>10} {wk[1]:>+10.2f} {tot[0]:>10} {tot[1]:>+10.2f} {tot[2] or 0:>7.1f}%")
@@ -216,7 +218,8 @@ def section_4_signal_quality(con, week_start: date):
         ).fetchone()[0]
         taken = con.execute(
             """SELECT COUNT(*) FROM paper_trades
-               WHERE orb_label = ? AND trading_day >= ? AND pnl_r IS NOT NULL""",
+               WHERE orb_label = ? AND trading_day >= ? AND pnl_r IS NOT NULL
+                 AND execution_source != 'shadow'""",
             [session, week_start],
         ).fetchone()[0]
         rate = (taken / signals * 100) if signals > 0 else 0
@@ -249,7 +252,8 @@ def section_6_mgc_shadow(con):
     """MGC shadow trading progress."""
     print("\n  SECTION 6 - MGC SHADOW PROGRESS")
     row = con.execute(
-        """SELECT COUNT(*) FROM paper_trades WHERE orb_label = 'TOKYO_OPEN' AND pnl_r IS NOT NULL"""
+        """SELECT COUNT(*) FROM paper_trades WHERE orb_label = 'TOKYO_OPEN' AND pnl_r IS NOT NULL
+             AND execution_source != 'shadow'"""
     ).fetchone()
     shadow_n = row[0] if row else 0
     remaining = max(0, 250 - shadow_n)

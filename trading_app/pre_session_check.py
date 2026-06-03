@@ -122,7 +122,10 @@ def check_data_freshness(con, instrument: str) -> tuple[bool, str]:
 def check_paper_trades_accessible(con) -> tuple[bool, str]:
     """Check paper_trades table is accessible."""
     try:
-        n = con.execute("SELECT COUNT(*) FROM paper_trades").fetchone()[0]
+        # Report live/backfill rows only — execution_source='shadow' rows are
+        # forward-monitoring evidence, not taken trades, and must not inflate the
+        # session-start activity count.
+        n = con.execute("SELECT COUNT(*) FROM paper_trades WHERE execution_source != 'shadow'").fetchone()[0]
         return True, f"paper_trades: {n} rows"
     except Exception as e:
         return False, f"paper_trades inaccessible: {e}"
