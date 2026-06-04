@@ -84,6 +84,12 @@ DEFAULT_TELEMETRY_INSTRUMENT = "MNQ"
 DEFAULT_SIGNALS_DIR = LIVE_SIGNALS_DIR
 ADVISORY_WARNING_MARKER = "(advisory for express/funded profile)"
 C11_STRICT_DIAGNOSTIC_WARNING_PREFIX = "Criterion 11 strict diagnostics:"
+# Version of the additive launch-tier metadata block (startup/signal/live_status,
+# launch_impact). Distinct from the proof-pack's own schema_version. Bump only when
+# the meaning of an existing tier field changes; adding a new field does not require
+# a bump. Doctrine: docs/plans/2026-06-04-live-app-operability-readiness-plan.md
+# § "Dashboard Open vs Live-Launch Allowed".
+LAUNCH_TIER_SCHEMA_VERSION = 1
 AUTOMATION_TASKS: tuple[dict[str, str], ...] = (
     {
         "task_name": "CanonMPX_DailyRefresh",
@@ -119,6 +125,35 @@ def is_launch_blocking_strict_warning(warning: object) -> bool:
 
 def launch_blocking_strict_warnings(strict_zero_warn: dict) -> list[object]:
     return [warning for warning in strict_zero_warn.get("warnings", []) if is_launch_blocking_strict_warning(warning)]
+
+
+def _derive_launch_tiers(strict_zero_warn: dict | None) -> dict[str, object]:
+    """Project the existing strict-zero-warn verdict onto operator-readable launch tiers.
+
+    Additive, non-binding metadata only — this does NOT change any gate. It labels
+    the report's OWN already-computed verdict using the three-tier contract from
+    docs/plans/2026-06-04-live-app-operability-readiness-plan.md (mapping the
+    Kubernetes startup/readiness/liveness separation onto dashboard-open vs
+    live-launch-allowed):
+
+      - startup_status: the report assembled, so the module ran -> always STARTUP_OK.
+      - signal_status: read-only state was rendered into this report -> always SIGNAL_OK.
+      - live_status:  LIVE_OK iff strict_zero_warn["green"] is True, else BLOCKED.
+      - launch_impact: "none" when LIVE_OK, else "blocks_live".
+
+    Fail-closed: a missing or malformed strict_zero_warn resolves to BLOCKED /
+    blocks_live, never to an accidental LIVE_OK. The binding launch decision remains
+    strict_zero_warn["green"] and launch_blocking_strict_warnings(); these labels are
+    a projection of that truth, not a substitute for it.
+    """
+    green = bool((strict_zero_warn or {}).get("green") is True)
+    return {
+        "schema_version": LAUNCH_TIER_SCHEMA_VERSION,
+        "startup_status": "STARTUP_OK",
+        "signal_status": "SIGNAL_OK",
+        "live_status": "LIVE_OK" if green else "BLOCKED",
+        "launch_impact": "none" if green else "blocks_live",
+    }
 
 
 def _git_head(root: Path) -> str | None:
@@ -933,8 +968,18 @@ def build_live_readiness_report(
         automation_health=automation_health,
     )
 
+    launch_tiers = _derive_launch_tiers(strict_zero_warn)
     report = {
         "generated_at": datetime.now(UTC).isoformat(),
+        # Additive, non-binding launch-tier metadata (dashboard-open vs
+        # live-launch-allowed three-tier contract). Derived from strict_zero_warn
+        # via _derive_launch_tiers; changes no gate. See the runbook
+        # "Dashboard Open vs Live-Launch Allowed (Three-Tier Contract)" section.
+        "schema_version": launch_tiers["schema_version"],
+        "startup_status": launch_tiers["startup_status"],
+        "signal_status": launch_tiers["signal_status"],
+        "live_status": launch_tiers["live_status"],
+        "launch_impact": launch_tiers["launch_impact"],
         "profile_id": resolved_profile_id,
         "git_branch": _git_branch(PROJECT_ROOT),
         "git_head": _git_head(PROJECT_ROOT),
@@ -977,6 +1022,14 @@ def _render_text(report: dict[str, Any]) -> str:
 
     lines = [
         f"Live Readiness | profile={report['profile_id']} | git={report.get('git_head') or 'unknown'}",
+        (
+            "Launch tiers: "
+            f"startup={report.get('startup_status')} "
+            f"signal={report.get('signal_status')} "
+            f"live={report.get('live_status')} "
+            f"launch_impact={report.get('launch_impact')} "
+            f"schema_v={report.get('schema_version')}"
+        ),
         (
             "Deployment: "
             f"deployed={deployment['deployed_count']} "

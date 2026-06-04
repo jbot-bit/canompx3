@@ -37,6 +37,18 @@ python scripts/run_live_session.py --profile topstep_50k_mnq_auto --instrument M
 
 Live remains blocked if any command fails, if `project_pulse` reports a broken/high live-control item or blocked capital recommendation, if `live_readiness_report` has blockers or non-advisory warnings, or if the operator cannot confirm broker account, mode, and account count from the broker UI.
 
+## Dashboard Open vs Live-Launch Allowed (Three-Tier Contract)
+
+"The dashboard opens" and "live launch is allowed" are **distinct states** and must not be conflated. Borrowing the Kubernetes probe model (startup / readiness / liveness are separate concerns), this runbook recognizes three independent tiers:
+
+- **`STARTUP_OK`** — the control-room web server can start and serve status. This is an *observability* guarantee. A dirty development tree, a stale evidence snapshot, or a red live gate must **not** prevent the dashboard from opening in degraded/read-only mode. Failing to open is a startup failure; being unable to trade is not.
+- **`SIGNAL_OK`** — read-only / cached state (allocator book, lane status, C11/C12, readiness report) is usable enough for signal monitoring. The operator can see *exactly what is blocked* without debugging git, leases, DB locks, or preflight scripts at the trade window.
+- **`LIVE_OK`** — every strict live-launch gate (the Hard Blockers below, plus `live_readiness_report` strict-zero-warn `green`) passes. This is the only tier that permits a real-money `HOLD TO GO LIVE`.
+
+The tiers are **monotonic for safety, not for availability**: `LIVE_OK` implies the lower tiers are fine, but a failure at `LIVE_OK` says nothing about `STARTUP_OK`/`SIGNAL_OK` — the dashboard should still open and still render the blockers. The doctrine is **dashboard fail-open, execution fail-closed**: degraded observability is acceptable and desirable; degraded *execution* is never permitted. A `live_status` of `BLOCKED` must leave the operator *more* informed, not blind.
+
+These tier labels are surfaced as additive, non-binding metadata on the `live_readiness_report` output (`startup_status`, `signal_status`, `live_status`, `launch_impact`); they describe the report's own verdict and do not change any gate. The binding launch decision remains the Hard Blockers and the strict-zero-warn `green` flag below — the tier metadata is an operator-readable projection of that existing truth, never a substitute for it.
+
 ## Hard Blockers
 
 - Dirty, ahead, or behind repo state for live mode.

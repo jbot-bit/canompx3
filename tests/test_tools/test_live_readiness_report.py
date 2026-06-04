@@ -1265,3 +1265,94 @@ def test_live_readiness_report_includes_profile_proof_pack_contract(tmp_path: Pa
         "topstep_50k_mnq_auto",
     ]
     assert proof_pack["unsupported_or_missing_evidence"] == []
+
+
+def test_derive_launch_tiers_green_is_live_ok() -> None:
+    tiers = live_readiness_report._derive_launch_tiers({"green": True, "blockers": [], "warnings": []})
+    assert tiers == {
+        "schema_version": live_readiness_report.LAUNCH_TIER_SCHEMA_VERSION,
+        "startup_status": "STARTUP_OK",
+        "signal_status": "SIGNAL_OK",
+        "live_status": "LIVE_OK",
+        "launch_impact": "none",
+    }
+
+
+def test_derive_launch_tiers_not_green_blocks_live() -> None:
+    tiers = live_readiness_report._derive_launch_tiers({"green": False, "blockers": ["x"], "warnings": []})
+    assert tiers["live_status"] == "BLOCKED"
+    assert tiers["launch_impact"] == "blocks_live"
+    # Lower tiers stay up — execution-blocked must not imply startup/signal failure.
+    assert tiers["startup_status"] == "STARTUP_OK"
+    assert tiers["signal_status"] == "SIGNAL_OK"
+
+
+def test_derive_launch_tiers_failcloses_on_missing_or_malformed() -> None:
+    # None, empty, and a non-True "green" all resolve to BLOCKED — never an
+    # accidental LIVE_OK. Fail-closed for a capital gate.
+    for bad in (None, {}, {"green": "yes"}, {"green": 1}, {"green": None}):
+        tiers = live_readiness_report._derive_launch_tiers(bad)
+        assert tiers["live_status"] == "BLOCKED", bad
+        assert tiers["launch_impact"] == "blocks_live", bad
+
+
+def test_report_carries_launch_tier_metadata_when_green(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(monkeypatch, allocation_path)
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["strict_zero_warn"]["green"] is True
+    assert report["schema_version"] == live_readiness_report.LAUNCH_TIER_SCHEMA_VERSION
+    assert report["startup_status"] == "STARTUP_OK"
+    assert report["signal_status"] == "SIGNAL_OK"
+    assert report["live_status"] == "LIVE_OK"
+    assert report["launch_impact"] == "none"
+    # Additive only: the launch-tier fields are a projection of the existing
+    # verdict and must not perturb the binding gate output.
+    assert live_readiness_report.launch_blocking_strict_warnings(report["strict_zero_warn"]) == []
+
+
+def test_report_launch_tier_blocked_tracks_strict_verdict(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        strategy_state={
+            "blocked": True,
+            "block_source": "lifecycle",
+            "block_reason": "manual hold",
+            "sr_status": "ALARM",
+            "sr_review_outcome": None,
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["strict_zero_warn"]["green"] is False
+    assert report["live_status"] == "BLOCKED"
+    assert report["launch_impact"] == "blocks_live"
+    # The dashboard-open / signal tiers stay up even when live is blocked.
+    assert report["startup_status"] == "STARTUP_OK"
+    assert report["signal_status"] == "SIGNAL_OK"
+
+
+def test_render_text_includes_launch_tier_line(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(monkeypatch, allocation_path)
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+    text = live_readiness_report._render_text(report)
+
+    assert "Launch tiers:" in text
+    assert "live=LIVE_OK" in text
+    assert "launch_impact=none" in text
