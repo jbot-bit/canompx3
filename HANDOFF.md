@@ -9,7 +9,7 @@
 ## Claude Session — C11 Secure & Hold (2026-06-04)
 - **Tool:** Claude Code
 - **Verdict:** `topstep_50k_mnq_auto` C11 is a **measured capital NO-GO. Live NOT armed.**
-- **What landed (`a0fbd3d3`):** committed the stranded C11 analysis (4 audit-result docs + corrected `c11-80pt-cap-wiring.md` stage + `.gitignore` for the dry-run scratch json). Docs/config only; no production logic, no schema, no capital lever moved.
+- **What landed (`572499d6`, rebased onto peer `5dab3861`; pushed in `b0d43c0f`):** committed the stranded C11 analysis (4 audit-result docs + corrected `c11-80pt-cap-wiring.md` stage + `.gitignore` for the dry-run scratch json). Docs/config only; no production logic, no schema, no capital lever moved.
 - **The decisive math:** the ~80pt ORB cap clears C11's operational-survival (≥70%) and zero-breach-day gates, but **NOT** the drawdown-magnitude gate — strict observed 90d DD at the current 0.75 stop = **$2,038**, exceeding both the $1,600 strict budget AND the full $2,000 Topstep MLL. A *wider* stop (1.0) makes DD worse; only a **tighter** stop (≤0.50) closes the gap (cap+0.50 → $1,142). Cap is necessary, not sufficient.
 - **Path to GO (research, not "go live ASAP"):** pre-registered cap+stop≤0.50 remediation (RULE 10) → re-run `account_survival` proving BOTH C11 gates → DSR/era checks → **independent live-path audit** (incl. the bracket-risk-parity fix `9b3fc530`, whose adversarial-audit gate is still OPEN — no independent reviewer yet) → only then live arming (separate operator GO).
 - **Already safe:** parity plumbing `9b3fc530` and preserve branch `c11-orb-cap-preserve-2026-06-04` (`48071955`) both on origin.
@@ -109,7 +109,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** a0fbd3d3 — docs(c11): commit C11 NO-GO analysis + correct cap-wiring stage premise
+- **Commit:** b0d43c0f — docs(handoff): record C11 NO-GO secure-and-hold state (C11 docs in 572499d6)
 - **Files changed:** 7 files
   - `.gitignore`
   - `HANDOFF.md`
