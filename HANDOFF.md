@@ -109,15 +109,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** 31e9749d — fix(crg): pin CRG launch to constraint-locked interpreter + widen intent routing
-- **Files changed:** 7 files
+- **Commit:** ee23c3fe — fix(crg): pin CRG launch to constraint-locked interpreter + widen intent routing
+- **Files changed:** 3 files
   - `.claude/hooks/intent-router.py`
   - `.mcp.json`
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-04-c11-budget-resolver-stage1.md`
-  - `scripts/tools/c11_clearance_scenarios.py`
-  - `tests/test_trading_app/test_account_survival.py`
-  - `trading_app/account_survival.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

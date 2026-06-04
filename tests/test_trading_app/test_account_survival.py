@@ -260,14 +260,26 @@ def test_effective_strict_dd_budget_is_profile_aware_and_fails_closed():
     self_funded = get_profile("self_funded_tradovate")
     self_rules = _build_rules(self_funded)
     assert self_funded.is_express_funded is False
-    # Self-funded relaxes to the FULL self-imposed firm DD (no prop-style haircut).
+    # Stage 2: self-funded budget comes from the profile's OWN self-imposed DD
+    # halt (risk-first SOURCE), NOT the prop-firm tier figure.
+    assert self_funded.self_imposed_dd_dollars == 3_000.0
     assert effective_strict_dd_budget(self_funded, self_rules) == round(
+        self_funded.self_imposed_dd_dollars * STRICT_DD_BUDGET_FRACTION_SELF_FUNDED, 2
+    )
+    # The LEAK guard: the self-funded budget must NOT equal the prop number
+    # (tier.max_dd at either fraction). tier.max_dd = $6,000 here, so the old
+    # `dd_limit_dollars * 1.00` path would have returned $6,000 — 2× the operator's
+    # actual -$3,000 halt. Prove we are de-coupled from the prop figure.
+    assert self_rules.dd_limit_dollars == 6_000.0  # the prop-shaped tier number
+    assert effective_strict_dd_budget(self_funded, self_rules) != round(
         self_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_SELF_FUNDED, 2
     )
-    # And self-funded must NEVER inherit the express prop fraction (leak guard).
+    assert effective_strict_dd_budget(self_funded, self_rules) != round(
+        self_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2
+    )
     assert STRICT_DD_BUDGET_FRACTION_SELF_FUNDED >= STRICT_DD_BUDGET_FRACTION_EXPRESS
 
-    # Fail-closed: a profile whose express flag is missing/None resolves to the
+    # Fail-closed (a): a profile whose express flag is missing/None resolves to the
     # STRICTER express belt, never the relaxed self-funded one.
     class _NoFlag:
         pass
@@ -275,6 +287,30 @@ def test_effective_strict_dd_budget_is_profile_aware_and_fails_closed():
     assert effective_strict_dd_budget(_NoFlag(), express_rules) == round(
         express_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2
     )
+
+    # Fail-closed (b): a SELF-FUNDED profile that omits the risk-first source
+    # (self_imposed_dd_dollars) must fall back to the STRICTER express belt on the
+    # firm number — never to the looser prop figure at full fraction.
+    class _SelfFundedNoSource:
+        is_express_funded = False
+        self_imposed_dd_dollars = None
+
+    express_belt_on_prop = round(self_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2)
+    assert effective_strict_dd_budget(_SelfFundedNoSource(), self_rules) == express_belt_on_prop
+
+    # Fail-closed (c): malformed self_imposed_dd_dollars MUST resolve to the
+    # express belt, never to a garbage budget. `bool` is a subclass of `int`
+    # (True > 0 is True) — a stray True must NOT yield a $1.00 budget. NaN, 0,
+    # negatives, and non-numerics all fail-close too.
+    for bad in (True, False, float("nan"), 0, -100.0, "3000"):
+
+        class _Bad:
+            is_express_funded = False
+            self_imposed_dd_dollars = bad
+
+        assert effective_strict_dd_budget(_Bad(), self_rules) == express_belt_on_prop, (
+            f"malformed self_imposed_dd_dollars={bad!r} did not fail-close to the express belt"
+        )
 
 
 def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots():

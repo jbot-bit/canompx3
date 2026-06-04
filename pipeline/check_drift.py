@@ -7465,6 +7465,72 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
             "a selection gate for self_funded (F2-A). Add the firm branch."
         )
 
+    # (d) STRUCTURAL — the strict-DD BUDGET for a self_funded profile must be
+    # de-coupled from the prop-firm tier number (Stage 2, 2026-06-04). The
+    # marker (b) pins INTENT; this proves the BEHAVIOUR by executing the canonical
+    # resolver and asserting the self_funded budget does not equal the prop figure
+    # (tier.max_dd * either fraction). This closes the "honest floor, not ceiling"
+    # gap named in self-funded-sizing-doctrine.md § "Current enforcement scope".
+    try:
+        from trading_app.account_survival import (
+            STRICT_DD_BUDGET_FRACTION_EXPRESS,
+            STRICT_DD_BUDGET_FRACTION_SELF_FUNDED,
+            _build_rules,
+            effective_strict_dd_budget,
+        )
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        self_funded_profiles = [p for p in ACCOUNT_PROFILES.values() if p.is_express_funded is False]
+        if not self_funded_profiles:
+            violations.append(
+                "  no self_funded (is_express_funded=False) profile found in "
+                "ACCOUNT_PROFILES — cannot structurally prove the strict-DD budget is "
+                "de-coupled from the prop tier number. Update "
+                "check_prop_caps_do_not_leak_into_self_funded if the profile set changed."
+            )
+        for profile in self_funded_profiles:
+            rules = _build_rules(profile)
+            budget = effective_strict_dd_budget(profile, rules)
+            # The prop-shaped figures a leak could produce: tier.max_dd at EITHER
+            # fraction. The old pre-Stage-2 bug returned `dd_limit_dollars * fraction`
+            # directly, so BOTH must be flagged (the self-funded fraction is the exact
+            # old-bug value; the express fraction is the fail-closed value).
+            express_on_prop = round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2)
+            self_on_prop = round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_SELF_FUNDED, 2)
+            # A profile that DECLARES a risk-first source must NOT resolve to either
+            # prop figure. The ONLY legitimate match is the documented fail-closed
+            # path (missing self_imposed_dd_dollars → stricter express belt).
+            declared = getattr(profile, "self_imposed_dd_dollars", None)
+            # Byte-identical to the resolver's source guard
+            # (account_survival.py effective_strict_dd_budget): `bool` subclasses
+            # `int` (True > 0 is True), so a stray True must be excluded here too —
+            # else this check and the resolver disagree on the one input where
+            # bool/int subclassing matters, firing a phantom leak.
+            has_source = isinstance(declared, (int, float)) and not isinstance(declared, bool) and declared > 0
+            if has_source and budget in (express_on_prop, self_on_prop):
+                violations.append(
+                    f"  self_funded profile {profile.profile_id!r} declares "
+                    f"self_imposed_dd_dollars={declared} but effective_strict_dd_budget "
+                    f"still resolves to a prop-derived figure ${budget} "
+                    f"(tier.max_dd=${rules.dd_limit_dollars} * a prop fraction). The "
+                    "strict-DD budget is LEAKING the prop number into personal-capital "
+                    "risk — self-funded-sizing-doctrine.md forbids this."
+                )
+            if not has_source and budget != express_on_prop:
+                violations.append(
+                    f"  self_funded profile {profile.profile_id!r} has no "
+                    f"self_imposed_dd_dollars source but effective_strict_dd_budget did "
+                    f"NOT fail-close to the stricter express belt (${express_on_prop}); "
+                    f"got ${budget}. Fail-closed contract broken."
+                )
+    except Exception as e:  # noqa: BLE001 — surface as a loud violation, never a silent pass
+        violations.append(
+            "  could not structurally verify the self_funded strict-DD budget "
+            f"de-coupling (effective_strict_dd_budget): {type(e).__name__}: {e}. "
+            "This check must execute the resolver; a failure here is a violation, "
+            "not a skip."
+        )
+
     return violations
 
 

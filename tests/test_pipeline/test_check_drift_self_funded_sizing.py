@@ -23,6 +23,7 @@ mutation of the real source.
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pipeline.check_drift as cd
@@ -183,3 +184,44 @@ def test_structural_guard_fails_loud_when_function_missing(tmp_path, monkeypatch
     monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _GOOD_SRC, portfolio_src="x = 1\n"))
     violations = check_prop_caps_do_not_leak_into_self_funded()
     assert any("could not locate select_for_profile" in v for v in violations)
+
+
+# --- Runtime-resolver layer (d) — bool-guard parity with the resolver (Stage 3) ---
+
+
+def test_runtime_resolver_no_phantom_leak_on_bool_declaration(monkeypatch):
+    """Layer (d) must agree with effective_strict_dd_budget on `bool`.
+
+    `bool` subclasses `int` (`True > 0` is `True`), so a stray
+    `self_imposed_dd_dollars=True` is the ONE input where the drift check's
+    has_source guard (check_drift.py) and the resolver's source guard
+    (account_survival.py:106) diverge. The resolver excludes bool and correctly
+    resolves `True` to the express belt; the drift check must do the same and NOT
+    fire a phantom leak violation.
+
+    This test drives ONLY layer (d) — it monkeypatches the live ACCOUNT_PROFILES
+    dict (read by the lazy import inside the function) and leaves PROJECT_ROOT on
+    the REAL repo so layers (a)/(b)/(c) stay green.
+
+    Asserts the ABSENCE of the (d) leak message specifically — NOT
+    `violations == []`. The resolver's correct express-belt output ($5400)
+    collides with express_on_prop ($5400), so the `not_has` express branch is
+    silent in BOTH old and new code; a bare emptiness check could pass for the
+    wrong reason. The LEAKING string is the precise red→green signal.
+    """
+    from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+    real = next(p for p in ACCOUNT_PROFILES.values() if p.is_express_funded is False)
+    true_profile = dataclasses.replace(real, self_imposed_dd_dollars=True)
+    monkeypatch.setattr(
+        "trading_app.prop_profiles.ACCOUNT_PROFILES",
+        {real.profile_id: true_profile},
+    )
+
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+
+    phantom = [v for v in violations if "self_imposed_dd_dollars=True" in v and ("LEAKING" in v or "prop-derived" in v)]
+    assert not phantom, (
+        "bool self_imposed_dd_dollars must NOT fire a (d) leak violation — the "
+        "drift check must agree with the resolver's express-belt resolution; got: " + "; ".join(phantom)
+    )

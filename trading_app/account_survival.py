@@ -80,14 +80,34 @@ def effective_strict_dd_budget(profile: AccountProfile, rules: SurvivalRules) ->
     falsy `is_express_funded` resolves to the STRICTER express belt, never the
     relaxed self-funded one — a budget can only ever be too conservative by
     default, never too loose.
+
+    EXPRESS-FUNDED (prop wrappers): a fraction of the firm MLL
+    (``rules.dd_limit_dollars`` = ``tier.max_dd``). The fraction is an operator
+    safety belt on the firm number, which is the correct binding guard for a
+    funded wrapper.
+
+    SELF-FUNDED (real capital): the budget is the profile's OWN self-imposed DD
+    HALT (``self_imposed_dd_dollars``), NOT a prop-firm tier figure. Sourcing it
+    from ``rules.dd_limit_dollars`` (= ``tier.max_dd``) would bound
+    personal-capital risk by a prop-shaped number — the exact leak forbidden by
+    .claude/rules/self-funded-sizing-doctrine.md. A self_funded profile that
+    omits ``self_imposed_dd_dollars`` fail-CLOSES to the stricter express belt
+    on the firm number, never to the looser prop figure at full fraction.
     """
     # Self-funded relaxation requires an explicit, truthy non-express flag.
     # Anything else (None, missing, True) falls through to the express belt.
     if getattr(profile, "is_express_funded", True) is False:
-        fraction = STRICT_DD_BUDGET_FRACTION_SELF_FUNDED
-    else:
-        fraction = STRICT_DD_BUDGET_FRACTION_EXPRESS
-    return round(rules.dd_limit_dollars * fraction, 2)
+        # Risk-first SOURCE: the profile's own self-imposed DD halt, never the
+        # prop tier number. Fail-CLOSED if the source is missing/non-positive/
+        # non-finite. `bool` is a subclass of `int` in Python (True > 0 is True),
+        # so it is excluded explicitly — a stray True must never resolve to a $1
+        # budget. NaN is rejected by `> 0` being False.
+        self_imposed = getattr(profile, "self_imposed_dd_dollars", None)
+        if isinstance(self_imposed, (int, float)) and not isinstance(self_imposed, bool) and self_imposed > 0:
+            return round(float(self_imposed) * STRICT_DD_BUDGET_FRACTION_SELF_FUNDED, 2)
+        # Missing risk-first source → stricter express belt on the firm number.
+        return round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2)
+    return round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2)
 
 
 @dataclass(frozen=True)
