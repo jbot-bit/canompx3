@@ -308,9 +308,21 @@ def test_schema3_ppid_create_time_written_on_windows(repo: Path) -> None:
 # concurrency-leak fix (3 live terminals slipping past the lease gate because
 # OpenProcess momentarily read the holder's ppid as dead).
 # --------------------------------------------------------------------------- #
-def _write_beat(repo: Path, session_id: str, *, cwd: Path | None = None, age_s: float = 0.0) -> Path:
+def _write_beat(
+    repo: Path,
+    session_id: str,
+    *,
+    cwd: Path | None = None,
+    age_s: float = 0.0,
+    anchor_pid: int | None = None,
+    anchor_create_time: int | None = None,
+) -> Path:
     """Stamp a `<session_id>.beat` into the repo's git-common-dir heartbeat dir,
-    mirroring `.claude/hooks/session-heartbeat.py`. `age_s` backdates the mtime."""
+    mirroring `.claude/hooks/session-heartbeat.py`. `age_s` backdates the mtime.
+
+    When `anchor_pid` is None the beat is OLD-FORMAT (no anchor fields) — the
+    reader must fall back to mtime-only liveness. When provided, the beat carries
+    the session-process anchor that the reader cross-checks via `_pid_is_alive`."""
     import time
 
     common = wg._git_common_dir(repo)
@@ -318,18 +330,18 @@ def _write_beat(repo: Path, session_id: str, *, cwd: Path | None = None, age_s: 
     beat_dir = common / wg.HEARTBEAT_DIRNAME
     beat_dir.mkdir(parents=True, exist_ok=True)
     bf = beat_dir / f"{session_id}.beat"
-    bf.write_text(
-        json.dumps(
-            {
-                "session_id": session_id,
-                "cwd": str((cwd or repo).resolve()),
-                "branch": "main",
-                "pid": 4242,
-                "ts": time.time() - age_s,
-            }
-        ),
-        encoding="utf-8",
-    )
+    payload = {
+        "session_id": session_id,
+        "cwd": str((cwd or repo).resolve()),
+        "branch": "main",
+        "pid": 4242,
+        "ts": time.time() - age_s,
+    }
+    if anchor_pid is not None:
+        payload["anchor_pid"] = anchor_pid
+        if anchor_create_time is not None:
+            payload["anchor_create_time"] = anchor_create_time
+    bf.write_text(json.dumps(payload), encoding="utf-8")
     if age_s:
         old = time.time() - age_s
         os.utime(bf, (old, old))
@@ -540,3 +552,108 @@ def test_reclaim_does_not_prune_a_live_callers_own_beat(repo: Path):
     assert status_str == "reclaimed"
     assert not holder_beat.exists(), "holder beat pruned"
     assert caller_beat.exists(), "caller's own beat must survive"
+
+
+# --------------------------------------------------------------------------- #
+# Anchor-PID heartbeat liveness (2026-06-04).
+# Orphan .beat files from crashed sessions stayed "fresh" by mtime for up to
+# the blocking window, false-blocking the busy main checkout. The fix stamps the
+# long-lived session-process (claude.exe) PID + create_time in the beat and
+# cross-checks it with `_pid_is_alive`. A dead anchor => orphan => do not block.
+# The recorded `pid` field is the SHORT-LIVED hook subprocess and is intentionally
+# NOT used for liveness (it is always dead by read time). Old beats without an
+# anchor keep mtime-only behavior (migration fallback).
+# --------------------------------------------------------------------------- #
+_DEAD_ANCHOR = 2147480000  # a PID that does not exist on any test host
+
+
+def test_orphan_fresh_beat_with_dead_anchor_does_not_block(repo: Path):
+    """THE FIX: a beat that is FRESH by mtime but whose recorded anchor process
+    is DEAD is an orphan from a crashed session — it must NOT keep a dead-ppid
+    stale lease alive. Dead ppid + dead anchor => reclaim, not block."""
+    wg.acquire(repo, pid=99991, session_id="crashedHolder", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = _DEAD_ANCHOR  # holder ppid dead
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    # Fresh-by-mtime peer beat, but its anchor (claude.exe) is dead.
+    _write_beat(repo, "crashedHolder", cwd=repo, age_s=2.0, anchor_pid=_DEAD_ANCHOR)
+
+    status_str, _, msg = wg.acquire(repo, pid=99992, session_id="callerNew", ppid=os.getpid())
+    assert status_str == "reclaimed", msg
+
+
+def test_live_anchor_fresh_beat_blocks(repo: Path):
+    """A fresh beat whose anchor process is ALIVE is a genuine live peer — block,
+    never reclaim, even when the lease's own ppid reads dead (Windows false-dead)."""
+    wg.acquire(repo, pid=99991, session_id="liveHolder", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = _DEAD_ANCHOR  # ppid probe says holder gone (the false-dead case)
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    # Anchor = this pytest process: provably alive. PID-reuse-safe via create_time.
+    live_pid = os.getpid()
+    ct = wg._get_process_create_time_windows(live_pid) if os.name == "nt" else None
+    _write_beat(repo, "liveHolder", cwd=repo, age_s=2.0, anchor_pid=live_pid, anchor_create_time=ct)
+
+    status_str, payload, msg = wg.acquire(repo, pid=99992, session_id="callerB", ppid=os.getpid())
+    assert status_str == "blocked", msg
+    assert payload is not None and payload["session_id"] == "liveHolder"
+
+
+def test_old_format_fresh_beat_still_blocks(repo: Path):
+    """Backward compat: a fresh beat with NO anchor field keeps the legacy
+    mtime-only behavior — it still blocks (we cannot prove the holder gone)."""
+    wg.acquire(repo, pid=99991, session_id="legacyHolder", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = _DEAD_ANCHOR  # dead ppid
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    # Old-format beat: anchor_pid omitted entirely.
+    _write_beat(repo, "legacyHolder", cwd=repo, age_s=2.0)
+
+    status_str, payload, msg = wg.acquire(repo, pid=99992, session_id="callerC", ppid=os.getpid())
+    assert status_str == "blocked", msg
+    assert payload is not None and payload["session_id"] == "legacyHolder"
+
+
+def test_pid_reuse_anchor_does_not_block(repo: Path):
+    """A live PID whose create_time does NOT match the recorded anchor_create_time
+    is a REUSED pid — the original session is gone. Must reclaim, not block.
+    (Windows-only: POSIX has no create_time cross-check, so skip there.)"""
+    if os.name != "nt":
+        pytest.skip("create_time PID-reuse cross-check is Windows-only")
+    wg.acquire(repo, pid=99991, session_id="reusedHolder", ppid=os.getpid())
+    ls = wg.lease_path(repo)
+    assert ls is not None
+    data = json.loads(ls.read_text(encoding="utf-8"))
+    data["ppid"] = _DEAD_ANCHOR
+    backdated = datetime.now(UTC) - timedelta(seconds=wg.STALE_HEARTBEAT_SECONDS + 30)
+    data["iso_heartbeat"] = backdated.isoformat()
+    ls.write_text(json.dumps(data), encoding="utf-8")
+
+    live_pid = os.getpid()
+    # Deliberately WRONG create_time → reuse signature → original session gone.
+    _write_beat(repo, "reusedHolder", cwd=repo, age_s=2.0, anchor_pid=live_pid, anchor_create_time=123456789)
+
+    status_str, _, msg = wg.acquire(repo, pid=99992, session_id="callerD", ppid=os.getpid())
+    assert status_str == "reclaimed", msg
+
+
+def test_find_session_anchor_pid_caps_walk_depth():
+    """The anchor walk-up must terminate (no infinite loop) and fail-safe to None
+    when no claude/claude.exe ancestor is found within the hop cap."""
+    # pytest's own process tree has no `claude` ancestor → None, no hang.
+    result = wg._find_session_anchor_pid(os.getpid())
+    assert result is None or isinstance(result, tuple)
+    # Bogus/dead start pid → None (fail-safe), never raises.
+    assert wg._find_session_anchor_pid(_DEAD_ANCHOR) is None
+    assert wg._find_session_anchor_pid(None) is None

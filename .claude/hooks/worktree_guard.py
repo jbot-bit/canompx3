@@ -281,6 +281,46 @@ def _op_is_index_mutating(event: dict, worktree_root) -> bool:
     return False
 
 
+def _derive_block_verdict(peer: dict, lease_module, cwd: Path) -> str:
+    """Re-derive WHY the lease blocked, for an honest BLOCK message.
+
+    Returns one of three truthful verdicts (never an unconditional assertion):
+      - "LIVE (lease ppid alive)"        — the holder's session process is alive.
+      - "LIVE (live-anchor peer beat)"   — a fresh beat with a live session anchor.
+      - "stale lease + fresh legacy beat" — old-format beat, mtime-only (can't prove gone).
+      - "uncertain — could not verify"   — every probe failed (conservative block).
+
+    Fail-open: any probe error → "uncertain". The message is advisory only; the
+    actual block decision was already made authoritatively by `_peer_is_live`.
+    """
+    try:
+        ppid = peer.get("ppid")
+        ct = peer.get("ppid_create_time")
+        if ppid is not None and lease_module._pid_is_alive(int(ppid), expected_create_time=ct):
+            return "LIVE (lease ppid alive)"
+    except BaseException:
+        pass
+    # ppid not provably alive — is a fresh peer beat (with a live anchor) holding it?
+    try:
+        if lease_module._fresh_peer_heartbeat(
+            cwd, window_seconds=lease_module.BLOCKING_HEARTBEAT_WINDOW_SECONDS
+        ):
+            return "LIVE (live-anchor peer beat)"
+    except BaseException:
+        pass
+    # Neither live ppid nor live-anchor beat — a legacy mtime-only beat or
+    # an old fresh-heartbeat lease is the only thing left keeping it.
+    try:
+        hb = peer.get("iso_heartbeat") or peer.get("iso_started") or ""
+        age = lease_module._iso_age_seconds(hb)
+        floor = getattr(lease_module, "STALE_HEARTBEAT_SECONDS", 90)
+        if isinstance(age, (int, float)) and age < floor:
+            return "stale lease + fresh legacy beat (mtime-only)"
+    except BaseException:
+        pass
+    return "uncertain — could not verify; blocking conservatively"
+
+
 def _emit_block(peer_lease: dict | None, lease_module, cwd: Path) -> None:
     """Structured stderr BLOCK message.
 
@@ -293,12 +333,11 @@ def _emit_block(peer_lease: dict | None, lease_module, cwd: Path) -> None:
     hb = peer.get("iso_heartbeat") or peer.get("iso_started") or ""
     age = lease_module._iso_age_seconds(hb)
     age_str = f"{age:.0f}s ago" if isinstance(age, (int, float)) else "unknown"
-    stale_floor = getattr(lease_module, "STALE_HEARTBEAT_SECONDS", 90)
-    verdict = (
-        "LIVE (peer beating now)"
-        if isinstance(age, (int, float)) and age < stale_floor
-        else "heartbeat stale — liveness confirmed via peer beat / live ppid"
-    )
+    # Re-derive the ACTUAL block source instead of asserting an unverified
+    # "liveness confirmed" (2026-06-04 fix). Probe, in the same order
+    # `_peer_is_live` uses, which signal is keeping the lease alive so the
+    # operator sees the truth — not a hard-coded claim.
+    verdict = _derive_block_verdict(peer, lease_module, cwd)
     pid = peer.get("pid", "?")
     ppid = peer.get("ppid", "?")
     session_id = peer.get("session_id", "?")
