@@ -182,3 +182,4 @@
 - Key direction: dashboard should fail open/degraded; live launch must remain fail-closed.
 - Workstreams: dashboard startup, clean runtime worktree/git lease, DB-safe snapshot refresh, preflight split, C11/C12 clarity, lane/account frontier, recent-commit integration audit, operator runbook boundaries.
 - No database, broker, or live runtime state was inspected. Current decision remains NO-GO until measured gates pass.
+- 2026-06-04 follow-up revision: plan now explicitly prioritizes smallest useful diffs first: doc clarification, report metadata, dashboard render-only blocker cards, worktree diagnostics, then one atomic snapshot before any runtime-worktree/scheduler/lane changes.

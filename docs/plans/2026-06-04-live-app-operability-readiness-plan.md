@@ -16,6 +16,41 @@ The plan separates three states that must not be conflated:
 
 The immediate target is not to bypass blockers. The target is to prevent blockers such as dirty git state, stale leases, DuckDB contention, stale evidence, or deep preflight runtime from making the operator blind at the trade window.
 
+
+## Minimum-diff revision rule
+
+This plan is intentionally constrained to **smallest useful diffs first**. Future implementation should prefer narrow adapters around existing project surfaces instead of new subsystems.
+
+### Change budget
+
+1. **No live routing change in the first patch.** Do not alter order submission, broker selection, profile selection, copy routing, kill/flatten behavior, or lane-selection rules while making the dashboard easier to open.
+2. **No database schema change for the startup unblock.** First use read-only queries, existing JSON/runtime state, and atomic snapshots. Schema or journal changes require a separate deploy-readiness review.
+3. **No front-end rewrite.** Add status cards or endpoint fields to the existing dashboard before considering a new UI framework or major layout replacement.
+4. **No new scheduler until manual/background snapshot proves value.** First create a command that can refresh a snapshot; only then decide whether Windows Task Scheduler, cron, or a service wrapper is needed.
+5. **No lane/account promotion in the app-operability patches.** Lane/account frontier work is analysis-only until the app-open path and live gate are stable.
+6. **One behavior per commit.** Each future code commit should be traceable to one acceptance criterion and one test group.
+7. **Prefer delete-free changes.** Preserve current runbook/live paths and add compatibility wrappers or status metadata before removing anything.
+
+### Minimal-diff sequence
+
+The preferred implementation order is:
+
+1. **Doc/runbook clarification only:** split “dashboard opens” from “live launch allowed.”
+2. **Report metadata only:** add `schema_version`, `startup_status`, `signal_status`, `live_status`, and `launch_impact` fields to the existing live-readiness report.
+3. **Dashboard render-only patch:** display the existing/new report fields as blocker cards without changing launch behavior.
+4. **Worktree diagnostic patch:** enrich existing worktree preflight JSON; do not create a new launcher until the diagnosis is proven useful.
+5. **Snapshot-first patch:** write/read one atomic readiness snapshot using current report output; do not move DB ownership or journal logic.
+6. **Fast/deep labels:** tag existing checks by runtime class and evidence age; do not remove checks until measured.
+7. **Only then launcher/runtime-worktree changes:** add a clean runtime worktree path if earlier diagnostics prove dirty dev state is a real startup blocker.
+
+### Best-practice grounding for the sequence
+
+- DuckDB's documented concurrency model supports multiple read-only processes but not automatic multi-process writing, so the first DB fix is read-only/snapshot access rather than a DB writer redesign.
+- Git worktrees are an official way to keep separate working trees, but introducing a runtime worktree should come after proving the smaller diagnostic/rendering changes are insufficient.
+- The Kubernetes probe model supports separating startup, liveness, and readiness; this plan maps that concept to dashboard-open, signal/read-only usable, and live-execution allowed.
+- Twelve-Factor disposability/backing-service principles support observable, restartable dashboard processes and explicit attached resources, but do not require a new service framework for the first patch.
+
+
 ## Evidence posture
 
 ### Measured from repository state
@@ -66,6 +101,10 @@ The project needs separate startup, fast readiness, and deep verification checks
 ### Principle 5 — lane deployment must optimize a frontier, not one scalar
 
 A lane/account selection decision should compare survival probability, drawdown distribution, expected take-home, opportunity count, correlation, operational load, and account rule constraints. Drawdown survival alone is insufficient.
+
+### Anti-scope for the first implementation pass
+
+The first implementation pass should **not** add a new app framework, replace the dashboard, change broker adapters, alter live order routing, promote lanes, change account profiles, rewrite preflight, or introduce a new database service. Those may become justified later, but only after the smallest diagnostics/rendering/snapshot diffs fail to solve the operator-open problem.
 
 ## Workstream A — App opens when needed
 
@@ -447,6 +486,8 @@ Exit criteria:
 
 ## Work packages for parallel agents
 
+Parallel work is optional and should only be used when write scopes are disjoint. The first two code patches should remain single-owner because dashboard/report/worktree behavior is tightly coupled. If agents are used, each agent should produce the smallest patch that satisfies its local acceptance criteria and must not edit another agent's files.
+
 ### Agent 1 — Dashboard/startup
 
 Scope: `trading_app/live/bot_dashboard.py`, startup recovery, UI cards, degraded mode.
@@ -502,11 +543,13 @@ Live remains **NO-GO** unless all binding gates are measured green:
 - Kill/flatten path is available.
 - Operator confirms profile, account, mode, instrument, and copies in the dashboard before launch.
 
-## Immediate next actions
+## Immediate next actions — smallest-diff queue
 
-1. Implement Phase 1 dashboard degraded mode and startup recovery report.
-2. Implement Phase 2 runtime worktree launch path.
-3. Implement Phase 3 snapshot-first refresh.
-4. Create the live-state schema and bind dashboard + live launch to it.
-5. Run recent-commit integration audit before changing lane/account deployment.
-6. Run lane/account frontier only after app operability is stable enough to avoid mixing infrastructure failures with strategy conclusions.
+1. **Edit runbook wording only:** add a short dashboard-open vs live-launch distinction to the live runbook. No runtime behavior change.
+2. **Add report metadata:** extend the existing readiness report with launch-tier fields and evidence age. No dashboard or launch behavior change.
+3. **Render blocker cards:** update the existing dashboard to display the readiness report fields. No launch behavior change.
+4. **Add tests for separation:** prove dirty git / stale evidence can show `LIVE BLOCKED` while dashboard status still renders.
+5. **Add worktree diagnostic JSON fields:** expose clean/dirty, lease holder, heartbeat age, and reclaimability from existing worktree tooling. No new launcher yet.
+6. **Add atomic snapshot command:** materialize the existing readiness report to one JSON snapshot and make dashboard refresh prefer that file. No DB schema or journal change.
+7. **Re-evaluate runtime worktree:** only after steps 1-6, decide whether the dedicated runtime worktree is still needed or whether diagnostics + snapshot-first refresh are enough.
+8. **Defer lane/account frontier:** do not alter lane/account selection until app operability and live-gate observability are stable.
