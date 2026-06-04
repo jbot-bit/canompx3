@@ -182,6 +182,9 @@ DB_PERFORMANCE_PLAN.md
 *.docx
 orbresearch.txt
 live_journal.db
+live_journal.db.wal
+live_journal.db-wal
+live_journal.db-shm
 mlprompt*.txt
 
 # External repos cloned into project tree
