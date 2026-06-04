@@ -69,6 +69,66 @@ CHECK_DEPS: dict[str, list[str]] = {
     ],
 }
 
+# CHECK_TREE_DEPS maps a check label → its dep set when the check reads whole
+# globbed file *trees* (not just a fixed file list). Same honesty contract as
+# CHECK_DEPS: the set must be COMPLETE — every file (and every source file whose
+# logic affects the verdict) the check transitively reads. Keyed via
+# pipeline._drift_cache.tree_cache_key (path+content digest so add/remove/rename/
+# edit all invalidate). A label here is cache-eligible exactly like CHECK_DEPS;
+# under-declaration is caught by check_drift_cache_meta_recheck (cold re-run
+# parity). A label must appear in AT MOST ONE of CHECK_DEPS / CHECK_TREE_DEPS.
+# Expansion is gated by an adversarial audit (Stage 2, 2026-06-03).
+#
+# Each value is {"file_deps": [repo-rel paths], "tree_deps": [(glob_root, pattern)]}.
+CHECK_TREE_DEPS: dict[str, dict[str, list]] = {
+    # ──────────────────────────────────────────────────────────────────────────
+    # DELIBERATELY NOT CACHED — "FAST_LANE PROMOTE queue: no orphan PROMOTEs ..."
+    # (Check #171, the dominant 43.7s non-DB-FLAGGED cost). It was wired here, but
+    # an adversarial audit (evidence-auditor, 2026-06-03) proved a CRITICAL
+    # stale-PASS hazard: although the check's CHECKS tuple declares requires_db=False,
+    # scripts.research.fast_lane_promote_queue.scan() internally opens gold.db via
+    # _resolve_oos_window_days() (`SELECT MAX(trading_day) FROM orb_outcomes`,
+    # fast_lane_promote_queue.py:337). That value flows straight into the per-entry
+    # verdict: build_entry()'s OOS-power pre-flight returns REJECTED_OOS_UNPOWERED vs
+    # QUEUED based on oos_window_days (fast_lane_promote_queue.py:800-827). As new
+    # bar data lands, the DB advances and a near-threshold entry flips
+    # REJECTED→QUEUED — with NO change to any hashed file. A warmed cache would then
+    # serve a stale PASS on this BLOCKING capital gate (orphan-PROMOTE detection).
+    # gold.db content is not file-content-hashable, so this check is in the SAME
+    # non-cacheable class as the Phase4-SHA-manifest check (git-history verdict input)
+    # and the doc-hygiene check (data-dependent entrypoint-existence input). A
+    # DB-content-aware key (folding MAX(trading_day) into the digest) is a possible
+    # future recovery of the ~62s, but it is its own correctness surface and a
+    # separate audit-gated follow-up — NOT wired here. Do NOT re-add without that.
+    # ──────────────────────────────────────────────────────────────────────────
+    # Check #165 — AM3.3 theory_grant parity (25.4s). Reads the audit log + every
+    # active prereg's metadata.theory_grant, compares against has_theory. Verdict
+    # also depends on the t-threshold constants in trading_app/chordia.py (imported
+    # CHORDIA_T_WITH/WITHOUT_THEORY), so that source file is a dep (rigor § 4 —
+    # verdict tracks the code). Glob is non-recursive so drafts/ is excluded by
+    # construction (the check's own `"drafts" not in str(p)` is belt-and-suspenders).
+    "AM3.3 audit-log/prereg theory_grant parity: chordia_audit_log.yaml theory_grants must match active prereg metadata.theory_grant (Check #162)": {
+        "file_deps": [
+            "docs/runtime/chordia_audit_log.yaml",
+            "trading_app/chordia.py",
+        ],
+        "tree_deps": [
+            ("docs/audit/hypotheses", "*.yaml"),
+        ],
+    },
+    # DSR reference-universe lock (24.6s). Reads ONLY the active hypotheses tree
+    # (non-recursive glob, drafts excluded by construction); the verdict's allowed
+    # derivations come from the module-level _ALLOWED_DSR_TRIALS_DERIVATION constant
+    # in THIS file, which the cache key cannot miss (an edit to check_drift.py is a
+    # code change that re-runs the whole suite). No fixed-file or git-state inputs.
+    "DSR reference-universe lock declared (Criterion 5 Amendment 3.5: criterion_5 block complete when claiming DSR-clearance)": {
+        "file_deps": [],
+        "tree_deps": [
+            ("docs/audit/hypotheses", "*.yaml"),
+        ],
+    },
+}
+
 # Records labels that returned a cached HIT during the current run, so the meta
 # cold-recheck can re-run exactly those checks and assert verdict parity.
 _CACHE_HITS_THIS_RUN: list[str] = []
@@ -5399,16 +5459,37 @@ def check_drift_shared_db_connection() -> list[str]:
 
 
 def check_drift_cache_meta_recheck() -> list[str]:
-    """Meta cold-recheck: every check that returned a CACHED HIT this run is
-    re-executed cold (bypassing the cache) and its verdict must match the cached
-    PASS. A mismatch means the cached PASS was stale — i.e. the check's declared
-    CHECK_DEPS are incomplete (an input changed that the key did not hash).
+    """Meta cold-recheck: the cache honesty backstop.
 
-    This is the honesty backstop for the cache. With one cached check it is a
-    deterministic full recheck; when many checks are cached later, this becomes a
-    random sample. Fail-closed: if a cached-hit label cannot be re-run (no entry
-    in CHECKS, or it requires_db), that is itself a violation — we never silently
-    trust a cached PASS we cannot reproduce.
+    Two layers, by cost:
+
+    1. STRUCTURAL (cheap, runs for EVERY cached-hit label, every run): a cached-hit
+       label must be a registered, non-``requires_db`` check. A label missing from
+       CHECKS, or one that is ``requires_db`` (DB content is not hashed, so its cache
+       key cannot be honest), is a violation — caught unconditionally.
+
+    2. COLD RE-RUN (expensive, SAMPLED — one label per run): the sampled check is
+       re-executed cold (bypassing the cache); its verdict must match the cached
+       PASS. A mismatch means the cached PASS was stale — the check's declared deps
+       are incomplete (an input changed that the key did not hash). The cold re-run
+       of the *dominant* cached checks costs ~tens of seconds each; running ALL of
+       them every drift would re-pay the entire cached cost and erase the speedup.
+       So we sample exactly one per run, rotating per-commit via
+       ``_meta_recheck_sample_index`` so every cached check is covered within a
+       bounded number of commits.
+
+       This sampling is defense-in-depth, NOT the sole anti-stale guard: the cache
+       key is a content hash of every declared dep, so a *complete* dep set can never
+       serve a stale PASS regardless of sampling — the cold re-run only catches dep
+       UNDER-declaration, which is also caught deterministically at config time by
+       the per-check ``*_covers_every_file_the_*_reads`` structural completeness
+       tests. Sampling trades a bounded worst-case detection latency (a missed dep
+       could survive a few commits) for the speedup; the static completeness tests
+       are the primary under-declaration guard.
+
+    Fail-closed throughout: an unverifiable cached-hit label is a violation; HEAD
+    unreadable still yields a deterministic in-range sample (a recheck always
+    happens — never zero rechecks).
 
     Runs LAST (registered at the tail of CHECKS) so all cache hits are recorded.
     """
@@ -5419,28 +5500,38 @@ def check_drift_cache_meta_recheck() -> list[str]:
     # label → (fn, requires_db) from the canonical CHECKS table.
     by_label = {label: (fn, requires_db) for label, fn, _adv, requires_db in CHECKS}
 
+    # Layer 1 — structural validation for ALL cached-hit labels (cheap). Collect the
+    # cold-recheckable labels (in CHECKS, non-db) for the sampled cold re-run.
+    recheckable: list[str] = []
     for label in _CACHE_HITS_THIS_RUN:
         entry = by_label.get(label)
         if entry is None:
             violations.append(f"  cached-hit label not found in CHECKS, cannot verify: {label!r}")
             continue
-        fn, requires_db = entry
+        _fn, requires_db = entry
         if requires_db:
             violations.append(
                 f"  cached requires_db check {label!r} cannot be cold-rechecked here "
                 f"(DB-content inputs are not hashed) — must not be cache-eligible"
             )
             continue
+        recheckable.append(label)
+
+    # Layer 2 — sampled cold re-run (expensive). Sort for a deterministic sample.
+    if recheckable:
+        sampled = sorted(set(recheckable))
+        label = sampled[_drift_cache.meta_recheck_sample_index(sampled)]
+        fn = by_label[label][0]
         try:
             cold = fn()
         except Exception as exc:  # noqa: BLE001 — record, never swallow
             violations.append(f"  cold recheck of {label!r} raised {type(exc).__name__}: {exc}")
-            continue
-        if cold:
-            violations.append(
-                f"  STALE CACHE: {label!r} returned cached PASS but cold re-run found "
-                f"{len(cold)} violation(s) — CHECK_DEPS for this label is incomplete"
-            )
+        else:
+            if cold:
+                violations.append(
+                    f"  STALE CACHE: {label!r} returned cached PASS but cold re-run found "
+                    f"{len(cold)} violation(s) — declared deps for this label are incomplete"
+                )
 
     return violations
 
@@ -15898,6 +15989,49 @@ def _assert_crg_advisory_labels_valid() -> None:
 _assert_crg_advisory_labels_valid()
 
 
+def _assert_check_dep_dicts_valid() -> None:
+    """Fail closed if CHECK_DEPS / CHECK_TREE_DEPS drift from the dispatch contract.
+
+    Three invariants the main-loop cache dispatch and the cold-recheck rely on:
+      1. Mutual exclusivity — a label in BOTH dicts would race on the same on-disk
+         cache file (``_safe_name`` hashes only the label), so the two key formats
+         could cross-serve a PASS. The dispatch fails such a label closed, but it is
+         a config error that must surface at import, not silently disable a cache.
+      2. Every label exists in CHECKS (rename/typo catch — same class as
+         ``_assert_slow_labels_valid``). A dep set keyed on a dead label caches
+         nothing and silently rots.
+      3. Every cache-eligible label is NON-db. The cache never hashes DB content, so
+         a ``requires_db`` check must never be cache-eligible (the cold-recheck
+         already refuses to verify such a hit; this stops it one layer earlier).
+    """
+    overlap = set(CHECK_DEPS) & set(CHECK_TREE_DEPS)
+    if overlap:
+        raise RuntimeError(
+            f"label(s) declared in BOTH CHECK_DEPS and CHECK_TREE_DEPS: {sorted(overlap)}. "
+            "A label may be cache-eligible via at most one dep dict (they share the "
+            "on-disk cache file keyed by label)."
+        )
+    by_label = {label: requires_db for label, _fn, _adv, requires_db in CHECKS}
+    for dict_name, dep_dict in (("CHECK_DEPS", CHECK_DEPS), ("CHECK_TREE_DEPS", CHECK_TREE_DEPS)):
+        stale = dep_dict.keys() - by_label.keys()
+        if stale:
+            raise RuntimeError(
+                f"{dict_name} references label(s) not present in CHECKS: {sorted(stale)}. "
+                "A check was renamed/removed without updating its dep declaration, or "
+                "the label string has a typo (the cache would silently never fire)."
+            )
+        db_backed = sorted(lbl for lbl in dep_dict if by_label[lbl])
+        if db_backed:
+            raise RuntimeError(
+                f"{dict_name} includes requires_db check(s): {db_backed}. DB content is "
+                "not hashed by the content-hash cache, so a DB check must never be "
+                "cache-eligible (a stale PASS would not be caught by the dep digest)."
+            )
+
+
+_assert_check_dep_dicts_valid()
+
+
 def main():
     import argparse
 
@@ -16023,19 +16157,37 @@ def main():
                 v = [f"  EXCEPTION: {type(e).__name__}: {e}"]
         else:
             # Content-hash cache: only labels with a declared dep set in
-            # CHECK_DEPS are eligible. A cache hit returns a PASS (empty
-            # violations) without re-running. Any miss / disabled cache / error
-            # falls through to the real check (fail-closed). Never used for
-            # requires_db checks — DB-content inputs are not hashed here.
+            # CHECK_DEPS (fixed file list) or CHECK_TREE_DEPS (whole globbed
+            # trees) are eligible. A cache hit returns a PASS (empty violations)
+            # without re-running. Any miss / disabled cache / error falls through
+            # to the real check (fail-closed). Never used for requires_db checks —
+            # DB-content inputs are not hashed here.
             deps = CHECK_DEPS.get(label)
-            cache_key = _drift_cache.cache_key(label, deps) if deps else None
-            if deps is not None and _drift_cache.read_pass(label, cache_key):
+            tree_spec = CHECK_TREE_DEPS.get(label)
+            if deps is not None and tree_spec is not None:
+                # A label in both dicts is a configuration error — the two keys
+                # would race on the same on-disk cache file. Fail closed (no
+                # cache) rather than trust an ambiguous declaration.
+                cache_key = None
+                cacheable = False
+            elif tree_spec is not None:
+                cache_key = _drift_cache.tree_cache_key(
+                    label, tree_spec.get("file_deps", []), tree_spec.get("tree_deps", [])
+                )
+                cacheable = True
+            elif deps is not None:
+                cache_key = _drift_cache.cache_key(label, deps)
+                cacheable = True
+            else:
+                cache_key = None
+                cacheable = False
+            if cacheable and _drift_cache.read_pass(label, cache_key):
                 _CACHE_HITS_THIS_RUN.append(label)
                 v = []
             else:
                 with suppress_ctx:
                     v = check_fn()
-                if deps is not None:
+                if cacheable:
                     # Only PASS is persisted; write_pass no-ops on FAIL.
                     _drift_cache.write_pass(label, cache_key, v)
 
