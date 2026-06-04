@@ -1464,9 +1464,15 @@ def _stale_process_reaper_lines() -> list[str]:
         if not reaper.exists():
             return []
         # Auto-apply only when the session lock is readable (kills then provable
-        # via Rule b/d). No lock -> dry-run report only (fail-closed on killing).
-        lock_path = PROJECT_ROOT / ".git" / ".claude.pid"
-        lock_readable = lock_path.exists() and lock_path.stat().st_size > 0
+        # via Rule b/d). No lock / unresolvable git-dir -> dry-run report only
+        # (fail-closed on killing). Resolve the git-dir via the canonical helper
+        # (matches the lock WRITE idiom at line 483) instead of the literal
+        # `.git/` — a literal is the silently-always-false-in-a-worktree
+        # anti-pattern the drift check
+        # `check_no_literal_git_marker_paths_in_hooks` forbids.
+        _gd = _git_dir()
+        lock_path = (_gd / ".claude.pid") if _gd is not None else None
+        lock_readable = lock_path is not None and lock_path.exists() and lock_path.stat().st_size > 0
         cmd = [sys.executable, str(reaper), "--quiet"]
         if lock_readable:
             cmd += ["--apply", "--reap-duplicates"]

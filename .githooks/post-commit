@@ -6,9 +6,18 @@
 # This is ADVISORY — if it fails, the commit is already done. Never exit 1.
 #
 
-# Skip during rebase, merge, or cherry-pick (fires per replayed commit = spam)
-if [ -n "$GIT_REBASE_TODO" ] || [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] \
-   || [ -f ".git/MERGE_HEAD" ] || [ -f ".git/CHERRY_PICK_HEAD" ]; then
+# Skip during rebase, merge, or cherry-pick (fires per replayed commit = spam).
+# Use `git rev-parse --git-path <marker>` — git's built-in that resolves the
+# marker under the correct git-dir in BOTH a main checkout and a worktree. A
+# literal `.git/<marker>` is silently always-false in a worktree (real git-dir
+# is `.git/worktrees/<name>/`), so the skip-guard would never fire there and the
+# hook would re-dirty the tree mid-replay (the documented cherry-pick/rebase
+# deadlock). Advisory hook — never blocks the commit.
+if [ -n "$GIT_REBASE_TODO" ] \
+   || [ -d "$(git rev-parse --git-path rebase-merge 2>/dev/null)" ] \
+   || [ -d "$(git rev-parse --git-path rebase-apply 2>/dev/null)" ] \
+   || [ -f "$(git rev-parse --git-path MERGE_HEAD 2>/dev/null)" ] \
+   || [ -f "$(git rev-parse --git-path CHERRY_PICK_HEAD 2>/dev/null)" ]; then
     exit 0
 fi
 

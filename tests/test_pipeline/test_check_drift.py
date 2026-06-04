@@ -22,13 +22,14 @@ from pipeline.check_drift import (
     check_dow_classification_complete,
     check_hardcoded_mgc_sql,
     check_holdout_policy_declaration_consistency,
+    check_no_literal_git_marker_paths_in_hooks,
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
     check_prereg_present_for_recent_runs,
-    check_session_order_covers_orb_labels,
     check_pyright_config_exists,
     check_python_version_file,
     check_ruff_rules_minimum,
+    check_session_order_covers_orb_labels,
     check_trading_app_connection_leaks,
     check_trading_app_hardcoded_paths,
     check_uv_lock_exists,
@@ -3637,3 +3638,77 @@ class TestSessionOrderCoversOrbLabels:
         monkeypatch.setattr(session_guard, "_SESSION_ORDER", truncated)
         violations = check_session_order_covers_orb_labels()
         assert any("NYSE_PREOPEN" in v and "_SESSION_ORDER" in v for v in violations), violations
+
+
+class TestNoLiteralGitMarkerPathsInHooks:
+    """Check: forbid literal `.git/<marker>` state paths in hooks/session tools.
+
+    A literal `.git/<marker>` is silently always-false in a worktree (real
+    git-dir is `.git/worktrees/<name>/`). Documented twice 2026-06-04; this is
+    the forward regression guard. The four false-positive guards below are the
+    load-bearing distinction — flagging any of them would get the check disabled.
+    """
+
+    def test_catches_python_path_git_marker(self, tmp_path):
+        f = tmp_path / "some_hook.py"
+        f.write_text('lock_path = PROJECT_ROOT / ".git" / ".claude.pid"\n')
+        violations = check_no_literal_git_marker_paths_in_hooks([tmp_path])
+        assert len(violations) == 1, violations
+        assert "some_hook.py:1" in violations[0]
+
+    def test_catches_shell_git_marker(self, tmp_path):
+        f = tmp_path / "post-commit"
+        f.write_text('if [ -f ".git/CHERRY_PICK_HEAD" ]; then exit 0; fi\n')
+        violations = check_no_literal_git_marker_paths_in_hooks([tmp_path])
+        assert len(violations) == 1, violations
+        assert "post-commit:1" in violations[0]
+
+    def test_catches_shell_rebase_merge(self, tmp_path):
+        f = tmp_path / "pre-commit"
+        f.write_text('[ -d ".git/rebase-merge" ] && exit 0\n')
+        violations = check_no_literal_git_marker_paths_in_hooks([tmp_path])
+        assert len(violations) == 1, violations
+
+    def test_does_not_flag_repo_root_marker(self, tmp_path):
+        # `(x / ".git").exists()` is a repo-root marker, correct in worktrees.
+        f = tmp_path / "guard.py"
+        f.write_text('if (candidate / ".git").exists():\n    root = candidate\n')
+        violations = check_no_literal_git_marker_paths_in_hooks([tmp_path])
+        assert violations == [], violations
+
+    def test_does_not_flag_resolved_var_shell(self, tmp_path):
+        # `"$GIT_DIR_PATH/.claude.pid"` — resolved variable, Stage-1 idiom.
+        f = tmp_path / "pre-commit"
+        f.write_text('LOCK="$GIT_DIR_PATH/.claude.pid"\n')
+        violations = check_no_literal_git_marker_paths_in_hooks([tmp_path])
+        assert violations == [], violations
+
+    def test_does_not_flag_resolved_var_with_rev_parse(self, tmp_path):
+        # The canonical fix idiom: resolve then test under the variable.
+        f = tmp_path / "post-commit"
+        f.write_text('GD=$(git rev-parse --git-dir)\nif [ -f "$GD/MERGE_HEAD" ]; then exit 0; fi\n')
+        violations = check_no_literal_git_marker_paths_in_hooks([tmp_path])
+        assert violations == [], violations
+
+    def test_does_not_flag_comment(self, tmp_path):
+        # A comment/docstring mentioning the pattern must not flag.
+        f = tmp_path / "some_hook.py"
+        f.write_text("# old code tested .git/rebase-merge directly — fixed\n")
+        violations = check_no_literal_git_marker_paths_in_hooks([tmp_path])
+        assert violations == [], violations
+
+    def test_does_not_flag_allowlisted_test_file(self, tmp_path):
+        # test_session_heartbeat.py uses synthetic `tmp_path/".git"/...` fixtures.
+        f = tmp_path / "test_session_heartbeat.py"
+        f.write_text('beat = tmp_path / ".git" / ".claude-heartbeats" / "x.beat"\n')
+        violations = check_no_literal_git_marker_paths_in_hooks([tmp_path])
+        assert violations == [], violations
+
+    def test_missing_root_no_crash(self, tmp_path):
+        # Non-existent scan root -> empty list, never raises.
+        violations = check_no_literal_git_marker_paths_in_hooks([tmp_path / "nope"])
+        assert violations == []
+
+    def test_real_check_is_green(self):
+        # After the Stage-2 residual fixes, the real check must land clean.
+        assert check_no_literal_git_marker_paths_in_hooks() == []

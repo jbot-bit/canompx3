@@ -103,14 +103,48 @@ def _cmd_matches(cmdline: str, signatures: tuple[str, ...]) -> bool:
     return any(sig.lower() in low for sig in signatures)
 
 
-def read_session_start(lock_path: Path) -> datetime | None:
+def _session_lock_path() -> Path | None:
+    """Resolve the session-lock path (`.claude.pid`) via git's built-in
+    ``git rev-parse --git-path`` — which returns the marker under the correct
+    git-dir in BOTH a main checkout (`.git/.claude.pid`) and a linked worktree
+    (`.git/worktrees/<name>/.claude.pid`).
+
+    A literal ``PROJECT_ROOT/.git/.claude.pid`` is silently wrong in a worktree
+    (there ``.git`` is a gitlink *file*, so the path never exists and the
+    session lock reads as absent). Resolves relative to ``PROJECT_ROOT`` so a
+    direct invocation from inside a worktree terminal finds that worktree's
+    lock. Fail-open: returns None on any git error -> caller treats as "no lock"
+    (fail-closed on killing, the documented contract).
+    """
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--git-path", ".claude.pid"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=str(PROJECT_ROOT),
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    p = Path(out.stdout.strip())
+    if not p.is_absolute():
+        p = (PROJECT_ROOT / p).resolve()
+    return p
+
+
+def read_session_start(lock_path: Path | None) -> datetime | None:
     """Return the current session lock's ``iso_started`` as aware UTC, or None.
 
     None means "no readable lock" — under the fail-closed contract, callers
     treat None as "cannot prove anything is older than the session", so
     age-based candidacy (rule b) is disabled and only dead-parent orphans
-    (rule a) remain killable.
+    (rule a) remain killable. A ``None`` ``lock_path`` (git-dir unresolvable)
+    is treated the same way.
     """
+    if lock_path is None:
+        return None
     try:
         raw = lock_path.read_text(encoding="utf-8")
     except Exception:
@@ -518,7 +552,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    lock_path = PROJECT_ROOT / ".git" / ".claude.pid"
+    # Resolve the session-lock path via `git rev-parse --git-path` so a direct
+    # invocation from inside a worktree finds that worktree's `.claude.pid`, not
+    # the literal `PROJECT_ROOT/.git/.claude.pid` (silently wrong in a worktree).
+    # None (git unresolvable) -> read_session_start returns None -> fail-closed
+    # (dry-run only, no age-based kills), the documented contract.
+    lock_path = _session_lock_path()
     session_start = read_session_start(lock_path)
     procs = _enumerate_processes()
     self_pid = os.getpid()

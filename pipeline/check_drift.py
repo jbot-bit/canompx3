@@ -13106,6 +13106,151 @@ def check_worktree_guard_lease_path_parity() -> list[str]:
     return violations
 
 
+# Git state-markers that live UNDER the resolved git-dir (`.git/` for the main
+# checkout, `.git/worktrees/<name>/` for a linked worktree). A hook that hardcodes
+# the literal `.git/<marker>` path is silently always-false/missing in every
+# worktree, because the real git-dir is NOT `.git/`. Resolve `git rev-parse
+# --git-dir` once at runtime and test the marker under that.
+_GIT_DIR_STATE_MARKERS = (
+    "rebase-merge",
+    "rebase-apply",
+    "MERGE_HEAD",
+    "CHERRY_PICK_HEAD",
+    "REVERT_HEAD",
+    "BISECT_LOG",
+    "ORIG_HEAD",
+    "index",
+    r"\.claude\.pid",
+)
+
+# Shell: literal `.git/` immediately followed by a known state-marker. The `.git/`
+# is the literal anchor — `$GIT_DIR_PATH/.claude.pid` (a RESOLVED variable, the
+# Stage-1 idiom) does NOT match because there is no literal `.git/` before it.
+_SHELL_GIT_MARKER_RE = re.compile(r"\.git/(?:" + "|".join(_GIT_DIR_STATE_MARKERS) + r")\b")
+
+# Python: the `Path(...) / ".git" / "<marker>"` shape — a quoted `.git` followed
+# by a `/` and another quoted segment. This deliberately EXCLUDES
+# `(x / ".git").exists()` (repo-root marker), because there `".git")` is followed
+# by `.exists`, not by `/ "<marker>"`.
+_PY_GIT_MARKER_RE = re.compile(r"""["']\.git["']\s*/\s*["']""")
+
+
+def check_no_literal_git_marker_paths_in_hooks(
+    scan_roots: list[Path] | None = None,
+) -> list[str]:
+    """Forbid literal ``.git/<state-marker>`` paths in hooks / session tools.
+
+    **The bug class (documented twice, 2026-06-04).** A git hook or hook-adjacent
+    tool that constructs a hardcoded ``.git/<state-marker>`` path is silently
+    always-false / missing in a git **worktree**, because the real git-dir is
+    ``.git/worktrees/<name>/``, not ``.git/``. The guard exists in source but
+    never fires — it reads as "covered" while doing nothing. It bit twice via the
+    ``.githooks/`` cherry-pick deadlock:
+      - ``memory/feedback_post_commit_hook_mutating_tracked_file_deadlocks_git_rebase_2026_06_04.md``
+      - ``memory/feedback_worktree_hooks_literal_dotgit_path_tests_always_false_2026_06_04.md``
+
+    Per the n>=2-same-class doctrine threshold this is promoted to a mechanical
+    drift check so the pattern cannot be silently reintroduced. This is a
+    **forward** regression guard, not a claim that current code is broken.
+
+    **What is FLAGGED** (literal-``.git``-anchored state-path construction):
+      - shell: ``.git/(rebase-merge|MERGE_HEAD|CHERRY_PICK_HEAD|...|.claude.pid|index)``
+      - python: ``Path(...) / ".git" / "<marker>"`` (quoted ``.git`` then ``/`` then a quoted segment)
+
+    **What is NOT flagged** (the load-bearing distinction):
+      - ``(x / ".git").exists()`` / ``.is_dir()`` — repo-root marker, correct in
+        worktrees (a worktree's ``.git`` is a *file*; ``.exists()`` is True).
+      - ``"$GIT_DIR_PATH/.claude.pid"`` — a RESOLVED variable (Stage-1 idiom);
+        no literal ``.git/`` precedes the marker.
+      - synthetic test fixtures under ``tmp_path / ".git" / ...`` — basename allowlist.
+      - comments / docstrings mentioning the pattern — skipped.
+
+    Flagging any of those would be a false positive that gets the check disabled
+    — worse than nothing. The regex anchors on a **literal** ``.git``, never on a
+    trailing marker after a *variable*.
+
+    Parameters
+    ----------
+    scan_roots : list[Path] | None
+        Directories to scan. Defaults to ``.githooks/``, ``.claude/hooks/``,
+        ``scripts/tools/``. Passing ``tmp_path`` roots lets injection tests
+        verify the check catches violations without touching the real tree.
+
+    Returns
+    -------
+    list[str]
+        One violation per offending file:line, naming the literal and the fix.
+        Empty == PASS. Fail-open: unreadable files are skipped, never raises.
+    """
+    if scan_roots is None:
+        scan_roots = [
+            PROJECT_ROOT / ".githooks",
+            PROJECT_ROOT / ".claude" / "hooks",
+            PROJECT_ROOT / "scripts" / "tools",
+        ]
+
+    # Files that legitimately reference the pattern: this check's own test file
+    # (injection fixtures) and the session-heartbeat test (synthetic
+    # ``tmp_path/".git"/...`` fixtures). Allow-listed by basename so the rule
+    # survives a path refactor.
+    allowlisted_basenames = frozenset(
+        {
+            "test_check_drift.py",
+            "test_session_heartbeat.py",
+        }
+    )
+
+    fix_hint = (
+        "Resolve the git-dir once at runtime "
+        "(`GD=$(git rev-parse --git-dir)` in shell, or reuse the file's "
+        "`_git_dir()` helper in python), test the marker UNDER it "
+        '(`"$GD/<marker>"` / `git_dir / "<marker>"`), and fail-open on empty. '
+        "A literal `.git/<marker>` is silently always-false in a worktree. "
+        "See memory/feedback_worktree_hooks_literal_dotgit_path_tests_always_false_2026_06_04.md "
+        "and memory/feedback_post_commit_hook_mutating_tracked_file_deadlocks_git_rebase_2026_06_04.md."
+    )
+
+    violations: list[str] = []
+    for root in scan_roots:
+        if not root.is_dir():
+            continue
+        for fpath in sorted(root.rglob("*")):
+            if not fpath.is_file():
+                continue
+            if fpath.name in allowlisted_basenames:
+                continue
+            is_python = fpath.suffix == ".py"
+            try:
+                content = fpath.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+
+            try:
+                rel = fpath.relative_to(PROJECT_ROOT)
+            except ValueError:
+                rel = fpath
+
+            for line_num, line in enumerate(content.splitlines(), 1):
+                stripped = line.strip()
+                # Skip comments (shell `#` and python `#`). Docstring/prose
+                # mentions on their own line are also skipped by this — the
+                # pattern is a code construction, not free text.
+                if stripped.startswith("#"):
+                    continue
+
+                regex = _PY_GIT_MARKER_RE if is_python else _SHELL_GIT_MARKER_RE
+                m = regex.search(line)
+                if m is not None:
+                    violations.append(
+                        f"check_no_literal_git_marker_paths_in_hooks: "
+                        f"{rel}:{line_num}: literal `.git/<marker>` state path "
+                        f"({stripped[:80]!r}) is silently always-false in a "
+                        f"worktree. {fix_hint}"
+                    )
+
+    return violations
+
+
 def check_triage_provenance_completeness(
     drafts_dir: Path | None = None,
 ) -> list[str]:
@@ -15822,6 +15967,12 @@ CHECKS = [
         "Worktree-guard: lease/lock path parity (CLI<->hook canonical-source delegation)",
         check_worktree_guard_lease_path_parity,
         False,  # blocking -- inline copy of lease path in the hook silently desyncs concurrency guard
+        False,
+    ),
+    (
+        "Literal .git/<marker> paths in hooks (worktree footgun, documented n=2 2026-06-04)",
+        check_no_literal_git_marker_paths_in_hooks,
+        False,  # blocking -- a literal `.git/<marker>` is silently always-false in worktrees
         False,
     ),
     (
