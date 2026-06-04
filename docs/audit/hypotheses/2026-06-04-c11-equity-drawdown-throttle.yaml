@@ -1,0 +1,124 @@
+# C11 Equity-Drawdown Throttle — PRE-REGISTRATION (DRAFT, provisional)
+# Drafted: 2026-06-04 | Status: DRAFT — requires human review before promotion.
+# Source-of-truth analysis: docs/audit/results/2026-06-04-c11-solution-matrix.md
+# NOT an edge-discovery hypothesis. This is a RISK-CONTROL overlay: it trades a
+# bounded slice of edge for drawdown reduction so topstep_50k_mnq_auto clears C11.
+# Bias note: the candidate params below were SELECTED in-sample by clearing C11
+# (parameter-selection bias). This pre-reg exists to test them OOS-honestly, NOT
+# to bless the in-sample fit. Treat trigger=$800/factor=0.5 as PROVISIONAL.
+
+metadata:
+  theory_grant: false                 # risk overlay, not a theory-grant edge claim
+  name: "c11-equity-drawdown-throttle"
+  date_drafted: "2026-06-04"
+  date_locked: "2026-06-04"           # promoted draft -> hypotheses/ after OOS validation PASS
+                                      # validation: docs/audit/results/2026-06-04-c11-throttle-validation.md
+                                      # k-budget reconfirmed at promotion: K=8 PASS (4.16yr req, 6.65yr avail)
+  profile: "topstep_50k_mnq_auto"
+  instrument: "MNQ"
+  holdout_date: "2026-01-01"          # 2026 = untouched OOS holdout (gate uses full history; failing window is 2022)
+  data_horizon_years_clean: 6.66      # 2019-05-31 .. 2025-12-31 IS span (pre-holdout)
+  kind: "risk_control_overlay"
+  parameter_selection_bias: |
+    trigger=$800 / factor=0.5 / recover=$400 were chosen in-sample by clearing
+    C11 on 2019-2026. This is selection bias. The grid below is the FULL trial
+    set that must be FDR-corrected; no single cell may be reported as validated
+    without surviving the OOS + walk-forward gates.
+
+hypothesis: >
+  A causal end-of-day equity drawdown throttle — halving daily participation when
+  account equity is >= TRIGGER below its running peak, restoring full size once
+  equity recovers to within RECOVER of the peak — reduces the strict 90-day
+  rolling drawdown of topstep_50k_mnq_auto below the $1,600 (0.80x) AND $2,000
+  (1.00x MLL) budgets while preserving >= 85% of total R-edge, OOS-honestly.
+
+mechanism: >
+  The C11 failure is a shared adverse-regime grind (Jul-Oct 2022): all three lanes'
+  win-rate collapsed ~43% -> ~25% over 78 days (ExpR +0.18 -> -0.20). Losses are
+  normal-sized and the lanes stay daily-uncorrelated (rho ~ 0), so caps/stops/
+  de-correlation cannot fix it. A drawdown-responsive throttle reduces exposure
+  during ANY sustained negative-drift regime using only realized past equity
+  (Carver Ch9-10 capital-rolling discipline; Carver Ch11 crisis-robustness cap).
+  It is regime-agnostic: it engaged in 5 distinct historical episodes, not just 2022.
+
+source_of_truth_chain:
+  - "canonical edge: orb_outcomes (pnl_r per trade) via account_survival._load_lane_trade_paths (account_survival.py:320)"
+  - "daily scenarios: account_survival._load_profile_daily_scenarios (:472) — common_start = max(per-lane first day)"
+  - "C11 metric: account_survival._max_observed_rolling_drawdown (:749), horizon=90, budget=0.80x*MLL"
+  - "live enforcement target: trading_app/live/session_orchestrator.py daily breaker (:598) + account_hwm_tracker.py (HWM state to reuse)"
+  - "lane caps: docs/runtime/lane_allocation.json via load_allocation_lanes() (prop_profiles.py)"
+  - "Topstep MLL rule (EOD trailing, verified live): help.topstep.com/en/articles/8284204"
+
+candidate_grid:
+  trigger_levels_dollars: [600, 800, 1000, 1200]   # equity DD-from-peak that engages throttle
+  throttle_sizes_factor:  [0.0, 0.5]                # 0.0=full sit-out, 0.5=half size
+  recover_rule: "recover = trigger * 0.5"           # hysteresis; 1 free param, not gridded
+  notes: >
+    factor=0.0 (full halt) is included only as a refuted bound (clears DD but -83%
+    return). The live candidate band is factor=0.5. Provisional best cell:
+    trigger=800, factor=0.5 (IS: max90dDD $1,459, edge loss 10.7%).
+
+trial_accounting:
+  K_total_trials: 8                # 4 triggers x 2 factors
+  minbtl_check: "run estimate_k_budget BEFORE locking; K=8 << Bailey MinBTL 300-trial bound and << 6.66yr horizon"
+  family: "single risk-overlay family (one profile, one mechanism)"
+  fdr: "BH FDR q=0.05 across the K=8 cells on the OOS edge-preservation metric"
+
+validation_design:
+  type: "walk_forward + frozen_holdout"
+  in_sample: "2019-05-31 .. 2024-12-31"
+  walk_forward: "anchored, 12-month test steps across IS; select param band stable across >=3 of the steps"
+  frozen_holdout: "2025-01-01 .. 2026-06-04 — touched ONCE, after the band is locked"
+  selection_rule: >
+    Choose the param cell from the WALK-FORWARD-stable band (not the global-best
+    in-sample cell). If the IS-best cell (800/0.5) is NOT in the WF-stable band,
+    it is disqualified as overfit.
+
+pass_criteria:
+  c11_survival: "max 90d rolling DD <= $1,600 (0.80x) on full history INCLUDING frozen holdout"
+  c11_survival_real_mll: "max 90d rolling DD <= $2,000 (1.00x MLL) — must also hold"
+  edge_preservation_floor: "total R-edge retained >= 85% of un-throttled baseline (book ExpR_R within 15%)"
+  daily_loss: "zero daily-loss breach days preserved (currently 0)"
+  walk_forward_stability: "chosen cell clears C11 in >= 3 of the anchored WF steps"
+  robustness_band: "C11 clears for at least 2 adjacent trigger values at the chosen factor (not a knife-edge)"
+  operational_gate: "MC operational_pass_probability stays >= existing threshold (no regression)"
+
+fail_criteria:
+  - "edge retained < 85% (throttle costs too much edge)"
+  - "C11 fails $1,600 on full history incl. holdout at every factor=0.5 cell"
+  - "chosen cell clears IS but FAILS the frozen 2025-2026 holdout (overfit)"
+  - "no trigger band >= 2 wide clears (knife-edge => overfit)"
+  - "BH FDR q=0.05 rejects the cell on the OOS metric"
+  - "throttle engages in only 1 historical episode (2022-only => fitted detector, not general rule)"
+
+lookahead_checks:
+  - "decision for day t MUST use equity through t-1 only; assert scale chosen BEFORE day t pnl applied"
+  - "no use of orb_size percentile, future regime label, or any t>=now field in the trigger"
+  - "recover/trigger are fixed constants, not data-derived per-window"
+  - "crg-lineage audit: confirm no daily_features column consumed by the throttle is itself look-ahead (E2 break-bar registry)"
+  - "frozen holdout 2026 untouched until final single evaluation"
+
+edge_preservation_floor: ">= 85% of baseline total R retained (baseline book total $23,412 / ExpR_R per matrix doc)"
+c11_survival_target: "max 90d DD <= $1,600 AND <= $2,000, zero daily-loss breach days, holdout-inclusive"
+
+# Validation commands to run LATER (read-only until promotion; NONE executed in this draft session)
+validation_commands:
+  preflight:
+    - "python scripts/tools/check_pdf_tooling.py   # ground Carver extracts before citing"
+    # k-budget gate (research-catalog MCP): estimate_k_budget with K=8, horizon=6.66yr
+  reproduce_baseline:
+    - "C:/Users/joshd/canompx3/.venv/Scripts/python.exe C:/Users/joshd/c11_matrix/repro_baseline.py   # expect max90dDD=$2038.84"
+  run_grid_walk_forward:
+    - "C:/Users/joshd/canompx3/.venv/Scripts/python.exe C:/Users/joshd/c11_matrix/throttle_test.py   # IS grid + overfitting audit (reference impl)"
+    - "# TODO at promotion: extend throttle_test.py with anchored walk-forward + frozen-holdout split per validation_design"
+  account_survival_gate:
+    - "python -m trading_app.account_survival --profile topstep_50k_mnq_auto   # canonical C11 gate (post-implementation)"
+  drift:
+    - "python pipeline/check_drift.py   # must pass before any commit of an implementation"
+
+implementation_note: |
+  NOT implemented in this session. When approved: the throttle param set must be a
+  SINGLE canonical source consumed by BOTH account_survival (gate) AND
+  session_orchestrator (live) — reuse account_hwm_tracker.py HWM state, do not add a
+  parallel tracker. Otherwise the gate-vs-live divergence reappears (memory-documented).
+  Adversarial-audit-gated (capital path) before arming.
