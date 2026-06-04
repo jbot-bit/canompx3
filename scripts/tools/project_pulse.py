@@ -925,6 +925,7 @@ def _collect_execution_evidence(
                 SUM(pnl_r) AS sum_r
             FROM paper_trades
             WHERE strategy_id IN ({placeholders})
+              AND execution_source != 'shadow'
             GROUP BY strategy_id
             """,
             deployed_ids,

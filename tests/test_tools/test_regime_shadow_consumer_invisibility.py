@@ -21,6 +21,8 @@ is present and the guard is doing the work.
 
 from __future__ import annotations
 
+import datetime
+
 import duckdb
 
 from trading_app.db_manager import init_trading_app_schema
@@ -179,3 +181,120 @@ def test_consistency_tracker_already_excludes_shadow_via_pnl_dollar(tmp_path):
     # Only the live row has a non-NULL pnl_dollar -> exactly one daily group, $30.
     assert len(rows) == 1, "shadow row (NULL pnl_dollar) must not form a daily group"
     assert rows[0][1] == 30.0, "daily P&L must be live-only ($30), shadow excluded"
+
+
+# ── R1: structural VIEW + newly-guarded readers (Stage-2 root fix) ────────
+
+
+def test_live_paper_trades_view_excludes_shadow(tmp_path):
+    """R1 layer 1: the canonical `live_paper_trades` VIEW excludes shadow rows by
+    construction — a consumer reading the VIEW inherits invisibility for free."""
+    from pipeline.db_contracts import LIVE_PAPER_TRADES_VIEW
+
+    db = tmp_path / "view.db"
+    _init_schema(db)
+    _seed_one_live_one_shadow(db)
+    with duckdb.connect(str(db), read_only=True) as con:
+        view_n, raw_n = _both(
+            con,
+            f"SELECT COUNT(*) FROM {LIVE_PAPER_TRADES_VIEW}",
+            "SELECT COUNT(*) FROM paper_trades",
+        )
+        assert view_n == 1, "VIEW excludes the shadow row"
+        assert raw_n == 2, "raw table still holds both (VIEW is the structural guard)"
+        # VIEW carries the same columns -> sum(pnl_r) is live-only.
+        cum = con.execute(f"SELECT COALESCE(SUM(pnl_r), 0) FROM {LIVE_PAPER_TRADES_VIEW}").fetchone()[0]
+        assert cum == 1.5, f"VIEW sum must be live-only (1.5), got {cum}"
+
+
+def test_log_trade_post_trade_stat_excludes_shadow(tmp_path):
+    """R1/F4 honesty gate: log_trade's post-trade stat keys on orb_label only.
+    With a shadow row sharing that orb_label, the guarded stat must report the
+    live row ONLY (N=1, cum_r=1.5) — the unguarded form would report N=2."""
+    db = tmp_path / "lt.db"
+    _init_schema(db)
+    _seed_one_live_one_shadow(db)  # live + shadow share _ORB
+    with duckdb.connect(str(db), read_only=True) as con:
+        # Mirror log_trade.py:177-182 exactly (guarded form).
+        guarded = (
+            "SELECT COUNT(*) as n, ROUND(SUM(pnl_r), 2) as cum_r "
+            "FROM paper_trades WHERE orb_label = ? AND execution_source != 'shadow'"
+        )
+        unguarded = "SELECT COUNT(*) as n, ROUND(SUM(pnl_r), 2) as cum_r FROM paper_trades WHERE orb_label = ?"
+        gn = con.execute(guarded, [_ORB]).fetchone()
+        un = con.execute(unguarded, [_ORB]).fetchone()
+        assert gn == (1, 1.5), f"log_trade stat must be live-only, got {gn}"
+        assert un == (2, 3.5), "guard is load-bearing: unguarded stat sees the shadow row"
+
+
+def test_paper_trade_logger_reads_exclude_shadow(tmp_path):
+    """R1/F2: paper_trade_logger's MAX(trading_day) sync-boundary read and its
+    per-lane summary read key on strategy_id. They are CORE-disjoint from shadow
+    today, but the guard is now structural. Prove the guarded forms skip a shadow
+    row sharing the strategy_id (worst case the disjointness argument waives)."""
+    db = tmp_path / "ptl.db"
+    _init_schema(db)
+    sid = "MNQ_SHARED_ID"
+    with duckdb.connect(str(db)) as con:
+        con.executemany(
+            """INSERT INTO paper_trades (
+                   trading_day, orb_label, strategy_id, instrument, pnl_r, execution_source
+               ) VALUES (?, ?, ?, 'MNQ', ?, ?)""",
+            [
+                ("2026-06-04", _ORB, sid, 1.0, "backfill"),
+                ("2026-09-01", _ORB, sid, 2.0, "shadow"),  # later day, would skew MAX + summary
+            ],
+        )
+    with duckdb.connect(str(db), read_only=True) as con:
+        # MAX(trading_day) guarded (paper_trade_logger.py:243) -> backfill day, not shadow's.
+        mx = con.execute(
+            "SELECT MAX(trading_day) FROM paper_trades WHERE strategy_id = ? AND execution_source != 'shadow'",
+            [sid],
+        ).fetchone()[0]
+        assert str(mx) == "2026-06-04", f"sync boundary MAX must ignore the shadow day, got {mx}"
+        # Summary guarded (paper_trade_logger.py:364) -> COUNT/SUM live-only.
+        summ = con.execute(
+            "SELECT COUNT(*), COALESCE(SUM(pnl_r), 0) FROM paper_trades "
+            "WHERE strategy_id = ? AND execution_source != 'shadow'",
+            [sid],
+        ).fetchone()
+        assert summ == (1, 1.0), f"lane summary must be backfill-only, got {summ}"
+
+
+def test_monitor_lane_correlation_excludes_shadow(tmp_path):
+    """R1: monitor_lane_correlation_rolling (8th reader, not in original
+    inventory) groups daily pnl_r per strategy_id for the live correlation
+    matrix. A shadow row sharing the strategy_id must not enter the matrix."""
+    db = tmp_path / "corr.db"
+    _init_schema(db)
+    sid = "MNQ_CORR_ID"
+    # paper_trades PRIMARY KEY is (strategy_id, trading_day), so a live and a
+    # shadow row for the same id must sit on DIFFERENT days. The guard must drop
+    # the shadow day from this strategy's daily-pnl series.
+    with duckdb.connect(str(db)) as con:
+        con.executemany(
+            """INSERT INTO paper_trades (
+                   trading_day, orb_label, strategy_id, instrument, pnl_r, execution_source
+               ) VALUES (?, ?, ?, 'MNQ', ?, ?)""",
+            [
+                ("2026-06-04", _ORB, sid, 1.0, "live"),
+                ("2026-06-05", _ORB, sid, 9.0, "shadow"),
+            ],
+        )
+    with duckdb.connect(str(db), read_only=True) as con:
+        # Mirror monitor_lane_correlation_rolling.py:131 (guarded form).
+        guarded_days = con.execute(
+            "SELECT trading_day, SUM(pnl_r) FROM paper_trades WHERE pnl_r IS NOT NULL "
+            "AND execution_source != 'shadow' AND strategy_id = ? GROUP BY strategy_id, trading_day ORDER BY 1",
+            [sid],
+        ).fetchall()
+        assert guarded_days == [(datetime.date(2026, 6, 4), 1.0)], (
+            f"correlation series must be live-only (one day, 1.0R), shadow day excluded; got {guarded_days}"
+        )
+        # Guard is load-bearing: WITHOUT it the shadow day enters the series.
+        unguarded = con.execute(
+            "SELECT COUNT(*) FROM (SELECT trading_day FROM paper_trades WHERE pnl_r IS NOT NULL "
+            "AND strategy_id = ? GROUP BY strategy_id, trading_day)",
+            [sid],
+        ).fetchone()[0]
+        assert unguarded == 2, "unguarded correlation series would include the shadow day"

@@ -85,6 +85,16 @@ class RegimeLane:
     rolling_exp_r: float | None
     included: bool
     reason: str
+    # F1: per-lane forward-monitoring boundary. The earliest trading_day this
+    # lane may be recorded as shadow — its OWN first-eligible date, NOT the shared
+    # global forward_start. A lane that JOINS the universe on a later run (its
+    # sample_size crosses into the 30-99 band) gets first_seen=as_of_date so its
+    # "N trades since start" window is comparable to other lanes. Preserved
+    # (never advanced) across refreshes, mirroring the global forward_start
+    # preserve-on-refresh discipline. The effective write boundary is
+    # max(forward_start, first_seen) (threaded by the runner) so a lane can never
+    # write earlier than the global forward-only floor.
+    first_seen: datetime.date
 
 
 def _active_instruments() -> tuple[str, ...]:
@@ -125,9 +135,56 @@ def _query_regime_strategies(
     return [dict(zip(cols, r, strict=False)) for r in rows]
 
 
+def _load_prior_first_seen(
+    universe_yaml: Path | str | None = None,
+    forward_start: datetime.date | None = None,
+) -> dict[str, datetime.date]:
+    """Read the per-lane `first_seen` map from an existing universe snapshot.
+
+    F1 boundary durability. Returns {strategy_id: first_seen} for every lane in
+    the prior YAML so `build_universe` PRESERVES (never advances) a lane's
+    first-seen date across a refresh — mirroring the global forward_start
+    preserve-on-refresh discipline.
+
+    Legacy migration (provable no-op): a prior-YAML lane that PREDATES this field
+    has no `first_seen`. We back-derive `first_seen = forward_start` for it, so
+    `max(forward_start, first_seen) == forward_start` — identical to the
+    pre-F1 global-boundary behaviour, no retroactive row deletion. If the YAML
+    carries no `forward_start` either, such legacy lanes are omitted from the map
+    and `build_universe` will treat them as newly-seen (as_of_date) — which is
+    correct because without a persisted boundary there is no earlier window to
+    preserve.
+    """
+    path = Path(universe_yaml) if universe_yaml else UNIVERSE_YAML
+    if not path.exists():
+        return {}
+    import yaml
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if forward_start is None:
+        fs = data.get("forward_start")
+        forward_start = datetime.date.fromisoformat(str(fs)) if fs else None
+
+    out: dict[str, datetime.date] = {}
+    for lane in data.get("lanes", []) or []:
+        sid = lane.get("strategy_id")
+        if not sid:
+            continue
+        raw = lane.get("first_seen")
+        if raw:
+            out[sid] = datetime.date.fromisoformat(str(raw))
+        elif forward_start is not None:
+            # Legacy lane (pre-F1): back-derive to the global boundary (no-op).
+            out[sid] = forward_start
+    return out
+
+
 def build_universe(
     db_path: Path | str | None = None,
     as_of_date: datetime.date | None = None,
+    *,
+    prior_first_seen: dict[str, datetime.date] | None = None,
+    universe_yaml: Path | str | None = None,
 ) -> list[RegimeLane]:
     """Build the REGIME shadow universe (RECORD-ALL).
 
@@ -138,12 +195,22 @@ def build_universe(
     than dropped (no silent loss of a would-record lane).
 
     Delegates classification entirely to compute_fitness — never re-derives.
+
+    F1 per-lane boundary: each lane carries `first_seen`. For a lane already
+    present in the prior universe snapshot, `first_seen` is PRESERVED (read via
+    `prior_first_seen`, or loaded from `universe_yaml` when not supplied). A
+    newly-seen lane gets `first_seen = as_of_date`. Preservation means a lane
+    that drops out and rejoins keeps its original monitoring-start, so per-lane
+    "N trades since start" windows stay comparable.
     """
     from trading_app.strategy_fitness import compute_fitness
 
     path = Path(db_path) if db_path else GOLD_DB_PATH
     if as_of_date is None:
         as_of_date = datetime.date.today()
+
+    if prior_first_seen is None:
+        prior_first_seen = _load_prior_first_seen(universe_yaml)
 
     instruments = _active_instruments()
 
@@ -181,6 +248,10 @@ def build_universe(
         else:
             reason = f"{status} — recorded"
 
+        # F1: preserve an existing lane's first_seen; a newly-seen lane starts at
+        # as_of_date. Never advance a preserved value (prior_first_seen wins).
+        first_seen = prior_first_seen.get(c["strategy_id"], as_of_date)
+
         lanes.append(
             RegimeLane(
                 strategy_id=c["strategy_id"],
@@ -197,6 +268,7 @@ def build_universe(
                 rolling_exp_r=rolling_exp_r,
                 included=included,
                 reason=reason,
+                first_seen=first_seen,
             )
         )
     return lanes
@@ -237,11 +309,19 @@ def write_universe_yaml(
                     forward_start.isoformat(),
                 )
 
+    def _lane_payload(lane: RegimeLane) -> dict:
+        # Stringify first_seen to an ISO date (consistent with forward_start /
+        # generated, and round-trip-safe via _load_prior_first_seen's
+        # fromisoformat). asdict would otherwise emit a native date object.
+        d = asdict(lane)
+        d["first_seen"] = lane.first_seen.isoformat()
+        return d
+
     payload = {
         "generated": as_of_date.isoformat(),
         "forward_start": effective_start.isoformat(),
         "regime_tier": {"min_sample": REGIME_MIN_SAMPLE, "max_sample": REGIME_MAX_SAMPLE},
-        "lanes": [asdict(lane) for lane in lanes],
+        "lanes": [_lane_payload(lane) for lane in lanes],
     }
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")

@@ -54,12 +54,13 @@ def test_load_trade_stream_prefers_paper_trades(monkeypatch):
         CREATE TABLE paper_trades (
             strategy_id VARCHAR,
             trading_day DATE,
-            pnl_r DOUBLE
+            pnl_r DOUBLE,
+            execution_source VARCHAR DEFAULT 'live'
         )
         """
     )
     con.execute(
-        "INSERT INTO paper_trades VALUES (?, DATE '2026-01-02', ?), (?, DATE '2026-01-03', ?)",
+        "INSERT INTO paper_trades (strategy_id, trading_day, pnl_r) VALUES (?, DATE '2026-01-02', ?), (?, DATE '2026-01-03', ?)",
         ["SID1", 1.25, "SID1", -1.0],
     )
 
@@ -93,7 +94,8 @@ def test_load_trade_stream_falls_back_to_canonical_forward(monkeypatch):
         CREATE TABLE paper_trades (
             strategy_id VARCHAR,
             trading_day DATE,
-            pnl_r DOUBLE
+            pnl_r DOUBLE,
+            execution_source VARCHAR DEFAULT 'live'
         )
         """
     )

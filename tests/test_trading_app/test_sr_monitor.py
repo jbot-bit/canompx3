@@ -49,7 +49,8 @@ def test_prepare_monitor_inputs_prefers_live_baseline_after_50_paper_trades():
         CREATE TABLE paper_trades (
             strategy_id VARCHAR,
             trading_day DATE,
-            pnl_r DOUBLE
+            pnl_r DOUBLE,
+            execution_source VARCHAR DEFAULT 'live'
         )
         """
     )
@@ -58,7 +59,7 @@ def test_prepare_monitor_inputs_prefers_live_baseline_after_50_paper_trades():
     for i in range(55):
         pnl = 0.1 if i % 2 == 0 else 0.3
         rows.append(("SID1", start + timedelta(days=i), pnl))
-    con.executemany("INSERT INTO paper_trades VALUES (?, ?, ?)", rows)
+    con.executemany("INSERT INTO paper_trades (strategy_id, trading_day, pnl_r) VALUES (?, ?, ?)", rows)
 
     monitor, trades, baseline_source, stream_source = sr_monitor.prepare_monitor_inputs(
         con,
@@ -90,7 +91,8 @@ def test_prepare_monitor_inputs_falls_back_to_validated_baseline_and_canonical(m
         CREATE TABLE paper_trades (
             strategy_id VARCHAR,
             trading_day DATE,
-            pnl_r DOUBLE
+            pnl_r DOUBLE,
+            execution_source VARCHAR DEFAULT 'live'
         )
         """
     )
@@ -170,7 +172,9 @@ def test_run_monitor_writes_state_envelope(tmp_path, monkeypatch, capsys):
     con = duckdb.connect(":memory:")
     con.execute("CREATE TABLE validated_setups (status VARCHAR)")
     con.execute("INSERT INTO validated_setups VALUES ('active')")
-    con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
+    con.execute(
+        "CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE, execution_source VARCHAR DEFAULT 'live')"
+    )
     con.execute("CREATE TABLE orb_outcomes (trading_day DATE)")
     con.execute("INSERT INTO orb_outcomes VALUES (DATE '2026-04-09')")
     con.execute("CREATE TABLE daily_features (trading_day DATE)")
@@ -305,7 +309,9 @@ def test_run_monitor_emits_current_sr_stat_and_recovery_fields(tmp_path, monkeyp
     con = duckdb.connect(":memory:")
     con.execute("CREATE TABLE validated_setups (status VARCHAR)")
     con.execute("INSERT INTO validated_setups VALUES ('active')")
-    con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
+    con.execute(
+        "CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE, execution_source VARCHAR DEFAULT 'live')"
+    )
     con.execute("CREATE TABLE orb_outcomes (trading_day DATE)")
     con.execute("INSERT INTO orb_outcomes VALUES (DATE '2026-04-09')")
     con.execute("CREATE TABLE daily_features (trading_day DATE)")
@@ -387,7 +393,9 @@ def test_run_monitor_no_alarm_emits_current_sr_stat_equal_to_sr_stat(tmp_path, m
     con = duckdb.connect(":memory:")
     con.execute("CREATE TABLE validated_setups (status VARCHAR)")
     con.execute("INSERT INTO validated_setups VALUES ('active')")
-    con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
+    con.execute(
+        "CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE, execution_source VARCHAR DEFAULT 'live')"
+    )
     con.execute("CREATE TABLE orb_outcomes (trading_day DATE)")
     con.execute("INSERT INTO orb_outcomes VALUES (DATE '2026-04-09')")
     con.execute("CREATE TABLE daily_features (trading_day DATE)")

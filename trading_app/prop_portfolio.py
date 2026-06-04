@@ -429,6 +429,7 @@ def _query_paper_pnl(db_path: Path, strategy_id: str, lookback_days: int = 30) -
                     MAX(trading_day) as last_trade
                 FROM paper_trades
                 WHERE strategy_id = ?
+                  AND execution_source != 'shadow'
                   AND trading_day >= CURRENT_DATE - INTERVAL ? DAY""",
                 [strategy_id, lookback_days],
             ).fetchone()

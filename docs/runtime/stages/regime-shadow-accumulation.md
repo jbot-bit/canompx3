@@ -1,15 +1,72 @@
 ---
-task: REGIME shadow accumulation — universe builder + forward shadow runner (Stage 1)
+task: REGIME shadow accumulation — Stage 2 (adversarial-audit fix: R1 structural invisibility + F1 per-lane boundary + F3 atomicity)
 slug: regime-shadow-accumulation
 mode: IMPLEMENTATION
-status: VERIFIED
+status: IN_PROGRESS
 created: 2026-06-03
+reopened: 2026-06-04
 capital_path: true
 worktree: C:/Users/joshd/canompx3-regime-shadow (session/joshd-regime-shadow off origin/main 7bf8c40f)
 design_doc: docs/plans/2026-06-03-regime-standalone-eligibility-monitor-design.md
 ---
 
-# REGIME Shadow Accumulation — Stage 1 (universe + runner)
+# REGIME Shadow Accumulation — Stage 2 (adversarial-audit fix)
+
+## Stage 2 mission (2026-06-04)
+Close the 4 findings from the Codex adversarial review (`7bf8c40f..HEAD`,
+needs-attention / no-ship). Root-cause analysis (institutional-rigor §3) collapses
+4 findings into 3 root-grounded work items — NOT 4 inline patches:
+
+- **R1 (root — kills the F2/F4/whack-a-mole class):** `paper_trades` is a shared
+  table discriminated by `execution_source`; invisibility was maintained by every
+  reader REMEMBERING to add a predicate (a vigilance contract that leaks by
+  construction — 6→7 unguarded readers already proven). Fix structurally: a
+  shadow-safe VIEW `live_paper_trades` (`execution_source IN ('live','backfill')`)
+  in `init_trading_app_schema` + a STATIC drift check
+  `check_paper_trades_reads_are_shadow_safe` that FAILs any `FROM paper_trades`
+  read not targeting the VIEW or carrying an `execution_source` predicate. This is
+  what makes an 8th leak impossible — CI catches it, not a future reviewer.
+  Migration depth = **predicate now, VIEW later** (operator-confirmed 2026-06-04):
+  add inline `execution_source` predicates to the 7 unguarded readers so the drift
+  check passes; the VIEW is defined for the later cleanup. Subsumes F2 + F4.
+- **F1 (separate, active, evidenced ×9 lanes):** one GLOBAL `forward_start` pins
+  every lane's monitoring-start to one shared date; a late-joiner inherits the
+  global boundary, not its own first-eligible date. Add per-lane `first_seen`;
+  boundary = `max(forward_start, lane.first_seen)` threaded into BOTH the insert
+  `since=` AND the per-lane DELETE. Back-derive `first_seen=forward_start` for
+  existing lanes → provable no-op (0 shadow rows exist today, verified).
+- **F3 (separate concurrency concern, D1 operator-confirmed):** N per-lane commits
+  → ONE transaction over the whole loop; re-assert `assert_no_live_session()`
+  immediately before write-open (narrow the TOCTOU window).
+
+## Honest severity ledger (no inflation — institutional-rigor §12 bias defense)
+- **F1 = ACTIVE, evidenced** (9 active strategies in the 90-110 sample band straddle
+  REGIME/CORE=100; verified live this session). 0 shadow rows today → fix lands
+  before first accrual.
+- **F4 = real-in-code, operator-reachability NOT active.** `log_trade` has ZERO
+  functional callers / launchers (verified: only a path-string in an improvement
+  tool + 2 comments in db_manager). It IS the canonical manual-CLI live-writer
+  (db_manager:1008), so NOT dead — covered by R1's VIEW, not deleted, not inflated.
+- **F2, F3 = currently SAFE by invariant** (tier-disjointness: smallest active
+  profile lane N=427, verified zero active sub-100 lanes / DailyRefresh
+  single-writer). Fixes are defense-in-depth hardening, NOT active bug-stops.
+- **R1 justification is STRUCTURAL** ("end the leak class"), not "stop an active
+  leak". Honest and sufficient — a vigilance contract on a capital-adjacent table
+  WILL leak again.
+
+## Reader inventory (verified this session — 13 `FROM paper_trades` readers)
+GUARDED (6, drift check passes as-is): weekly_review ×5, pre_session_check ×2,
+bot_dashboard ×2, derived_state, paper_trade_summary ×4, consistency_tracker ×3
+(implicit: `pnl_dollar IS NOT NULL`; shadow rows have NULL pnl_dollar).
+UNGUARDED (7, get inline predicate under R1): paper_trade_logger (MAX/summary),
+log_trade (stat), sr_monitor, sprt_monitor, prop_portfolio, project_pulse.
+DANGER NOTE: paper_trade_logger's DELETE (:260-267) must NEVER gain a predicate
+that would delete shadow rows — its DELETE is keyed on strategy_id (CORE lanes);
+shadow rows are disjoint and must stay untouched.
+
+---
+
+# REGIME Shadow Accumulation — Stage 1 (universe + runner) [SHIPPED 7d9889a4]
 
 ## Mission (operator, 2026-06-03)
 Record EVERY REGIME-tier (validated sample_size 30-99) would-have trade
@@ -57,16 +114,81 @@ valid DEPLOY lanes ONLY. Shadow != discovery/tuning.
 - Do not weaken account gates. Do not bypass SR / Chordia / c8.
 - Delegate to canonical sources; never re-encode fitness/filter/session logic.
 
+## Stage 2 — VERIFICATION EVIDENCE (2026-06-04)
+- Tests: 248 passed (Stage-2 + all touched-consumer regression suites) + 126
+  passed (adjacent: bot_dashboard/lane_allocator/paper_trader/schema-migration).
+  Zero failures. The 6 consumer-suite regressions were UNREALISTIC fixtures
+  (hand-rolled paper_trades without execution_source); fixed by adding the column
+  the real schema always has — NOT by weakening the production predicate.
+- Drift: `NO DRIFT DETECTED: 176 checks passed, 0 skipped, 22 advisory`. New
+  Check 196 (`paper_trades reads exclude shadow rows`) PASSED.
+- Drift known-violation injection: an injected unguarded `FROM paper_trades`
+  SELECT is CAUGHT; removed → passes (mutation-proof, integrity-guardian §7).
+- R1 VIEW: idempotent, no-op on live-DB copy (792==792, 0 shadow rows), excludes
+  a seeded shadow+live collision (sum drops by exactly the shadow pnl_r).
+- F1 no-op proof (live DB): all 62 lanes resolve per-lane boundary == forward_start
+  == 2026-06-03 (`{'2026-06-03': 62}`); dry-run 62 scanned / 0 errored / 0 append.
+- ruff: all changed files clean.
+- Dead-code sweep: every new symbol referenced; `PAPER_TRADES_SHADOW_SOURCE` was
+  initially dead → wired (runner's `SHADOW_SOURCE` now delegates to it, removing a
+  re-encoded literal, institutional-rigor §4).
+
+## Adversarial-audit gate (institutional-rigor §2 / adversarial-audit-gate.md)
+Independent evidence-auditor pass on the fix diff: **CONDITIONAL**. Claims 1,2,5,6,7
+PROVEN from code; claim 3 (the 2026-06-03 date) proven live this session; claim 4
+CONDITIONALLY PROVEN with one residual gap below.
+
+### DEFERRED finding (written justification — not silently dropped)
+**Gap:** `paper_trade_logger.py` DELETE (~:260-267) keys on `strategy_id` ALONE
+(no execution_source predicate — correctly, it owns CORE rows). IF a strategy were
+promoted REGIME→CORE while STILL present in the shadow universe YAML, a
+`paper_trade_logger` full-resync would DELETE that strategy's shadow rows
+(shared strategy_id). **Not an active bug:** tier-disjointness holds TODAY
+(verified live: smallest active profile lane N=427; zero active sub-100 lanes; 0
+shadow rows exist), and the universe build-time tripwire (`regime_shadow_universe.py`
+classify_strategy != REGIME → ValueError) blocks a CORE lane ENTERING the shadow
+universe. The uncovered case is a lane that was REGIME when added and is promoted
+later without YAML removal — a promotion-workflow race, not a code defect.
+**Deferral justification:** closing it requires a NEW drift/runtime guard asserting
+shadow-YAML strategy_ids ∩ prop_profiles CORE lanes = ∅ — a separate, clean,
+adversarial-audit-gated follow-up. It is NOT in Stage-2 scope (the 4 review
+findings), would expand the diff into prop_profiles read paths, and the race
+cannot fire while disjointness holds. **Follow-up:** add
+`check_shadow_universe_disjoint_from_core_lanes` to check_drift.py (next stage).
+
+## Commit note — pre-commit hook BYPASSED (--no-verify), justified
+The pre-commit hook BLOCKED on `TestCollectWorktrees::test_detects_worktree` — a
+PRE-EXISTING flaky test that asserts on the LIVE machine worktree count
+(`32 open worktrees` from concurrent sessions). It PASSES in isolation; the
+Stage-2 diff does NOT touch it (verified `git diff --cached` — no worktree-test
+lines). The hook's own gates were satisfied MANUALLY this session: drift NO DRIFT
+(176 checks, Check 196 PASSED), 248+126 tests pass, ruff clean. Committed with
+`--no-verify` (operator-approved 2026-06-04) — branch-only, no push to main, on
+the correct branch (branch-flip guard moot). Follow-up (separate, trivial-tier):
+make the worktree-count test environment-independent (mock the enumeration).
+
 ## scope_lock
-- scripts/tools/regime_shadow_universe.py
-- scripts/tools/regime_shadow_runner.py
+- scripts/tools/regime_shadow_universe.py        # F1: first_seen per-lane boundary
+- scripts/tools/regime_shadow_runner.py          # F1 boundary thread + F3 atomicity
 - tests/test_tools/test_regime_shadow_universe.py
 - tests/test_tools/test_regime_shadow_runner.py
 - tests/test_tools/test_paper_trades_schema_migration.py
 - tests/test_tools/test_regime_shadow_sr_noncontamination.py
+- tests/test_tools/test_regime_shadow_consumer_invisibility.py  # R1 VIEW + collision tests
 - docs/runtime/regime_shadow_universe.yaml
 - docs/runtime/stages/regime-shadow-accumulation.md
-- trading_app/db_manager.py  # SCOPE EXPANSION (Tier B, user-approved 2026-06-03)
+- trading_app/db_manager.py  # R1: VIEW live_paper_trades (Tier B, user-approved)
+# STAGE 2 scope (R1 structural fix — predicate-now/VIEW-later, operator-confirmed 2026-06-04):
+- pipeline/check_drift.py                         # R1: check_paper_trades_reads_are_shadow_safe
+- tests/test_pipeline/test_check_drift_paper_trades_shadow_safe.py  # R1 drift known-violation injection
+- trading_app/paper_trade_logger.py              # R1: execution_source predicate on MAX/summary reads
+- trading_app/log_trade.py                       # R1: execution_source predicate on post-trade stat
+- trading_app/sr_monitor.py                      # R1: execution_source predicate (DiD)
+- trading_app/sprt_monitor.py                    # R1: execution_source predicate (DiD)
+- trading_app/prop_portfolio.py                  # R1: execution_source predicate (DiD)
+- scripts/tools/project_pulse.py                 # R1: execution_source predicate (DiD)
+- scripts/reports/monitor_lane_correlation_rolling.py  # R1: 8th reader (NOT in plan inventory — drift check surfaced it)
+- pipeline/db_contracts.py                        # R1: canonical VIEW + live-source constants
 # SCOPE EXPANSION 2 (Tier B, user-approved 2026-06-03) — consumer shadow-guards.
 # Adversarial review FALSIFIED the "shadow is structurally invisible" claim: the
 # self-review only audited 3 consumers and the per-strategy_id disjointness

@@ -11393,6 +11393,159 @@ def check_no_direct_requests_to_broker_endpoints(trading_app_dir: Path) -> list[
     return violations
 
 
+def check_paper_trades_reads_are_shadow_safe(scan_dirs: list[Path] | None = None) -> list[str]:
+    """Every `FROM paper_trades` READ must exclude forward-monitoring shadow rows.
+
+    ROOT-CAUSE guard (Stage-2 adversarial-audit fix). `paper_trades` is a shared
+    table discriminated by `execution_source`: real trades ('live'/'backfill')
+    plus REGIME `'shadow'` rows (would-have trades, NEVER taken). Shadow
+    invisibility used to be maintained by every reader REMEMBERING to add an
+    `execution_source` predicate — a vigilance contract that leaked by
+    construction (the Stage-1 review found 6 unguarded aggregate reads; a 7th
+    surfaced later). This STATIC check ends that bug class: a future unguarded
+    reader fails CI, not a later human reviewer.
+
+    A `FROM paper_trades` SQL string is COMPLIANT iff it does ANY of:
+      - reads the shadow-safe VIEW (`live_paper_trades`) instead of the raw table;
+      - carries an `execution_source` predicate in the same SQL string (the
+        canonical `!= 'shadow'` / `IN ('live','backfill')` / `= 'live'` guard, or
+        the `COALESCE(execution_source, 'backfill')` form used by derived_state);
+      - carries the implicit `pnl_dollar IS NOT NULL` guard — the runner never
+        writes pnl_dollar for shadow rows (NULL), so this structurally excludes
+        them (consistency_tracker's documented form).
+
+    ALLOW-LISTED files legitimately operate on raw `paper_trades` incl. shadow:
+      - the shadow writer/universe (`regime_shadow_runner.py`,
+        `regime_shadow_universe.py`) — its writes/deletes/reads ARE on shadow rows;
+      - `db_manager.py` — DEFINES the VIEW and the table DDL;
+      - `paper_trade_logger.py`'s idempotent DELETE keyed on strategy_id (it must
+        NOT add an execution_source predicate — that would risk deleting shadow
+        rows; CORE/REGIME tier-disjointness keeps it from ever touching them).
+        Only its READS (MAX/summary) are guarded; the DELETE is exempt by being a
+        write, not a read (this check scans READS only).
+
+    Pure static AST scan — `requires_db=False` is HONEST (reads .py source only,
+    never opens gold.db). Multi-line SQL is handled natively: an f-string /
+    triple-quoted SQL literal is ONE AST node, so the FROM and its WHERE predicate
+    are examined together regardless of line breaks.
+    """
+    violations: list[str] = []
+    seen: set[tuple[str, int]] = set()  # dedup (rel, lineno) — f-strings walk twice.
+
+    # Files that legitimately read/write raw paper_trades including shadow rows.
+    allowlist = {
+        "scripts/tools/regime_shadow_runner.py",
+        "scripts/tools/regime_shadow_universe.py",
+        "trading_app/db_manager.py",
+    }
+
+    from_re = re.compile(r"\bFROM\s+paper_trades\b", re.IGNORECASE)
+    # A string is treated as SQL only if it SELECT-reads — this both kills prose
+    # false-positives ("Reads from paper_trades table" in a docstring) and scopes
+    # the check to READS. DELETE/UPDATE writes are intentionally NOT flagged: the
+    # idempotent shadow/backfill rewrites delete by strategy_id, and adding an
+    # execution_source predicate to paper_trade_logger's DELETE is the wrong move
+    # (it deletes CORE rows; shadow rows are tier-disjoint and never touched).
+    select_re = re.compile(r"\bSELECT\b", re.IGNORECASE)
+    view_re = re.compile(r"\bFROM\s+live_paper_trades\b", re.IGNORECASE)
+    # Any execution_source predicate (positive allowlist, negative exclusion, or
+    # the COALESCE form) OR the implicit pnl_dollar-NOT-NULL shadow exclusion
+    # (the runner never writes pnl_dollar for shadow rows → NULL → excluded).
+    guard_re = re.compile(r"execution_source|pnl_dollar\s+IS\s+NOT\s+NULL", re.IGNORECASE)
+
+    # Default to the real production dirs; tests may pass temp dirs to inject a
+    # known violation (integrity-guardian §7 mutation-proofing).
+    if scan_dirs is None:
+        scan_dirs = [TRADING_APP_DIR, SCRIPTS_DIR]
+    for base in scan_dirs:
+        for fpath in sorted(base.rglob("*.py")):
+            try:
+                rel = fpath.relative_to(PROJECT_ROOT).as_posix()
+            except ValueError:
+                # Temp dir outside the repo (test injection) — use the bare name.
+                rel = fpath.name
+            if rel in allowlist:
+                continue
+            try:
+                source = fpath.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if "paper_trades" not in source:
+                continue
+            try:
+                tree = ast.parse(source, filename=str(fpath))
+            except SyntaxError:
+                # A file that doesn't parse is caught by check_all_imports_resolve;
+                # don't double-report here. Fail-open for THIS check only.
+                continue
+
+            # A `JoinedStr` (f-string) contains child `Constant` nodes holding the
+            # literal chunks BETWEEN interpolations. ast.walk yields both the
+            # parent f-string AND those inner chunks; an inner chunk truncated
+            # before the `execution_source` predicate (which sits after a
+            # `{placeholders}` interpolation) would false-positive. Skip any
+            # Constant that belongs to an f-string — the parent JoinedStr is
+            # evaluated as a whole, predicate included.
+            fstring_child_constants: set[int] = set()
+            for parent in ast.walk(tree):
+                if isinstance(parent, ast.JoinedStr):
+                    for child in ast.walk(parent):
+                        if child is not parent:
+                            fstring_child_constants.add(id(child))
+
+            for node in ast.walk(tree):
+                if id(node) in fstring_child_constants:
+                    continue
+                sql = _string_literal_value(node)
+                if sql is None:
+                    continue
+                # Must be a SELECT read FROM the raw table (not prose, not a write).
+                if not (select_re.search(sql) and from_re.search(sql)):
+                    continue
+                # COMPLIANT if it reads the VIEW or carries a shadow-excluding
+                # predicate IN THE SAME SQL STRING.
+                if view_re.search(sql) or guard_re.search(sql):
+                    continue
+                line_no = getattr(node, "lineno", 0)
+                key = (rel, line_no)
+                if key in seen:
+                    continue
+                seen.add(key)
+                snippet = " ".join(sql.split())[:90]
+                violations.append(
+                    f"  {rel}:{line_no}: `FROM paper_trades` SELECT without a shadow"
+                    f"-exclusion guard. Read the `live_paper_trades` VIEW, or add an"
+                    f" `execution_source` predicate (IN ('live','backfill') / != "
+                    f"'shadow'). SQL: {snippet}"
+                )
+
+    return violations
+
+
+def _string_literal_value(node: ast.AST) -> str | None:
+    """Return a string literal's value, joining adjacent/f-string parts.
+
+    Handles plain `ast.Constant` strings, implicitly-concatenated string literals
+    (a single `ast.Constant` post-parse), and f-strings (`ast.JoinedStr` — we
+    concatenate the literal `FormattedValue`-adjacent text parts so an
+    interpolated table/view name like `{LIVE_PAPER_TRADES_VIEW}` does not blind
+    the scan to the surrounding `FROM paper_trades ... WHERE execution_source`).
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        parts: list[str] = []
+        for value in node.values:
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                parts.append(value.value)
+            else:
+                # Interpolated expression — emit a space placeholder so adjacent
+                # literal text (and any execution_source predicate) is preserved.
+                parts.append(" ")
+        return "".join(parts)
+    return None
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -15835,6 +15988,12 @@ CHECKS = [
         check_ci_pytest_no_timeout_plugin,
         False,  # blocking — class has failed CI 5+ times; further regression silently red-CIs main
         False,
+    ),
+    (
+        "paper_trades reads exclude shadow rows (VIEW or execution_source guard)",
+        check_paper_trades_reads_are_shadow_safe,
+        False,  # blocking — an unguarded read leaks REGIME shadow rows into live/monitoring aggregates
+        False,  # pure static AST scan of .py source — never opens gold.db
     ),
     (
         "Canary contamination suite green (every guard catches its trap)",

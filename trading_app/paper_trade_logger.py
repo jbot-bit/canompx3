@@ -240,7 +240,7 @@ def backfill(
             since = None
             if sync:
                 row = con.execute(
-                    "SELECT MAX(trading_day) FROM paper_trades WHERE strategy_id = ?",
+                    "SELECT MAX(trading_day) FROM paper_trades WHERE strategy_id = ? AND execution_source != 'shadow'",
                     [lane.strategy_id],
                 ).fetchone()
                 if row and row[0] is not None:
@@ -365,6 +365,7 @@ def backfill(
                 SELECT COUNT(*), COALESCE(SUM(pnl_r), 0),
                        MIN(trading_day), MAX(trading_day)
                 FROM paper_trades WHERE strategy_id = ?
+                  AND execution_source != 'shadow'
                 """,
                 [lane.strategy_id],
             ).fetchone()

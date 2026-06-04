@@ -46,6 +46,9 @@ def _lane(strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER_O5", **kw):
         rolling_exp_r=0.5,
         included=True,
         reason="FIT — recorded",
+        # F1: default first_seen == FWD so existing tests stay a no-op
+        # (max(FWD, FWD) == FWD). Late-joiner tests pass a later first_seen.
+        first_seen=FWD,
     )
     base.update(kw)
     return RegimeLane(**base)
@@ -260,6 +263,30 @@ def test_oos_context_report_writes_nothing(tmp_path, monkeypatch):
     assert sum(r.appended for r in results) >= 1
 
 
+def test_oos_context_report_not_clamped_by_first_seen(tmp_path, monkeypatch):
+    """REGRESSION: the OOS context report uses the OOS start (2026-01-01), NOT
+    the per-lane first_seen. A late-joiner lane (first_seen far in the future)
+    must STILL have its full OOS history counted — first_seen is a forward-
+    monitoring concept and must not silently clamp the backward OOS analysis.
+
+    Guards the implementation choice to make _shadow_rows_for_lane take an
+    EXPLICIT boundary (not derive max(.,first_seen) internally), so the sync and
+    OOS paths keep distinct time semantics."""
+    db = _make_db(tmp_path, [datetime.date(2026, 1, 5), datetime.date(2026, 6, 2)])
+    # Lane joined the universe only on 2026-06-20 (future first_seen).
+    late = _lane(strategy_id="LATE_JOINER", first_seen=datetime.date(2026, 6, 20))
+    monkeypatch.setattr(runner, "build_universe", lambda **kw: [late])
+
+    results = runner.oos_context_report(db_path=db, as_of_date=FWD)
+
+    assert _source_counts(db) == {"backfill": 1}, "OOS report still writes nothing"
+    # BOTH the Jan row AND the Jun row are counted — first_seen does NOT clamp the
+    # OOS boundary (would be only 0 rows if it were wrongly clamped to 2026-06-20).
+    assert sum(r.appended for r in results) == 2, (
+        "OOS report must span from OOS_CONTEXT_START, not be clamped by first_seen"
+    )
+
+
 # ── G2: boundary durability ──────────────────────────────────────────────
 
 
@@ -373,3 +400,147 @@ def test_sync_proceeds_when_lock_pid_dead(tmp_path, monkeypatch):
 
     summary = runner.sync_shadow(db_path=db, as_of_date=FWD, universe_yaml=tmp_path / "u.yaml")
     assert summary.trades_appended == 1, "dead-PID lock must not block"
+
+
+# ── F1: per-lane first_seen boundary ─────────────────────────────────────
+
+
+def test_lane_boundary_uses_max_of_floor_and_first_seen():
+    """_lane_boundary = max(global forward_start floor, lane.first_seen)."""
+    floor = datetime.date(2026, 6, 1)
+    # Late-joiner: first_seen AFTER the floor -> boundary rises to first_seen.
+    late = _lane(first_seen=datetime.date(2026, 6, 20))
+    assert runner._lane_boundary(late, floor) == datetime.date(2026, 6, 20)
+    # Existing lane: first_seen == floor -> boundary == floor (no-op).
+    existing = _lane(first_seen=floor)
+    assert runner._lane_boundary(existing, floor) == floor
+    # Defensive: a first_seen EARLIER than the floor can never lower the boundary.
+    early = _lane(first_seen=datetime.date(2026, 5, 1))
+    assert runner._lane_boundary(early, floor) == floor
+
+
+def test_late_joiner_writes_nothing_before_its_first_seen(tmp_path, monkeypatch):
+    """A lane that joins later monitors from ITS first_seen, not the global floor.
+
+    Outcomes exist on 06-02 (>= floor, < first_seen) and 06-25 (>= first_seen).
+    The late-joiner must record ONLY the 06-25 row — the 06-02 row is before the
+    lane was eligible, so it is NOT its forward-monitoring evidence.
+    """
+    floor = datetime.date(2026, 6, 1)
+    db = _make_db(tmp_path, [datetime.date(2026, 6, 2), datetime.date(2026, 6, 25)])
+    late = _lane(strategy_id="LATE_JOINER", first_seen=datetime.date(2026, 6, 20))
+    monkeypatch.setattr(runner, "build_universe", lambda **kw: [late])
+
+    runner.sync_shadow(db_path=db, as_of_date=floor, universe_yaml=tmp_path / "u.yaml")
+
+    with duckdb.connect(str(db), read_only=True) as con:
+        days = [
+            r[0]
+            for r in con.execute(
+                "SELECT trading_day FROM paper_trades WHERE execution_source='shadow' ORDER BY 1"
+            ).fetchall()
+        ]
+    assert days == [datetime.date(2026, 6, 25)], (
+        f"late-joiner must record only >= its first_seen 2026-06-20, got {days}"
+    )
+
+
+def test_existing_lane_row_set_identical_before_and_after_first_seen(tmp_path, monkeypatch):
+    """No-op proof: a lane whose first_seen == forward_start records the SAME
+    rows it would have under the pre-F1 global-only boundary."""
+    floor = datetime.date(2026, 6, 1)
+    days = [datetime.date(2026, 6, 2), datetime.date(2026, 6, 3), datetime.date(2026, 6, 5)]
+    db = _make_db(tmp_path, days)
+    existing = _lane(strategy_id="EXISTING", first_seen=floor)
+    monkeypatch.setattr(runner, "build_universe", lambda **kw: [existing])
+
+    runner.sync_shadow(db_path=db, as_of_date=floor, universe_yaml=tmp_path / "u.yaml")
+
+    with duckdb.connect(str(db), read_only=True) as con:
+        got = [
+            r[0]
+            for r in con.execute(
+                "SELECT trading_day FROM paper_trades WHERE execution_source='shadow' ORDER BY 1"
+            ).fetchall()
+        ]
+    assert got == days, "first_seen==floor must record every forward day (no-op vs pre-F1)"
+
+
+def test_per_lane_delete_window_matches_insert_window(tmp_path, monkeypatch):
+    """The idempotent per-lane DELETE clears from the SAME per-lane boundary the
+    INSERT repopulates — a re-sync of a late-joiner does not double-count and does
+    not strand rows."""
+    floor = datetime.date(2026, 6, 1)
+    db = _make_db(tmp_path, [datetime.date(2026, 6, 25), datetime.date(2026, 6, 26)])
+    late = _lane(strategy_id="LATE_JOINER", first_seen=datetime.date(2026, 6, 20))
+    monkeypatch.setattr(runner, "build_universe", lambda **kw: [late])
+
+    runner.sync_shadow(db_path=db, as_of_date=floor, universe_yaml=tmp_path / "u.yaml")
+    runner.sync_shadow(db_path=db, as_of_date=floor, universe_yaml=tmp_path / "u.yaml")
+
+    assert _source_counts(db).get("shadow") == 2, "re-sync of a late-joiner must not double-count"
+
+
+# ── F3: write atomicity ──────────────────────────────────────────────────
+
+
+def test_mid_loop_failure_rolls_back_all_shadow_rows(tmp_path, monkeypatch):
+    """A failure partway through the per-lane loop rolls the WHOLE sync back —
+    zero shadow rows committed (single-transaction atomicity), so no second
+    writer observes a half-written universe. backfill rows are untouched."""
+    db = _make_db(tmp_path, [datetime.date(2026, 6, 2)])
+    lane_ok = _lane(strategy_id="LANE_OK")
+    lane_boom = _lane(strategy_id="LANE_BOOM")
+    monkeypatch.setattr(runner, "build_universe", lambda **kw: [lane_ok, lane_boom])
+
+    # Make the SECOND lane explode inside the loop (after LANE_OK wrote rows).
+    real = runner._shadow_rows_for_lane
+
+    def explode(con, lane, boundary):
+        if lane.strategy_id == "LANE_BOOM":
+            raise RuntimeError("injected mid-loop failure")
+        return real(con, lane, boundary)
+
+    monkeypatch.setattr(runner, "_shadow_rows_for_lane", explode)
+
+    with pytest.raises(RuntimeError, match="injected mid-loop failure"):
+        runner.sync_shadow(db_path=db, as_of_date=FWD, universe_yaml=tmp_path / "u.yaml")
+
+    after = _source_counts(db)
+    assert after.get("shadow") is None, "LANE_OK rows must be rolled back, not partially committed"
+    assert after.get("backfill") == 1, "backfill untouched by the rolled-back sync"
+
+
+def test_live_lock_reasserted_before_write_open(tmp_path, monkeypatch):
+    """F3: the live-session lock is re-checked immediately before the write
+    connection opens. A lock that appears AFTER the first (boundary-persist) check
+    but BEFORE write-open is still caught — nothing is written."""
+    db = _make_db(tmp_path, [datetime.date(2026, 6, 2)])
+    monkeypatch.setattr(runner, "build_universe", lambda **kw: [_lane()])
+
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    import trading_app.live.instance_lock as il
+
+    monkeypatch.setattr(il, "_LOCK_DIR", lock_dir)
+    monkeypatch.setattr(il, "is_pid_alive", lambda pid: True)
+
+    # The lock does NOT exist on the first assert_no_live_session() call, but
+    # appears just before the second (pre-write-open) one. We emulate that by
+    # creating the lock on the first call and letting the second call see it.
+    calls = {"n": 0}
+    real_assert = runner.assert_no_live_session
+
+    def racy_assert():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # First check passes (no lock yet); a live bot starts right after.
+            (lock_dir / "bot_MNQ.lock").write_text("12345")
+            return
+        real_assert()  # second check sees the lock -> raises
+
+    monkeypatch.setattr(runner, "assert_no_live_session", racy_assert)
+
+    with pytest.raises(RuntimeError, match="LIVE SESSION ACTIVE"):
+        runner.sync_shadow(db_path=db, as_of_date=FWD, universe_yaml=tmp_path / "u.yaml")
+    assert _source_counts(db) == {"backfill": 1}, "second-check race must write nothing"

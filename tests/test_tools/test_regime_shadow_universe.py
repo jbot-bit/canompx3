@@ -171,3 +171,66 @@ def test_yaml_round_trips_forward_start(tmp_path, monkeypatch):
     assert data["forward_start"] == "2026-06-03"
     assert data["regime_tier"]["min_sample"] == uni.REGIME_MIN_SAMPLE
     assert len(data["lanes"]) == 1
+
+
+# ── F1: per-lane first_seen ───────────────────────────────────────────────
+
+
+def test_new_lane_gets_first_seen_as_of_date(tmp_path, monkeypatch):
+    """A lane with no prior first_seen is stamped with as_of_date (newly seen)."""
+    db = _make_db(tmp_path, [{"strategy_id": "NEW_LANE", "sample_size": 60}])
+    _patch_fitness(monkeypatch, {})
+    monkeypatch.setattr(uni, "_active_instruments", lambda: ("MNQ",))
+
+    lanes = uni.build_universe(db_path=db, as_of_date=AS_OF, prior_first_seen={})
+    assert len(lanes) == 1
+    assert lanes[0].first_seen == AS_OF, "newly-seen lane starts at as_of_date"
+
+
+def test_existing_lane_first_seen_preserved_across_refresh(tmp_path, monkeypatch):
+    """A lane already present keeps its ORIGINAL first_seen; a later refresh must
+    NOT advance it (mirrors the global forward_start preserve discipline)."""
+    db = _make_db(tmp_path, [{"strategy_id": "OLD_LANE", "sample_size": 60}])
+    _patch_fitness(monkeypatch, {})
+    monkeypatch.setattr(uni, "_active_instruments", lambda: ("MNQ",))
+
+    original = datetime.date(2026, 6, 3)
+    lanes = uni.build_universe(
+        db_path=db,
+        as_of_date=datetime.date(2026, 7, 1),  # a LATER run
+        prior_first_seen={"OLD_LANE": original},
+    )
+    assert lanes[0].first_seen == original, "existing lane's first_seen must be preserved, not advanced"
+
+
+def test_legacy_yaml_without_first_seen_backderives_to_forward_start(tmp_path):
+    """Migration no-op: a prior YAML lane lacking first_seen back-derives to the
+    persisted forward_start, so max(forward_start, first_seen)==forward_start."""
+    uyaml = tmp_path / "u.yaml"
+    # Hand-write a LEGACY snapshot: forward_start present, lanes have NO first_seen.
+    uyaml.write_text(
+        "forward_start: '2026-06-03'\nlanes:\n- strategy_id: LEGACY_LANE\n  sample_size: 60\n",
+        encoding="utf-8",
+    )
+    pfs = uni._load_prior_first_seen(universe_yaml=uyaml)
+    assert pfs == {"LEGACY_LANE": datetime.date(2026, 6, 3)}, "legacy lane back-derives to forward_start"
+
+
+def test_first_seen_round_trips_through_yaml(tmp_path, monkeypatch):
+    """write_universe_yaml emits first_seen as an ISO date; _load_prior_first_seen
+    reads it back identically."""
+    db = _make_db(tmp_path, [{"strategy_id": "RT_LANE", "sample_size": 60}])
+    _patch_fitness(monkeypatch, {})
+    monkeypatch.setattr(uni, "_active_instruments", lambda: ("MNQ",))
+
+    fseen = datetime.date(2026, 6, 25)
+    lanes = uni.build_universe(db_path=db, as_of_date=AS_OF, prior_first_seen={"RT_LANE": fseen})
+    out = tmp_path / "u2.yaml"
+    uni.write_universe_yaml(lanes, forward_start=datetime.date(2026, 6, 3), path=out, as_of_date=AS_OF)
+
+    import yaml
+
+    data = yaml.safe_load(out.read_text(encoding="utf-8"))
+    assert data["lanes"][0]["first_seen"] == "2026-06-25", "first_seen serialized as ISO date"
+    reloaded = uni._load_prior_first_seen(universe_yaml=out)
+    assert reloaded["RT_LANE"] == fseen, "first_seen round-trips through YAML"

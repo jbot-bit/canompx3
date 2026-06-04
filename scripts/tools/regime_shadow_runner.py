@@ -45,6 +45,7 @@ from pathlib import Path
 import duckdb
 
 from pipeline.db_config import configure_connection
+from pipeline.db_contracts import PAPER_TRADES_SHADOW_SOURCE
 from pipeline.log import get_logger
 from pipeline.paths import GOLD_DB_PATH
 from scripts.tools.regime_shadow_universe import (
@@ -55,7 +56,10 @@ from scripts.tools.regime_shadow_universe import (
 
 logger = get_logger(__name__)
 
-SHADOW_SOURCE = "shadow"
+# Canonical sentinel — delegated to pipeline.db_contracts (institutional-rigor §4:
+# never re-encode a value that already has a single source of truth). The VIEW in
+# db_manager and the drift check key on the SAME contract.
+SHADOW_SOURCE = PAPER_TRADES_SHADOW_SOURCE
 # OOS boundary for the optional read-only context report only (NEVER a write
 # boundary for shadow rows — those are gated by the persisted forward_start).
 OOS_CONTEXT_START = datetime.date(2026, 1, 1)
@@ -214,10 +218,25 @@ def _persist_forward_start(
 # ── outcome sourcing (reuses paper_trade_logger's canonical pattern) ───────
 
 
+def _lane_boundary(lane: RegimeLane, forward_start: datetime.date) -> datetime.date:
+    """Effective per-lane forward boundary = max(global floor, lane.first_seen).
+
+    F1: the global `forward_start` is the immutable floor (no lane may write
+    earlier — capital-safety invariant); a late-joining lane's own `first_seen`
+    raises its boundary above the floor so its monitoring window starts when it
+    became eligible, not at the shared global date. Defensive: a lane without a
+    populated first_seen (None) falls back to the floor.
+    """
+    fs = getattr(lane, "first_seen", None)
+    if fs is None:
+        return forward_start
+    return max(forward_start, fs)
+
+
 def _shadow_rows_for_lane(
     con: duckdb.DuckDBPyConnection,
     lane: RegimeLane,
-    forward_start: datetime.date,
+    boundary: datetime.date,
 ) -> tuple[list[tuple], LaneResult]:
     """Compute the shadow rows for one lane from canonical orb_outcomes.
 
@@ -225,9 +244,20 @@ def _shadow_rows_for_lane(
     (matches_row + per-aperture daily_features + cross-asset ATR injection) so we
     never re-encode filter logic. Returns (insert_tuples, lane_result).
 
-    FAIL-CLOSED: raises ValueError if any sourced row precedes forward_start —
-    the canonical query already filters >= forward_start, so this is a tripwire
-    against a future query regression silently back-relabelling history.
+    `boundary` is the EXPLICIT earliest trading_day this call may source — the
+    caller decides its semantics:
+      - the forward sync passes the per-lane `_lane_boundary(lane, forward_start)`
+        = max(global floor, lane.first_seen) so a late-joiner is not pinned to the
+        shared global monitoring-start (F1);
+      - the read-only OOS context report passes the OOS start (2026-01-01) to
+        compute a "would-have-recorded" history, deliberately NOT clamped by
+        first_seen.
+    Making the boundary an explicit parameter (not a hidden derivation) keeps
+    these two distinct time semantics from being silently conflated.
+
+    FAIL-CLOSED: raises ValueError if any sourced row precedes `boundary` — the
+    canonical query already filters >= boundary, so this is a tripwire against a
+    future query regression silently back-relabelling history.
     """
     from trading_app.config import ALL_FILTERS
     from trading_app.paper_trade_logger import (
@@ -258,9 +288,9 @@ def _shadow_rows_for_lane(
         logger.warning("%s: %s — skipping", lane.strategy_id, result.error)
         return [], result
 
-    # Forward-only at the source: only days >= boundary are candidates.
-    raw = _query_outcomes(con, lane_def, since=forward_start)
-    features = _load_features(con, lane.instrument, lane.orb_minutes, since=forward_start)
+    # Forward-only at the source: only days >= per-lane boundary are candidates.
+    raw = _query_outcomes(con, lane_def, since=boundary)
+    features = _load_features(con, lane.instrument, lane.orb_minutes, since=boundary)
     needs_cross = _is_cross_asset_filter(lane.filter_type)
 
     insert_rows: list[tuple] = []
@@ -271,10 +301,11 @@ def _shadow_rows_for_lane(
             trading_day = trading_day.date()
 
         # FAIL-CLOSED forward-only tripwire — never relabel history as shadow.
-        if trading_day < forward_start:
+        if trading_day < boundary:
             raise ValueError(
                 f"FORWARD BOUNDARY VIOLATION: {lane.strategy_id} row trading_day="
-                f"{trading_day} < forward_start={forward_start}. Aborting."
+                f"{trading_day} < boundary={boundary} "
+                f"(first_seen={getattr(lane, 'first_seen', None)}). Aborting."
             )
 
         feat_row = features.get(trading_day)
@@ -369,7 +400,7 @@ def sync_shadow(
     if dry_run:
         with duckdb.connect(str(path), read_only=True) as con:
             for lane in lanes:
-                rows, res = _shadow_rows_for_lane(con, lane, forward_start)
+                rows, res = _shadow_rows_for_lane(con, lane, _lane_boundary(lane, forward_start))
                 summary.lane_results.append(res)
                 summary.lanes_scanned += 1
                 if res.error:
@@ -392,49 +423,74 @@ def sync_shadow(
 
     init_trading_app_schema(db_path=path)
 
+    # F3: re-assert the live-session lock IMMEDIATELY before opening the write
+    # connection. The first check (above) gates persisting the boundary YAML; this
+    # second check narrows the TOCTOU window between that check and the gold.db
+    # write-open — a live bot that acquired its lock in between is caught here
+    # before any paper_trades write happens.
+    assert_no_live_session()
+
     with duckdb.connect(str(path)) as con:
         configure_connection(con, writing=True)
-        for lane in lanes:
-            rows, res = _shadow_rows_for_lane(con, lane, forward_start)
-            summary.lane_results.append(res)
-            summary.lanes_scanned += 1
-            if res.error:
-                summary.lanes_errored += 1
-                con.commit()
-                continue
+        # F3: ONE transaction over the whole per-lane loop. A mid-loop failure
+        # rolls the entire sync back atomically, so a second (non-live) writer
+        # never observes a half-written universe. Replaces the prior N per-lane
+        # commits. DailyRefresh single-writer remains the PRIMARY guarantee; this
+        # closes the manual-`--sync` interleave gap (decision D1).
+        con.execute("BEGIN TRANSACTION")
+        try:
+            for lane in lanes:
+                # F1: idempotent rewrite window == insert window. The SAME per-lane
+                # boundary feeds both the row sourcing and the DELETE so they cover
+                # the same span (a narrower DELETE than INSERT would leave stale
+                # rows; a wider one would clear a gap that is correctly empty —
+                # keeping them equal avoids reasoning about that gap).
+                lane_boundary = _lane_boundary(lane, forward_start)
+                rows, res = _shadow_rows_for_lane(con, lane, lane_boundary)
+                summary.lane_results.append(res)
+                summary.lanes_scanned += 1
+                if res.error:
+                    summary.lanes_errored += 1
+                    continue
 
-            # Idempotent: clear only THIS lane's shadow rows >= boundary.
-            con.execute(
-                "DELETE FROM paper_trades WHERE strategy_id = ? AND execution_source = ? AND trading_day >= ?",
-                [lane.strategy_id, SHADOW_SOURCE, forward_start],
-            )
-            if rows:
-                con.executemany(
-                    """
-                    INSERT INTO paper_trades (
-                        trading_day, orb_label, entry_time, direction,
-                        entry_price, stop_price, target_price, exit_price,
-                        exit_time, exit_reason, pnl_r,
-                        strategy_id, lane_name, instrument,
-                        orb_minutes, rr_target, filter_type, entry_model,
-                        execution_source
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    rows,
-                )
-            con.commit()
-            summary.trades_appended += len(rows)
-
-        # G5: reconcile orphan shadow lanes (report always; prune only if asked).
-        summary.orphans_found = _find_orphan_shadow_strategies(con, universe_ids, forward_start)
-        if prune_orphans and summary.orphans_found:
-            for sid in summary.orphans_found:
                 con.execute(
                     "DELETE FROM paper_trades WHERE strategy_id = ? AND execution_source = ? AND trading_day >= ?",
-                    [sid, SHADOW_SOURCE, forward_start],
+                    [lane.strategy_id, SHADOW_SOURCE, lane_boundary],
                 )
-                summary.orphans_pruned += 1
-            con.commit()
+                if rows:
+                    con.executemany(
+                        """
+                        INSERT INTO paper_trades (
+                            trading_day, orb_label, entry_time, direction,
+                            entry_price, stop_price, target_price, exit_price,
+                            exit_time, exit_reason, pnl_r,
+                            strategy_id, lane_name, instrument,
+                            orb_minutes, rr_target, filter_type, entry_model,
+                            execution_source
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        rows,
+                    )
+                summary.trades_appended += len(rows)
+
+            # G5: reconcile orphan shadow lanes (report always; prune only if
+            # asked). Orphan strategy_ids are NOT in the current universe so they
+            # carry no per-lane first_seen — clearing from the GLOBAL forward_start
+            # floor is correct (remove all of a departed lane's shadow rows).
+            summary.orphans_found = _find_orphan_shadow_strategies(con, universe_ids, forward_start)
+            if prune_orphans and summary.orphans_found:
+                for sid in summary.orphans_found:
+                    con.execute(
+                        "DELETE FROM paper_trades WHERE strategy_id = ? AND execution_source = ? AND trading_day >= ?",
+                        [sid, SHADOW_SOURCE, forward_start],
+                    )
+                    summary.orphans_pruned += 1
+        except BaseException:
+            # Atomic rollback: a mid-loop failure leaves ZERO rows committed.
+            con.execute("ROLLBACK")
+            raise
+        else:
+            con.execute("COMMIT")
 
     return summary
 

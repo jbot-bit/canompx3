@@ -132,6 +132,7 @@ def load_daily_pnl_series(
         SELECT strategy_id, trading_day, SUM(pnl_r) AS pnl_r
           FROM paper_trades
          WHERE pnl_r IS NOT NULL
+           AND execution_source != 'shadow'
            AND strategy_id IN ({placeholders})
            AND trading_day >= CURRENT_DATE - INTERVAL '{days_back} DAY'
          GROUP BY 1, 2

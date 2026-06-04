@@ -25,6 +25,8 @@ from pipeline.db_contracts import (
     ACTIVE_VALIDATED_VIEW,
     DEPLOYABLE_VALIDATED_VIEW,
     DEPLOYMENT_SCOPE_DEPLOYABLE,
+    LIVE_PAPER_TRADES_SOURCES,
+    LIVE_PAPER_TRADES_VIEW,
 )
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.deployability_state import DEPLOYMENT_READINESS_EVALUATIONS_SCHEMA
@@ -81,6 +83,31 @@ def _refresh_validated_shelf_views(con: duckdb.DuckDBPyConnection) -> None:
     """)
 
 
+def _refresh_live_paper_trades_view(con: duckdb.DuckDBPyConnection) -> None:
+    """Publish the shadow-safe `paper_trades` read surface as a DB view.
+
+    `paper_trades` is shared by real trades (`execution_source` in
+    `LIVE_PAPER_TRADES_SOURCES`) and forward-monitoring REGIME `'shadow'` rows
+    (never taken). This VIEW excludes shadow rows STRUCTURALLY so live /
+    monitoring consumers inherit invisibility without each one re-declaring an
+    `execution_source` predicate (the vigilance contract that the Stage-1
+    adversarial review proved leaks: 6→7 unguarded readers). The allowlist is
+    canonical in `pipeline.db_contracts.LIVE_PAPER_TRADES_SOURCES` — never
+    re-encoded here. Created AFTER the execution_source migration so the column
+    is guaranteed present (a brand-new DB and a legacy DB both round-trip).
+
+    `COALESCE(execution_source, 'backfill')` mirrors production: pre-migration
+    rows have NULL execution_source and ARE backfill (db_manager migration note).
+    """
+    sources = ", ".join(f"'{s}'" for s in LIVE_PAPER_TRADES_SOURCES)
+    con.execute(f"""
+        CREATE OR REPLACE VIEW {LIVE_PAPER_TRADES_VIEW} AS
+        SELECT *
+        FROM paper_trades
+        WHERE COALESCE(execution_source, 'backfill') IN ({sources})
+    """)
+
+
 def init_trading_app_schema(db_path: Path | None = None, force: bool = False) -> None:
     """
     Create trading_app tables if they don't exist.
@@ -95,6 +122,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
     with duckdb.connect(str(db_path)) as con:
         if force:
             logger.warning("WARN: Force mode: Dropping existing trading_app tables...")
+            con.execute(f"DROP VIEW IF EXISTS {LIVE_PAPER_TRADES_VIEW}")
             con.execute(f"DROP VIEW IF EXISTS {DEPLOYABLE_VALIDATED_VIEW}")
             con.execute(f"DROP VIEW IF EXISTS {ACTIVE_VALIDATED_VIEW}")
             con.execute("DROP TABLE IF EXISTS deployment_readiness_evaluations")
@@ -734,6 +762,10 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         ]:
             con.execute(f"ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
+        # Publish the shadow-safe paper_trades read surface AFTER the
+        # execution_source migration (column guaranteed present).
+        _refresh_live_paper_trades_view(con)
+
         _refresh_validated_shelf_views(con)
         con.commit()
         logger.info("Trading app schema initialized successfully")
@@ -767,6 +799,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
         expected_views = [
             ACTIVE_VALIDATED_VIEW,
             DEPLOYABLE_VALIDATED_VIEW,
+            LIVE_PAPER_TRADES_VIEW,
         ]
 
         # Check tables exist

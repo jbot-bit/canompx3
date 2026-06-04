@@ -113,6 +113,7 @@ def _load_trade_stream(
     paper_rows = con.execute(
         """SELECT pnl_r FROM paper_trades
            WHERE strategy_id = ? AND pnl_r IS NOT NULL
+             AND execution_source != 'shadow'
            ORDER BY trading_day""",
         [strategy_id],
     ).fetchall()
