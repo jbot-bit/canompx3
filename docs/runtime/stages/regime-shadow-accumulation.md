@@ -1,10 +1,11 @@
 ---
-task: REGIME shadow accumulation — Stage 2 (adversarial-audit fix: R1 structural invisibility + F1 per-lane boundary + F3 atomicity)
+task: REGIME shadow accumulation — Stage 3 DONE (DELETE predicate parity #1 + DailyRefresh wiring #3); Stage 2 R1/F1/F3 prior
 slug: regime-shadow-accumulation
 mode: IMPLEMENTATION
-status: IN_PROGRESS
+status: DONE
 created: 2026-06-03
 reopened: 2026-06-04
+stage3_committed: 3fe3bbf6  # pushed origin/session/joshd-regime-shadow 2026-06-04
 capital_path: true
 worktree: C:/Users/joshd/canompx3-regime-shadow (session/joshd-regime-shadow off origin/main 7bf8c40f)
 design_doc: docs/plans/2026-06-03-regime-standalone-eligibility-monitor-design.md
@@ -138,7 +139,23 @@ Independent evidence-auditor pass on the fix diff: **CONDITIONAL**. Claims 1,2,5
 PROVEN from code; claim 3 (the 2026-06-03 date) proven live this session; claim 4
 CONDITIONALLY PROVEN with one residual gap below.
 
-### DEFERRED finding (written justification — not silently dropped)
+### RESOLVED in Stage 3 (`3fe3bbf6`) — was the deferred finding below
+**Fix shipped:** both DELETE paths in `paper_trade_logger.py` now carry
+`AND execution_source != 'shadow'` (predicate parity with the read paths at
+`_query_outcomes` MAX() and the post-sync summary). Shadow rows survive a
+shared-strategy_id resync structurally — chosen over the disjointness drift
+check below because it is the root fix (R1 philosophy) and a strictly smaller
+diff that does not leave the unsafe DELETE in place. Regression test:
+`test_paper_trade_logger_delete_preserves_shadow_rows` (both DELETE paths +
+load-bearing unguarded assertion). Drift NO DRIFT (176), 11/11 shadow tests.
+
+**Optional remaining defense-in-depth (NOT required — the root fix above closes
+the exposure):** a `check_shadow_universe_disjoint_from_core_lanes` drift check
+asserting shadow-YAML strategy_ids ∩ prop_profiles CORE lanes = ∅ would catch a
+REGIME→CORE promotion-without-YAML-removal at CI time. Belt-and-suspenders only;
+the DELETE is already shadow-safe regardless of disjointness.
+
+### (historical) DEFERRED finding — superseded by the Stage-3 fix above
 **Gap:** `paper_trade_logger.py` DELETE (~:260-267) keys on `strategy_id` ALONE
 (no execution_source predicate — correctly, it owns CORE rows). IF a strategy were
 promoted REGIME→CORE while STILL present in the shadow universe YAML, a
@@ -273,6 +290,13 @@ the existing pattern; extend verify_trading_app_schema to assert the 3 columns
 - Generated artifact: docs/runtime/regime_shadow_universe.yaml (immutable
   forward_start=2026-06-03, 62 lanes).
 
-## REMAINING (follow-up, not this stage)
-- Wire `--sync` into CanonMPX_DailyRefresh (operator launcher domain; decision 2).
-- First real `--sync` accrues rows once 2026-06-03+ bars land in gold.db.
+## REMAINING (follow-up)
+- ~~Wire the shadow runner into CanonMPX_DailyRefresh~~ DONE Stage 3 (`3fe3bbf6`):
+  `daily_refresh.bat` now runs `python -m scripts.tools.regime_shadow_runner`
+  after CORE `paper_trade_logger --sync`. NOTE: the runner has NO `--sync` flag —
+  it accumulates by default (`sync_shadow(...)` unconditional); the earlier
+  "`--sync`" wording was wrong.
+- First real accrual happens on the next scheduled refresh once 2026-06-03+ bars
+  land in gold.db (shadow rows currently 0 — built, now wired, not yet fired).
+- (Optional) disjointness drift check — see "Optional remaining defense-in-depth"
+  above. Not required; the DELETE is shadow-safe at the root.
