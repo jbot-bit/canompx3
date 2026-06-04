@@ -178,3 +178,16 @@
 - Workstreams: dashboard startup, clean runtime worktree/git lease, DB-safe snapshot refresh, preflight split, C11/C12 clarity, lane/account frontier, recent-commit integration audit, operator runbook boundaries.
 - No database, broker, or live runtime state was inspected. Current decision remains NO-GO until measured gates pass.
 - 2026-06-04 follow-up revision: plan now explicitly prioritizes smallest useful diffs first: doc clarification, report metadata, dashboard render-only blocker cards, worktree diagnostics, then one atomic snapshot before any runtime-worktree/scheduler/lane changes.
+
+## 2026-06-04 Codex update — drift/precommit speed audit
+
+- Created `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md` after auditing the current hook/drift setup and fetching official/unofficial hook best practices.
+- Measured local state: `session_preflight.py` reports `core.hooksPath` unset; `profile_check_drift.py` took 191.79s across 198 checks; `check_drift.py --fast --quiet --skip-crg-advisory` took 18.51s and failed 10 DB-backed checks in this WSL checkout.
+- Recommendation: do not merely remove checks. Move to a tiered model: sub-5s always-on commit hygiene, path-scoped commit checks, pre-push integration gate, and full CI/readiness/deploy drift. First safe implementation should make hook activation loud, add a pre-push tier, then introduce typed drift metadata/path scopes before moving heavyweight checks out of commit time.
+
+
+## 2026-06-04 Codex update — drift/precommit speed audit v2
+
+- Expanded `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md` from a conservative tiering memo into a supersonic implementation blueprint with explicit latency targets: docs-only p50 <1s/p95 <3s, small Python p50 <3s/p95 <8s, pipeline/trading p50 <8s/p95 <20s, push p50 <90s/p95 <4min.
+- Added concrete architecture: hot-path hook classifier, typed drift registry, staged drift modes, timing ledgers, staged-only Ruff/compile, test impact map, DB truth lanes, and parallel pre-push runner.
+- Added staged roadmap and first patch set that should produce immediate UX wins before any heavyweight drift check is moved: hook activation repair, staged Ruff/compile, docs-only hot path, serial pre-push gate, drift metadata substrate, then scoped whale checks.
