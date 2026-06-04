@@ -298,3 +298,59 @@ def test_monitor_lane_correlation_excludes_shadow(tmp_path):
             [sid],
         ).fetchone()[0]
         assert unguarded == 2, "unguarded correlation series would include the shadow day"
+
+
+def test_paper_trade_logger_delete_preserves_shadow_rows(tmp_path):
+    """paper_trade_logger sync/resync DELETE must NOT remove shadow rows.
+
+    The logger owns CORE (deploy-lane) rows. Its idempotent pre-sync DELETE keys
+    on strategy_id; if a strategy were promoted REGIME->CORE while still in the
+    shadow universe YAML, a shared-strategy_id resync would wipe its shadow rows
+    (the disjointness argument does not cover that promotion race). The guard
+    `execution_source != 'shadow'` makes the deletion shadow-safe structurally.
+
+    Both DELETE paths are exercised against a live+shadow pair sharing strategy_id
+    on different days (PK is (strategy_id, trading_day)).
+    """
+    sid = "MNQ_PROMO_RACE"
+
+    def _seed(con):
+        con.execute("DELETE FROM paper_trades")
+        con.executemany(
+            """INSERT INTO paper_trades (
+                   trading_day, orb_label, strategy_id, instrument, pnl_r, execution_source
+               ) VALUES (?, ?, ?, 'MNQ', ?, ?)""",
+            [
+                ("2026-06-04", _ORB, sid, 1.0, "live"),
+                ("2026-06-05", _ORB, sid, 9.0, "shadow"),
+            ],
+        )
+
+    db = tmp_path / "delete.db"
+    _init_schema(db)
+
+    # sync path: DELETE ... WHERE strategy_id=? AND trading_day>=? AND execution_source != 'shadow'
+    with duckdb.connect(str(db)) as con:
+        _seed(con)
+        con.execute(
+            "DELETE FROM paper_trades WHERE strategy_id = ? AND trading_day >= ? AND execution_source != 'shadow'",
+            [sid, datetime.date(2026, 6, 1)],
+        )
+        rows = con.execute(
+            "SELECT execution_source FROM paper_trades WHERE strategy_id = ? ORDER BY trading_day", [sid]
+        ).fetchall()
+        assert rows == [("shadow",)], f"sync DELETE must clear live, keep shadow; got {rows}"
+
+    # full-resync path: DELETE ... WHERE strategy_id=? AND execution_source != 'shadow'
+    with duckdb.connect(str(db)) as con:
+        _seed(con)
+        con.execute("DELETE FROM paper_trades WHERE strategy_id = ? AND execution_source != 'shadow'", [sid])
+        rows = con.execute("SELECT execution_source FROM paper_trades WHERE strategy_id = ?", [sid]).fetchall()
+        assert rows == [("shadow",)], f"full-resync DELETE must clear live, keep shadow; got {rows}"
+
+    # Guard is load-bearing: the UNGUARDED full-resync DELETE wipes the shadow row.
+    with duckdb.connect(str(db)) as con:
+        _seed(con)
+        con.execute("DELETE FROM paper_trades WHERE strategy_id = ?", [sid])
+        remaining = con.execute("SELECT COUNT(*) FROM paper_trades WHERE strategy_id = ?", [sid]).fetchone()[0]
+        assert remaining == 0, "unguarded DELETE wipes BOTH rows — proves the guard is doing the work"
