@@ -109,12 +109,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** 888d1d46 — chore(repo): reconcile powered-oos landing truth
-- **Files changed:** 4 files
-  - `.gitignore`
+- **Commit:** 9685ff61 — chore(settings): disable Bash sandbox on native Windows
+- **Files changed:** 2 files
+  - `.claude/settings.json`
   - `HANDOFF.md`
-  - `docs/plans/2026-06-04-NEXT-land-powered-oos-reform.md`
-  - `docs/plans/2026-06-04-project-self-consistency-consolidation.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
