@@ -673,8 +673,49 @@ def test_dsr_tree_dep_set_covers_every_input_the_check_reads():
     import pipeline.check_drift as cd
 
     spec = cd.CHECK_TREE_DEPS[DSR_LABEL]
-    assert spec["file_deps"] == []
+    assert spec["file_deps"] == ["pipeline/_dsr_policy.py"], (
+        "the DSR verdict's allowed-derivation set lives in pipeline/_dsr_policy.py "
+        "(ALLOWED_DSR_TRIALS_DERIVATION) — it is verdict logic and MUST be a declared "
+        "dep or the cache serves a stale PASS when the policy is tightened"
+    )
     assert spec["tree_deps"] == [("docs/audit/hypotheses", "*.yaml")]
+
+
+def test_dsr_cache_key_binds_verdict_policy_module():
+    """Anti-regression (Codex high-risk 2026-06-04, PROVEN by execution): the DSR cache
+    key MUST be bound to the module holding ALLOWED_DSR_TRIALS_DERIVATION, else a
+    tightened DSR gate serves a STALE PASS. The bug: the DSR verdict depends directly
+    on that constant, but the cache key only hashed the hypotheses/*.yaml tree — so a
+    commit that drops an allowed derivation computes the SAME key, reads the OLD PASS,
+    and the blocking Bailey–López de Prado DSR/multiplicity gate reports green on stale
+    logic. The fix deps the entry on pipeline/_dsr_policy.py, which binds the key.
+
+    Mirrors test_fast_lane_check_is_deliberately_not_cached: both lock a cache-honesty
+    invariant on a blocking capital gate against silent regression."""
+    import pipeline.check_drift as cd
+    from pipeline import _drift_cache
+
+    spec = cd.CHECK_TREE_DEPS[DSR_LABEL]
+    assert "pipeline/_dsr_policy.py" in spec["file_deps"], (
+        "DSR verdict depends on ALLOWED_DSR_TRIALS_DERIVATION; the policy module "
+        "MUST be a declared dep or the cache serves a stale PASS"
+    )
+    k_bound = _drift_cache.tree_cache_key(DSR_LABEL, spec["file_deps"], spec["tree_deps"])
+    k_unbound = _drift_cache.tree_cache_key(DSR_LABEL, [], spec["tree_deps"])
+    assert k_bound is not None and k_bound != k_unbound, (
+        "binding the policy module as a dep must change the cache key vs not binding it"
+    )
+
+
+def test_dsr_in_file_alias_is_the_policy_module_constant():
+    """The in-file name _ALLOWED_DSR_TRIALS_DERIVATION (used at the check body's
+    enforcement sites) MUST be the same object as pipeline._dsr_policy's canonical
+    constant — proving the import alias did not silently re-define a divergent copy
+    (institutional-rigor §4: delegate to canonical source, never re-encode)."""
+    import pipeline.check_drift as cd
+    from pipeline import _dsr_policy
+
+    assert cd._ALLOWED_DSR_TRIALS_DERIVATION is _dsr_policy.ALLOWED_DSR_TRIALS_DERIVATION
 
 
 @pytest.mark.slow  # runs two LIVE ~25s checks twice each — full-CI, not pre-commit fast gate

@@ -36,6 +36,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline import _drift_cache
+from pipeline._dsr_policy import (
+    ALLOWED_DSR_TRIALS_DERIVATION as _ALLOWED_DSR_TRIALS_DERIVATION,
+)
 from pipeline.db_connect import open_read_only_with_retry
 
 # Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
@@ -116,13 +119,22 @@ CHECK_TREE_DEPS: dict[str, dict[str, list]] = {
             ("docs/audit/hypotheses", "*.yaml"),
         ],
     },
-    # DSR reference-universe lock (24.6s). Reads ONLY the active hypotheses tree
-    # (non-recursive glob, drafts excluded by construction); the verdict's allowed
-    # derivations come from the module-level _ALLOWED_DSR_TRIALS_DERIVATION constant
-    # in THIS file, which the cache key cannot miss (an edit to check_drift.py is a
-    # code change that re-runs the whole suite). No fixed-file or git-state inputs.
+    # DSR reference-universe lock (24.6s). Reads the active hypotheses tree
+    # (non-recursive glob, drafts excluded by construction). The verdict's allowed
+    # derivations come from ALLOWED_DSR_TRIALS_DERIVATION in pipeline/_dsr_policy.py
+    # (imported above as _ALLOWED_DSR_TRIALS_DERIVATION, enforced at the check body).
+    # That constant is verdict logic, so the policy module is a declared file_dep —
+    # the SAME pattern as the theory_grant check above deping on trading_app/chordia.py
+    # (rigor § 4 — the cache key must track the code that decides the verdict). Without
+    # this dep the key hashed only the YAML tree, so a commit that tightened the
+    # allowed-derivation set computed an identical key and served a STALE PASS on this
+    # blocking Bailey–López de Prado DSR/multiplicity gate (Codex high-risk finding
+    # 2026-06-04, proven by execution; anti-regression in test_drift_cache.py). The
+    # constant was extracted to its own tiny module — rather than deping on the whole
+    # of THIS file — so a policy tightening cold-runs DSR, but the ~1-in-8 commits that
+    # edit other parts of check_drift.py do NOT needlessly cold-run it.
     "DSR reference-universe lock declared (Criterion 5 Amendment 3.5: criterion_5 block complete when claiming DSR-clearance)": {
-        "file_deps": [],
+        "file_deps": ["pipeline/_dsr_policy.py"],
         "tree_deps": [
             ("docs/audit/hypotheses", "*.yaml"),
         ],
@@ -3898,12 +3910,10 @@ def check_amendment_3_4_provisional_gate(
     return violations
 
 
-# Allowed derivation labels for criterion_5.effective_trials_derivation.
-# declared_K_conservative — N̂ = the prereg's declared K (Amendment 3.5 default,
-#   strict: larger K -> higher SR_0 -> stricter gate).
-# onc_clustered — N̂ from trading_app.dsr.estimate_n_eff_onc (López de Prado
-#   Optimal Number of Clusters). Permitted now that the canonical helper exists.
-_ALLOWED_DSR_TRIALS_DERIVATION = {"declared_K_conservative", "onc_clustered"}
+# Allowed derivation labels for criterion_5.effective_trials_derivation live in
+# the canonical pipeline._dsr_policy module (imported at top of file as
+# _ALLOWED_DSR_TRIALS_DERIVATION). The DSR cache entry deps on that module so a
+# policy tightening invalidates the cache key — see the CHECK_TREE_DEPS note.
 
 
 def check_dsr_universe_lock_declared(
