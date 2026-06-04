@@ -437,22 +437,89 @@ echo "  PASSED"
 # per-node graph query measured 2026-05-30). These checks NEVER block a commit, so
 # zero blocking coverage is lost: CI runs the full set, and step 3b below rebuilds
 # the CRG graph anyway. Rollback = remove the flag token (flag defaults off).
-_stage "[3/8] Drift check..."
-DRIFT_TMPFILE=$(mktemp)
-set +e
-"$PYTHON" pipeline/check_drift.py --skip-crg-advisory --skip-advisory 2>&1 | tee "$DRIFT_TMPFILE" | awk '
-    /^python-dotenv could not parse statement starting at line / { next }
-    /^Check [0-9]+:/ || /^  FAILED:/ || /^  WARNING:/ || /^  SKIPPED/ || /^DRIFT / || /^NO DRIFT/ || /^====/ { print }
-'
-DRIFT_EXIT=${PIPESTATUS[0]}
-set -e
-if [ "$DRIFT_EXIT" -ne 0 ]; then
-    echo "BLOCKED: Drift detected."
-    rm -f "$DRIFT_TMPFILE"
-    exit 1
+#
+# Path-scoped fast path (2026-06-05, branch drift-supersonic):
+# The full drift step measured ~172s of the ~189s pre-commit on this box (cold).
+# A commit that stages ONLY docs-safe markdown/notes cannot regress any code/config
+# the drift checks guard, so it is sound to skip the heavy step for that class.
+# This is a FAIL-CLOSED gate: heavy drift runs UNLESS every staged path is proven
+# docs-safe AND none is denylisted AND the staged set is non-empty. Any doubt →
+# full drift. The safety net for the skip is the NEW pre-push hook (.githooks/
+# pre-push runs the full blocking drift set before any push) plus CI (ci.yml).
+#
+# _drift_path_is_docs_safe <path>  → returns 0 (true) iff the single path is
+# docs-safe (markdown/notes outside the code/audit surfaces). Returns 1 for every
+# denylisted or unrecognized path. Pure string matching — no python startup, so it
+# adds ~0ms to the fast path.
+_drift_path_is_docs_safe() {
+    local p="$1"
+    # Empty is never docs-safe (caller treats empty staged set as fail-closed too).
+    [ -n "$p" ] || return 1
+    case "$p" in
+        # --- Denylist FIRST (fail-closed): any code/config/registry/audit path
+        #     forces full drift even if it ends in .md (e.g. docs/audit/*.md
+        #     carry claim-hygiene + can gate research truth). Order matters:
+        #     these patterns are checked before the docs-safe allowlist. ---
+        pipeline/*|trading_app/*|scripts/*|tests/*|research/*|.githooks/*|.claude/*) return 1 ;;
+        docs/audit/*) return 1 ;;
+        *.py|*.yaml|*.yml|*.json|*.toml|*.lock|*.cfg|*.ini|*.sh|*.bat|*.ps1) return 1 ;;
+        pyproject.toml|uv.lock|.mcp.json|.python-version|.gitattributes|.gitignore) return 1 ;;
+        # --- Docs-safe allowlist: markdown + plan/runtime notes OUTSIDE the
+        #     denylisted surfaces above. ---
+        *.md) return 0 ;;
+        docs/plans/*|docs/runtime/*|docs/handoffs/*) return 0 ;;
+        HANDOFF.md|REPO_MAP.md) return 0 ;;
+        # --- Unknown shape → fail-closed (full drift). ---
+        *) return 1 ;;
+    esac
+}
+
+# Decide whether this commit qualifies for the docs-only fast path.
+# --diff-filter=ACMD includes Deletions (the existing STAGED_ALL at step 4 used
+# ACM and silently excluded deletes — a delete-only commit must NOT be mistaken
+# for an empty/docs-safe set). Empty staged set → full drift (fail-closed).
+DRIFT_STAGED=$(git diff --cached --name-only --diff-filter=ACMD)
+DRIFT_DOCS_ONLY=1
+DRIFT_FULL_REASON=""
+if [ -z "$DRIFT_STAGED" ]; then
+    DRIFT_DOCS_ONLY=0
+    DRIFT_FULL_REASON="empty staged set (fail-closed)"
+else
+    while IFS= read -r _dpath; do
+        [ -z "$_dpath" ] && continue
+        if ! _drift_path_is_docs_safe "$_dpath"; then
+            DRIFT_DOCS_ONLY=0
+            DRIFT_FULL_REASON="$_dpath"
+            break
+        fi
+    done <<DRIFT_PATHS_EOF
+$DRIFT_STAGED
+DRIFT_PATHS_EOF
 fi
-rm -f "$DRIFT_TMPFILE"
-echo "  PASSED"
+
+_stage "[3/8] Drift check..."
+if [ "$DRIFT_DOCS_ONLY" -eq 1 ]; then
+    DRIFT_DOC_COUNT=$(printf '%s\n' "$DRIFT_STAGED" | grep -c . || true)
+    echo "  DRIFT: skipped path-safe docs-only commit ($DRIFT_DOC_COUNT docs file(s))"
+    echo "  PASSED (full drift runs at pre-push + CI)"
+else
+    echo "  DRIFT: running full check due to $DRIFT_FULL_REASON"
+    DRIFT_TMPFILE=$(mktemp)
+    set +e
+    "$PYTHON" pipeline/check_drift.py --skip-crg-advisory --skip-advisory 2>&1 | tee "$DRIFT_TMPFILE" | awk '
+        /^python-dotenv could not parse statement starting at line / { next }
+        /^Check [0-9]+:/ || /^  FAILED:/ || /^  WARNING:/ || /^  SKIPPED/ || /^DRIFT / || /^NO DRIFT/ || /^====/ { print }
+    '
+    DRIFT_EXIT=${PIPESTATUS[0]}
+    set -e
+    if [ "$DRIFT_EXIT" -ne 0 ]; then
+        echo "BLOCKED: Drift detected."
+        rm -f "$DRIFT_TMPFILE"
+        exit 1
+    fi
+    rm -f "$DRIFT_TMPFILE"
+    echo "  PASSED"
+fi
 
 # 3b. CRG incremental update (advisory-only, fail-open, ~1-5s)
 # Keeps the graph DB fresh so drift checks D1-D5 (Phase 2) and slash

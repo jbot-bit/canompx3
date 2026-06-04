@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+#
+# Pre-push hook: full-drift safety gate.
+#
+# WHY THIS EXISTS (2026-06-05, branch drift-supersonic):
+# The pre-COMMIT hook path-scopes its drift step — a docs-only commit (markdown/
+# notes, no code/config) skips the ~172s full drift check for speed. That skip is
+# only SOUND if the full blocking drift set is GUARANTEED to run before the work
+# leaves this machine. This hook is that guarantee: every `git push` runs the FULL
+# drift set (no --skip flags, unlike pre-commit) and aborts the push on any drift.
+# CI (.github/workflows/ci.yml) is the second backstop.
+#
+# Fail-closed: if drift fails, the push is blocked. A genuine tooling error (no
+# python, etc.) also blocks — at push time, refusing to push unverified work is
+# the safe default. (Contrast: pre-commit's lock/CRG steps fail OPEN because a
+# wedged commit is worse than a missed advisory; a push is a deliberate, less
+# frequent act where the conservative default is correct.)
+#
+# Setup: git config core.hooksPath .githooks  (already set for this repo)
+# Bypass (use sparingly, e.g. pushing a docs-only backup branch): git push --no-verify
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_SAVED_PATH="$PATH"
+
+case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS_SHELL=1 ;;
+    *) IS_WINDOWS_SHELL=0 ;;
+esac
+
+# Activate venv (same precedence as pre-commit: WSL venv, then .venv, then legacy).
+if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/.venv-wsl/bin/activate" ]; then
+    source "$SCRIPT_DIR/.venv-wsl/bin/activate" 2>/dev/null
+elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/.venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/.venv/bin/activate" 2>/dev/null
+elif [ "$IS_WINDOWS_SHELL" -eq 1 ] && [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
+    source "$SCRIPT_DIR/.venv/Scripts/activate" 2>/dev/null
+elif [ "$IS_WINDOWS_SHELL" -eq 1 ] && [ -f "$SCRIPT_DIR/venv/Scripts/activate" ]; then
+    source "$SCRIPT_DIR/venv/Scripts/activate" 2>/dev/null
+elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/venv/bin/activate" 2>/dev/null
+fi
+export PATH="$PATH:$_SAVED_PATH"
+
+# Resolve python — same precedence/cross-wire guards as pre-commit (lines 239-265):
+# prefer SCRIPT_DIR/.venv (uv-managed, isolated per worktree), then the canonical
+# sibling venv (legacy shared-venv worktrees), then legacy venv, then PATH python.
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+WORKTREE_BASENAME="$(basename "$SCRIPT_DIR")"
+CANONICAL_BASENAME="${WORKTREE_BASENAME%%-*}"
+CANONICAL_VENV_PY=""
+for candidate in \
+    "$PARENT_DIR/$CANONICAL_BASENAME/.venv-wsl/bin/python" \
+    "$PARENT_DIR/$CANONICAL_BASENAME/.venv/bin/python" \
+    "$PARENT_DIR/$CANONICAL_BASENAME/.venv/Scripts/python.exe" ; do
+    if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [[ "$candidate" == *"/Scripts/"* ]]; then
+        continue
+    fi
+    if [ "$IS_WINDOWS_SHELL" -eq 1 ] && [[ "$candidate" == *"/.venv-wsl/"* ]]; then
+        continue
+    fi
+    if [ -f "$candidate" ]; then
+        CANONICAL_VENV_PY="$candidate"
+        break
+    fi
+done
+
+PYTHON="python"
+if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/.venv-wsl/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/.venv-wsl/bin/python"
+elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/bin/python"
+elif [ "$IS_WINDOWS_SHELL" -eq 1 ] && [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
+elif [ -n "$CANONICAL_VENV_PY" ] && [ -f "$CANONICAL_VENV_PY" ]; then
+    PYTHON="$CANONICAL_VENV_PY"
+elif [ "$IS_WINDOWS_SHELL" -eq 1 ] && [ -f "$SCRIPT_DIR/venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/venv/Scripts/python.exe"
+elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/venv/bin/python"
+fi
+
+if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [[ "$PYTHON" == *"/Scripts/"* || "$PYTHON" == *.exe ]]; then
+    echo "BLOCKED (pre-push): POSIX/WSL selected Windows Python: $PYTHON"
+    echo "         Use .venv-wsl/bin/python in WSL/Linux; do not cross-wire .venv/Scripts."
+    exit 1
+fi
+if [ "$IS_WINDOWS_SHELL" -eq 1 ] && [[ "$PYTHON" == *"/.venv-wsl/"* ]]; then
+    echo "BLOCKED (pre-push): Windows selected WSL Python: $PYTHON"
+    echo "         Use .venv/Scripts/python.exe on Windows; do not cross-wire .venv-wsl."
+    exit 1
+fi
+
+echo "=== PRE-PUSH: full drift safety gate ==="
+echo "  (full blocking drift set — the net for pre-commit's path-scoped skip)"
+
+# Run the FULL drift set. No --skip-crg-advisory / --skip-advisory here: pre-push
+# is the place we pay for complete coverage, because a docs-only commit may have
+# skipped drift entirely at commit time. Show only the salient lines (mirror the
+# pre-commit awk filter) so a clean run is quiet and a failure is legible.
+DRIFT_TMPFILE=$(mktemp)
+set +e
+"$PYTHON" "$SCRIPT_DIR/pipeline/check_drift.py" 2>&1 | tee "$DRIFT_TMPFILE" | awk '
+    /^python-dotenv could not parse statement starting at line / { next }
+    /^Check [0-9]+:/ || /^  FAILED:/ || /^  WARNING:/ || /^  SKIPPED/ || /^DRIFT / || /^NO DRIFT/ || /^====/ { print }
+'
+DRIFT_EXIT=${PIPESTATUS[0]}
+set -e
+rm -f "$DRIFT_TMPFILE"
+
+if [ "$DRIFT_EXIT" -ne 0 ]; then
+    echo ""
+    echo "BLOCKED (pre-push): full drift failed (exit $DRIFT_EXIT) — push aborted."
+    echo "  This is the safety net for commit-time path-scoped drift skipping."
+    echo "  Fix drift, or (docs-only backup branch only) re-run with: git push --no-verify"
+    exit 1
+fi
+
+echo "=== PRE-PUSH: full drift PASSED — push allowed ==="
+exit 0
