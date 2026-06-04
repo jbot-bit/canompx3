@@ -100,8 +100,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** (rebased) — chore(repo): untrack artifacts/research scratch (13,390 files / 91 MB) + START_WORKTREE.bat self-DOS guard fix
-- **Files changed:** untrack of `artifacts/research/` scratch (deletions only) + `.gitignore` + purge runbook + 3 guard hooks; see section notes below.
+- **Commit:** 9b3fc530 — fix(c11): align replay and live risk parity
+- **Files changed:** 4 files
+  - `tests/test_trading_app/test_account_survival.py`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/account_survival.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

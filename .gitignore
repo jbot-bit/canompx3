@@ -297,6 +297,8 @@ scripts/tmp_lit_results.txt
 scripts/infra/wsl-env.ps1
 deets.txt
 docs/runtime/lane_correlation_monitor.json
+# C11 cap-emulation dry-run allocator snapshots (scratch — not deployed config)
+docs/runtime/lane_allocation/*.c11-fail-dry-run.json
 
 # Live runtime artefacts (not for VCS)
 live_session.stop
