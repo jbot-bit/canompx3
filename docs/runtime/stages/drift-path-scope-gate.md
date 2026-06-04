@@ -78,6 +78,41 @@ ONLY these files may be edited under this stage:
 Integration: FF to main ONLY if all four pass (operator GO pre-granted for that
 condition). Else hold on branch with findings.
 
+## Verification results (2026-06-05)
+
+| Gate | Result |
+|---|---|
+| 1. Full `check_drift.py` | **PASS** — EXIT=0 through check 198 (~4min cold), no regression from the hook edit. |
+| 2a. code-path smoke (gate commit `ba246aa7`, stages `.githooks/`+tests) | **PASS** — `DRIFT: running full check due to .githooks/pre-commit`, drift 210.6s. |
+| 2b. docs-only smoke (commit `ba65a667`) | **PASS** — `DRIFT: skipped path-safe docs-only commit (2 docs file(s))`, drift step **151ms** (vs 210,591ms). |
+| 2c. unknown-path smoke (`*.xyz`) | **PASS** — took full-drift branch (no <1s skip). |
+| 3. Hook tests | **PASS** — 33/33 (`tests/test_tools/test_git_hooks_env.py`, +19 new). |
+| 4. Adversarial audit | **PASS** — done inline (CTX 77%, narrow scope; subagent-budget rule). 5 attack vectors disproven below. |
+
+### Adversarial audit — "can a code/config/capital change commit without drift?"
+
+Audited the EXACT committed classifier (`git show HEAD:.githooks/pre-commit`),
+both by code-reading and live `bash` execution:
+
+1. **Default-skip retained only if ALL paths docs-safe** — loop flips
+   `DRIFT_DOCS_ONLY=0` on the FIRST non-docs path and `break`s. Verified.
+2. **Code file with docs-like name** (`pipeline/README.md`, `config.yaml`,
+   `lane_allocation.json`) → denylist branch fires first (case-order) → FULL.
+   Verified live (`lane_allocation.json` → FULL).
+3. **Empty staged set** → `if [ -z ]` → FULL (fail-closed). Delete-only `.py`
+   caught by `--diff-filter=ACMD` (D included) → non-empty → classified → FULL.
+4. **Odd filenames** (spaces/newlines/quoted by git) → no docs-safe pattern
+   matches → `*)` → return 1 → FULL.
+5. **`set -e` interaction** — classifier's `return 1` is inside an `if !`
+   condition, exempt from `set -e`; script does NOT abort, takes FULL branch.
+   Verified live: mixed docs+code (code staged SECOND) → FULL, script_rc=0.
+
+**Verdict: FAIL-CLOSED property holds.** The skip fires ONLY when every staged
+path is proven docs-safe markdown/notes AND the set is non-empty. No constructed
+input let a code/config/capital path skip drift. Net safety: skip → pre-push
+(full drift, no flags) → CI = three independent full-drift gates before code
+leaves the machine.
+
 ## Coordination
 
 - This terminal owns drift (operator-confirmed 2026-06-05). The OTHER terminal
