@@ -109,17 +109,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** 4badd61c — chore(consolidate): prune 4 stale-paperwork stages + record session docs
-- **Files changed:** 9 files
+- **Commit:** 888d1d46 — chore(repo): reconcile powered-oos landing truth
+- **Files changed:** 4 files
+  - `.gitignore`
   - `HANDOFF.md`
-  - `docs/plans/2026-06-03-regime-standalone-eligibility-monitor-design.md`
-  - `docs/plans/2026-06-04-live-app-operability-readiness-plan.md`
-  - `docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md`
-  - `docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md`
-  - `docs/runtime/stages/2026-05-24-rebuild-outcomes-mnq.md`
-  - `docs/runtime/stages/2026-05-26-dotenv-cleanup.md`
-  - `docs/runtime/stages/2026-06-04-refresh-c11-c12-control-state.md`
-  - `docs/runtime/stages/regime-standalone-eligibility-monitor.md`
+  - `docs/plans/2026-06-04-NEXT-land-powered-oos-reform.md`
+  - `docs/plans/2026-06-04-project-self-consistency-consolidation.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

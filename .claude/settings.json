@@ -39,7 +39,7 @@
     "pr": "Generated with [Claude Code](https://claude.com/claude-code)"
   },
   "sandbox": {
-    "enabled": true,
+    "enabled": false,
     "autoAllowBashIfSandboxed": true,
     "excludedCommands": [
       "git",
