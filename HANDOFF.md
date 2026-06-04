@@ -109,10 +109,15 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** d959e32d — docs(stage): next-session Tier B task — DSR drift-cache stale-PASS audit
-- **Files changed:** 2 files
+- **Commit:** 31e9749d — fix(crg): pin CRG launch to constraint-locked interpreter + widen intent routing
+- **Files changed:** 7 files
+  - `.claude/hooks/intent-router.py`
+  - `.mcp.json`
   - `HANDOFF.md`
-  - `docs/runtime/stages/dsr-cache-stale-pass-audit.md`
+  - `docs/runtime/stages/2026-06-04-c11-budget-resolver-stage1.md`
+  - `scripts/tools/c11_clearance_scenarios.py`
+  - `tests/test_trading_app/test_account_survival.py`
+  - `trading_app/account_survival.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
