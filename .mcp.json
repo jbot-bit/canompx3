@@ -33,10 +33,9 @@
       "env": {}
     },
     "code-review-graph": {
-      "command": "C:/Users/joshd/AppData/Local/Programs/Python/Python311/python.exe",
+      "command": "uvx",
       "args": [
-        "-m",
-        "code_review_graph",
+        "code-review-graph",
         "serve"
       ],
       "type": "stdio",
