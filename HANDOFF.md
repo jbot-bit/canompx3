@@ -109,15 +109,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** b0d43c0f — docs(handoff): record C11 NO-GO secure-and-hold state (C11 docs in 572499d6)
-- **Files changed:** 7 files
-  - `.gitignore`
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-06-03-bracket-risk-parity-closeout.md`
-  - `docs/audit/results/2026-06-03-c11-attribution-closeout.md`
-  - `docs/audit/results/2026-06-03-c11-remediation-topstep-50k-mnq-auto.md`
-  - `docs/audit/results/2026-06-03-plan-v2-current-execution.md`
-  - `docs/runtime/stages/c11-80pt-cap-wiring.md`
+- **Commit:** b73271f4 — fix(hooks): resolve real git-dir in post-commit HANDOFF-skip guard (worktree footgun)
+- **Files changed:** 2 files
+  - `.githooks/post-commit`
+  - `.githooks/pre-commit`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
@@ -174,3 +169,12 @@
 - **Branch:** `session/joshd-maximise-no-tunnel-vision`
 - **Summary:** Built the opportunity map across allocation/live-readiness, ASX-open research, worktree/hook friction, dashboard readiness, drift speed, and stale-doc risk. Fresh DB-backed allocation verification is blocked because canonical `/workspace/canompx3/gold.db` is absent in this WSL checkout. Chosen action was the smallest high-EV operational fix: `workflow_doctor` now recommends opening an isolated worktree (`START_WORKTREE.bat <descriptor>` or `scripts/tools/new_session.sh <descriptor>`) for a live `peer_lease` instead of only inspecting the holder. This keeps live peer leases intact and removes the ambiguous force-release temptation.
 - **Verification:** `python -m pytest tests/test_tools/test_workflow_doctor.py -q` passed 22 tests with known pytest config warnings. `python -m pytest tests/test_tools/test_worktree_guard.py tests/test_tools/test_worktree_launch_preflight.py tests/test_tools/test_workflow_doctor.py -q` passed 73 tests / 1 skipped with the same config warnings. `ruff check`, `ruff format --check`, `python -m py_compile scripts/tools/workflow_doctor.py`, and `git diff --check` passed on the changed code paths. A mistaken probe for nonexistent `tests/test_hooks/test_worktree_guard_hook.py` failed with pytest exit 4 before collecting tests; reran the correct guard/launcher/workflow-doctor set successfully.
+
+## 2026-06-04 Codex plan update — live app operability/readiness
+
+- Created `docs/plans/2026-06-04-live-app-operability-readiness-plan.md`.
+- Plan separates dashboard-open, signal/read-only usability, and live-execution gates.
+- Key direction: dashboard should fail open/degraded; live launch must remain fail-closed.
+- Workstreams: dashboard startup, clean runtime worktree/git lease, DB-safe snapshot refresh, preflight split, C11/C12 clarity, lane/account frontier, recent-commit integration audit, operator runbook boundaries.
+- No database, broker, or live runtime state was inspected. Current decision remains NO-GO until measured gates pass.
+- 2026-06-04 follow-up revision: plan now explicitly prioritizes smallest useful diffs first: doc clarification, report metadata, dashboard render-only blocker cards, worktree diagnostics, then one atomic snapshot before any runtime-worktree/scheduler/lane changes.
