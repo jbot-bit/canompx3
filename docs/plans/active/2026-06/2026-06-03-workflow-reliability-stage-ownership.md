@@ -182,7 +182,7 @@ Exit criteria:
 
 ## Phase 5 - Drift And Precommit Reliability
 
-Goal: make drift/precommit cost visible and bounded.
+Goal: make drift/precommit cost visible and bounded. Detailed audit and tiered implementation plan: `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md`.
 
 Owner branch:
 
@@ -193,13 +193,20 @@ Checks:
 ```powershell
 git -C C:\Users\joshd\.codex\worktrees\precommit-drift-speed status --short --branch
 python scripts\tools\workflow_doctor.py drift
+python scripts\tools\profile_check_drift.py
+python -u pipeline\check_drift.py --fast --quiet --skip-crg-advisory
 ```
 
 Exit criteria:
 
 - fast drift probe has bounded timing evidence
+- docs-only commits have a measured sub-1-3s hot path
+- small Python/tooling commits have a measured sub-3-8s path where possible
+- hook activation state is explicit (`core.hooksPath=.githooks` or a loud fix command)
 - precommit does not hide background failures
 - full drift remains explicit, not default status
+- heavyweight drift checks have typed ownership/stage/path-scope metadata before any commit-time skip is introduced
+- pre-push or CI carries every heavyweight check moved out of commit time
 
 ## Phase 6 - Remaining Stage Disposition
 
