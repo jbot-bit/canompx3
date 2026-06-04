@@ -6,9 +6,21 @@
 # This is ADVISORY — if it fails, the commit is already done. Never exit 1.
 #
 
-# Skip during rebase, merge, or cherry-pick (fires per replayed commit = spam)
-if [ -n "$GIT_REBASE_TODO" ] || [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] \
-   || [ -f ".git/MERGE_HEAD" ] || [ -f ".git/CHERRY_PICK_HEAD" ]; then
+# Skip during rebase, merge, or cherry-pick (fires per replayed commit = spam).
+#
+# Resolve the REAL git-dir at runtime. In a git worktree the git-dir is
+# `.git/worktrees/<name>/`, NOT a literal `.git/` — so testing `.git/MERGE_HEAD`
+# etc. is ALWAYS false in a worktree, the skip never fires, and the HANDOFF
+# stamp below re-dirties the tree mid-cherry-pick → the next replayed commit
+# aborts ("local changes would be overwritten"). Resolving via rev-parse makes
+# this guard fire correctly in both the main checkout and every worktree.
+# Fail-open: if rev-parse fails, GIT_DIR stays empty and the path tests below
+# are harmless no-ops (no false skip, no crash).
+GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo "")
+if [ -n "$GIT_REBASE_TODO" ] \
+   || { [ -n "$GIT_DIR_RESOLVED" ] && { [ -d "$GIT_DIR_RESOLVED/rebase-merge" ] \
+        || [ -d "$GIT_DIR_RESOLVED/rebase-apply" ] || [ -f "$GIT_DIR_RESOLVED/MERGE_HEAD" ] \
+        || [ -f "$GIT_DIR_RESOLVED/CHERRY_PICK_HEAD" ]; }; }; then
     exit 0
 fi
 

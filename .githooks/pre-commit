@@ -264,8 +264,19 @@ if [ "$IS_WINDOWS_SHELL" -eq 1 ] && [[ "$PYTHON" == *"/.venv-wsl/"* ]]; then
     exit 1
 fi
 
-# 0a. Auto-stage HANDOFF.md if dirty (picks up post-commit hook's auto-update)
-if git diff --name-only -- HANDOFF.md 2>/dev/null | grep -q 'HANDOFF.md'; then
+# 0a. Auto-stage HANDOFF.md if dirty (picks up post-commit hook's auto-update).
+#
+# Skip during a multistep git op (rebase/merge/cherry-pick), resolved against the
+# REAL git-dir ($GIT_DIR_PATH from 0c, worktree-correct). Same thrash class as the
+# post-commit stamper: force-staging HANDOFF.md mid-replay can sweep a peer's
+# momentary HANDOFF edit into this commit. Fail-open — if GIT_DIR_PATH is empty,
+# the multistep test is skipped and the original force-stage behavior is unchanged.
+_IN_MULTISTEP=0
+if [ -n "$GIT_DIR_PATH" ] && { [ -d "$GIT_DIR_PATH/rebase-merge" ] || [ -d "$GIT_DIR_PATH/rebase-apply" ] \
+   || [ -f "$GIT_DIR_PATH/MERGE_HEAD" ] || [ -f "$GIT_DIR_PATH/CHERRY_PICK_HEAD" ]; }; then
+    _IN_MULTISTEP=1
+fi
+if [ "$_IN_MULTISTEP" -eq 0 ] && git diff --name-only -- HANDOFF.md 2>/dev/null | grep -q 'HANDOFF.md'; then
     git add HANDOFF.md
 fi
 
