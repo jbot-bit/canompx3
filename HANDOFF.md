@@ -109,13 +109,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** 5bb34816 — fix(worktree-guard): anchor heartbeat liveness to session process
-- **Files changed:** 5 files
-  - `.claude/hooks/session-heartbeat.py`
-  - `.claude/hooks/worktree_guard.py`
-  - `docs/runtime/stages/2026-06-04-worktree-guard-anchor-beat.md`
-  - `scripts/tools/worktree_guard.py`
-  - `tests/test_tools/test_worktree_guard.py`
+- **Commit:** d959e32d — docs(stage): next-session Tier B task — DSR drift-cache stale-PASS audit
+- **Files changed:** 2 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/dsr-cache-stale-pass-audit.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

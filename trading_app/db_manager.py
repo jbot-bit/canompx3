@@ -401,7 +401,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 slippage_ticks   DOUBLE DEFAULT 0,
                 strategy_id      TEXT NOT NULL,
                 lane_name        TEXT,
-                instrument       TEXT DEFAULT 'MNQ',
+                instrument       TEXT,
                 orb_minutes      INTEGER,
                 rr_target        DOUBLE,
                 filter_type      TEXT,
@@ -932,6 +932,9 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 # c8_oos_status: 'passed'/'pass_through_no_data'/etc vs NULL
                 "validation_pathway",
                 "c8_oos_status",
+                # EHR discovery-emitted columns (migration-added — 2026-05-17 PASS 2 Stage 3)
+                "validation_mode",
+                "cumulative_search_count",
             }
             actual_cols = {row[0] for row in result}
 
@@ -1027,6 +1030,12 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 # Bloomey Pathway B audit trail (migration-added — 2026-04-09)
                 "validation_pathway",
                 "c8_oos_status",
+                # EHR probe-mode schema (migration-added — 2026-05-17 PASS 2 Stage 2)
+                "validation_mode",
+                "pseudo_oos_window_start",
+                "pseudo_oos_window_end",
+                "verdict_ceiling",
+                "cumulative_search_count",
             }
             actual_cols = {row[0] for row in result}
 
