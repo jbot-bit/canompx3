@@ -1,7 +1,10 @@
 # C11 Equity-Drawdown Throttle — Implementation Plan (Tier B, capital path)
 
-**Status:** DRAFT — NOT implemented. Requires operator approval + adversarial audit
-before any production edit. Validation PASS (OOS + throttle-aware MC); see Evidence.
+**Status:** DRAFT — NOT implementable as written. A 2026-06-04 second-pass review found a
+CRITICAL gate-vs-live mechanism gap (live book is fixed 1 micro; a 0.5× *size scale* is not
+realizable — see "Second-pass review findings"). Requires design revision + re-validation on
+the live mechanism BEFORE operator approval + adversarial audit. Validation PASS is for a
+pnl-scale model, not the live realization.
 **Date:** 2026-06-04
 **Hypothesis (locked):** `docs/audit/hypotheses/2026-06-04-c11-equity-drawdown-throttle.yaml`
 **Validation:** `docs/audit/results/2026-06-04-c11-throttle-validation.md`
@@ -153,6 +156,38 @@ No dashboard/UI changes. No config flips beyond the per-profile `enabled` (opera
 8. no-lookahead test green.
 9. `check_drift.py` full pass.
 10. adversarial audit (capital path) before arming.
+
+## Second-pass review findings (2026-06-04, grounded against live source)
+
+Verified every line citation in this plan against canonical source (not read-only —
+traced the call graph). Citations are accurate (`account_survival` 57/608/749/767/787,
+`account_hwm_tracker._dd_used:530`, `session_orchestrator` 395/1962). Three gaps surfaced
+that BLOCK implementation as written:
+
+- **[CRITICAL] The live "halve participation" mechanism does not exist as a size scale.**
+  This plan (Purpose, parity table, file-change #4) applies the throttle as a *multiplicative
+  0.5× scale on next-entry position size*. But the live book trades a **fixed 1 micro per
+  signal**: `event.contracts` defaults to `1` everywhere (`position_tracker.py:34,55`,
+  `trade_journal.py:144`), flows through `_resolve_execution_order(event.contracts)`
+  (`session_orchestrator.py:2194,2544,2602`) → `prop_profiles.resolve_execution_order:197`.
+  `0.5 × 1 contract` is not tradeable. The validated metric ($1,459 max-90d-DD) comes from a
+  **pnl-scale** model; the only faithful live realization at 1 micro is a **discrete
+  trade-skip / participation gate**, which has *different path statistics* than a pnl scale.
+  → The validated number is NOT proven to transfer to the live realization. This is the same
+  gate-vs-live MODEL DIVERGENCE class C11 exists to kill, re-emerging one layer down.
+  **Re-validation on the exact live mechanism is required before any number is trusted.**
+  (Multi-contract scaling exists structurally via `resolve_execution_order` for
+  scaled/substituted accounts, so a true multiplicative throttle IS realizable on a
+  multi-contract book — but NOT for `topstep_50k_mnq_auto` today.)
+- **[HIGH] Equity-poll-failure behavior is undefined.** `_dd_used()` routes None/NaN equity
+  polls through a consecutive-failure path (`account_hwm_tracker.py:546-559`, SG4 fix). The
+  plan never states what `scale_for` does when the dd input is stale/unavailable. For a
+  capital control this must be **fail-safe-explicit** (recommend: hold the throttled state /
+  do not silently un-throttle on a degraded poll), not inherited by accident.
+- **[MEDIUM] Internal contradiction in the DD-basis "no re-validation" option.** Option (b)
+  below claims to match validation with no new state, but the live side has no daily-close
+  cumulative-pnl peak — `_dd_used` is HWM-based. Computing (b)'s peak live requires new
+  tracked state, contradicting "throttle adds no new persisted state" (Rollback plan).
 
 ## Remaining risks (carry-forward)
 

@@ -109,10 +109,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** b73271f4 — fix(hooks): resolve real git-dir in post-commit HANDOFF-skip guard (worktree footgun)
-- **Files changed:** 2 files
-  - `.githooks/post-commit`
-  - `.githooks/pre-commit`
+- **Commit:** 8c80abd5 — C11 throttle: validated (OOS+MC PASS), hypothesis promoted, impl plan
+- **Files changed:** 6 files
+  - `docs/audit/hypotheses/2026-06-04-c11-equity-drawdown-throttle.yaml`
+  - `docs/audit/results/2026-06-04-c11-solution-matrix.md`
+  - `docs/audit/results/2026-06-04-c11-throttle-validation.md`
+  - `docs/plans/2026-06-04-NEXT-c11-solution-matrix.md`
+  - `docs/plans/2026-06-04-NEXT-c11-throttle-validation.md`
+  - `docs/plans/2026-06-04-c11-throttle-implementation.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
