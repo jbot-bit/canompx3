@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 
 from trading_app.account_survival import (
-    STRICT_DD_BUDGET_FRACTION,
+    STRICT_DD_BUDGET_FRACTION_EXPRESS,
+    STRICT_DD_BUDGET_FRACTION_SELF_FUNDED,
     DailyScenario,
     SurvivalRules,
     TradePath,
@@ -20,6 +21,7 @@ from trading_app.account_survival import (
     _load_lane_trade_paths,
     _scenario_from_trade_paths,
     check_survival_report_gate,
+    effective_strict_dd_budget,
     evaluate_profile_survival,
     get_survival_report_path,
     main,
@@ -240,7 +242,39 @@ def test_build_rules_uses_profile_daily_loss_and_reports_strict_dd_budget():
 
     assert rules.daily_loss_limit == 450.0
     assert rules.dd_limit_dollars == 2000.0
-    assert rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION == 1600.0
+    # Express-funded strict budget = 0.90 belt on the $2,000 MLL = $1,800
+    # (operator risk-knob 2026-06-04; raised from the prior arbitrary 0.80/$1,600).
+    assert STRICT_DD_BUDGET_FRACTION_EXPRESS == 0.90
+    assert effective_strict_dd_budget(profile, rules) == 1800.0
+
+
+def test_effective_strict_dd_budget_is_profile_aware_and_fails_closed():
+    """Resolver: express belt 0.90; self-funded relaxed 1.00; fail-closed to express."""
+    express = get_profile("topstep_50k_mnq_auto")
+    express_rules = _build_rules(express)
+    assert express.is_express_funded is True
+    assert effective_strict_dd_budget(express, express_rules) == round(
+        express_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2
+    )
+
+    self_funded = get_profile("self_funded_tradovate")
+    self_rules = _build_rules(self_funded)
+    assert self_funded.is_express_funded is False
+    # Self-funded relaxes to the FULL self-imposed firm DD (no prop-style haircut).
+    assert effective_strict_dd_budget(self_funded, self_rules) == round(
+        self_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_SELF_FUNDED, 2
+    )
+    # And self-funded must NEVER inherit the express prop fraction (leak guard).
+    assert STRICT_DD_BUDGET_FRACTION_SELF_FUNDED >= STRICT_DD_BUDGET_FRACTION_EXPRESS
+
+    # Fail-closed: a profile whose express flag is missing/None resolves to the
+    # STRICTER express belt, never the relaxed self-funded one.
+    class _NoFlag:
+        pass
+
+    assert effective_strict_dd_budget(_NoFlag(), express_rules) == round(
+        express_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2
+    )
 
 
 def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots():
@@ -729,10 +763,15 @@ def test_evaluate_profile_survival_records_strict_historical_account_diagnostics
 
     assert summary.gate_pass is False
     assert summary.strict_account_gate_pass is False
-    assert summary.effective_dd_budget_dollars == 1600.0
+    # Express belt now $1,800 (0.90 × $2,000). The synthetic DD here is $1,701,
+    # which is BELOW the new budget — so the strict gate fails purely on the
+    # daily-loss breach day, not on DD magnitude. (Under the old $1,600 belt it
+    # failed on both.) The breach alone keeps strict_account_gate_pass False.
+    assert summary.effective_dd_budget_dollars == 1800.0
+    assert summary.historical_max_observed_90d_dd_dollars == 1701.0
+    assert summary.historical_max_observed_90d_dd_dollars <= summary.effective_dd_budget_dollars
     assert summary.historical_daily_loss_breach_days == ["2025-01-03"]
     assert summary.historical_daily_loss_breach_count == 1
-    assert summary.historical_max_observed_90d_dd_dollars == 1701.0
     assert not get_survival_report_path("topstep_50k_mnq_auto").exists()
 
 
@@ -788,7 +827,7 @@ def test_account_survival_no_write_state_cli_fails_operational_gate_and_reports_
     out = capsys.readouterr().out
     assert "gate=FAIL" in out
     assert "Expectancy edge: not evaluated by Criterion 11 account survival" in out
-    assert "Strict diagnostics: effective_dd_budget=$1,600" in out
+    assert "Strict diagnostics: effective_dd_budget=$1,800" in out
     assert "Prop-account path safety=FAIL" in out
     assert "Final deployability gate=FAIL" in out
     assert "Historical daily-loss breach days (1): 2025-01-03" in out

@@ -29,7 +29,6 @@ from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.account_survival import (
     MIN_SURVIVAL_PROBABILITY,
-    STRICT_DD_BUDGET_FRACTION,
     STRICT_DD_HORIZON_DAYS,
     _build_rules,
     _historical_daily_loss_breach_days,
@@ -37,6 +36,7 @@ from trading_app.account_survival import (
     _max_observed_rolling_drawdown,
     _scenario_from_trade_paths,
     _with_consistency_rule,
+    effective_strict_dd_budget,
     simulate_survival,
 )
 from trading_app.prop_profiles import (
@@ -90,13 +90,13 @@ def _scenarios_for_subset(con, instruments, trades_by_lane, subset_ids):
     ]
 
 
-def _gate(scenarios, rules, *, n_paths=10000, seed=0):
+def _gate(scenarios, rules, profile, *, n_paths=10000, seed=0):
     """Return strict + operational gate verdict for a scenario set."""
     if not scenarios:
         return None
     res = simulate_survival(scenarios, rules, horizon_days=90, n_paths=n_paths, seed=seed)
     op = round(res["operational_pass_probability"], 4)
-    budget = round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION, 2)
+    budget = effective_strict_dd_budget(profile, rules)
     breach_days = _historical_daily_loss_breach_days(scenarios, rules)
     max_dd = _max_observed_rolling_drawdown(scenarios, horizon_days=STRICT_DD_HORIZON_DAYS)
     op_pass = op >= float(MIN_SURVIVAL_PROBABILITY)
@@ -127,7 +127,7 @@ def main():
 
     print(
         f"PROFILE {PROFILE_ID} | daily_loss_limit=${rules.daily_loss_limit} | "
-        f"dd_limit=${rules.dd_limit_dollars} | strict_budget=${rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION:.0f} | "
+        f"dd_limit=${rules.dd_limit_dollars} | strict_budget=${effective_strict_dd_budget(profile, rules):.0f} | "
         f"min_surv={MIN_SURVIVAL_PROBABILITY}"
     )
     print(f"LANES ({len(all_ids)}): {all_ids}")
@@ -153,7 +153,7 @@ def main():
         # === FULL BOOK ===
         print("\n=== FULL BOOK (all lanes) ===")
         full = _scenarios_for_subset(con, instruments, trades_by_lane, set(all_ids))
-        gfull = _gate(full, rules)
+        gfull = _gate(full, rules, profile)
         print(gfull)
 
         # === BREACH-DAY ATTRIBUTION ===
@@ -175,7 +175,7 @@ def main():
         print("\n=== STANDALONE C11 PER LANE ===")
         standalone = {}
         for sid in all_ids:
-            g = _gate(_scenarios_for_subset(con, instruments, trades_by_lane, {sid}), rules)
+            g = _gate(_scenarios_for_subset(con, instruments, trades_by_lane, {sid}), rules, profile)
             standalone[sid] = g
             print(
                 f"  {sid}: gate_pass={g['gate_pass']} strict={g['strict_pass']} op={g['operational_pass']} "
@@ -186,7 +186,7 @@ def main():
         print("\n=== DROP-ONE-LANE ===")
         for drop in all_ids:
             keep = set(all_ids) - {drop}
-            g = _gate(_scenarios_for_subset(con, instruments, trades_by_lane, keep), rules)
+            g = _gate(_scenarios_for_subset(con, instruments, trades_by_lane, keep), rules, profile)
             print(
                 f"  drop {drop.split('_')[1]:13}: gate_pass={g['gate_pass']} strict={g['strict_pass']} "
                 f"op={g['operational_pass']} breach={g['breach_count']} max90dd=${g['max_90d_dd']:,.0f}/${g['budget']:,.0f}"
@@ -195,7 +195,7 @@ def main():
         # === PAIRS ===
         print("\n=== LANE PAIRS ===")
         for pair in combinations(all_ids, 2):
-            g = _gate(_scenarios_for_subset(con, instruments, trades_by_lane, set(pair)), rules)
+            g = _gate(_scenarios_for_subset(con, instruments, trades_by_lane, set(pair)), rules, profile)
             tags = "+".join(p.split("_")[1] for p in pair)
             print(
                 f"  {tags:28}: gate_pass={g['gate_pass']} strict={g['strict_pass']} "
