@@ -67,15 +67,24 @@ INTENT_RULES: list[tuple[str, str, int]] = [
     # Improve a skill → /skill-improve
     (r"\b(improve a? skill|optimize a? skill|skill loop)\b", "/skill-improve", 26),
     # CRG: where is X / what calls X / find Y / who imports Z → /crg-search
-    (r"\b(where is |what calls |who imports |find the (function|class|symbol))\b", "/crg-search", 32),
+    # Widened to natural phrasing: "where's X", "where does X live", "show me X",
+    # "which file has X", "what handles X". (2026-06-04 vocab tune)
+    (r"\b(where is |where'?s |where does .{1,40} (live|defined|sit)|what calls |who imports |find the (function|class|symbol|code)|show me (the |where )|which file (has|holds|defines)|what handles )\b", "/crg-search", 32),
     # CRG: blast radius / before editing / impact → /crg-blast
-    (r"\b(blast radius|impact analysis|what will (this )?break|before (editing|I edit))\b", "/crg-blast", 33),
+    # Widened: "if I change/edit X what breaks", "safe to change/touch/delete X",
+    # "what depends on/relies on X". (2026-06-04 vocab tune)
+    (r"\b(blast radius|impact analysis|what (will|would) (this |it )?break|before (editing|I edit)|if I (change|edit|touch|delete|remove) .{1,50} (what|break)|safe to (change|edit|touch|delete|remove)|what depends on|what relies on)\b", "/crg-blast", 33),
     # CRG: predicate lineage / contamination → /crg-lineage
-    (r"\b(predicate lineage|contamination|what consumes (feature|column))\b", "/crg-lineage", 34),
+    # Widened to data-flow phrasing the operator actually uses: "what feeds into X",
+    # "what's feeding X", "what uses/reads/writes X", "where does X come from",
+    # "upstream/downstream of X", "trace X". (2026-06-04 vocab tune)
+    (r"\b(predicate lineage|contamination|what consumes (feature|column)|what(?:'?s| is| does)? feed(s|ing)? (in)?to |what (uses|reads|writes|populates|derives) |where does .{1,40} come from|(up|down)stream of|trace (the |where |how )|lineage of)\b", "/crg-lineage", 34),
     # CRG: tests for X / what tests cover Y → /crg-tests
-    (r"\b(tests for |what tests cover|test coverage of)\b", "/crg-tests", 35),
+    # Widened: "what tests X", "is X tested", "test coverage". (2026-06-04 vocab tune)
+    (r"\b(tests for |what tests (cover|exercise)?|test coverage|is .{1,40} tested|covered by (a )?test)\b", "/crg-tests", 35),
     # CRG: dead code / unused functions → /crg-deadcode
-    (r"\b(dead code|unused functions?|unreferenced (function|class))\b", "/crg-deadcode", 36),
+    # Widened: "is X used anywhere", "anything calling X", "still used". (2026-06-04 vocab tune)
+    (r"\b(dead code|unused (functions?|code|imports?)|unreferenced (function|class)|is .{1,40} (still )?used (anywhere)?|anything (calling|using) |still (used|referenced|called))\b", "/crg-deadcode", 36),
 ]
 
 # Compiled at import time. Stored as (compiled_regex, skill, line_no, raw_pattern_len)

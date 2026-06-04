@@ -109,10 +109,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-04
-- **Commit:** d959e32d — docs(stage): next-session Tier B task — DSR drift-cache stale-PASS audit
-- **Files changed:** 2 files
+- **Commit:** 526c2814 — fix(db_manager): ralph iter 225 — drop lying instrument DEFAULT + EHR schema parity
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/dsr-cache-stale-pass-audit.md`
+  - `docs/ralph-loop/ralph-loop-plan.md`
+  - `docs/runtime/stages/ralph_iter_225.md`
+  - `trading_app/db_manager.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

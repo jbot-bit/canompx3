@@ -54,8 +54,40 @@ MIN_SURVIVAL_PROBABILITY = 0.70
 DEFAULT_REPORT_MAX_AGE_DAYS = 30
 CRITERION11_STATE_TYPE = "account_survival"
 CRITERION11_STATE_SCHEMA_VERSION = 1
-STRICT_DD_BUDGET_FRACTION = 0.80
+# Strict-DD budget fraction is PROFILE-AWARE — resolved by
+# `effective_strict_dd_budget()`, NOT applied as a flat constant. Express-funded
+# (prop wrappers) carry an operator-chosen safety belt below the firm's MLL;
+# self-funded (real capital) is risk-first and NEVER prop-fraction-capped
+# (see .claude/rules/self-funded-sizing-doctrine.md).
+#   @margin-guard-not-earnings-cap — the express fraction is a survival safety
+#   belt on the prop MLL, not an earnings ceiling; it must never reach a
+#   self-funded sizing path.
+# Express belt: 0.90 of the $2,000 Topstep MLL = $1,800 (operator risk-knob,
+# 2026-06-04; raised from the prior arbitrary 0.80/$1,600 — see
+# docs/audit/results/2026-06-03-c11-clearance-audit.md). Self-funded: 1.00 (full
+# self-imposed firm DD; its risk-first sizing is enforced elsewhere via
+# max_risk_per_trade, not by haircutting this budget like a prop account).
+STRICT_DD_BUDGET_FRACTION_EXPRESS = 0.90
+STRICT_DD_BUDGET_FRACTION_SELF_FUNDED = 1.00
 STRICT_DD_HORIZON_DAYS = 90
+
+
+def effective_strict_dd_budget(profile: AccountProfile, rules: SurvivalRules) -> float:
+    """Resolve the strict 90-day DD budget in dollars for one profile.
+
+    Single source of truth for BOTH the survival gate verdict and any
+    budget-aware lane selection (Stage 2+). Fail-CLOSED: an unresolved or
+    falsy `is_express_funded` resolves to the STRICTER express belt, never the
+    relaxed self-funded one — a budget can only ever be too conservative by
+    default, never too loose.
+    """
+    # Self-funded relaxation requires an explicit, truthy non-express flag.
+    # Anything else (None, missing, True) falls through to the express belt.
+    if getattr(profile, "is_express_funded", True) is False:
+        fraction = STRICT_DD_BUDGET_FRACTION_SELF_FUNDED
+    else:
+        fraction = STRICT_DD_BUDGET_FRACTION_EXPRESS
+    return round(rules.dd_limit_dollars * fraction, 2)
 
 
 @dataclass(frozen=True)
@@ -784,7 +816,7 @@ def evaluate_profile_survival(
     rules = _with_consistency_rule(_build_rules(profile), profile)
     result = simulate_survival(scenarios, rules, horizon_days=horizon_days, n_paths=n_paths, seed=seed)
     operational_pass_probability = round(result["operational_pass_probability"], 4)
-    effective_dd_budget_dollars = round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION, 2)
+    effective_dd_budget_dollars = effective_strict_dd_budget(profile, rules)
     historical_daily_loss_breach_days = _historical_daily_loss_breach_days(scenarios, rules)
     historical_max_observed_90d_dd_dollars = _max_observed_rolling_drawdown(
         scenarios,
