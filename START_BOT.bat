@@ -41,10 +41,22 @@ if "%MKT%"=="CLOSED" (
 :: See trading_app/prop_profiles.py ACCOUNT_PROFILES for the registry.
 set ACTIVE_PROFILE=topstep_50k_mnq_auto
 
-:: Default mode is SIGNAL (no broker orders). START_BOT is the control-room
-:: entrypoint; demo/live starts are initiated from the dashboard after gates
-:: run. Do not set --live here.
+:: Mode: SIGNAL by default (no broker orders). START_BOT is the control-room
+:: entrypoint. The dashboard START LIVE button still does the gated demo/live
+:: handoff after preflight — that path is unchanged.
+::
+:: Optional arg lets the operator launch a mode directly from this front-end
+:: launcher (their preferred surface — never the bare CLI):
+::   START_BOT.bat            -> signal-only (default, no capital)
+::   START_BOT.bat demo       -> demo (paper broker)
+::   START_BOT.bat live       -> LIVE (REAL MONEY). run_live_session still runs
+::                               the full 14-gate preflight + CONFIRM before any
+::                               order; --live arms capital.
 set BOT_MODE_FLAGS=--signal-only
+if /i "%~1"=="signal" set BOT_MODE_FLAGS=--signal-only
+if /i "%~1"=="demo"   set BOT_MODE_FLAGS=--demo
+if /i "%~1"=="live"   set BOT_MODE_FLAGS=--live
+if /i "%~1"=="--live" set BOT_MODE_FLAGS=--live
 
 :: Step 1: Clean up stale lock + stop files (don't kill python — other terminals may be running)
 ::   The .stop file triggers graceful-shutdown on the next feed scan; a stale one
@@ -81,7 +93,13 @@ echo [4/5] Launching orchestrator: profile=%ACTIVE_PROFILE% %BOT_MODE_FLAGS%
 :: Suppress the orchestrator's own dashboard spawn — this bat opens the dashboard
 :: directly on line 78. Without this env var, two dashboards + two browser tabs
 :: open and race for live_journal.db (fails preflight check 6).
-start "ORB Orchestrator (%ACTIVE_PROFILE%)" /min cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS%"
+::
+:: Window state: signal/demo launch minimized (background). LIVE launches VISIBLE
+:: so the operator can type CONFIRM at the real-money prompt — a minimized window
+:: would hang on input() and never arm. The typed CONFIRM is the human gate.
+set WIN_STATE=/min
+if /i "%BOT_MODE_FLAGS%"=="--live" set WIN_STATE=
+start "ORB Orchestrator (%ACTIVE_PROFILE%)" %WIN_STATE% cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS%"
 
 :: Step 5: Launch dashboard + open browser in this (main) console.
 :: This console auto-minimises ~3s after launch (line ~107). To stop the
