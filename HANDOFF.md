@@ -6,6 +6,14 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Claude Session — canompx3_autopilot_v1 reviewed, fixed, MERGED to origin/main (2026-06-05)
+- **Tool:** Claude Code
+- **What landed:** `origin/main` advanced `6dadde5b → 60edcb1b` (clean fast-forward). The full `canompx3_autopilot_v1` feature is now on main: headless self-driving task runner (`scripts/autopilot/{run_autopilot.sh,tier_guard.py,review_diff.py}`), the `completion-notify.py` autopilot Stop-block extension, docs, and `tests/test_autopilot/` (67 tests).
+- **The fix (HIGH finding):** `.claude/hooks/autopilot-tier-guard.py` was DEAD safety code — the PreToolUse Tier-B guard existed but was registered in NO settings.json. Commit `60edcb1b` registers it (first PreToolUse entry, `Edit|Write|MultiEdit|Bash` matcher). It only activates under `AUTOPILOT_RUN=1`; fail-OPEN on its own errors; delegates to `tier_guard.classify_action` (fail-CLOSED: unknown `pipeline/`·`trading_app/` paths → Tier B).
+- **Verified by EXECUTION (not just reading):** 67/67 autopilot tests pass; 18 classifier probes; hook fires/blocks/allows/journals `BLOCKED_TIER_B`; pre-push full drift PASSED 176/0.
+- **Wired-not-dead note:** the hook `command` points at the MAIN checkout path (repo convention) — now that the file is on main's tree via this merge, it fires for real `AUTOPILOT_RUN=1` sessions.
+- **No capital/schema touched.** Tier A throughout; direct integration to main per no-PR doctrine. Push went through GCM auth (operator ran it).
+
 ## Claude Session — C11 Secure & Hold (2026-06-04)
 - **Tool:** Claude Code
 - **Verdict:** `topstep_50k_mnq_auto` C11 is a **measured capital NO-GO. Live NOT armed.**
@@ -109,9 +117,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-05
-- **Commit:** 9e79e8a3 — fix(autopilot): register autopilot-tier-guard.py PreToolUse hook (was dead safety code)
-- **Files changed:** 1 files
+- **Commit:** 60edcb1b — fix(autopilot): register autopilot-tier-guard.py PreToolUse hook (was dead safety code)
+- **Files changed:** 2 files
   - `.claude/settings.json`
+  - `HANDOFF.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
