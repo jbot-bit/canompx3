@@ -754,6 +754,7 @@ class TestFillPriceTracking:
         record = orch_with_fill.monitor.record_trade.call_args[0][0]
         assert record.entry_price == 2351.0  # broker fill, not engine
 
+
 class TestNQMiniExecutionSubstitution:
     async def test_entry_uses_execution_contract_and_integer_divided_qty(self):
         """MNQ strategy contracts route to mapped NQ contract with exact integer qty."""

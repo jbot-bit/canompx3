@@ -133,12 +133,12 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Unknown
-- **Date:** 2026-06-03
-- **Commit:** c12f43f6 — fix(account): enforce strict survival gate
+- **Tool:** Claude Code
+- **Date:** 2026-06-04
+- **Commit:** aa15b304 — docs(audit): real earning potential — $19.3k/acct survival-proven; bottleneck=capacity not edge
 - **Files changed:** 2 files
-  - `tests/test_trading_app/test_account_survival.py`
-  - `trading_app/account_survival.py`
+  - `HANDOFF.md`
+  - `docs/audit/results/2026-06-04-real-earning-potential.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
