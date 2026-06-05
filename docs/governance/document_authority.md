@@ -19,6 +19,7 @@ to mean, and what it is not allowed to mean.
 | `TRADING_RULES.md` | live trading doctrine | live trading semantics, session/entry/filter interpretation, what is currently tradeable | research methodology, future feature plans |
 | `RESEARCH_RULES.md` | research doctrine | methodology, statistical standards, discovery discipline, interpretation discipline | live deployment state, portfolio routing |
 | `docs/institutional/pre_registered_criteria.md` | locked promotion/validation policy | the criteria validated strategies must satisfy | implementation details of how code is written |
+| `docs/governance/research_decision_governor.md` | decision routing / anti-tunnel checklist (`contract` class) | routing a proposed change to the layers + gates it touches, forcing portfolio-EV and higher-EV-alternative questions at decision time | any threshold/budget/criterion value — it composes gates and owns none; the cited canonical surface wins |
 | `docs/governance/system_authority_map.md` | whole-project authority/context map | where major truth surfaces live, how categories relate, what is linked vs derived | live runtime values by itself |
 | `ROADMAP.md` | planning inventory | planned or not-yet-built work only | current implementation truth, live behavior, policy |
 | `HANDOFF.md` | cross-tool baton | current session baton, recent changes, local warnings | durable truth when code or canonical docs disagree |
