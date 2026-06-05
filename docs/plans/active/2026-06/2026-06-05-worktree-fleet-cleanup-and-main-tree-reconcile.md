@@ -1,8 +1,53 @@
 # Worktree-Fleet Cleanup + Main-Tree Reconcile (2026-06-05)
 
 **Owner:** Claude (main checkout `C:/Users/joshd/canompx3`)
-**Status:** IN_PROGRESS — main-tree reconcile staged-but-uncommitted; worktree triage pending.
+**Status:** TRIAGE LARGELY DONE — fleet 15→8 trees (7 removed 2026-06-05 PM); remaining 5 non-main trees ALL protected (live-C11 / C11-capital-deferred / uncommitted-work). main-tree reconcile DONE.
+
+### FINAL STATE (2026-06-05 PM) — 8 trees, all removable ones removed
+**Removed (7):** strict-c11-readiness-merge, precommit-drift-speed-replay, quick-gate-reliability (merged-clean); db-mcp-safe-access, ev-proof-pack-harness (content already shipped); ce7f-daily-radar, 025e-go-portal (detached, origin/rescue backup); plugin-routing-grounding (superseded by #325, 0 unique rule lines); peer-capability-parity-map (docs on HEAD, 0 unique); track-d-gate0-mbp1 (migration+research on HEAD). All backed up (branch ref and/or origin/rescue/*).
+
+**REMAINING — do NOT auto-sweep, each needs a decision:**
+| Tree | State | Why protected | Unblock when |
+|---|---|---|---|
+| `canompx3-wt-c11-cap-x075` | LIVE (idx today) | operator's active C11 audit @ `8d0b540e` | leave to operator |
+| `canompx3-wt-audit-8d0b540e` | LIVE (idx today) | C11 verify tree @ `8d0b540e` | leave to operator |
+| `daily-bug-scan-restore` | ~525 uniq lines, **capital** (account_survival.py) | head-on collision w/ live C11 | C11 lands → ship restore (supersedes scan) |
+| `daily-bug-scan` | ~532 uniq lines, **capital**, BAD commit msg | superseded by restore | kill after restore ships |
+| `1248` (detached) | **32 dirty = uncommitted live-pilot** (env_bootstrap.py, reconcile_live_fills.py, broker/tradovate env tests) | UNBACKED-UP valuable work; delete = the wipe incident | owner commits-or-discards |
+| `institutional-audit-2026-06-03` | 11 dirty + new fdr.py, audit docs | uncommitted real work | owner commits-or-discards |
+| `precommit-drift-speed` | 8 dirty (check_drift/_drift_cache/hooks) | uncommitted real work | owner commits-or-discards |
+
+**KEY METHOD (load-bearing):** baseline is **HEAD, not origin/main**. Local main carries PR-merged work (e.g. #325) that origin/main lacks until pushed → a branch "unmerged vs origin/main" is often fully shipped vs HEAD. 3 branches (plugin-routing, parity-map, track-d) were superseded by HEAD with ZERO unique content — merging them would have REGRESSED rule files to older versions. Always `comm -23 <(git show BR:f|sort -u) <(git show HEAD:f|sort -u)` for true unique-content count.
 **Trigger:** Operator git-cleanup session ("~20 worktrees, merge some, finish some, delete the rest" + "ship my shit properly, merged, not hanging around"). NOT the C11 cap-wiring the `/clear` baton pointed at (that's blocked — see §4).
+
+---
+
+## 0b. TRIAGE PROGRESS (2026-06-05 PM session — operator chose "full ship")
+
+State at resume: **main == origin/main == `d2f5eb62`** (everything the plan listed as local-only/in-flight LANDED: cleanup `8f561e73`, baton-staleness `faf8c84e`, governor `cbb72f67`, stat-claim-gate `d2f5eb62`). Plan's old ahead/dirty table was STALE.
+
+**KEY METHOD CORRECTION:** SHA-ancestry "unmerged" ≠ content-unmerged. In this multi-agent repo, work lands via re-commit/squash so a branch shows `ahead=N` while its FILES are byte-identical on origin/main. ALWAYS `diff <(git show BR:f) <(git show origin/main:f)` before merging — several "unmerged" branches were already shipped.
+
+### REMOVED this session (verified safe):
+- `strict-c11-readiness-merge`, `precommit-drift-speed-replay` — merged-clean (ahead 0, dirty 0). Branches deleted.
+- `quick-gate-reliability` — merged, only HANDOFF.md auto-gen dirt (forced). Branch deleted.
+- `db-mcp-safe-access` — **content already shipped** (`db_access.py`+`mcp_server.py` byte-identical on main). Worktree removed; branch ref kept (CI-only delta = fork noise).
+- `ev-proof-pack-harness` — **harnesses already shipped** (`bootstrap_health_proof.py`/`bounded_benchmark_harness.py` identical). Worktree removed; branch KEPT — has ambiguous unmerged remainder in `live_readiness_report.py`/`check_drift.py`/`fast_lane_status.py` (stale-vs-superseded UNRESOLVED, needs real diff review).
+
+### LIVE — HANDS OFF (appeared mid-session, NOT in plan's table):
+- `canompx3-wt-c11-cap-x075` (session/joshd-c11-cap-x075-wiring, `8d0b540e`) — operator's ACTIVE C11 audit, merging to main imminently.
+- `canompx3-wt-c11-verify` (detached `8d0b540e`) — C11 verify tree, live.
+- `track-d-gate0-mbp1` (`f888fbec`) — appeared mid-session; not yet triaged.
+
+### REMAINING (genuinely-new content, decision each):
+- `peer-capability-parity-map` (parity-map doc NOT on main) — real new doc; rebase-or-ship.
+- `plugin-routing-grounding` (`.codex/PLUGIN_ROUTING.md` NOT on main) — real; vet vs current routing rules.
+- `daily-bug-scan` + `daily-bug-scan-restore` — BOTH have `daily_bug_scan.py` (+472) NOT on main. TWO variants of same feature; bad commit MSG (stray Codex chat) but REAL content. Pick better variant, ship one, kill other.
+- `1248` (detached, ahead 0, **dirty 34** = live-pilot work: `env_bootstrap.py`, `reconcile_live_fills.py`, 27 live modules) — HIGH-VALUE uncommitted; needs owner/commit decision.
+- `institutional-audit-2026-06-03` (dirty 13 + new `fdr.py`, audit docs) — real uncommitted; commit-or-discard.
+- `precommit-drift-speed` (dirty 8: check_drift/_drift_cache/hooks) — real uncommitted.
+- `025e` (detached `3ff16e40`, ahead 3, dirty 1) — go-portal perf; commits backed up on `origin/rescue/2026-06-03/detached-3ff16e40-go-portal`.
+- `ce7f` (detached `a59791d5`, ahead 1) — daily-radar; backed up on `origin/rescue/2026-06-03/detached-a59791d5-daily-radar` → safe to remove.
 
 ---
 
@@ -157,9 +202,25 @@ fix the stale closeout-doc body line → operator GO (Tier B capital; telemetry 
 ---
 
 ## 5. Resume checklist (next session / after /clear)
-1. `git fetch`; re-read §0 live-coordination; confirm operator's governor push landed.
-2. Re-sync local main (rebase `7abceff3` onto new origin/main).
-3. Finish §1: restore the 2 tests, vet the 4 unvetted mods, commit SAFE cleanup only.
-4. §2 feature: separate commit with wiring re-added + verified.
-5. §3 worktree triage (the real job).
-6. §4 C11 stays blocked.
+
+### DONE this session (2026-06-05)
+- ✅ Re-synced local main to origin/main `cbb72f67`; rebased baton-staleness commit (now `faf8c84e`).
+- ✅ Committed SAFE cleanup `8f561e73` (5 stale C11-throttle doc deletions + this plan). Verified by content.
+- ✅ Squared up C11 (§4): CLOSED CONDITIONAL, fix in-flight on peer terminal, NOT NO-GO-dead.
+
+### STATE AT HANDOFF (verify with `git fetch` + `git status` first — may be stale)
+- **local main = `8f561e73`, AHEAD 2 of origin/main `cbb72f67`** (2 LOCAL-ONLY commits: `faf8c84e` baton-staleness, `8f561e73` cleanup). NOT pushed. Per no-PR doctrine, integrate direct — but these are Tier A docs/hooks; pushing main is operator-run (auto-classifier blocks self-push to default branch).
+- **Uncommitted = stat-claim-gate feature (C) + 2 not-mine files:**
+  - C (own commit, NEEDS verify + missing pre-commit `[7/8]` wiring): `.claude/settings.json` (branch-context.py hook),
+    `.claude/skills/code-review/SKILL.md`, `scripts/tools/check_claim_hygiene.py`, `tests/test_tools/test_check_claim_hygiene.py` (new),
+    `docs/runtime/stages/2026-06-05-stat-claim-literature-anchor-gate.md` (new).
+  - NOT MINE — leave alone: `HANDOFF.md` (post-commit hook's last-session auto-update of `8f561e73` — safe), `tests/test_hooks/test_baton_staleness.py` (peer trimming our baton test, -17/+6).
+  - Untracked C11 docs (likely peer's, vet owner): `c11-cap-x080-remediation-v1.md`, `c11-stage1-stage2-design.md`.
+
+### NEXT STEPS (priority order)
+1. `git fetch`; re-read §0; check if peer's C11 cap work (`c11-cap-x075`) landed on origin/main.
+2. **Feature C** — its own verified commit: re-add the pre-commit `[7/8]` claim-hygiene filter broadening
+   (`docs/audit/|institutional/|plans/|research/`), run `check_drift.py` + the new test, then commit. Do NOT bundle the 2 not-mine files.
+3. **§3 worktree triage (THE main job):** remove 2 merged-clean trees, verify+clear 5 merged-dirty, merge-or-kill 10 unmerged. Per-tree protocol in §3.
+4. **Follow-ups:** DSR stage doc → CLOSED; C11 closeout-body stale line (§4) — after peer C11 lands.
+5. **§4 C11:** stay OFF cap-wiring (peer owns it). Path-to-live in §4.

@@ -117,14 +117,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-05
-- **Commit:** 8f561e73 — chore(cleanup): remove 5 stale C11-throttle docs + add worktree-fleet-cleanup plan
-- **Files changed:** 6 files
-  - `docs/audit/results/2026-06-04-c11-throttle-mechanism-revalidation.md`
-  - `docs/handoffs/archived/2026-06-05-root-handoff-archive.md`
-  - `docs/plans/2026-06-04-c11-throttle-live-mechanism-design.md`
+- **Commit:** bb4d1f26 — docs(plan): record worktree-fleet triage progress — 4 trees removed, content-equality method
+- **Files changed:** 2 files
+  - `HANDOFF.md`
   - `docs/plans/active/2026-06/2026-06-05-worktree-fleet-cleanup-and-main-tree-reconcile.md`
-  - `docs/runtime/stages/2026-06-04-c11-throttle-mechanism-revalidation.md`
-  - `docs/runtime/stages/2026-06-04-refresh-c11-c12-control-state.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
