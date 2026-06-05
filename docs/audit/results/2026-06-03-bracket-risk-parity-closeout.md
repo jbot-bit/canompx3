@@ -130,6 +130,61 @@ new); `test_account_survival.py` = 22 passed (parity side, no sim↔live asymmet
 introduced); ruff + py_compile clean on both changed files. Live-order fail-closed
 hardening only; no schema, no profile, no cap, no allocator change.
 
+## Adversarial-Audit Gate — INDEPENDENT PASS COMPLETE (2026-06-05, Stage 1c)
+
+**Actor:** independent `evidence-auditor` subagent (separate context, agentId
+`aabe3bba320f7de8b`), dispatched per `.claude/rules/adversarial-audit-gate.md` under
+operator-authorized delegation (C11 Stage 1). It was told explicitly that the self-review
+block above was implementer self-review, NOT a cleared gate, and instructed to disprove each
+claim from code. Audited the COMBINED post-fix live-path state at HEAD `f1fd7a90` (shipped
+`9b3fc530` parity logic + the present-but-≤0 guard).
+
+**Independent verdict: CONDITIONAL.** Eight falsification points:
+1. Single-helper routing — PASS (only callers `:2206`/`:2646`; no third bracket-price path).
+2. Present-but-zero closes the hole (`is not None` + `>0`) — PASS.
+3. Replay↔live parity (`account_survival.py:421` `abs(entry-stop)` == `execution_engine.py:896`) — PASS.
+4. No scope leak into exit-record/journal/naked-position — PASS (structurally separate fns).
+5. Two entry events per bar — PASS (helper static/stateless; C1 kill-switch fence isolates).
+6. Tight-stop ordering — PASS (`execution_engine.py:864-873` modifies stop_price before `:896` risk).
+7. Cross-path consistency (bracket FLATTENS vs exit-record COALESCEs zero→median) — **CONDITIONAL.**
+   Intentionally different (placement vs accounting), and a zero-risk event is rejected at
+   `execution_engine.py:897/1115/1289` before reaching the journal coalesce, so it is not a
+   capital-at-risk path — but a hand-crafted EXIT with `risk_points=0.0` would silently coalesce
+   to median for P&L. Latent ACCOUNTING gap, not capital-at-risk. Logged; no fix this stage.
+8. Absent-vs-zero reachability — **CONDITIONAL.** In normal flow an ENTRY always carries a
+   positive float (`<=0` guards gate all three assignments). REJECT events default
+   `risk_points=None`; if one were ever routed as an ENTRY (bug/mock only), the median fallback
+   would re-engage. Defense-in-depth gap — no runtime assertion that an ENTRY carries non-None
+   risk. Documented; the median fallback is correct-by-design for genuinely-absent risk.
+
+**Single highest-priority fix (independent auditor) — IMPLEMENTED THIS PASS:** add an
+INTEGRATION test exercising `_handle_event(ENTRY, risk_points=0.0)` in demo/live mode so the
+end-to-end pre-entry safety gate (`session_orchestrator.py:~2683`) is proven to BLOCK the entry,
+not just the helper returning None in isolation.
+
+### Highest-priority fix applied (Stage 1d, 2026-06-05)
+New RED→GREEN integration test
+`TestF4BracketNakedPosition::test_f4_zero_risk_points_blocks_entry_via_safety_gate`. Drives
+`_handle_event` with a present-but-zero `risk_points` ENTRY through `FakeBracketRouter`
+(native brackets) in live/demo mode and asserts: position popped (`_positions.get` is None),
+nothing submitted to the broker (`router.submitted == []`), operator notified `ENTRY BLOCKED`.
+**RED proof (mutation probe):** reverting `_bracket_stop_distance` to the old `if event_risk:`
+truthiness guard makes a present-but-zero risk fall through to the non-zero strategy median
+(3.0) → a GUESSED bracket merges → entry NOT blocked → a `PositionRecord(state=ENTERED)`
+survives and the test FAILS. Restored guard → GREEN. MEASURED:
+`TestBracketOrders`+`TestF4BracketNakedPosition`+`TestObservability`+`TestC1` = 37 passed.
+
+**Findings 7 & 8 disposition:** both CONDITIONAL findings are non-capital-at-risk (accounting-only
+coalesce; bug-only reachability) and are **explicitly deferred** with rationale above — they are
+not live-order naked-position risks. No further code change this stage. If a future change makes
+REJECT→ENTRY routing or zero-risk EXIT events reachable, re-open.
+
+**Gate disposition:** the highest-priority capital-path finding is fixed and proven RED→GREEN by
+an independent pass. Remaining findings are documented accounting/defense-in-depth gaps, not
+capital risks. **Adversarial-audit gate on the bracket-risk-parity live path: CLOSED (CONDITIONAL,
+two findings deferred with rationale).** Stage 3 (cap wiring) is unblocked on the audit axis;
+C11 itself stays NO-GO pending Stages 3–6 + operator GO.
+
 ## Verification
 
 MEASURED passing commands:

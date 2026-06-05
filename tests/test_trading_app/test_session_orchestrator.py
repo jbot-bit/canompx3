@@ -5028,6 +5028,54 @@ class TestF4BracketNakedPosition:
         notify_msg = str(orch._notify.call_args_list[0])
         assert "F4" in notify_msg, "F4-3: notify message must contain 'F4' source marker"
 
+    # F4-4 (integration) — present-but-zero risk_points BLOCKS entry end-to-end
+    async def test_f4_zero_risk_points_blocks_entry_via_safety_gate(self):
+        """Integration gap closed per independent audit (2026-06-05, Stage 1c).
+
+        The unit test ``test_bracket_stop_distance_zero_event_risk_does_not_guess_median``
+        proves the helper returns None for present-but-zero risk_points. This test
+        proves the END-TO-END consequence through the pre-entry merge path
+        (session_orchestrator.py ~:2646): stop_dist None -> bracket NOT merged ->
+        _bracket_merged=False -> the SAFETY GATE (~:2683) BLOCKS the entry and pops
+        the position in live/demo mode, so no NAKED position reaches the broker.
+
+        Mutation probe (proves it guards the fix, not just the code path): revert
+        ``_bracket_stop_distance`` to the old ``if event_risk:`` truthiness guard and
+        a present-but-zero risk_points falls through to ``median_risk_points`` (3.0,
+        truthy) -> a GUESSED bracket merges -> entry is NOT blocked -> this test
+        fails (position is not None, spec WAS submitted). The non-zero strategy
+        median is load-bearing: it is what the old guess-path would have used.
+        """
+        router = FakeBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        assert orch.signal_only is False, "live/demo mode required for the safety gate"
+        # Strategy median is non-zero (3.0 per _test_strategy) — the value the OLD
+        # truthiness guard would have guessed a bracket from. The fix must NOT use it
+        # when risk_points is present-but-zero.
+
+        notifications: list[str] = []
+        orch._notify = notifications.append
+
+        event = _entry_event(2350.5)
+        event.risk_points = 0.0  # present-but-zero: a degenerate live value
+
+        await orch._handle_event(event)
+
+        # Safety gate fired: position rolled back, nothing submitted to the broker.
+        assert orch._positions.get(STRATEGY_ID) is None, (
+            "F4-4: present-but-zero risk_points must BLOCK the entry (position popped); "
+            "a guessed-median bracket must NOT be submitted"
+        )
+        assert router.submitted == [], (
+            "F4-4: no order spec may reach the broker when the bracket cannot be built "
+            "from a present-but-zero risk_points"
+        )
+        blocked = [n for n in notifications if "ENTRY BLOCKED" in n]
+        assert blocked, f"F4-4: operator must be notified of ENTRY BLOCKED; got: {notifications}"
+
     # Source-text probe — confirms all three F4 markers survive in production code
     def test_f4_source_markers_present(self):
         """Source-text mutation probe: all three F4 source markers must be present

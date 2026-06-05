@@ -108,12 +108,14 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-04
-- **Commit:** ee23c3fe — fix(crg): pin CRG launch to constraint-locked interpreter + widen intent routing
-- **Files changed:** 3 files
-  - `.claude/hooks/intent-router.py`
-  - `.mcp.json`
-  - `HANDOFF.md`
+- **Date:** 2026-06-05
+- **Commit:** f1fd7a90 — fix(c11-s1): [judgment] fail-closed guard on present-but-<=0 event.risk_points + honest audit provenance
+- **Files changed:** 5 files
+  - `docs/audit/results/2026-06-03-bracket-risk-parity-closeout.md`
+  - `docs/runtime/decision-ledger.md`
+  - `docs/runtime/stages/2026-06-05-c11-s1-bracket-parity-audit.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
