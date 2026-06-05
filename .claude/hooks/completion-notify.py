@@ -17,6 +17,7 @@ committing. Fail-open at every step: any error → silent exit 0.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -142,6 +143,42 @@ def _maybe_emit_cue() -> None:
     _save_cue_state(state)
 
 
+def _autopilot_review_done() -> bool:
+    """True if review_diff.py has emitted a seen-hashes file for this run (i.e.
+    a review pass has executed)."""
+    run_id = os.environ.get("AUTOPILOT_RUN_ID", "")
+    if not run_id:
+        return True  # can't tell -> don't block
+    seen = PROJECT_ROOT / "docs" / "runtime" / "autopilot" / f"{run_id}.seen.json"
+    return seen.exists()
+
+
+def _maybe_block_autopilot_stop() -> bool:
+    """When an autopilot run is active, force the review/repair pass before Stop
+    is allowed to end. Returns True if it emitted a `decision:block`.
+
+    Conditions: AUTOPILOT_RUN=1 AND the working tree has uncommitted production
+    edits AND no review pass has run yet for this run-id. Emits the Stop-event
+    `decision:block` channel so the agent loop must continue.
+    """
+    if os.environ.get("AUTOPILOT_RUN") != "1":
+        return False
+    if not _has_prod_edits():
+        return False
+    if _autopilot_review_done():
+        return False
+    payload = {
+        "decision": "block",
+        "reason": (
+            "autopilot: production edits are uncommitted and no review pass has "
+            "run. Run `python scripts/autopilot/review_diff.py` and complete one "
+            "repair pass before ending, then output the === AUTOPILOT REPORT === block."
+        ),
+    }
+    print(json.dumps(payload))
+    return True
+
+
 def main() -> None:
     try:
         event = json.load(sys.stdin)
@@ -155,6 +192,13 @@ def main() -> None:
     _play_sound()
 
     if hook_event == "Stop":
+        # Autopilot path takes precedence: if it blocks, do not also emit the
+        # advisory cue (a Stop hook should emit one JSON payload).
+        try:
+            if _maybe_block_autopilot_stop():
+                sys.exit(0)
+        except BaseException:  # pragma: no cover - fail-open
+            pass
         try:
             _maybe_emit_cue()
         except BaseException:  # pragma: no cover - fail-open
