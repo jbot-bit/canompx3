@@ -956,11 +956,93 @@ def test_check_notifications_summary_surfaces_per_component_status(monkeypatch):
         components=components,
     )
     result = rls._check_notifications(ctx)
-    # Preflight is not blocking — the live SessionOrchestrator re-runs the
-    # verifiers and that path is authoritative. But the failure MUST be visible.
+    # Order-routing launch (demo=True, signal_only=False) now FAILS CLOSED on a
+    # probe failure — the orchestrator does NOT abort on bracket/fill-poller
+    # failure, so preflight is the authoritative launch gate. The failure MUST
+    # also be visible per-component.
+    assert result.passed is False
     assert "brackets:FAIL" in result.message
     assert "fill_poller:FAIL" in result.message
     assert "notifications:PASS" in result.message
+
+
+def test_notifications_fail_closed_on_probe_failure_for_order_routing(monkeypatch):
+    """Audit finding (2026-06-05): a bracket/fill-poller probe failure must FAIL
+    the gate for order-routing launches, else the mandatory pre-launch gate lets
+    real orders route on a known-degraded broker path (unprotected entries /
+    untracked fills). Single-probe failure is sufficient to fail."""
+    monkeypatch.setattr(
+        rls,
+        "_run_lightweight_component_self_tests",
+        lambda *, instrument, components=None: {"notifications": True, "brackets": False, "fill_poller": True},
+    )
+    components = _components_with_router(_BracketSupportingRouter)
+    ctx = rls.PreflightContext(
+        instrument="MNQ", broker_name="topstep", demo=True, portfolio=None, components=components
+    )
+    result = rls._check_notifications(ctx)
+    assert result.passed is False, "order-routing launch must fail closed on a degraded bracket probe"
+    assert result.message.startswith("FAILED")
+    assert "brackets:FAIL" in result.message
+
+
+def test_notifications_probe_failure_is_advisory_for_signal_only(monkeypatch):
+    """Signal-only places no orders — a probe failure stays advisory (WARNINGS,
+    passed=True) so evidence accumulation is not blocked by a degraded probe."""
+    monkeypatch.setattr(
+        rls,
+        "_run_lightweight_component_self_tests",
+        lambda *, instrument, components=None: {"notifications": True, "brackets": False, "fill_poller": True},
+    )
+    components = _components_with_router(_BracketSupportingRouter)
+    ctx = rls.PreflightContext(
+        instrument="MNQ", broker_name="topstep", demo=True, portfolio=None, components=components, signal_only=True
+    )
+    result = rls._check_notifications(ctx)
+    assert result.passed is True, "signal-only probe failure must stay advisory"
+    assert result.message.startswith("WARNINGS")
+
+
+def test_live_launch_blocks_when_bracket_probe_fails(monkeypatch, _gate_seams):
+    """End-to-end: a direct --live --auto-confirm launch with a failing bracket
+    probe must exit before constructing SessionOrchestrator. This is the exact
+    capital-loss path the audit flagged — degraded brackets + live orders."""
+    import trading_app.live.broker_factory as bf
+
+    monkeypatch.setattr(
+        bf, "create_broker_components", lambda *a, **kw: _components_with_router(_BracketSupportingRouter)
+    )
+    monkeypatch.setattr(bf, "get_broker_name", lambda: "topstep")
+    # Everything else in the preflight chain passes; only the component probe fails.
+    monkeypatch.setattr(
+        rls,
+        "_run_lightweight_component_self_tests",
+        lambda *, instrument, components=None: {"notifications": True, "brackets": False, "fill_poller": True},
+    )
+    # Neutralize the other order-routing checks so the bracket probe is the sole
+    # failure under test (they have their own dedicated tests above).
+    import trading_app.live.trade_journal as tj
+
+    monkeypatch.setattr(tj, "TradeJournal", lambda *a, **kw: SimpleNamespace(is_healthy=True))
+    monkeypatch.setattr(rls, "_check_survival_report", lambda _ctx: rls.CheckResult(True, "OK"))
+    monkeypatch.setattr(rls, "_check_sr_state", lambda _ctx: rls.CheckResult(True, "OK"))
+    monkeypatch.setattr(rls, "_check_daily_features", lambda _ctx: rls.CheckResult(True, "OK"))
+    monkeypatch.setattr(rls, "_check_contracts", lambda _ctx: rls.CheckResult(True, "OK"))
+    monkeypatch.setattr(rls, "_check_repo_drift_for_live", lambda _ctx: rls.CheckResult(True, "OK"))
+    monkeypatch.setattr(rls, "_check_telemetry_maturity", lambda _ctx: rls.CheckResult(True, "OK"))
+    monkeypatch.setattr(rls, "_check_live_readiness_report", lambda _ctx: rls.CheckResult(True, "OK"))
+    monkeypatch.setattr(rls, "_check_project_pulse_for_live", lambda _ctx: rls.CheckResult(True, "OK"))
+    monkeypatch.setattr(rls, "_check_copy_trading_accounts", lambda _ctx: rls.CheckResult(True, "OK"))
+    monkeypatch.setattr(rls, "_check_shadow_copy_loss_protection", lambda _ctx: rls.CheckResult(True, "OK"))
+
+    _live_argv(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        rls.main()
+
+    assert exc.value.code != 0
+    assert _gate_seams["orchestrator_built"] is False, (
+        "a failing bracket probe must block the live launch before orchestrator construction"
+    )
 
 
 def test_check_notifications_summary_lists_all_pass_components(monkeypatch):
@@ -1110,3 +1192,121 @@ def test_pid_is_alive_dead_pid_is_false():
             break
     assert candidate is not None, "expected at least one dead PID in the probe range"
     assert rls._pid_is_alive(candidate) is False
+
+
+# ---------- Mandatory pre-launch gate in main() (2026-06-05 fail-open fix) ------
+#
+# Codex adversarial review + ground-truth verification confirmed: _run_preflight
+# (the only caller of the C11/C12/readiness/pulse/drift/telemetry checks) ran
+# ONLY inside `if args.preflight:`. A direct `--live --auto-confirm` — the exact
+# form the dashboard launches with NO --preflight — reached SessionOrchestrator
+# with no capital gate. These tests pin the fix: every order-routing launch runs
+# preflight inline and a FAIL blocks before the orchestrator is ever built. There
+# is no skip flag by design (operator decision, fail-closed doctrine).
+
+
+@pytest.fixture
+def _gate_seams(monkeypatch):
+    """Stub the seams between the gate and the orchestrator so main() can be
+    driven to the gate without real broker / lock / asyncio side effects.
+
+    Returns a recorder dict: `orchestrator_built` flips True iff construction
+    is reached (i.e. the gate let the launch through). --raw-baseline is used
+    so the profile / ACCOUNT_PROFILES machinery is bypassed; the raw-baseline
+    portfolio carries the .instrument the single-instrument path needs.
+    """
+    recorder = {"orchestrator_built": False}
+
+    monkeypatch.setattr(
+        "trading_app.portfolio.build_raw_baseline_portfolio",
+        lambda **_kw: SimpleNamespace(instrument="MNQ", strategies=[]),
+    )
+    # Lock / sweep / banner / dashboard seams — no-ops for the test.
+    monkeypatch.setattr(rls, "acquire_instance_lock", lambda *_a, **_kw: None, raising=False)
+    monkeypatch.setattr(rls, "release_instance_lock", lambda *_a, **_kw: None, raising=False)
+    monkeypatch.setattr(rls, "_sweep_startup_orphan_rings", lambda: None)
+    monkeypatch.setattr(rls, "_print_mode_banner", lambda *_a, **_kw: None)
+    monkeypatch.setattr(rls, "_should_launch_dashboard", lambda: False)
+
+    def _record_orchestrator(*_a, **_kw):
+        recorder["orchestrator_built"] = True
+        # Return an object whose run()/post_session() are inert so that, on the
+        # proceed-past-gate test, main() does not do real work.
+        return SimpleNamespace(
+            run=lambda: None,
+            post_session=lambda: None,
+        )
+
+    monkeypatch.setattr(rls, "SessionOrchestrator", _record_orchestrator)
+    # asyncio.run on the inert orchestrator's run() — make it a no-op so the
+    # proceed-past-gate path returns cleanly without an event loop.
+    monkeypatch.setattr(rls.asyncio, "run", lambda _coro: None)
+    return recorder
+
+
+def _live_argv(monkeypatch, *extra):
+    argv = ["run_live_session", "--raw-baseline", "--instrument", "MNQ", "--live", "--auto-confirm", *extra]
+    monkeypatch.setattr(sys, "argv", argv)
+
+
+def test_live_launch_blocks_when_preflight_fails(monkeypatch, _gate_seams, capsys):
+    """A failing preflight on a direct --live --auto-confirm launch MUST exit
+    non-zero and MUST NOT construct the orchestrator. This is the core
+    fail-open regression: pre-fix the gate did not run at all off the CLI."""
+    monkeypatch.setattr(rls, "_run_preflight", lambda *a, **kw: False)
+
+    _live_argv(monkeypatch)
+    with pytest.raises(SystemExit) as exc:
+        rls.main()
+
+    assert exc.value.code != 0, "failed preflight must abort the live launch"
+    assert _gate_seams["orchestrator_built"] is False, (
+        "SessionOrchestrator must NOT be constructed when preflight fails"
+    )
+    out = capsys.readouterr().out
+    assert "preflight FAILED" in out
+
+
+def test_live_launch_proceeds_when_preflight_passes(monkeypatch, _gate_seams):
+    """A passing preflight lets the live launch reach orchestrator construction.
+    Proves the gate is a gate, not a wall — it does not block the happy path."""
+    monkeypatch.setattr(rls, "_run_preflight", lambda *a, **kw: True)
+
+    _live_argv(monkeypatch)
+    rls.main()  # must NOT raise SystemExit
+
+    assert _gate_seams["orchestrator_built"] is True, "passing preflight must allow the orchestrator to be built"
+
+
+def test_live_launch_runs_preflight_inline_without_preflight_flag(monkeypatch, _gate_seams):
+    """The gate must invoke _run_preflight on the live path EVEN WHEN
+    --preflight is absent. Pre-fix, _run_preflight was reachable only via
+    `if args.preflight:`; this asserts the inline call happens for a bare
+    --live launch."""
+    called = {"n": 0}
+
+    def _spy(*_a, **_kw):
+        called["n"] += 1
+        return True
+
+    monkeypatch.setattr(rls, "_run_preflight", _spy)
+
+    _live_argv(monkeypatch)  # note: no --preflight
+    rls.main()
+
+    assert called["n"] == 1, "preflight must run exactly once inline on the live path"
+
+
+def test_signal_only_launch_skips_the_inline_gate(monkeypatch, _gate_seams):
+    """Signal-only places no orders and the _check_* functions self-SKIP on it;
+    the inline gate must NOT run preflight for signal-only (it would be
+    redundant and would break the evidence-accumulation path that FEEDS C11)."""
+    monkeypatch.setattr(
+        rls,
+        "_run_preflight",
+        lambda *_a, **_kw: (_ for _ in ()).throw(AssertionError("signal-only must not run the inline launch gate")),
+    )
+    monkeypatch.setattr(sys, "argv", ["run_live_session", "--raw-baseline", "--instrument", "MNQ", "--signal-only"])
+    rls.main()  # must not raise — gate skipped for signal-only
+
+    assert _gate_seams["orchestrator_built"] is True

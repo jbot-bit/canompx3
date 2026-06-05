@@ -414,9 +414,19 @@ def _check_notifications(ctx: PreflightContext) -> CheckResult:
         status_suffix = " · ".join(f"{name}:{'PASS' if ok else 'FAIL'}" for name, ok in test_results.items())
         if ctx.components_all_pass:
             return CheckResult(True, f"OK ({status_suffix})")
-        # Probes are surfaced but non-blocking at preflight time; the live
-        # SessionOrchestrator re-runs `run_self_tests` at startup and that path
-        # is the authoritative gate.
+        # Order-routing launches (--demo / --live) FAIL-CLOSED on any probe
+        # failure: a degraded bracket builder or fill-poller means entries could
+        # land without crash protection or with untracked fills. The
+        # SessionOrchestrator records these probes as broker_status="degraded"
+        # but does NOT abort on bracket/fill-poller failure (only on broken
+        # notifications — run_self_tests sets _notifications_broken alone), so
+        # preflight is the authoritative launch gate for these. Now that the
+        # mandatory pre-launch gate makes _run_preflight binding for every
+        # order-routing launch (CLI + dashboard), a non-blocking WARNINGS here
+        # would let real orders route on a known-degraded broker path.
+        if not ctx.signal_only:
+            return CheckResult(False, f"FAILED ({status_suffix})")
+        # Signal-only places no orders; probes are advisory and surfaced only.
         return CheckResult(True, f"WARNINGS ({status_suffix})")
     except Exception as e:
         return CheckResult(False, f"FAILED: {e}")
@@ -1232,6 +1242,62 @@ def main() -> None:
             log.warning("LIVE MODE — auto-confirmed (dashboard launch)")
         signal_only = False
         demo = False
+
+    # MANDATORY pre-launch capital gate (hard, no skip flag).
+    #
+    # Every order-routing launch (--demo / --live, CLI *or* dashboard) MUST pass
+    # the canonical preflight chain before any side effect. Previously this chain
+    # ran ONLY under `if args.preflight:` (an exit-after-report path), so a direct
+    # `--live --auto-confirm` — the exact form the dashboard launches
+    # (bot_dashboard.py builds `--live --auto-confirm` with NO --preflight; its
+    # own preflight subprocess is an advisory pre-click UI check, not a gate on
+    # the launch process) — reached SessionOrchestrator with no C11 survival,
+    # C12 SR, live-readiness, project-pulse, repo-drift, or telemetry gate. The
+    # orchestrator's startup lifecycle read is fail-open and never refuses launch.
+    #
+    # signal-only is exempt: it places no orders and the _check_* functions
+    # self-SKIP on signal_only (they accumulate evidence). Delegates to the same
+    # canonical _run_preflight used by the --preflight block — no re-encoding.
+    if not signal_only:
+        if _is_multi_profile:
+            from trading_app.portfolio import build_profile_portfolio
+
+            _gate_ok = True
+            for _inst in args._profile_instruments:
+                _inst_portfolio = build_profile_portfolio(profile_id=args.profile, instrument=_inst)
+                if not _run_preflight(
+                    _inst,
+                    args.broker,
+                    demo,
+                    portfolio=_inst_portfolio,
+                    profile_id=args.profile,
+                    requested_account_id=args.account_id,
+                    signal_only=signal_only,
+                    requested_copies=args.copies,
+                ):
+                    _gate_ok = False
+            if not _gate_ok:
+                print(
+                    "ERROR: pre-launch preflight FAILED — order-routing launch blocked. "
+                    "Fix the failing check(s) above, then relaunch. (No skip flag by design.)"
+                )
+                sys.exit(1)
+        else:
+            if not _run_preflight(
+                args.instrument,
+                args.broker,
+                demo,
+                portfolio=raw_portfolio,
+                profile_id=args.profile,
+                requested_account_id=args.account_id,
+                signal_only=signal_only,
+                requested_copies=args.copies,
+            ):
+                print(
+                    "ERROR: pre-launch preflight FAILED — order-routing launch blocked. "
+                    "Fix the failing check(s) above, then relaunch. (No skip flag by design.)"
+                )
+                sys.exit(1)
 
     # Publish the canonical planned-launch surface BEFORE orchestrator init so
     # the dashboard can render the unambiguous "Next launch: …" banner. The
