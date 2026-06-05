@@ -599,8 +599,10 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     # max_contracts_mini/_micro values below are a BROKER / MARGIN / SANITY guard,
     # NOT a prop-style earnings ceiling. Personal-capital sizing is risk-first
     # (drawdown tolerance -> vol-targeting/Kelly -> broker margin -> liquidity), and
-    # NO prop-firm contract cap may bound self_funded earning capacity. Enforced by
-    # check_prop_caps_do_not_leak_into_self_funded in pipeline/check_drift.py.
+    # NO prop-firm contract cap may bound self_funded earning capacity. This marker
+    # pins that intent; the invariant is structurally enforced by
+    # check_prop_caps_do_not_leak_into_self_funded in pipeline/check_drift.py (the
+    # select_for_profile firm branch and the strict-DD resolver de-coupling).
     ("self_funded", 2_500): PropFirmAccount("self_funded", 2_500, 375, 0, 1, 125),
     ("self_funded", 5_000): PropFirmAccount("self_funded", 5_000, 750, 0, 2, 250),
     ("self_funded", 10_000): PropFirmAccount("self_funded", 10_000, 1_500, 0, 4, 500),

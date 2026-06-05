@@ -1,9 +1,17 @@
+---
+paths:
+  - "trading_app/prop_profiles.py"
+  - "trading_app/prop_portfolio.py"
+  - "trading_app/account_survival.py"
+  - "pipeline/check_drift.py"
+---
+
 # Self-Funded Sizing — Risk-First, Never Prop-Capped (HARD DOCTRINE)
 
-**Load-policy:** auto-injected when editing `trading_app/prop_profiles.py`,
-`trading_app/prop_portfolio.py`, `trading_app/account_survival.py`, or
-`pipeline/check_drift.py`. Read on demand when sizing or building books for any
-personal-capital (`self_funded`) account.
+**Load-policy:** auto-injected (via the `paths:` frontmatter above) when editing
+`trading_app/prop_profiles.py`, `trading_app/prop_portfolio.py`,
+`trading_app/account_survival.py`, or `pipeline/check_drift.py`. Read on demand
+when sizing or building books for any personal-capital (`self_funded`) account.
 
 **Authority:** operator-emphatic, 2026-05-31 — *"I don't want to cap my live
 personal capital earnings just because we started this on prop firms."* This is

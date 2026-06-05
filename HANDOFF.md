@@ -117,10 +117,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-05
-- **Commit:** bb4d1f26 — docs(plan): record worktree-fleet triage progress — 4 trees removed, content-equality method
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `docs/plans/active/2026-06/2026-06-05-worktree-fleet-cleanup-and-main-tree-reconcile.md`
+- **Commit:** f180ef38 — fix(drift): anchor self-funded margin-guard marker to ACCOUNT_TIERS dict
+- **Files changed:** 3 files
+  - `docs/superpowers/specs/2026-06-05-self-funded-marker-anchor-fix-design.md`
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift_self_funded_sizing.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
