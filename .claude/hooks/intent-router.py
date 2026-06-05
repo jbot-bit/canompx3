@@ -62,6 +62,14 @@ INTENT_RULES: list[tuple[str, str, int]] = [
     (r"\b(test a hypothesis|investigate (an )?edge|run research|new hypothesis)\b", "/research", 22),
     # Real-capital scrutiny / bias check / before deploy → /capital-review
     (r"\b(real[- ]?capital|bias check|before deploy|capital review|before going live)\b", "/capital-review", 23),
+    # Decision/deploy/portfolio/account-sizing candidate → /decision-governor
+    # (the 13-Q anti-tunnel checklist; route a candidate by decision class before
+    # the deep dive). Phrasing the operator uses for a decision, not a one-off fix.
+    # NB: the verb group is deliberately NARROW — bare "should we run/add" was
+    # dropped (it over-matched "should we run tests/backfill/CI" and "should we
+    # add error handling"; proven by evidence-auditor 2026-06-05). Each arm now
+    # requires a decision OBJECT (lane / account / portfolio / deploy / class).
+    (r"\b(should we deploy|decision (class|governor)|add (a |an |this )?(new |fourth |another |\w+ )?lane|which (decision )?class|portfolio (decision|add|reweight)|reweight (the )?(portfolio|book|lane)|account.sizing|size (the |this )?account|higher[- ]ev|what are we ignoring)\b", "/decision-governor", 52),
     # Review / check my work / before I commit → /code-review
     (r"\b(check my work|before I commit|code review this|review this (change|pr|commit))\b", "/code-review", 24),
     # Improve a skill → /skill-improve

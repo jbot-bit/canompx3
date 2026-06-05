@@ -48,15 +48,21 @@ The word "VERDICT:" MUST appear literally for Critical/High findings. Show full 
 
 ### Section A: Seven Sins (Weight: 40%)
 
-| Sin | What to Look For | Severity |
-|-----|------------------|----------|
-| **Look-ahead bias** | `double_break` as filter, future data in predictor, LAG() without `WHERE orb_minutes = 5` | CRITICAL |
-| **Data snooping** | Significance after grid search without BH FDR, cherry-picking by OOS peek | CRITICAL |
-| **Overfitting** | High Sharpe + N<30, passing only one year, too many params for sample | HIGH |
-| **Survivorship bias** | Ignoring dead instruments (MCL/SIL/M6E/MBT), ignoring purged E0/E3 | HIGH |
-| **Storytelling bias** | Narrative around noise, p>0.05 as "edge", "significant" without p-value | MEDIUM |
-| **Outlier distortion** | Single extreme day driving aggregates, no year-by-year breakdown | MEDIUM |
-| **Transaction cost illusion** | Missing COST_SPECS, ignoring spread+slippage+commission | HIGH |
+Each statistical sin is grounded in the **canonical literature extract** under
+`docs/institutional/literature/` (the citation source — fetch via
+`mcp__research-catalog__get_literature_excerpt`, never paraphrase from memory).
+The literature→sin mapping is the SAME canon `.claude/rules/institutional-rigor.md`
+§7 applies on the *edit* path; this section applies it on the *review* path.
+
+| Sin | What to Look For | Literature anchor | Severity |
+|-----|------------------|-------------------|----------|
+| **Look-ahead bias** | `double_break` as filter, future data in predictor, LAG() without `WHERE orb_minutes = 5` | `chan_2013_ch1_backtesting_lookahead.md` | CRITICAL |
+| **Data snooping** | Significance below the multiple-testing bound: **t < 3.79** at finance scale (Chordia 2018, α t-stat, FDP-StepM) — plain BH-FDR at conventional thresholds is NOT sufficient; only adaptive methods (FDR-BH / FDP-StepM) have power. With-theory floor **t ≥ 3.0** (Harvey-Liu-Zhu 2015). Cherry-picking by OOS peek. | `chordia_et_al_2018_two_million_strategies.md`, `harvey_liu_zhu_2015_cross_section.md`, `aronson_2007_ebta_data_snooping.md` | CRITICAL |
+| **Overfitting** | High Sharpe + N<30; **no Deflated Sharpe Ratio** computed (DSR corrects selection bias under multiple testing AND non-normal returns — Bailey-LdP 2014); **trial count exceeds MinBTL** for the sample (Bailey 2013 — prior 35k-combo methodology violated the bound ~600×; hard cap **300 trials**); passing only one year; too many params for sample | `bailey_lopez_de_prado_2014_deflated_sharpe.md`, `bailey_et_al_2013_pseudo_mathematics.md` | HIGH |
+| **Survivorship bias** | Ignoring dead instruments (MCL/SIL/M6E/MBT), ignoring purged E0/E3 | — | HIGH |
+| **Storytelling bias** | Narrative around noise; p>0.05 as "edge"; "significant" without p-value; **claiming a max-Sharpe strategy is real without the False Strategy Theorem haircut** (E[max Sharpe] under K trials grows with K even at zero true edge — LdP-Bailey 2018) | `lopez_de_prado_bailey_2018_false_strategy.md` | MEDIUM |
+| **Outlier distortion** | Single extreme day driving aggregates, no year-by-year breakdown | `harris_2002_trading_exchanges_microstructure.md` (Sharpe deflation) | MEDIUM |
+| **Transaction cost illusion** | Missing COST_SPECS, ignoring spread+slippage+commission | — | HIGH |
 
 ### Section B: Canonical Integrity (Weight: 20%)
 
@@ -71,8 +77,23 @@ The word "VERDICT:" MUST appear literally for Critical/High findings. Show full 
 
 ### Section C: Statistical Rigor (Weight: 25%)
 
+Thresholds below are LOCKED in `docs/institutional/pre_registered_criteria.md`
+(12 criteria, no post-hoc relaxation) and grounded in the extracts cited. Cite
+the extract, not training memory.
+
 - [ ] Every quantitative claim has a p-value from an actual test?
-- [ ] BH FDR applied after testing 50+ hypotheses?
+- [ ] **Multiple-testing correction adequate?** Adaptive method (FDR-BH or
+      FDP-StepM) — NOT a fixed Bonferroni/conventional-BH cutoff — when the
+      candidate is one of many (`chordia_et_al_2018`). Plain "BH after 50 tests"
+      is insufficient at finance scale.
+- [ ] **t-stat clears the finance bound?** `t ≥ 3.79` (no theory, Chordia 2018)
+      or `t ≥ 3.0` (with mechanism prior, Harvey-Liu-Zhu 2015). t≈1.96/2.0 is a
+      FAIL, not a pass (`harvey_liu_zhu_2015_cross_section.md`).
+- [ ] **Deflated Sharpe Ratio computed** for any Sharpe-based claim? DSR corrects
+      selection bias + non-normal returns (`bailey_lopez_de_prado_2014_deflated_sharpe.md`).
+      Raw Sharpe without DSR on a selected strategy = HIGH finding.
+- [ ] **Trial count within MinBTL** for the sample length? Brute-force > 300
+      trials violates the bound (`bailey_et_al_2013_pseudo_mathematics.md`).
 - [ ] Sample size labels correct? (<30 INVALID, 30-99 REGIME, 100+ CORE)
 - [ ] Year-by-year breakdown for any finding?
 - [ ] N computed correctly? (not inflated by bad JOINs)
@@ -107,6 +128,16 @@ The word "VERDICT:" MUST appear literally for Critical/High findings. Show full 
 - [ ] NO-GO registry (Blueprint SS5) — reimplementing dead path?
 - [ ] Flagged assumptions (SS10)?
 - [ ] ML is DEAD — flag any revival
+- [ ] **Mechanism grounded?** Does the edge map to a prior in
+      `docs/institutional/mechanism_priors.md` (R1 FILTER → R8 PORTFOLIO)? A
+      finding with no mechanism is a storytelling-sin candidate.
+- [ ] **ORB / breakout premise** cites the relevant extract?
+      `fitschen_2013_path_of_least_resistance.md` (core ORB premise),
+      `yordanov_2026_nq_orb_value_area_breakouts.md` / `howard_2026_value_area_breakouts_es.md`
+      (value-area breakouts), `topstep_2026_auction_market_theory_intro.md` /
+      `tolusic_2026_amt_inventory_dynamics.md` (auction-market structure).
+- [ ] **Sizing claims** grounded in Carver (`carver_2015_volatility_targeting_position_sizing.md`)
+      — not prop-cap-shaped (cf. `.claude/rules/self-funded-sizing-doctrine.md`).
 
 ### Section H: Improvements
 
@@ -152,6 +183,10 @@ Action items: [numbered list]
 
 - NEVER flag without line citation proof
 - NEVER override CLAUDE.md rules
+- Statistical findings (Sections A/C) cite the literature extract in
+  `docs/institutional/literature/`, fetched via `mcp__research-catalog__get_literature_excerpt`
+  — not training memory. A stat sin asserted without its anchor is itself an
+  ungrounded claim. This is the same canon as `.claude/rules/institutional-rigor.md` §7.
 - Check cross-file context before flagging (guard may exist in another file)
 - DuckDB replacement scans are NOT bugs
 - `fillna(-999.0)` is intentional domain sentinel

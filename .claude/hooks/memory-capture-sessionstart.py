@@ -39,6 +39,22 @@ _CUE_TEMPLATE = (
     "to JUDGE, not an instruction to write."
 )
 
+# Tier-1: git-PROVEN stale "not-merged" claims. Strong cue — fix the baton.
+_STALE_TEMPLATE = (
+    "STALE BATON (git-proven): {detail}. The named SHA(s) ARE on origin/main, "
+    "yet the baton claims unmerged/not-landed. Before relying on these files, "
+    "UPDATE them to reflect the integrated state (and their MEMORY.md index "
+    "line). This is a factual contradiction, not a judgement call."
+)
+
+# Tier-2: recent project resume-batons asserting live status. Advisory nudge.
+_LIVE_TEMPLATE = (
+    "LIVE PROJECT BATONS ({n}): {files}. These recent `type: project` batons "
+    "assert live status (NEXT/RESUME/OPEN/pending). Confirm each is still "
+    "current against git/DB before acting on it — finishing work includes "
+    "updating the baton that describes it. Advisory: confirm, do not assume stale."
+)
+
 
 def _counts_nonzero(counts: dict) -> bool:
     if not isinstance(counts, dict):
@@ -56,28 +72,64 @@ def _should_emit(crumb: dict | None) -> bool:
     return _counts_nonzero(crumb.get("counts", {}))
 
 
+def _staleness_context() -> str:
+    """Tier-1 + tier-2 baton-drift cues. Empty string if nothing to surface.
+
+    Independent of the capture breadcrumb — runs every SessionStart so a baton
+    that went stale (its work merged, or its live status drifted) is flagged
+    even on a clean start with no new-capture signal. Fail-open per caller.
+    """
+    parts: list[str] = []
+    try:
+        stale = mc.scan_stale_batons()
+    except BaseException:
+        stale = []
+    if stale:
+        detail = "; ".join(
+            f"{f['file']} claims {', '.join(f['shas'])} unmerged" for f in stale
+        )
+        parts.append(_STALE_TEMPLATE.format(detail=detail))
+    try:
+        live = mc.scan_live_project_batons()
+    except BaseException:
+        live = []
+    if live:
+        parts.append(_LIVE_TEMPLATE.format(n=len(live), files=", ".join(live)))
+    return "\n\n".join(parts)
+
+
 def main() -> None:
     try:
         json.load(sys.stdin)  # drain stdin; source/session_type unused for gating
     except (json.JSONDecodeError, ValueError):
         pass
 
-    crumb = mc.read_breadcrumb()
-    if not _should_emit(crumb):
-        sys.exit(0)  # silent — no stdout on a clean / already-consumed start
+    sections: list[str] = []
 
-    summary = mc.describe_signals(crumb["counts"])
+    # Capture cue (breadcrumb-gated, one-shot, consumed when emitted).
+    crumb = mc.read_breadcrumb()
+    if _should_emit(crumb):
+        sections.append(_CUE_TEMPLATE.format(summary=mc.describe_signals(crumb["counts"])))
+        mc.mark_breadcrumb_consumed()
+
+    # Baton-drift cues (run every start, independent of the breadcrumb).
+    drift = _staleness_context()
+    if drift:
+        sections.append(drift)
+
+    if not sections:
+        sys.exit(0)  # silent clean start
+
     print(
         json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "SessionStart",
-                    "additionalContext": _CUE_TEMPLATE.format(summary=summary),
+                    "additionalContext": "\n\n".join(sections),
                 }
             }
         )
     )
-    mc.mark_breadcrumb_consumed()
     sys.exit(0)
 
 

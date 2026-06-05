@@ -46,6 +46,7 @@ Use skills only after the route narrows what should be read.
 - Kill-verdict lookup / has X been ruled out / graveyard / NO-GO on X -> `/nogo` (single-call research-catalog filter; faster than `/pinecone-assistant` for verdict-only)
 - Test a hypothesis / research / investigate edge -> `/research` (and call `/nogo` FIRST so we don't re-litigate a buried verdict)
 - Real-capital scrutiny / bias check / before deploy -> `/capital-review`
+- Decision/deploy/portfolio/account-sizing candidate / "should we deploy X / add this lane / size this account / which class is this" -> `/decision-governor` (composes the 13-Q anti-tunnel checklist via `scripts/tools/decision_governor.py`; routes a candidate through its decision class before any deep dive — forces Q13 "what higher-EV item are we ignoring?")
 - Review / check my work / before I commit -> `/code-review`
 - Editing schema or canonical config -> full stage-gate
 - Improve a skill -> `/skill-improve`

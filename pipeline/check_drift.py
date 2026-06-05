@@ -11507,6 +11507,170 @@ def check_intent_router_routing_parity() -> list[str]:
     return violations
 
 
+def check_decision_governor_pointers_resolve() -> list[str]:
+    """Marker guard for the Research / Decision Governor.
+
+    The governor (``docs/governance/research_decision_governor.md`` + its fill-in
+    companion ``docs/audit/templates/decision_candidate_review.md``) is a
+    ``contract`` doc: a ROUTER and CHECKLIST that *composes* existing canonical
+    surfaces (C1-C13, the 14-gate live preflight, K-budget estimator, lane
+    allocator, account survival) and **re-encodes none of them**. The doc states
+    its own invariant: *"If this doc ever states a numeric threshold, that is a
+    bug — it must point to the surface that owns the number."*
+
+    This check is the fail-closed half of that invariant (the
+    ``scripts/tools/decision_governor.py`` composer is the advisory half). It
+    asserts, structurally:
+
+      (a) the governor doc, the template, and the composer script all EXIST —
+          none can be silently deleted while this check claims to enforce them;
+      (b) every canonical pointer the governor names RESOLVES on disk — a stale
+          pointer (e.g. the original ``lane_allocation.py`` typo for the real
+          ``lane_allocator.py``) means the router sends you to a file that
+          isn't there; and
+      (c) the ROUTING surface (doc secs. 3-4: the decision-class router table and
+          the question set) carries NO numeric-threshold LITERAL — a number
+          there is a re-encode of a canonical gate's floor. Criterion *names*
+          and criterion-by-number references ("Criteria 2,3,4,6,7,8,9",
+          "MinBTL", "Chordia t-floor") are EXPLICITLY allowed — they route to
+          the gate that owns the number. Sec. 5 (stale-assumption reconciliation)
+          is OUT OF SCOPE: it legitimately cites numbers *with* their canonical
+          source and a "re-run, never quote" caveat, which is correct usage.
+
+    @canonical-source: docs/governance/research_decision_governor.md,
+    docs/audit/templates/decision_candidate_review.md,
+    scripts/tools/decision_governor.py
+    """
+    violations: list[str] = []
+
+    doc = PROJECT_ROOT / "docs" / "governance" / "research_decision_governor.md"
+    template = PROJECT_ROOT / "docs" / "audit" / "templates" / "decision_candidate_review.md"
+    composer = PROJECT_ROOT / "scripts" / "tools" / "decision_governor.py"
+
+    # (a) existence — fail loud if any leg is gone.
+    for label, path in (
+        ("governor doc", doc),
+        ("template", template),
+        ("composer script", composer),
+    ):
+        if not path.exists():
+            violations.append(
+                f"  decision-governor {label} is MISSING ({path.relative_to(PROJECT_ROOT)}). "
+                "The governor is a 3-part contract (router doc + fill-in template + "
+                "read-only composer); none may be deleted while "
+                "check_decision_governor_pointers_resolve claims to enforce it."
+            )
+    if not doc.exists():
+        return violations  # can't validate pointers/thresholds without the doc
+
+    try:
+        doc_text = doc.read_text(encoding="utf-8")
+    except OSError as e:
+        return violations + [f"  cannot read research_decision_governor.md: {e}"]
+
+    # (b) every canonical pointer the doc names must resolve. Enumerate
+    # repo-relative paths the governor cites (code + docs + the runtime json).
+    cited_paths = set(
+        re.findall(
+            r"(?:trading_app|pipeline|scripts|docs)/[A-Za-z0-9_./-]+\.(?:py|md|json)",
+            doc_text,
+        )
+    )
+    for rel in sorted(cited_paths):
+        if not (PROJECT_ROOT / rel).exists():
+            violations.append(
+                f"  governor doc cites a canonical path that does NOT resolve: {rel!r}. "
+                "A router pointing at a missing file sends decisions to a dead surface. "
+                "Fix the pointer (or restore the file)."
+            )
+
+    # (c) the routing surface (secs. 3-4) must carry no numeric-threshold literal.
+    # Scope to the slice between '## 3.' and '## 5.' so sec. 5 reconciliation notes
+    # (which correctly cite numbers + source) are not flagged.
+    sec3 = doc_text.find("\n## 3.")
+    sec5 = doc_text.find("\n## 5.")
+    if sec3 != -1 and sec5 != -1 and sec5 > sec3:
+        routing = doc_text[sec3:sec5]
+        # Numeric-threshold literals a re-encode would introduce: comparator-vs-number
+        # (t >= 3.79, q < 0.05, N >= 100, WFE >= 0.50), dollar budgets, "x MLL"
+        # fractions. NOT criterion-by-number refs ("Criteria 2,3,4") — those carry
+        # no comparator/$/x and route to the owning gate.
+        threshold_patterns = [
+            r"[a-zA-Z]\s*[<>]=?\s*\d",  # t >= 3, q < 0.05, N >= 100
+            r"[<>]=?\s*\d+(?:\.\d+)?\s*(?:R\b|σ|%)",  # >= 0.40 R, > 5%
+            r"\$\s?\d",  # $1,800 budget
+            r"\d+(?:\.\d+)?\s*[×x]\s*MLL",  # 0.90 x MLL
+            r"\bq\s*<\s*0",  # q < 0.05 (BH-FDR floor)
+            # Comparator-less re-encode forms (evidence-auditor LOW blind-spot,
+            # 2026-06-05): a NAMED statistical floor written next to a number with
+            # no comparator ("t-stat 3.79", "threshold: 3.79", "DSR 0.95"). Keyed
+            # on the threshold KEYWORD + a digit so bare numbers ("R1-R8",
+            # "Criteria 2,3,4", "13-Q") never false-fire.
+            r"(?i:Sharpe|DSR|deflated sharpe)\s*[>=≥]*\s*\d",
+            r"(?i:t[- ]?stat|t[- ]?value|chordia t)\s*[>=≥]*\s*\d",
+            r"(?i:q[- ]?value|q[- ]?val|FDR)\s*[<≤=]*\s*\d",
+            r"(?i:WFE|walk[- ]forward)\s*[>=≥]*\s*\d",
+            r"(?i:threshold|floor|budget)\s*[:=]?\s*\d",
+        ]
+        for pat in threshold_patterns:
+            m = re.search(pat, routing)
+            if m:
+                # 1-based doc line number of the offending literal (sec3 is the
+                # offset of '\n## 3.' within doc_text, so its line = count to that
+                # offset; m.start() is relative to the routing slice).
+                line_no = doc_text[: sec3 + m.start()].count("\n") + 1
+                snippet = m.group(0)
+                violations.append(
+                    f"  governor doc secs. 3-4 (routing surface) contains a numeric-threshold "
+                    f"literal {snippet!r} at line {line_no} — the doc's own rule forbids this "
+                    "(a threshold must POINT to the gate that owns it, not be restated here). "
+                    "Replace with the criterion NAME or the canonical surface pointer. "
+                    "(Sec. 5 reconciliation notes are exempt; this guard scopes to secs. 3-4 only.)"
+                )
+                break  # one report is enough to action
+
+    # (d) DELEGATION INTEGRITY (added 2026-06-05 per evidence-auditor MEDIUM):
+    # the composer resolves Q13 live by delegating to a PRIVATE function,
+    # research_catalog_mcp_server._list_open_hypotheses. The composer's own
+    # except-clause fail-opens (correct for an advisory tool) — which means if
+    # that delegate is renamed/removed, Q13 silently goes dark with no runtime
+    # signal. This drift check is the fail-closed half: assert the composer's
+    # named delegate still resolves to a `def` in the MCP server (static source
+    # scan — no import, so the drift process never loads the FastMCP server).
+    if composer.exists():
+        try:
+            composer_text = composer.read_text(encoding="utf-8")
+        except OSError as e:
+            return violations + [f"  cannot read decision_governor.py: {e}"]
+        # The delegate name + its host module, as the composer actually writes them.
+        delegate = "_list_open_hypotheses"
+        host_module = "research_catalog_mcp_server"
+        if delegate in composer_text and host_module in composer_text:
+            host = PROJECT_ROOT / "scripts" / "tools" / f"{host_module}.py"
+            if not host.exists():
+                violations.append(
+                    f"  decision_governor.py delegates Q13 to {host_module}.{delegate} but "
+                    f"scripts/tools/{host_module}.py is MISSING. Q13's live open-hypothesis "
+                    "count would silently degrade to a NOTE (the composer fail-opens). "
+                    "Restore the module or update the composer's delegation target."
+                )
+            else:
+                try:
+                    host_text = host.read_text(encoding="utf-8")
+                except OSError as e:
+                    return violations + [f"  cannot read {host_module}.py: {e}"]
+                if f"def {delegate}(" not in host_text:
+                    violations.append(
+                        f"  decision_governor.py delegates Q13 to {host_module}.{delegate}, but "
+                        f"`def {delegate}(` no longer exists in scripts/tools/{host_module}.py. "
+                        "The delegate was renamed/removed; the composer would silently degrade "
+                        "Q13 to a NOTE (fail-open). Re-point the composer's delegation target "
+                        "(or restore the function name)."
+                    )
+
+    return violations
+
+
 def check_no_direct_requests_to_broker_endpoints(trading_app_dir: Path) -> list[str]:
     """Broker adapters MUST route HTTP through trading_app.live.http_client.BrokerHTTPClient.
 
@@ -15996,6 +16160,12 @@ CHECKS = [
         "intent-router.py routing table matches auto-skill-routing.md documented skills",
         check_intent_router_routing_parity,
         False,  # blocking — silent drift between hook + rule = unreachable routes
+        False,
+    ),
+    (
+        "decision-governor doc/template/composer exist, pointers resolve, routing surface threshold-free",
+        check_decision_governor_pointers_resolve,
+        False,  # blocking — a router with a dead pointer or a re-encoded threshold lies about its gates
         False,
     ),
     (

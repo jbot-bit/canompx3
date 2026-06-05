@@ -167,6 +167,182 @@ def _now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Baton staleness detector (4th check — SessionStart re-verifies falsifiable
+# "not-on-origin / unmerged" git claims in memory batons against live git).
+#
+# Logic contract (same "factual git state only" discipline as the rest of the
+# loop): fire ONLY on a git-PROVEN contradiction — a baton asserts a specific
+# SHA is NOT merged, yet `git merge-base --is-ancestor <sha> origin/main`
+# proves it IS reachable from origin/main. Never fires on prose alone, never on
+# a SHA that is genuinely still unmerged (false-negative is the safe failure;
+# a false-positive nag would erode trust, so the gate is strict). Fail-open.
+# See `.claude/rules/auto-memory-capture.md` § Baton staleness.
+# ---------------------------------------------------------------------------
+import re  # noqa: E402  (kept local-adjacent to its sole consumer)
+
+
+def _resolve_memory_dir() -> Path:
+    """Locate the persistent memory dir.
+
+    Canonical location is HOME-based: `~/.claude/projects/<slug>/memory`, where
+    <slug> is the project path with separators flattened to '-' (Claude Code's
+    own scheme, e.g. C--Users-joshd-canompx3). Derived from PROJECT_ROOT — NOT
+    hardcoded — so it follows the checkout. Falls back to the legacy repo-local
+    path, then to whichever exists. Pure path math; never raises.
+    """
+    try:
+        slug = str(PROJECT_ROOT).replace(":", "-").replace("\\", "-").replace("/", "-")
+        home_based = Path.home() / ".claude" / "projects" / slug / "memory"
+        repo_based = PROJECT_ROOT / ".claude" / "projects" / slug / "memory"
+        if home_based.is_dir():
+            return home_based
+        if repo_based.is_dir():
+            return repo_based
+        return home_based  # default target even if not yet created
+    except BaseException:  # pragma: no cover - fail-open
+        return PROJECT_ROOT / ".claude" / "projects" / "memory"
+
+
+MEMORY_DIR = _resolve_memory_dir()
+
+# Cheap bounds so SessionStart stays fast (one git call per unique SHA).
+_BATON_MAX_FILES = 60
+_BATON_MAX_SHA_CHECKS = 8
+
+# A 7-40 hex SHA token (git's abbreviated..full range).
+_SHA_RE = re.compile(r"\b([0-9a-f]{7,40})\b")
+# Claim that an object is NOT integrated. The proximity of one of these phrases
+# to a SHA (same line) is the anti-false-positive guard — abstract prose about
+# "unmerged" mechanics with no adjacent SHA never matches.
+_NOT_MERGED_RE = re.compile(
+    r"not\s+(?:on|merged|integrated)|unmerged|local[\s-]?only|"
+    r"verify\s+it\s+landed|NOT\s+on\s+origin",
+    re.IGNORECASE,
+)
+
+
+def _sha_on_origin_main(sha: str) -> bool:
+    """True iff `sha` is an ancestor of origin/main (deterministically merged).
+
+    Returns False on ANY uncertainty (unknown rev, GC'd object, ambiguous
+    abbrev, no git, timeout) — never claims merged when it cannot prove it.
+    """
+    rc, _ = _git(["merge-base", "--is-ancestor", sha, "origin/main"])
+    return rc == 0
+
+
+def _stale_claims_in_text(text: str) -> list[str]:
+    """SHAs in `text` that are claimed not-merged on a line yet ARE on origin/main.
+
+    Line-scoped proximity: a NOT-merged phrase and the SHA must co-occur on the
+    same line. Bounded to _BATON_MAX_SHA_CHECKS git calls per file.
+    """
+    confirmed: list[str] = []
+    checks = 0
+    seen: set[str] = set()
+    for line in text.splitlines():
+        if not _NOT_MERGED_RE.search(line):
+            continue
+        for sha in _SHA_RE.findall(line):
+            if sha in seen:
+                continue
+            seen.add(sha)
+            if checks >= _BATON_MAX_SHA_CHECKS:
+                return confirmed
+            checks += 1
+            if _sha_on_origin_main(sha):
+                confirmed.append(sha)
+    return confirmed
+
+
+def scan_stale_batons() -> list[dict]:
+    """Scan memory batons for git-proven-stale 'not-merged' claims.
+
+    Returns a list of {file, shas} for each baton whose text claims a SHA is
+    unmerged that git proves is on origin/main. Always returns a list; never
+    raises (fail-open -> empty list on any error).
+    """
+    try:
+        if not MEMORY_DIR.is_dir():
+            return []
+        findings: list[dict] = []
+        files = sorted(MEMORY_DIR.glob("*.md"))[:_BATON_MAX_FILES]
+        for path in files:
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            # Cheap pre-filter: skip files with no not-merged phrasing at all.
+            if not _NOT_MERGED_RE.search(text):
+                continue
+            stale = _stale_claims_in_text(text)
+            if stale:
+                findings.append({"file": path.name, "shas": stale})
+        return findings
+    except BaseException:  # pragma: no cover - fail-open
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Tier-2 (advisory): recent `type: project` resume-batons that assert LIVE
+# status. NOT git-provable, so this is a JUDGE nudge ("confirm still current"),
+# never a staleness assertion — same contract as the capture cue. Scoped hard
+# on three independent axes (type:project + recent mtime + status language) so
+# it surfaces a handful of live batons, not the whole 500-file corpus.
+# ---------------------------------------------------------------------------
+_TIER2_MAX_AGE_HOURS = 72
+_TIER2_MAX_FILES = 8
+_TYPE_PROJECT_RE = re.compile(r"^\s*type:\s*project\s*$", re.MULTILINE)
+# Live-status language a resume-baton uses about work that can complete/drift.
+_LIVE_STATUS_RE = re.compile(
+    r"NEXT\s*=|\bRESUME\b|\bOPEN\b|verify\s+it\s+landed|actively\s+working|"
+    r"in[\s-]?progress|unmerged|NOT\s+(?:on|merged|integrated)|pending\b",
+    re.IGNORECASE,
+)
+
+
+def _description_line(text: str) -> str:
+    for line in text.splitlines():
+        if line.startswith("description:"):
+            return line
+    return ""
+
+
+def scan_live_project_batons() -> list[str]:
+    """Recent `type: project` batons whose description asserts live status.
+
+    Advisory only: these are the resume-batons most likely to have drifted since
+    they were written. Returns up to _TIER2_MAX_FILES filenames; never raises.
+    """
+    try:
+        if not MEMORY_DIR.is_dir():
+            return []
+        now = datetime.now(UTC).timestamp()
+        hits: list[str] = []
+        for path in sorted(MEMORY_DIR.glob("*.md")):
+            try:
+                age_h = (now - path.stat().st_mtime) / 3600.0
+            except OSError:
+                continue
+            if age_h > _TIER2_MAX_AGE_HOURS:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            if not _TYPE_PROJECT_RE.search(text):
+                continue
+            if not _LIVE_STATUS_RE.search(_description_line(text)):
+                continue
+            hits.append(path.name)
+            if len(hits) >= _TIER2_MAX_FILES:
+                break
+        return hits
+    except BaseException:  # pragma: no cover - fail-open
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Breadcrumb I/O (SessionEnd writes, SessionStart consumes)
 # ---------------------------------------------------------------------------
 def write_breadcrumb(session_id: str, sig: dict) -> None:
