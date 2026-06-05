@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import random
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
@@ -36,6 +37,7 @@ from trading_app.derived_state import (
     get_git_head,
     validate_state_envelope,
 )
+from trading_app.portfolio import build_profile_portfolio
 from trading_app.prop_firm_policies import get_payout_policy
 from trading_app.prop_profiles import (
     AccountProfile,
@@ -47,6 +49,8 @@ from trading_app.prop_profiles import (
 )
 from trading_app.strategy_fitness import _load_strategy_outcomes
 from trading_app.topstep_scaling_plan import lots_for_position, max_lots_for_xfa
+
+log = logging.getLogger(__name__)
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -218,10 +222,23 @@ def _build_profile_fingerprint(profile) -> str:
 
 
 def _criterion11_code_paths() -> list[Path]:
+    """Files whose content the cached Criterion 11 PASS depends on.
+
+    Capital review D (2026-06-06): the fingerprint previously covered only
+    account_survival.py + derived_state.py, so a change to live ORB-cap
+    enforcement, position sizing, lane registry, or routing could leave an
+    existing C11 PASS valid even though the real live risk math had drifted.
+    Include every live-risk execution dependency so a change to any of them
+    invalidates the cached PASS (fail-closed staleness detection).
+    """
     root = Path(__file__).resolve().parents[1]
     return [
         Path(__file__).resolve(),
         root / "trading_app" / "derived_state.py",
+        root / "trading_app" / "prop_profiles.py",
+        root / "trading_app" / "portfolio.py",
+        root / "trading_app" / "execution_engine.py",
+        root / "trading_app" / "live" / "session_orchestrator.py",
     ]
 
 
@@ -816,6 +833,42 @@ def _max_observed_rolling_drawdown(scenarios: list[DailyScenario], *, horizon_da
     return round(max_dd, 2)
 
 
+def _assert_single_micro_sizing(profile_id: str) -> tuple[bool, str]:
+    """D-3 sizing-parity guard for Criterion 11 (capital review C, 2026-06-06).
+
+    The C11 survival model hardcodes 1 micro contract per lane
+    (``_build_rules`` -> ``contracts_per_trade_micro=1``; ``_load_lane_trade_paths``
+    -> ``contracts_per_trade = 1``). The LIVE execution engine sizes contracts
+    from equity/risk/volatility and clamps to ``PortfolioStrategy.max_contracts``.
+    Today every lane is built with ``max_contracts == 1`` so the two agree, but
+    the instant the clamp is lifted the survival proof silently understates
+    drawdown (a 2-contract lane ~doubles realised DD against an unchanged budget).
+
+    This guard binds the gate to the live sizing intent: build the same profile
+    portfolio the live path uses and require every strategy to size exactly one
+    micro. Returns ``(ok, message)``; ``ok=False`` must fail the C11 gate closed.
+    Any builder error also fails closed (we cannot prove parity).
+    """
+    try:
+        portfolio = build_profile_portfolio(profile_id=profile_id)
+    except Exception as e:  # fail closed — cannot prove sizing parity
+        return (False, f"sizing-parity unprovable: build_profile_portfolio failed: {e}")
+
+    offenders = [
+        f"{s.strategy_id}(max_contracts={s.max_contracts})"
+        for s in portfolio.strategies
+        if getattr(s, "max_contracts", 1) != 1
+    ]
+    if offenders:
+        return (
+            False,
+            "D-3 sizing parity VIOLATED: C11 models 1 micro/lane but live "
+            f"max_contracts > 1 for {', '.join(offenders)}. Scale the survival DD "
+            "math or keep max_contracts == 1 before passing C11.",
+        )
+    return (True, f"sizing parity OK ({len(portfolio.strategies)} lanes @ 1 micro)")
+
+
 def evaluate_profile_survival(
     profile_id: str | None = None,
     *,
@@ -847,7 +900,13 @@ def evaluate_profile_survival(
         len(historical_daily_loss_breach_days) == 0
         and historical_max_observed_90d_dd_dollars <= effective_dd_budget_dollars
     )
-    gate_pass = operational_gate_pass and strict_account_gate_pass
+    # D-3 sizing-parity guard (capital review C): the survival DD math models
+    # 1 micro/lane; if the live portfolio would size any lane above 1 micro the
+    # proof is invalid. Fail the gate closed rather than pass a stale DD figure.
+    sizing_parity_ok, sizing_parity_msg = _assert_single_micro_sizing(resolved_profile_id)
+    if not sizing_parity_ok:
+        log.warning("Criterion 11 sizing-parity guard: %s", sizing_parity_msg)
+    gate_pass = operational_gate_pass and strict_account_gate_pass and sizing_parity_ok
 
     summary = SurvivalSummary(
         profile_id=resolved_profile_id,

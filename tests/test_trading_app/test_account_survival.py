@@ -867,3 +867,134 @@ def test_account_survival_no_write_state_cli_fails_operational_gate_and_reports_
     assert "Prop-account path safety=FAIL" in out
     assert "Final deployability gate=FAIL" in out
     assert "Historical daily-loss breach days (1): 2025-01-03" in out
+
+
+# ── Capital fix D — Criterion 11 code fingerprint must cover live-risk paths ──
+# A cached C11 PASS must invalidate when the live ORB-cap / sizing / routing code
+# changes, not just account_survival.py + derived_state.py.
+
+
+def test_criterion11_fingerprint_covers_live_risk_execution_paths():
+    from trading_app.account_survival import _criterion11_code_paths
+
+    names = {p.name for p in _criterion11_code_paths()}
+    # Original two must remain.
+    assert "account_survival.py" in names
+    assert "derived_state.py" in names
+    # Live-risk execution dependencies that can drift the real DD/cap/sizing.
+    for required in (
+        "prop_profiles.py",
+        "portfolio.py",
+        "execution_engine.py",
+        "session_orchestrator.py",
+    ):
+        assert required in names, (
+            f"C11 code fingerprint must include {required} so a change to live "
+            f"risk behaviour invalidates a cached PASS; got {sorted(names)}"
+        )
+
+
+def test_criterion11_fingerprint_paths_all_exist():
+    from trading_app.account_survival import _criterion11_code_paths
+
+    for p in _criterion11_code_paths():
+        assert p.exists(), f"fingerprint path does not exist: {p}"
+
+
+# ── Capital fix C — D-3 sizing parity: C11 DD models 1 micro; live sizes from ──
+# equity clamped to max_contracts. C11 must FAIL CLOSED if the live portfolio
+# for the profile would size any lane above 1 micro (the 1-micro DD proof would
+# otherwise silently understate drawdown).
+
+
+def test_single_micro_sizing_ok_when_all_strategies_one_contract(monkeypatch):
+    from types import SimpleNamespace
+
+    from trading_app import account_survival as asv
+
+    fake_portfolio = SimpleNamespace(
+        strategies=[SimpleNamespace(strategy_id="A", max_contracts=1),
+                    SimpleNamespace(strategy_id="B", max_contracts=1)]
+    )
+    monkeypatch.setattr(asv, "build_profile_portfolio", lambda **_kw: fake_portfolio)
+    ok, msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
+    assert ok is True
+    assert "1" in msg
+
+
+def test_single_micro_sizing_fails_closed_when_a_lane_exceeds_one(monkeypatch):
+    from types import SimpleNamespace
+
+    from trading_app import account_survival as asv
+
+    fake_portfolio = SimpleNamespace(
+        strategies=[SimpleNamespace(strategy_id="A", max_contracts=1),
+                    SimpleNamespace(strategy_id="B", max_contracts=2)]
+    )
+    monkeypatch.setattr(asv, "build_profile_portfolio", lambda **_kw: fake_portfolio)
+    ok, msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
+    assert ok is False
+    assert "max_contracts" in msg
+    assert "B" in msg
+
+
+def test_single_micro_sizing_fails_closed_on_builder_error(monkeypatch):
+    from trading_app import account_survival as asv
+
+    def boom(**_kw):
+        raise RuntimeError("cannot build portfolio")
+
+    monkeypatch.setattr(asv, "build_profile_portfolio", boom)
+    ok, _msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
+    assert ok is False
+
+
+def test_evaluate_profile_survival_gate_fails_closed_on_sizing_parity_violation(monkeypatch):
+    """End-to-end: a clean-passing profile is forced FAIL by the D-3 parity guard.
+
+    Also guards against a regression where the gate branch referenced an
+    undefined ``log`` (NameError) — this exercises that exact code path.
+    """
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs",
+        lambda *_a, **_k: _canonical_inputs(),
+    )
+
+    def fake_load(_profile_id, *, as_of_date, db_path=None):
+        scenarios = [
+            DailyScenario(
+                trading_day="2025-01-02",
+                total_pnl_dollars=100.0,
+                positive_pnl_dollars=100.0,
+                active_lane_count=1,
+            ),
+        ]
+        metadata = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "source_start": "2025-01-02",
+            "source_end": str(as_of_date),
+            "source_days": len(scenarios),
+            "lane_ids": ["MNQ_TEST"],
+            "instruments": ["MNQ"],
+        }
+        return scenarios, metadata
+
+    monkeypatch.setattr("trading_app.account_survival._load_profile_daily_scenarios", fake_load)
+    # Force the parity guard to report a violation (a lane sizes >1 micro).
+    monkeypatch.setattr(
+        "trading_app.account_survival._assert_single_micro_sizing",
+        lambda _pid: (False, "D-3 sizing parity VIOLATED: test"),
+    )
+
+    summary = evaluate_profile_survival(
+        "topstep_50k_mnq_auto",
+        as_of_date=date(2025, 12, 31),
+        horizon_days=90,
+        n_paths=16,
+        seed=0,
+        write_state=False,
+    )
+
+    assert summary.gate_pass is False, (
+        "C11 gate must fail closed when D-3 sizing parity is violated"
+    )
