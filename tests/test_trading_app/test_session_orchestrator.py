@@ -3825,6 +3825,22 @@ class FakeNonSequentialIdBracketRouter(FakeBracketRouter):
         raise RuntimeError("simulated transient verify failure (non-sequential broker)")
 
 
+class FakeMissingLegBracketRouter(FakeBracketRouter):
+    """Router whose entry fills but whose SL leg never materialises.
+
+    ``verify_bracket_legs`` returns ``(None, tp_id)`` — the broker accepted
+    the entry and created a take-profit, but the protective stop is absent.
+    This drives the missing-leg ``else`` branch (NOT the exception branch):
+    the position is live and genuinely unprotected, so the orchestrator MUST
+    treat it as a naked position (kill switch + emergency flatten), not merely
+    store the partial TP id and continue.
+    """
+
+    def verify_bracket_legs(self, order_id: int, contract_symbol: str):
+        self.verify_bracket_legs_call_count += 1
+        return (None, order_id + 2)
+
+
 class FakeAtomicBracketRouter(FakeBracketRouter):
     """Router that simulates Rithmic/Tradovate-style native atomic brackets.
 
@@ -4133,7 +4149,8 @@ class TestBracketOrders:
         assert naked_alarms == [], f"Sequential-ID broker must not raise NAKED POSITION RISK; got: {naked_alarms}"
 
     async def test_bracket_fallback_blocked_for_non_sequential_id_broker(self):
-        """Verify exception + non-sequential broker -> NO fallback, CRITICAL alert.
+        """Verify exception + non-sequential broker -> NO fallback, CRITICAL alert,
+        and (capital fix B) emergency flatten of the now-naked position.
 
         Per the adversarial-audit fix on commit 58abc30a: when
         ``verify_bracket_legs`` raises and the broker is NOT a sequential-ID
@@ -4141,29 +4158,117 @@ class TestBracketOrders:
         guessed IDs (they cannot cancel real orders on exit) and MUST emit
         a NAKED POSITION RISK notification.
 
-        Before the fix, the orchestrator silently stored ``[entry+1, entry+2]``
-        on every broker — including Tradovate, whose IDs are API-assigned
-        and not derivable from the entry.
+        Capital fix B then requires the orchestrator to ACT on that naked
+        position: fire the kill switch and emergency-flatten it. After the
+        flatten the position is closed, so it no longer appears in
+        ``_positions`` and ``brackets_submitted`` is NOT incremented.
         """
         router = FakeNonSequentialIdBracketRouter(fill_price=2351.0)
         c = FakeBrokerComponents()
         c.router = router
         orch = build_orchestrator(c)
         orch.order_router = router
+        orch.signal_only = False
 
         notifications: list[str] = []
         orch._notify = notifications.append
 
         await orch._handle_event(_entry_event(2350.5))
 
-        record = orch._positions.get(STRATEGY_ID)
-        assert record is not None
-        assert record.bracket_order_ids == [], (
-            f"Non-sequential broker MUST NOT receive guessed bracket IDs; got {record.bracket_order_ids}"
-        )
         assert router.verify_bracket_legs_call_count == 1
         naked_alarms = [n for n in notifications if "NAKED POSITION RISK" in n]
         assert len(naked_alarms) == 1, f"Exactly one NAKED POSITION RISK notification expected; got: {naked_alarms}"
+        # Capital fix B: the naked position is acted on, not left running.
+        assert orch._kill_switch_fired is True
+        assert orch._stats.brackets_submitted == 0, (
+            "A naked (un-fallback-able) bracket must NOT be counted as submitted"
+        )
+
+    async def test_naked_position_fires_kill_switch_and_flatten_on_failed_verify(self):
+        """Capital fix B: a confirmed-naked position must be ACTED ON, not just alerted.
+
+        Exception branch + non-sequential broker = the orchestrator cannot
+        derive the protective leg IDs and the entry is live. Before the fix it
+        logged/notified NAKED POSITION RISK and then incremented
+        ``brackets_submitted`` as if a bracket were placed, leaving a real
+        unprotected position running. The fix must:
+          1. fire the kill switch (no further entries), and
+          2. emergency-flatten the just-opened position, and
+          3. NOT count it as a submitted bracket.
+        """
+        router = FakeNonSequentialIdBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        orch.signal_only = False
+
+        notifications: list[str] = []
+        orch._notify = notifications.append
+        flatten_calls: list[int] = []
+        orig_flatten = orch._emergency_flatten
+
+        async def spy_flatten():
+            flatten_calls.append(1)
+            return await orig_flatten()
+
+        orch._emergency_flatten = spy_flatten
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        assert orch._kill_switch_fired is True, (
+            "Confirmed-naked position must fire the kill switch"
+        )
+        assert flatten_calls, (
+            "Confirmed-naked position must trigger emergency flatten"
+        )
+        assert orch._stats.brackets_submitted == 0, (
+            "A failed/naked bracket must NOT be counted as submitted; "
+            f"got brackets_submitted={orch._stats.brackets_submitted}"
+        )
+        assert orch._stats.brackets_failed == 1, (
+            "A naked bracket must be counted as failed for honest telemetry; "
+            f"got brackets_failed={orch._stats.brackets_failed}"
+        )
+
+    async def test_naked_position_fires_kill_switch_and_flatten_on_missing_sl(self):
+        """Capital fix B: a verified-missing STOP leg is a naked position too.
+
+        ``verify_bracket_legs`` returns ``(None, tp_id)`` — entry filled, TP
+        exists, protective STOP absent. Before the fix the orchestrator stored
+        the partial TP id and continued. The fix must treat the missing-stop
+        case as naked: fire kill switch + emergency flatten.
+        """
+        router = FakeMissingLegBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        orch.signal_only = False
+
+        notifications: list[str] = []
+        orch._notify = notifications.append
+        flatten_calls: list[int] = []
+        orig_flatten = orch._emergency_flatten
+
+        async def spy_flatten():
+            flatten_calls.append(1)
+            return await orig_flatten()
+
+        orch._emergency_flatten = spy_flatten
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        assert orch._kill_switch_fired is True, (
+            "Missing-stop position must fire the kill switch"
+        )
+        assert flatten_calls, (
+            "Missing-stop position must trigger emergency flatten"
+        )
+        assert orch._stats.brackets_submitted == 0, (
+            "A missing-stop bracket must NOT be counted as submitted; "
+            f"got brackets_submitted={orch._stats.brackets_submitted}"
+        )
 
     async def test_bracket_verify_skipped_for_atomic_native_broker(self):
         """REGRESSION GUARD for the has_queryable_bracket_legs() skip path.

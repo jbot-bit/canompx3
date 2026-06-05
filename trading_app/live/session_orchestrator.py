@@ -2763,6 +2763,7 @@ class SessionOrchestrator:
             # non-native brackets get submitted separately post-fill.
             if _bracket_merged:
                 record = self._positions.get(event.strategy_id)
+                naked_position = False
                 if record is not None and order_id and self.order_router.has_queryable_bracket_legs():
                     # Verify bracket legs were actually created at the broker.
                     # ProjectX creates bracket legs as separate orders with IDs entry_id+1 (SL)
@@ -2790,8 +2791,12 @@ class SessionOrchestrator:
                             )
                             log.critical(msg)
                             self._notify(msg)
-                            # Store what we have — partial protection is better than none
+                            # Store what we have so the surviving leg can be
+                            # cancelled during the emergency flatten below.
                             record.bracket_order_ids = [x for x in [sl_id, tp_id] if x]
+                            # A missing protective STOP means the live position
+                            # is genuinely unprotected. Do not just alert — act.
+                            naked_position = True
                     except Exception as e:
                         log.error("Bracket verification failed for %s: %s", event.strategy_id, e)
                         # The entry+1/entry+2 sequential-ID fallback is a ProjectX-specific
@@ -2818,7 +2823,28 @@ class SessionOrchestrator:
                                 f"{event.strategy_id} and broker does not support "
                                 f"sequential-ID fallback"
                             )
-                self._stats.brackets_submitted += 1
+                            # No usable protective legs and the entry is live.
+                            naked_position = True
+                if naked_position:
+                    # A live position with no verified protective stop can
+                    # run unbounded past the intended risk. Alerting is not
+                    # enough: fire the kill switch (block new entries) and
+                    # emergency-flatten the exposed position now.
+                    log.critical(
+                        "NAKED POSITION: %s is live without a verified "
+                        "protective stop — firing kill switch and "
+                        "emergency-flattening.",
+                        event.strategy_id,
+                    )
+                    self._notify(
+                        f"NAKED POSITION: emergency-flattening {event.strategy_id} "
+                        f"(no verified protective stop after entry fill)"
+                    )
+                    self._fire_kill_switch()
+                    await self._emergency_flatten()
+                    self._stats.brackets_failed += 1
+                else:
+                    self._stats.brackets_submitted += 1
             else:
                 actual_entry = fill_price if fill_price is not None else event.price
                 await self._submit_bracket(event, strategy, actual_entry)

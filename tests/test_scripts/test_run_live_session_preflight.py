@@ -52,7 +52,9 @@ def all_pass_components():
     """Mock broker components for the auth + contracts + notifications path."""
     auth = SimpleNamespace(get_token=lambda: "tk_abcdef1234567890")
     contracts_cls = lambda **_kw: SimpleNamespace(  # noqa: E731
-        resolve_front_month=lambda _instrument: "MNQU6"
+        resolve_front_month=lambda _instrument: "MNQU6",
+        # Single unambiguous account → _check_account_binding passes.
+        resolve_all_account_ids=lambda: [(21944866, "TS-50K-MNQ")],
     )
     return {"auth": auth, "contracts_class": contracts_cls}
 
@@ -391,6 +393,7 @@ def test_preflight_checks_is_an_ordered_list():
         "_check_telemetry_maturity",
         "_check_live_readiness_report",
         "_check_project_pulse_for_live",
+        "_check_account_binding",
         "_check_copy_trading_accounts",
         "_check_shadow_copy_loss_protection",
     ]
@@ -582,6 +585,87 @@ def test_copy_trading_check_fails_when_auth_failed():
         pp.ACCOUNT_PROFILES = original  # type: ignore[misc]
     assert result.passed is False
     assert "auth failed" in result.message
+
+
+# ── Capital fix A — live account-binding guard ───────────────────────────────
+# resolve_account_id() returns accounts[0]; a profile-backed LIVE order-routing
+# session with multiple broker accounts and no explicit --account-id would
+# silently route to whichever account the broker lists first (could be a 100K
+# XFA or an eval combine), voiding the profile-bound survival proof.
+
+
+def test_account_binding_skipped_when_signal_only():
+    """Signal-only places no orders → no account binding required."""
+    ctx = _make_copy_trading_ctx(profile_id="p", requested_account_id=None)
+    ctx.signal_only = True
+    result = rls._check_account_binding(ctx)
+    assert result.passed is True
+    assert "SKIPPED" in result.message
+
+
+def test_account_binding_skipped_when_no_profile():
+    """Raw-baseline / no-profile sessions are out of scope for this guard."""
+    ctx = _make_copy_trading_ctx(profile_id=None, requested_account_id=None)
+    result = rls._check_account_binding(ctx)
+    assert result.passed is True
+    assert "SKIPPED" in result.message
+
+
+def test_account_binding_ok_single_broker_account():
+    """Exactly one active account → accounts[0] is unambiguous → OK."""
+    ctx = _make_copy_trading_ctx(
+        profile_id="p",
+        requested_account_id=None,
+        all_accounts=[(21944866, "TS-50K-MNQ")],
+    )
+    ctx.demo = False
+    result = rls._check_account_binding(ctx)
+    assert result.passed is True
+    assert "OK" in result.message
+
+
+def test_account_binding_ok_when_explicit_account_id_valid():
+    """Explicit --account-id present and valid → bound → OK."""
+    ctx = _make_copy_trading_ctx(
+        profile_id="p",
+        requested_account_id=21944867,
+        all_accounts=[(21944866, "TS-50K-MNQ"), (21944867, "TS-100K-XFA")],
+    )
+    ctx.demo = False
+    result = rls._check_account_binding(ctx)
+    assert result.passed is True
+    assert "OK" in result.message
+
+
+def test_account_binding_fails_live_multiple_accounts_no_binding():
+    """THE capital hole: LIVE + multiple accounts + no --account-id → FAIL.
+
+    Without an explicit binding the router would default to accounts[0], which
+    may not be the profile-gated account. Preflight must fail closed.
+    """
+    ctx = _make_copy_trading_ctx(
+        profile_id="p",
+        requested_account_id=None,
+        all_accounts=[(21944866, "TS-50K-MNQ"), (21944867, "TS-100K-XFA")],
+    )
+    ctx.demo = False
+    result = rls._check_account_binding(ctx)
+    assert result.passed is False
+    assert "FAILED" in result.message
+    assert "--account-id" in result.message
+
+
+def test_account_binding_fails_when_requested_account_id_unknown():
+    """Explicit --account-id that the broker does not expose → FAIL closed."""
+    ctx = _make_copy_trading_ctx(
+        profile_id="p",
+        requested_account_id=999999,
+        all_accounts=[(21944866, "TS-50K-MNQ"), (21944867, "TS-100K-XFA")],
+    )
+    ctx.demo = False
+    result = rls._check_account_binding(ctx)
+    assert result.passed is False
+    assert "FAILED" in result.message
 
 
 def test_shadow_copy_loss_protection_blocks_live_multi_copy(monkeypatch):

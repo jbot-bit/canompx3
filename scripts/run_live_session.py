@@ -781,6 +781,74 @@ def _check_project_pulse_for_live(ctx: PreflightContext) -> CheckResult:
     return CheckResult(True, "OK (project_pulse no live blockers)")
 
 
+def _check_account_binding(ctx: PreflightContext) -> CheckResult:
+    """Live order-routing must bind to an explicit broker account.
+
+    Capital review A (2026-06-06): ContractResolver.resolve_account_id() returns
+    ``accounts[0]`` from /api/Account/search. A profile-backed LIVE session with
+    multiple active broker accounts and no explicit ``--account-id`` would route
+    orders to whichever account the broker lists first — possibly a different
+    account (e.g. 100K XFA or an eval combine) than the one the Criterion 11
+    survival proof was computed for. That silently voids the profile-bound
+    capital guard.
+
+    Rule (fail-closed):
+      * signal-only / no-profile        → SKIPPED (no order routing).
+      * exactly one active account       → OK (accounts[0] is unambiguous).
+      * explicit --account-id present    → OK iff it exists at the broker
+                                           (delegated to the same selection
+                                           helper used at live-start).
+      * LIVE + >1 account + no binding   → FAILED (would default to accounts[0]).
+
+    Demo is lenient (paper account, no real capital): a missing binding is a
+    WARN-equivalent PASS so demo dry-runs are not blocked.
+    """
+    if ctx.signal_only:
+        return CheckResult(True, "SKIPPED (signal-only — no order routing)")
+    if ctx.profile_id is None:
+        return CheckResult(True, "SKIPPED (no profile — raw-baseline path)")
+    if ctx.components is None:
+        return CheckResult(False, "FAILED: auth failed (cannot verify account binding)")
+    try:
+        contracts_cls = ctx.components["contracts_class"]
+        contracts = contracts_cls(auth=ctx.components["auth"], demo=ctx.demo)
+        all_accounts = contracts.resolve_all_account_ids()
+        n = len(all_accounts)
+        if n == 0:
+            return CheckResult(False, "FAILED: no active broker accounts discovered")
+
+        requested = ctx.requested_account_id
+        if requested is not None and requested != 0:
+            # Reuse the exact live-start validation: hard-fails if unknown.
+            _select_primary_and_shadow_accounts(
+                all_accounts=all_accounts,
+                n_copies=1,
+                requested_account_id=requested,
+            )
+            return CheckResult(True, f"OK (bound to --account-id {requested})")
+
+        if n == 1:
+            only_id, only_name = all_accounts[0]
+            return CheckResult(True, f"OK (single broker account {only_name} id={only_id})")
+
+        # >1 account and no explicit binding.
+        if ctx.demo:
+            return CheckResult(
+                True,
+                f"WARN: {n} accounts and no --account-id; demo routes to first. "
+                "Live requires --account-id.",
+            )
+        ids = [aid for aid, _ in all_accounts]
+        return CheckResult(
+            False,
+            f"FAILED: live profile-backed routing with {n} broker accounts {ids} "
+            "and no --account-id would default to accounts[0] (possibly the WRONG "
+            "account). Pass --account-id to bind the profile to its broker account.",
+        )
+    except Exception as e:
+        return CheckResult(False, f"FAILED: {e}")
+
+
 def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
     """Copy-trading account resolution (dry run).
 
@@ -874,6 +942,7 @@ PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_telemetry_maturity,
     _check_live_readiness_report,
     _check_project_pulse_for_live,
+    _check_account_binding,
     _check_copy_trading_accounts,
     _check_shadow_copy_loss_protection,
 ]
