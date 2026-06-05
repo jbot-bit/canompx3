@@ -79,6 +79,45 @@ nag (one-shot per breadcrumb, 24 h expiry).
 
 ---
 
+## Baton staleness detection (4th check — closes the integrate-then-/clear gap)
+
+The capture cue tells Claude to write NEW memory; it never re-checks EXISTING
+batons. So a resume-baton could keep claiming `<sha> NOT on origin/main` long
+after the work merged (n=1: this session's `f1fd7a90`/`6dadde5b` C11 baton). The
+SessionStart hook now also runs two drift cues every start (independent of the
+breadcrumb), both fail-open, emitted on the same `additionalContext` channel.
+
+Grounded against official docs (`code.claude.com/docs/en/hooks`): SessionStart is
+the sanctioned place for this — it **re-runs on resume** specifically so hooks can
+refresh stale SHAs; multiple hooks' `additionalContext` is **concatenated**; cap
+is 10 000 chars (our cue is < 1 KB). No built-in staleness mechanism exists, and
+the leading memory plugin (claude-mem) is retrieval-only with no git validation —
+so tier 1 is a deliberate, more-rigorous specialization for this git-native repo,
+not a reinvented wheel.
+
+- **Tier 1 — PROVEN (git-falsifiable).** `scan_stale_batons()`: a baton line says
+  a SHA is *not merged / unmerged / local-only / verify-it-landed*, yet
+  `git merge-base --is-ancestor <sha> origin/main` proves it IS on origin/main.
+  The NOT-merged phrase and the SHA must co-occur **on the same line** (proximity
+  guard — abstract merge-mechanics prose with no adjacent SHA never fires). Fires
+  only on the git-proven contradiction; a genuinely-unmerged or unknown/GC'd SHA
+  stays silent. This is a factual claim, phrased as such in the cue.
+- **Tier 2 — ADVISORY (heuristic, not provable).** `scan_live_project_batons()`:
+  recent (`mtime ≤ 72 h`) `metadata.type: project` batons whose `description:`
+  asserts live status (`NEXT=/RESUME/OPEN/pending/…`). Scoped on three
+  independent axes (type + recency + status language) to cut the ~500-file corpus
+  to a handful; capped at 8. A *confirm-still-current* JUDGE nudge — never an
+  assertion of staleness (it can't be proved, so it mustn't claim it). This
+  mirrors claude-mem's "surface and let Claude decide" norm.
+
+`MEMORY_DIR` is resolved HOME-based (`~/.claude/projects/<slug>/memory`, slug
+derived from PROJECT_ROOT — not hardcoded), with a legacy repo-local fallback. A
+live smoke test caught a hardcoded-repo-path bug here that 10 patched unit tests
+missed → regression test `test_memory_dir_resolves_home_based_not_repo_based`
+exercises the REAL resolver. Tests: `tests/test_hooks/test_baton_staleness.py`.
+
+---
+
 ## Lifecycle
 
 - **SessionEnd** (signal met) writes `memory-capture-pending.json`
