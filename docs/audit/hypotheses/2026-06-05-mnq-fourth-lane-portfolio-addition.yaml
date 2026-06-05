@@ -1,0 +1,117 @@
+metadata:
+  name: mnq-fourth-lane-portfolio-addition
+  created_by: Claude (opus-4-8)
+  date_locked: "2026-06-05T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  base_commit_sha: "9429c540"
+  research_question_type: portfolio_marginal_value
+  theory_grant: false
+  testing_mode: family
+  total_expected_trials: 9
+  bailey_compliance: >
+    MinBTL gate run inline (research-catalog estimate_k_budget, MNQ, n_trials=9
+    and n_trials=12): PASS — clean_years=6.65, minbtl_years_required=4.97,
+    1.68yr headroom, n_max_at_horizon=27, operational_cap=300. K=9 candidate
+    lanes is well within the Bailey E=1.0 bound. Candidates are PRE-VALIDATED
+    shelf lanes (validated_setups active), not a fresh broad parameter scan, so
+    selection multiplicity is small by construction.
+  notes: >
+    Charter `~/.claude/plans/yes-the-baton-vectorized-valiant.md` RESEARCH TRACK.
+    Sizing-up is PROVEN dead (2-micro op_pass 29.5% — fails C11 operational gate).
+    This tests whether adding ONE uncorrelated 4th lane improves portfolio
+    C11-adjusted EV via SUB-LINEAR drawdown (lanes fire at different sessions ->
+    losses partially uncorrelated -> combined DD grows sub-linearly, unlike +1
+    micro which grows DD exactly-linearly). Research-only: NO promotion, NO
+    arming, NO prop_profiles.py / live_config / schema / DB writes.
+
+  honest_caveats: >
+    (1) All candidate lanes carry n_trials_at_discovery=36372 in validated_setups
+    (same MinBTL-at-discovery concern as the EUROPE_FLOW_OVNRNG_100 kill, blocker
+    B4). This is a property of the WHOLE shelf including the 3 ALREADY-DEPLOYED
+    lanes, so it is not disqualifying for a MARGINAL-portfolio DD-efficiency test
+    — but it means no candidate here is independently re-validated; the test is
+    "does adding this shelf lane improve the book's DD-per-dollar", not "is this
+    lane a fresh standalone edge". (2) validated_setups is a DERIVED layer banned
+    for TRUTH-FINDING; it is used here ONLY to enumerate the candidate set. All
+    DD / EV / C11 truth comes from the canonical account_survival loader reading
+    orb_outcomes + daily_features. (3) Correlation screen already run: all 9
+    candidates corr_all in [-0.070, +0.082] vs deployed book.
+
+execution:
+  entrypoint: c11_matrix/fourth_lane_dual_gate.py
+  canonical_inputs:
+    - orb_outcomes
+    - daily_features
+    - trading_app.account_survival._load_profile_daily_scenarios
+    - trading_app.account_survival._load_lane_trade_paths
+    - trading_app.account_survival.simulate_survival
+    - trading_app.prop_profiles
+  output_paths:
+    - docs/audit/results/2026-06-05-mnq-fourth-lane-portfolio-addition.md
+
+baseline:
+  book: "3-lane cap_x0.80 (COMEX_SETTLE, US_DATA_1000, TOKYO_OPEN)"
+  budget_dollars: 1800          # express fraction 0.90 x $2,000 MLL (SOURCE-TRACED)
+  baseline_dd_dollars: null     # measured at run time from canonical loader
+  baseline_op_pass: null        # measured at run time (simulate_survival)
+  stop_multiplier: 0.75
+  daily_loss_dollars: 450
+
+hypotheses:
+  - id: H1
+    statement: >
+      Adding exactly ONE session-distant uncorrelated MNQ lane to the 3-lane
+      cap_x0.80 book improves portfolio C11-adjusted EV: the 4-lane book clears
+      BOTH C11 gate terms (strict max-90d-DD <= $1,800 AND op_pass >= 70%) while
+      adding return, BECAUSE the candidate's near-zero/negative daily correlation
+      makes its marginal DD sub-linear (less than its standalone DD).
+    mechanism: >
+      Session diversification (Carver 2015 vol-targeting / portfolio
+      construction): lanes firing at different Brisbane sessions have partially
+      uncorrelated daily P&L; combined drawdown grows sub-linearly in the number
+      of low-correlation legs. The 9 candidates measured corr_all in
+      [-0.070, +0.082] vs the deployed book — CME_PRECLOSE lanes are NEGATIVELY
+      correlated, the strongest DD-efficiency case.
+    candidates:
+      - MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR_P70          # corr -0.070 first 2019-05
+      - MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08        # corr -0.045 first 2019-05
+      - MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VWAP_BP_ALIGNED  # corr -0.026 first 2019-05
+      - MNQ_CME_PRECLOSE_E2_RR2.0_CB1_ATR_P70          # corr -0.054 first 2019-05
+      - MNQ_EUROPE_FLOW_E2_RR2.0_CB1_PDR_R105          # corr -0.037 first 2019-05
+      - MNQ_EUROPE_FLOW_E2_RR2.0_CB1_COST_LT08         # corr -0.024 first 2019-08
+      - MNQ_NYSE_CLOSE_E2_RR1.0_CB1_X_MES_ATR70        # corr -0.024 first 2019-05
+      - MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MGC_ATR70         # corr +0.007 first 2022-09 (WINDOW-TRUNCATION risk)
+      - MNQ_SINGAPORE_OPEN_E2_RR1.0_CB1_ATR_P70_O30_S075  # corr +0.082 first 2019-05
+    primary_metric: c11_adjusted_marginal_ev_dollars
+    promotion_target: NONE_RESEARCH_ONLY
+    selection_rule: >
+      For each candidate, build the 4-lane book (3 deployed cap_x0.80 + candidate
+      at native stop), run the canonical account_survival loader for the strict
+      max-90d-DD term AND simulate_survival for the op_pass term. A candidate is
+      a CONTINUE only if the 4-lane book clears BOTH C11 terms (DD <= $1,800 AND
+      op_pass >= 70%), AND adds positive marginal book $ vs the 3-lane baseline,
+      AND does not truncate the book window (candidate first_day <= deployed
+      common_start, else the 2022 binding-year DD is hidden).
+    kill_criteria:
+      - "No candidate clears BOTH C11 terms as a 4th lane -> 4th-lane track KILL."
+      - "Any candidate that only passes the DD term but fails op_pass>=70% is the SAME failure mode as sizing-up; reported, not rescued."
+      - "A candidate whose first_day > deployed common_start is DISQUALIFIED (window truncation), regardless of DD."
+    verdict_policy:
+      continue: 4th lane clears both C11 terms + positive marginal $ + no window truncation
+      park: clears DD but underpowered / marginal $ within noise / single binding year
+      kill: no candidate improves portfolio C11-adjusted EV
+
+controls:
+  frozen_monitoring_window: "2026-01-01+"
+  no_2026_tuning: true
+  no_live_deployment: true
+  no_threshold_rescue: true
+  no_oos_tuning: true
+  hard_stop: >
+    If no candidate improves portfolio C11-adjusted EV, say so plainly. A null
+    result is the correct, honest outcome. Do NOT rescue with new thresholds,
+    new RR targets, or re-parameterized filters.
+  monte_carlo:
+    horizon_days: 90
+    n_paths: 10000
+    seed: 20260605

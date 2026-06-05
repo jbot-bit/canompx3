@@ -11,6 +11,7 @@ Use these as the only daily entrypoints. Everything else in `docs/` is supportin
 7. [`docs/runtime/action-queue.yaml`](./runtime/action-queue.yaml) — active operational queue and priorities.
 8. [`docs/plans/active/`](./plans/active/) — date-bounded active design plans only.
 9. [`docs/governance/system_authority_map.md`](./governance/system_authority_map.md) — full authority/context map.
+10. [`docs/governance/research_decision_governor.md`](./governance/research_decision_governor.md) — decision front-door: routes any proposed change through the 8-layer / 13-question anti-tunnel loop before work starts.
 
 ## Usage rules
 
