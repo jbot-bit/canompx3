@@ -7367,7 +7367,7 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
         return violations + [f"  cannot read trading_app/prop_profiles.py: {e}"]
 
     marker = "@margin-guard-not-earnings-cap"
-    marker_line = next((i for i, ln in enumerate(lines) if marker in ln), None)
+    marker_lines = [i for i, ln in enumerate(lines) if marker in ln]
     self_funded_tier_lines = [i for i, ln in enumerate(lines) if '("self_funded",' in ln and "PropFirmAccount(" in ln]
 
     if not self_funded_tier_lines:
@@ -7379,24 +7379,47 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
         )
         return violations
 
-    if marker_line is None:
+    # Anchor the marker to the ACCOUNT_TIERS dict. Taking the FIRST marker
+    # anywhere in the file is a fail-open hole: an unrelated occurrence of the
+    # marker string elsewhere (e.g. the @margin-guard-not-earnings-cap in the
+    # AccountProfile.self_imposed_dd_dollars field comment) would satisfy the
+    # check even if the real tier-block marker were deleted. Require a marker
+    # occurrence INSIDE the dict span, BEFORE the first self_funded tier, so it
+    # genuinely introduces the block. (PR #343 review finding.)
+    dict_open = next(
+        (i for i, ln in enumerate(lines) if "ACCOUNT_TIERS" in ln and ln.rstrip().endswith("{")),
+        None,
+    )
+    if dict_open is None:
         violations.append(
-            f"  {marker!r} marker comment is ABSENT from prop_profiles.py but "
-            f"{len(self_funded_tier_lines)} ('self_funded', ...) tier(s) exist. Every "
-            "self_funded contract cap must be explicitly labelled a margin/sanity "
-            "guard (not an earnings ceiling) per the doctrine."
+            "  could not locate the ACCOUNT_TIERS dict opening ('ACCOUNT_TIERS ... = {') "
+            "in prop_profiles.py — layout changed; update "
+            "check_prop_caps_do_not_leak_into_self_funded to match."
         )
         return violations
 
-    # The marker must precede the FIRST self_funded tier and there must be no
-    # self_funded tier above it (the marker introduces the whole block).
     first_tier = min(self_funded_tier_lines)
-    if marker_line > first_tier:
-        violations.append(
-            f"  {marker!r} marker appears at line {marker_line + 1}, AFTER the first "
-            f"('self_funded', ...) tier at line {first_tier + 1}. The marker must "
-            "introduce the self_funded tier block so every cap is covered."
-        )
+    # The marker must live within the dict (below its opening line) and introduce
+    # the self_funded block (above the first self_funded tier).
+    anchored = [m for m in marker_lines if dict_open < m < first_tier]
+    if not anchored:
+        if marker_lines:
+            violations.append(
+                f"  {marker!r} marker does NOT introduce the self_funded ACCOUNT_TIERS "
+                f"block: no marker occurs inside the dict (after line {dict_open + 1}) and "
+                f"before the first ('self_funded', ...) tier at line {first_tier + 1}. "
+                f"A marker present only elsewhere in the file (lines "
+                f"{', '.join(str(m + 1) for m in marker_lines)}) does not cover the tiers. "
+                "Every self_funded contract cap must be explicitly labelled a margin/sanity "
+                "guard (not an earnings ceiling) per the doctrine."
+            )
+        else:
+            violations.append(
+                f"  {marker!r} marker comment is ABSENT from prop_profiles.py but "
+                f"{len(self_funded_tier_lines)} ('self_funded', ...) tier(s) exist. Every "
+                "self_funded contract cap must be explicitly labelled a margin/sanity "
+                "guard (not an earnings ceiling) per the doctrine."
+            )
 
     # (c) STRUCTURAL — the book-builder firm branch must exist (F2-A fix, 2026-05-31).
     # Parse select_for_profile's source via AST and confirm: (1) it references a

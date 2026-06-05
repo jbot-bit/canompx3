@@ -57,6 +57,25 @@ ACCOUNT_TIERS = {
 }
 """
 
+# DECOY scenario — the real fail-open bug on main in miniature. The marker exists
+# ONLY in an unrelated comment ABOVE the ACCOUNT_TIERS dict (mirroring the
+# @margin-guard-not-earnings-cap that was later added at prop_profiles.py:139 in
+# the AccountProfile.self_imposed_dd_dollars field comment). The ACCOUNT_TIERS
+# self_funded block itself carries NO marker. A first-match-anywhere guard finds
+# the decoy, sees it precedes the first tier, and PASSES — fail-open. The anchored
+# guard must require a marker INSIDE the dict and FAIL here.
+_DECOY_OUTSIDE_DICT_SRC = """\
+class AccountProfile:
+    # @margin-guard-not-earnings-cap — survival DD HALT, unrelated to ACCOUNT_TIERS.
+    self_imposed_dd_dollars = None
+
+ACCOUNT_TIERS = {
+    ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50),
+    ("self_funded", 2_500): PropFirmAccount("self_funded", 2_500, 375, 0, 1, 125),
+    ("self_funded", 50_000): PropFirmAccount("self_funded", 50_000, 10_000, 2, 20, 2_500),
+}
+"""
+
 # A minimal prop_portfolio.py-shaped source. structural-assertion (c) parses
 # select_for_profile and requires a self_funded firm branch where the prop cap is
 # NOT assigned unconditionally. This is the WELL-FORMED (post-F2-A) shape.
@@ -132,7 +151,7 @@ def test_guard_fails_when_marker_after_first_tier(tmp_path, monkeypatch):
     """Scope hole: marker must INTRODUCE the block; a marker below the first tier leaves it uncovered."""
     monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _MARKER_TOO_LATE_SRC))
     violations = check_prop_caps_do_not_leak_into_self_funded()
-    assert any("AFTER the first" in v for v in violations)
+    assert any("does NOT introduce" in v for v in violations)
 
 
 def test_guard_fails_loud_when_no_self_funded_tiers(tmp_path, monkeypatch):
@@ -141,6 +160,22 @@ def test_guard_fails_loud_when_no_self_funded_tiers(tmp_path, monkeypatch):
     monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, src))
     violations = check_prop_caps_do_not_leak_into_self_funded()
     assert any("could not locate any" in v for v in violations)
+
+
+def test_guard_fails_when_marker_only_outside_dict(tmp_path, monkeypatch):
+    """Fail-open regression (PR #343 finding): a marker that exists ONLY in an
+    unrelated comment ABOVE the ACCOUNT_TIERS dict must NOT satisfy the guard.
+
+    This is the real-world bug: a second @margin-guard-not-earnings-cap was added
+    at prop_profiles.py:139 (the self_imposed_dd_dollars field comment), so a
+    first-match-anywhere check passed even with the real tier-block marker gone.
+    The anchored guard must require the marker INSIDE the dict and flag this."""
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _DECOY_OUTSIDE_DICT_SRC))
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+    assert any("margin-guard-not-earnings-cap" in v for v in violations), (
+        "a marker only OUTSIDE the ACCOUNT_TIERS dict must not satisfy the guard "
+        "(the line-139 decoy must not mask a missing tier-block marker); got: " + "; ".join(violations)
+    )
 
 
 # --- Structural assertion (c) — the select_for_profile firm branch (F2-A) ---
