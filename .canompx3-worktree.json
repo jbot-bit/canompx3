@@ -1,10 +1,13 @@
 {
-  "tool": "claude",
-  "name": "First workstream test",
-  "branch": "wt-claude-first-workstream-test",
+  "tool": "codex",
+  "name": "institutional-audit-2026-06-03",
+  "branch": "wt-codex-institutional-audit-2026-06-03",
   "base_ref": "HEAD",
   "created_at": "2026-03-17T07:12:06.624999+00:00",
-  "last_opened_at": "2026-03-17T07:12:06.624999+00:00",
-  "purpose": "Review / verify",
+  "last_opened_at": "2026-06-03T02:54:01.630478+00:00",
+  "purpose": "Self-identifying institutional audit/design only; no implementation",
+  "state": "active",
+  "handoff_note": null,
+  "last_actor_tool": "codex",
   "repo_root": "C:\\Users\\joshd\\canompx3"
 }

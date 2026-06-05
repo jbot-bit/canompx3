@@ -54,7 +54,7 @@ research/
     analyze_1100_conditional.py
     analyze_1100_ib_alignment.py
     analyze_1100_midday_reversal.py
-... and 1525 more entries
+... and 1560 more entries
 ```
 
 ## Module Index
@@ -71,7 +71,7 @@ research/
 | `pipeline/calendar_filters.py` | 259 | Calendar-based date flags: NFP, OPEX, FOMC, CPI, month-end, OPEX-week, day-of... | is_nfp_day, is_opex_day, is_friday, is_monday, is_tuesday |
 | `pipeline/canonical_inline_copies.py` | 317 | Canonical-inline-copy meta-registry (Layer 2 of 3-layer hardening). | InlineCopyPair |
 | `pipeline/check_db.py` | 61 | Check database contents and integrity. | check_db |
-| `pipeline/check_drift.py` | 12726 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
+| `pipeline/check_drift.py` | 13027 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
 | `pipeline/check_drift_crg_helpers.py` | 163 | CRG (code-review-graph) helpers for pipeline/check_drift.py. | crg_is_available, get_surprising_connections, query_tests_for, find_large_functions, get_bridge_nodes |
 | `pipeline/cost_model.py` | 330 | Cost model for futures instruments. | CostSpec, get_session_cost_spec, get_cost_spec, list_validated_instruments, risk_in_dollars |
 | `pipeline/daily_backfill.py` | 140 | Nightly data backfill: ingest new bars → 5m bars → daily features → outcomes. | get_last_ingested_date, is_up_to_date, run_backfill_for_instrument, main |
@@ -121,8 +121,8 @@ research/
 | `trading_app/calendar_overlay.py` | 108 | Calendar overlay for per-instrument x session calendar rules. | CalendarAction, get_calendar_action |
 | `trading_app/cascade_table.py` | 92 | Cross-session conditional probability table. | build_cascade_table, lookup_cascade |
 | `trading_app/chordia.py` | 383 | Chordia t-statistic gate — Chordia, Goyal, Saretto (2018). | chordia_threshold, compute_chordia_t, chordia_gate, ChordiaAuditEntry, ChordiaAuditLog |
-| `trading_app/conditional_overlays.py` | 441 | Shadow-only conditional overlay registry and derived-state helpers. | ConditionalOverlaySpec, get_overlay_specs_for_profile, get_overlay_state_path, refresh_overlay_state, read_overlay_states |
-| `trading_app/config.py` | 3248 | Strategy configuration: filters, entry models, and grid parameters. | is_e2_lookahead_filter, is_e2_deployment_unsafe_filter, e2_deployment_unsafe_reason, AtomDescription, StrategyFilter |
+| `trading_app/conditional_overlays.py` | 442 | Shadow-only conditional overlay registry and derived-state helpers. | ConditionalOverlaySpec, get_overlay_specs_for_profile, get_overlay_state_path, refresh_overlay_state, read_overlay_states |
+| `trading_app/config.py` | 3249 | Strategy configuration: filters, entry models, and grid parameters. | is_e2_lookahead_filter, is_e2_deployment_unsafe_filter, e2_deployment_unsafe_reason, AtomDescription, StrategyFilter |
 | `trading_app/consistency_tracker.py` | 345 | Prop firm compliance monitors — consistency rule, payout eligibility, | ConsistencyResult, PayoutEligibility, MicroscalpResult, check_consistency, check_payout_eligibility |
 | `trading_app/db_access.py` | 318 | Read-safe gold.db access helpers for MCP and remote-agent snapshots. | db_access_policy, db_freshness, db_health, validate_snapshot_manifest, snapshot_manifest |
 | `trading_app/db_manager.py` | 802 | Database schema manager for trading_app tables. | compute_trade_day_hash, init_trading_app_schema, verify_trading_app_schema, get_family_head_ids, has_edge_families |
@@ -141,13 +141,13 @@ research/
 | `trading_app/hypothesis_loader.py` | 696 | Hypothesis registry loader (READ-SIDE) — Phase 4 Stage 4.0. | HypothesisLoaderError, hypothesis_dir, compute_file_sha, find_hypothesis_file_by_sha, load_hypothesis_metadata |
 | `trading_app/lane_allocator.py` | 1142 | Adaptive Lane Allocator — monthly rebalancer for ORB breakout deployment. | normalize_writable_path, lane_allocation_profile_path, LaneScore, compute_lane_scores, load_sr_state |
 | `trading_app/lane_correlation.py` | 206 | Pre-deploy trade-level correlation gate for profit expansion. | PairResult, CorrelationReport, check_candidate_correlation |
-| `trading_app/lane_ctl.py` | 183 | Lane control — pause/resume/list daily lane overrides. | pause_lane, pause_strategy_id, resume_lane, list_overrides, get_lane_override |
+| `trading_app/lane_ctl.py` | 196 | Lane control — pause/resume/list daily lane overrides. | pause_lane, pause_strategy_id, resume_lane, resume_strategy_id, list_overrides |
 | `trading_app/lifecycle_state.py` | 272 | Unified operational lifecycle-state reader for live control surfaces. | read_criterion11_state, read_criterion12_state, read_pause_state, read_lifecycle_state |
 | `trading_app/live/alert_engine.py` | 162 | Thin runtime alert persistence for the operator dashboard. | OperatorAlert, classify_operator_alert, record_operator_alert, read_operator_alerts, summarize_operator_alerts |
 | `trading_app/live/bar_aggregator.py` | 152 | Aggregates real-time ticks into 1-minute OHLCV bars. | Bar, BarAggregator |
 | `trading_app/live/bar_persister.py` | 107 | Persist live 1-minute bars to bars_1m table. | BarPersister |
 | `trading_app/live/bar_ring.py` | 351 | Live-bars ring file — written by SessionOrchestrator, read by dashboard. | write_shutdown_trace, read_shutdown_trace, WriteResult, RingSnapshot, enqueue_bar |
-| `trading_app/live/bot_dashboard.py` | 2954 | Bot Operations Dashboard — local web UI for monitoring and control. | OriginAllowlistMiddleware, api_signals_recent, api_planned_launch, api_status, api_operator_state |
+| `trading_app/live/bot_dashboard.py` | 3166 | Bot Operations Dashboard — local web UI for monitoring and control. | OriginAllowlistMiddleware, api_signals_recent, api_planned_launch, api_status, api_operator_state |
 | `trading_app/live/bot_state.py` | 324 | Shared bot state file — written by SessionOrchestrator, read by dashboard. | write_state, read_state, clear_state, write_live_health, read_live_health |
 | `trading_app/live/broker_base.py` | 238 | Abstract base classes for multi-broker support. | BrokerAuth, BrokerFeed, BrokerRouter, BrokerContracts, BrokerPositions |
 | `trading_app/live/broker_connections.py` | 263 | Broker connection manager — persistent credential store with runtime auth lif... | ConnectionState, BrokerConnectionManager |
@@ -161,7 +161,7 @@ research/
 | `trading_app/live/multi_runner.py` | 135 | Multi-instrument live session runner. | MultiInstrumentRunner |
 | `trading_app/live/notifications.py` | 19 | Best-effort Telegram notifications for live trading events. | notify |
 | `trading_app/live/performance_monitor.py` | 101 | Per-strategy live P&L tracking with CUSUM drift detection. | TradeRecord, PerformanceMonitor |
-| `trading_app/live/planned_launch.py` | 175 | Canonical writer/reader for the dashboard's planned-launch surface. | write_planned_launch, read_planned_launch, clear_planned_launch |
+| `trading_app/live/planned_launch.py` | 183 | Canonical writer/reader for the dashboard's planned-launch surface. | write_planned_launch, read_planned_launch, clear_planned_launch |
 | `trading_app/live/position_tracker.py` | 215 | Position lifecycle state machine for live trading. | PositionState, PositionRecord, PositionTracker |
 | `trading_app/live/projectx/__init__.py` | 13 | ProjectX (TopstepX) broker implementation. |  |
 | `trading_app/live/projectx/auth.py` | 99 | ProjectX Gateway API authentication. | ProjectXAuth |
@@ -180,7 +180,7 @@ research/
 | `trading_app/live/sr_monitor.py` | 139 | Score-based Shiryaev-Roberts drift monitor. | calibrate_sr_threshold, ShiryaevRobertsMonitor |
 | `trading_app/live/telemetry_maturity.py` | 215 | Live-telemetry maturity gate — 30-trading-day floor (advisory). | TelemetryMaturityReport, evaluate_telemetry_maturity, iter_known_uptime_record_types |
 | `trading_app/live/trade_journal.py` | 318 | Persistent trade journal for live trading sessions. | TradeJournalLockedError, generate_trade_id, TradeJournal |
-... and 1094 more modules
+... and 1127 more modules
 
 ## Cross-Package Dependencies
 
@@ -233,7 +233,7 @@ research/
 - `trading_app/eligibility/__init__.py` -> trading_app
 - `trading_app/eligibility/builder.py` -> pipeline, trading_app
 - `trading_app/entry_rules.py` -> trading_app
-... and 823 more edges
+... and 846 more edges
 
 ## CLI Entry Points
 
@@ -261,4 +261,4 @@ research/
 - `python trading_app/db_manager.py` -- (no argparse description)
 - `python trading_app/lane_ctl.py` -- (no argparse description)
 - `python trading_app/live/bot_dashboard.py` -- Bot Operations Dashboard
-... and 611 more entry points
+... and 626 more entry points

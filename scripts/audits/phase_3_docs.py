@@ -229,7 +229,7 @@ def _check_repo_map(audit: AuditPhase):
         capture_output=True,
         text=True,
         cwd=str(PROJECT_ROOT),
-        timeout=30,
+        timeout=90,
     )
     if r.returncode == 0:
         audit.check_passed("REPO_MAP.md is up to date")

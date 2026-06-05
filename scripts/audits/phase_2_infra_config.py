@@ -180,18 +180,20 @@ def _check_dst_sessions(audit: AuditPhase):
         entry = SESSION_CATALOG[name]
         print(f"         {name}: type={entry.get('type', '?')}")
 
-    # All have resolvers in DYNAMIC_ORB_RESOLVERS
+    # All dynamic sessions have resolvers in DYNAMIC_ORB_RESOLVERS
     for name, entry in SESSION_CATALOG.items():
-        resolver_name = entry.get("resolver")
-        if resolver_name and resolver_name in DYNAMIC_ORB_RESOLVERS:
+        if entry.get("type") != "dynamic":
+            continue
+        resolver = entry.get("resolver")
+        if resolver and name in DYNAMIC_ORB_RESOLVERS and DYNAMIC_ORB_RESOLVERS[name] is resolver:
             pass  # OK
-        elif resolver_name:
-            audit.check_failed(f"{name}: resolver '{resolver_name}' not in DYNAMIC_ORB_RESOLVERS")
+        elif resolver:
+            audit.check_failed(f"{name}: resolver not in DYNAMIC_ORB_RESOLVERS")
             audit.add_finding(
                 Severity.HIGH,
                 "SESSION_CONFIG_DRIFT",
                 claimed=f"{name} resolver in DYNAMIC_ORB_RESOLVERS",
-                actual=f"Resolver '{resolver_name}' missing",
+                actual="Resolver missing or mismatched",
                 evidence="pipeline/dst.py:DYNAMIC_ORB_RESOLVERS",
                 fix_type="CONFIG_FIX",
             )
@@ -207,7 +209,9 @@ def _check_dst_sessions(audit: AuditPhase):
             )
 
     all_valid = all(
-        entry.get("resolver") in DYNAMIC_ORB_RESOLVERS for entry in SESSION_CATALOG.values() if entry.get("resolver")
+        name in DYNAMIC_ORB_RESOLVERS and DYNAMIC_ORB_RESOLVERS[name] is entry.get("resolver")
+        for name, entry in SESSION_CATALOG.items()
+        if entry.get("type") == "dynamic"
     )
     if all_valid:
         audit.check_passed("All sessions have valid resolvers")
@@ -247,16 +251,17 @@ def _check_dst_sessions(audit: AuditPhase):
         if season_ok:
             audit.check_passed(f"All resolvers return valid (h, m) for {season} ({td})")
 
-    # DOW_MISALIGNED_SESSIONS should only contain NYSE_OPEN
-    if set(DOW_MISALIGNED_SESSIONS.keys()) == {"NYSE_OPEN"}:
-        audit.check_passed("DOW_MISALIGNED_SESSIONS = {NYSE_OPEN: -1}")
+    # NYSE_PREOPEN and NYSE_OPEN cross the same Brisbane/US DOW boundary.
+    expected_misaligned = {"NYSE_PREOPEN": -1, "NYSE_OPEN": -1}
+    if expected_misaligned == DOW_MISALIGNED_SESSIONS:
+        audit.check_passed("DOW_MISALIGNED_SESSIONS = {NYSE_PREOPEN: -1, NYSE_OPEN: -1}")
     else:
         audit.check_failed(f"DOW_MISALIGNED_SESSIONS = {DOW_MISALIGNED_SESSIONS}")
         audit.add_finding(
             Severity.HIGH,
             "SESSION_CONFIG_DRIFT",
-            claimed="Only NYSE_OPEN is DOW-misaligned",
-            actual=f"Keys: {sorted(DOW_MISALIGNED_SESSIONS.keys())}",
+            claimed="NYSE_PREOPEN and NYSE_OPEN are DOW-misaligned",
+            actual=f"Mapping: {DOW_MISALIGNED_SESSIONS}",
             evidence="pipeline/dst.py:DOW_MISALIGNED_SESSIONS",
             fix_type="CODE_FIX",
         )
