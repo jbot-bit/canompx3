@@ -69,7 +69,7 @@ INTENT_RULES: list[tuple[str, str, int]] = [
     # dropped (it over-matched "should we run tests/backfill/CI" and "should we
     # add error handling"; proven by evidence-auditor 2026-06-05). Each arm now
     # requires a decision OBJECT (lane / account / portfolio / deploy / class).
-    (r"\b(should we deploy|decision (class|governor)|add (a |this )?lane|which (decision )?class|portfolio (decision|add|reweight)|reweight (the )?(portfolio|book|lane)|account.sizing|size (the |this )?account|higher[- ]ev|what are we ignoring)\b", "/decision-governor", 52),
+    (r"\b(should we deploy|decision (class|governor)|add (a |an |this )?(new |fourth |another |\w+ )?lane|which (decision )?class|portfolio (decision|add|reweight)|reweight (the )?(portfolio|book|lane)|account.sizing|size (the |this )?account|higher[- ]ev|what are we ignoring)\b", "/decision-governor", 52),
     # Review / check my work / before I commit → /code-review
     (r"\b(check my work|before I commit|code review this|review this (change|pr|commit))\b", "/code-review", 24),
     # Improve a skill → /skill-improve
