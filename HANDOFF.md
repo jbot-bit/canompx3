@@ -117,9 +117,8 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-05
-- **Commit:** 60edcb1b — fix(autopilot): register autopilot-tier-guard.py PreToolUse hook (was dead safety code)
-- **Files changed:** 2 files
-  - `.claude/settings.json`
+- **Commit:** 3d78509b — docs(handoff): record canompx3_autopilot_v1 reviewed/fixed/merged to origin/main (60edcb1b)
+- **Files changed:** 1 files
   - `HANDOFF.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
