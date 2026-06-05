@@ -10916,6 +10916,95 @@ def check_lane_allocation_per_profile_legacy_parity() -> list[str]:
     return violations
 
 
+def check_lane_allocation_risk_cap_honesty() -> list[str]:
+    """``risk_cap_pts`` honest-override invariant: when a lane carries a
+    ``risk_cap_pts`` field it MUST satisfy ``0 < risk_cap_pts <= p90_orb_pts``.
+
+    Origin: C11 cap remediation (2026-06-05,
+    ``docs/audit/results/2026-06-05-c11-cap-x080-remediation-v1.md``). The cap is
+    an *honest* risk-cap override stored SEPARATELY from the empirical
+    ``p90_orb_pts`` so the p90 truth is never overwritten. The loader
+    (``trading_app.prop_profiles.load_allocation_lanes``) prefers ``risk_cap_pts``
+    over ``p90_orb_pts`` when present and feeds it to BOTH the survival gate
+    (``account_survival``) and the live engine (``session_orchestrator`` ORB cap)
+    via ``get_profile_lane_definitions`` — so a malformed cap is a capital-class
+    error.
+
+    The honesty invariant has two halves:
+      - ``risk_cap_pts > 0`` — a zero/negative cap is nonsensical and (if the
+        loader ever used a falsy ``or``-chain) could silently disable capping.
+      - ``risk_cap_pts <= p90_orb_pts`` — a cap *above* the empirical p90 is not
+        a risk reduction; it would be a dishonest field claiming to cap while
+        loosening, and signals the cap was mis-derived or p90 drifted under it.
+
+    Fail conditions (blocking — capital-class):
+      - Any lane in any ``docs/runtime/lane_allocation/<profile>.json`` (or the
+        legacy single-profile file) whose ``risk_cap_pts`` is present but is not
+        a positive number, OR exceeds the lane's ``p90_orb_pts``, OR is present
+        while ``p90_orb_pts`` is absent (can't verify the invariant).
+
+    Pass / skip conditions:
+      - No allocation files, or no lane carries ``risk_cap_pts`` (the field is
+        optional; absence is the uncapped baseline).
+      - Unparseable JSON → skip (the chordia/c8/parity checks already guard file
+        integrity; this check is strictly about the cap invariant).
+
+    @canonical-source: trading_app/prop_profiles.load_allocation_lanes (cap precedence)
+    @canonical-source: trading_app/lane_allocator.save_allocation (risk_cap_pts preservation)
+    @canonical-source: docs/audit/results/2026-06-05-c11-cap-x080-remediation-v1.md
+    """
+    import json
+
+    files: list[Path] = []
+    new_dir = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation"
+    if new_dir.exists() and new_dir.is_dir():
+        files.extend(p for p in sorted(new_dir.iterdir()) if p.is_file() and p.suffix == ".json")
+    legacy_path = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+    if legacy_path.exists():
+        files.append(legacy_path)
+
+    violations: list[str] = []
+    for fpath in files:
+        try:
+            data = json.loads(fpath.read_text())
+        except (OSError, ValueError):
+            # File integrity is covered by sibling checks; skip here.
+            continue
+        if not isinstance(data, dict):
+            continue
+        lanes = data.get("lanes")
+        if not isinstance(lanes, list):
+            continue
+        rel = fpath.relative_to(PROJECT_ROOT).as_posix()
+        for lane in lanes:
+            if not isinstance(lane, dict):
+                continue
+            if "risk_cap_pts" not in lane:
+                continue  # optional field; absence == uncapped baseline
+            sid = lane.get("strategy_id", "<unknown>")
+            cap = lane.get("risk_cap_pts")
+            p90 = lane.get("p90_orb_pts")
+            if not isinstance(cap, (int, float)) or isinstance(cap, bool):
+                violations.append(f"  {rel}: {sid}: risk_cap_pts must be a number, got {cap!r}")
+                continue
+            if cap <= 0:
+                violations.append(f"  {rel}: {sid}: risk_cap_pts must be > 0, got {cap}")
+                continue
+            if not isinstance(p90, (int, float)) or isinstance(p90, bool):
+                violations.append(
+                    f"  {rel}: {sid}: risk_cap_pts={cap} present but p90_orb_pts "
+                    f"missing/invalid ({p90!r}) — cannot verify honesty invariant"
+                )
+                continue
+            if cap > p90:
+                violations.append(
+                    f"  {rel}: {sid}: risk_cap_pts={cap} exceeds p90_orb_pts={p90} "
+                    f"(a cap above empirical p90 is not a risk reduction — honesty invariant broken)"
+                )
+
+    return violations
+
+
 # Allowlists for check_no_direct_lane_allocation_json_literals.
 # Module-level so tests can introspect / mutate via monkeypatch.
 _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset(
@@ -15877,6 +15966,12 @@ CHECKS = [
         "lane_allocation per-profile JSON must byte-equal legacy when profile_id matches (Stage 1a dual-write parity)",
         check_lane_allocation_per_profile_legacy_parity,
         False,  # blocking — silent dual-write divergence is capital-class risk
+        False,
+    ),
+    (
+        "lane_allocation risk_cap_pts honesty invariant (0 < risk_cap_pts <= p90_orb_pts)",
+        check_lane_allocation_risk_cap_honesty,
+        False,  # blocking — capital-class: malformed cap mis-sizes live risk
         False,
     ),
     (

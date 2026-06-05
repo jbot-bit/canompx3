@@ -1516,8 +1516,17 @@ def load_allocation_lanes(
         if not all((sid, inst, orb)):
             continue
 
-        # Use per-session P90 from JSON if available, else fallback to flat _P90_ORB_PTS
-        max_orb = entry.get("p90_orb_pts")
+        # Cap resolution precedence (C11 cap remediation, 2026-06-05):
+        #   1. risk_cap_pts — honest risk-cap override (p90 × cap factor); the
+        #      live-tradeable DD-control lever. Preferred when present.
+        #   2. p90_orb_pts — empirical per-session P90 ORB size from JSON.
+        #   3. _P90_ORB_PTS  — flat per-instrument fallback.
+        # risk_cap_pts is kept SEPARATE from p90_orb_pts so the empirical p90
+        # truth is never overwritten (honesty invariant enforced in check_drift:
+        # 0 < risk_cap_pts <= p90_orb_pts).
+        max_orb = entry.get("risk_cap_pts")
+        if max_orb is None:
+            max_orb = entry.get("p90_orb_pts")
         if max_orb is None:
             max_orb = _P90_ORB_PTS.get(inst)
 
