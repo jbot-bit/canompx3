@@ -11418,6 +11418,121 @@ def check_intent_router_routing_parity() -> list[str]:
     return violations
 
 
+def check_decision_governor_pointers_resolve() -> list[str]:
+    """Marker guard for the Research / Decision Governor.
+
+    The governor (``docs/governance/research_decision_governor.md`` + its fill-in
+    companion ``docs/audit/templates/decision_candidate_review.md``) is a
+    ``contract`` doc: a ROUTER and CHECKLIST that *composes* existing canonical
+    surfaces (C1-C13, the 14-gate live preflight, K-budget estimator, lane
+    allocator, account survival) and **re-encodes none of them**. The doc states
+    its own invariant: *"If this doc ever states a numeric threshold, that is a
+    bug — it must point to the surface that owns the number."*
+
+    This check is the fail-closed half of that invariant (the
+    ``scripts/tools/decision_governor.py`` composer is the advisory half). It
+    asserts, structurally:
+
+      (a) the governor doc, the template, and the composer script all EXIST —
+          none can be silently deleted while this check claims to enforce them;
+      (b) every canonical pointer the governor names RESOLVES on disk — a stale
+          pointer (e.g. the original ``lane_allocation.py`` typo for the real
+          ``lane_allocator.py``) means the router sends you to a file that
+          isn't there; and
+      (c) the ROUTING surface (doc secs. 3-4: the decision-class router table and
+          the question set) carries NO numeric-threshold LITERAL — a number
+          there is a re-encode of a canonical gate's floor. Criterion *names*
+          and criterion-by-number references ("Criteria 2,3,4,6,7,8,9",
+          "MinBTL", "Chordia t-floor") are EXPLICITLY allowed — they route to
+          the gate that owns the number. Sec. 5 (stale-assumption reconciliation)
+          is OUT OF SCOPE: it legitimately cites numbers *with* their canonical
+          source and a "re-run, never quote" caveat, which is correct usage.
+
+    @canonical-source: docs/governance/research_decision_governor.md,
+    docs/audit/templates/decision_candidate_review.md,
+    scripts/tools/decision_governor.py
+    """
+    violations: list[str] = []
+
+    doc = PROJECT_ROOT / "docs" / "governance" / "research_decision_governor.md"
+    template = PROJECT_ROOT / "docs" / "audit" / "templates" / "decision_candidate_review.md"
+    composer = PROJECT_ROOT / "scripts" / "tools" / "decision_governor.py"
+
+    # (a) existence — fail loud if any leg is gone.
+    for label, path in (
+        ("governor doc", doc),
+        ("template", template),
+        ("composer script", composer),
+    ):
+        if not path.exists():
+            violations.append(
+                f"  decision-governor {label} is MISSING ({path.relative_to(PROJECT_ROOT)}). "
+                "The governor is a 3-part contract (router doc + fill-in template + "
+                "read-only composer); none may be deleted while "
+                "check_decision_governor_pointers_resolve claims to enforce it."
+            )
+    if not doc.exists():
+        return violations  # can't validate pointers/thresholds without the doc
+
+    try:
+        doc_text = doc.read_text(encoding="utf-8")
+    except OSError as e:
+        return violations + [f"  cannot read research_decision_governor.md: {e}"]
+
+    # (b) every canonical pointer the doc names must resolve. Enumerate
+    # repo-relative paths the governor cites (code + docs + the runtime json).
+    cited_paths = set(
+        re.findall(
+            r"(?:trading_app|pipeline|scripts|docs)/[A-Za-z0-9_./-]+\.(?:py|md|json)",
+            doc_text,
+        )
+    )
+    for rel in sorted(cited_paths):
+        if not (PROJECT_ROOT / rel).exists():
+            violations.append(
+                f"  governor doc cites a canonical path that does NOT resolve: {rel!r}. "
+                "A router pointing at a missing file sends decisions to a dead surface. "
+                "Fix the pointer (or restore the file)."
+            )
+
+    # (c) the routing surface (secs. 3-4) must carry no numeric-threshold literal.
+    # Scope to the slice between '## 3.' and '## 5.' so sec. 5 reconciliation notes
+    # (which correctly cite numbers + source) are not flagged.
+    sec3 = doc_text.find("\n## 3.")
+    sec5 = doc_text.find("\n## 5.")
+    if sec3 != -1 and sec5 != -1 and sec5 > sec3:
+        routing = doc_text[sec3:sec5]
+        # Numeric-threshold literals a re-encode would introduce: comparator-vs-number
+        # (t >= 3.79, q < 0.05, N >= 100, WFE >= 0.50), dollar budgets, "x MLL"
+        # fractions. NOT criterion-by-number refs ("Criteria 2,3,4") — those carry
+        # no comparator/$/x and route to the owning gate.
+        threshold_patterns = [
+            r"[a-zA-Z]\s*[<>]=?\s*\d",  # t >= 3, q < 0.05, N >= 100
+            r"[<>]=?\s*\d+(?:\.\d+)?\s*(?:R\b|σ|%)",  # >= 0.40 R, > 5%
+            r"\$\s?\d",  # $1,800 budget
+            r"\d+(?:\.\d+)?\s*[×x]\s*MLL",  # 0.90 x MLL
+            r"\bq\s*<\s*0",  # q < 0.05 (BH-FDR floor)
+        ]
+        for pat in threshold_patterns:
+            m = re.search(pat, routing)
+            if m:
+                # 1-based doc line number of the offending literal (sec3 is the
+                # offset of '\n## 3.' within doc_text, so its line = count to that
+                # offset; m.start() is relative to the routing slice).
+                line_no = doc_text[: sec3 + m.start()].count("\n") + 1
+                snippet = m.group(0)
+                violations.append(
+                    f"  governor doc secs. 3-4 (routing surface) contains a numeric-threshold "
+                    f"literal {snippet!r} at line {line_no} — the doc's own rule forbids this "
+                    "(a threshold must POINT to the gate that owns it, not be restated here). "
+                    "Replace with the criterion NAME or the canonical surface pointer. "
+                    "(Sec. 5 reconciliation notes are exempt; this guard scopes to secs. 3-4 only.)"
+                )
+                break  # one report is enough to action
+
+    return violations
+
+
 def check_no_direct_requests_to_broker_endpoints(trading_app_dir: Path) -> list[str]:
     """Broker adapters MUST route HTTP through trading_app.live.http_client.BrokerHTTPClient.
 
@@ -15901,6 +16016,12 @@ CHECKS = [
         "intent-router.py routing table matches auto-skill-routing.md documented skills",
         check_intent_router_routing_parity,
         False,  # blocking — silent drift between hook + rule = unreachable routes
+        False,
+    ),
+    (
+        "decision-governor doc/template/composer exist, pointers resolve, routing surface threshold-free",
+        check_decision_governor_pointers_resolve,
+        False,  # blocking — a router with a dead pointer or a re-encoded threshold lies about its gates
         False,
     ),
     (
