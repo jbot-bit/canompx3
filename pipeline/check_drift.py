@@ -11512,6 +11512,16 @@ def check_decision_governor_pointers_resolve() -> list[str]:
             r"\$\s?\d",  # $1,800 budget
             r"\d+(?:\.\d+)?\s*[×x]\s*MLL",  # 0.90 x MLL
             r"\bq\s*<\s*0",  # q < 0.05 (BH-FDR floor)
+            # Comparator-less re-encode forms (evidence-auditor LOW blind-spot,
+            # 2026-06-05): a NAMED statistical floor written next to a number with
+            # no comparator ("t-stat 3.79", "threshold: 3.79", "DSR 0.95"). Keyed
+            # on the threshold KEYWORD + a digit so bare numbers ("R1-R8",
+            # "Criteria 2,3,4", "13-Q") never false-fire.
+            r"(?i:Sharpe|DSR|deflated sharpe)\s*[>=≥]*\s*\d",
+            r"(?i:t[- ]?stat|t[- ]?value|chordia t)\s*[>=≥]*\s*\d",
+            r"(?i:q[- ]?value|q[- ]?val|FDR)\s*[<≤=]*\s*\d",
+            r"(?i:WFE|walk[- ]forward)\s*[>=≥]*\s*\d",
+            r"(?i:threshold|floor|budget)\s*[:=]?\s*\d",
         ]
         for pat in threshold_patterns:
             m = re.search(pat, routing)
@@ -11529,6 +11539,45 @@ def check_decision_governor_pointers_resolve() -> list[str]:
                     "(Sec. 5 reconciliation notes are exempt; this guard scopes to secs. 3-4 only.)"
                 )
                 break  # one report is enough to action
+
+    # (d) DELEGATION INTEGRITY (added 2026-06-05 per evidence-auditor MEDIUM):
+    # the composer resolves Q13 live by delegating to a PRIVATE function,
+    # research_catalog_mcp_server._list_open_hypotheses. The composer's own
+    # except-clause fail-opens (correct for an advisory tool) — which means if
+    # that delegate is renamed/removed, Q13 silently goes dark with no runtime
+    # signal. This drift check is the fail-closed half: assert the composer's
+    # named delegate still resolves to a `def` in the MCP server (static source
+    # scan — no import, so the drift process never loads the FastMCP server).
+    if composer.exists():
+        try:
+            composer_text = composer.read_text(encoding="utf-8")
+        except OSError as e:
+            return violations + [f"  cannot read decision_governor.py: {e}"]
+        # The delegate name + its host module, as the composer actually writes them.
+        delegate = "_list_open_hypotheses"
+        host_module = "research_catalog_mcp_server"
+        if delegate in composer_text and host_module in composer_text:
+            host = PROJECT_ROOT / "scripts" / "tools" / f"{host_module}.py"
+            if not host.exists():
+                violations.append(
+                    f"  decision_governor.py delegates Q13 to {host_module}.{delegate} but "
+                    f"scripts/tools/{host_module}.py is MISSING. Q13's live open-hypothesis "
+                    "count would silently degrade to a NOTE (the composer fail-opens). "
+                    "Restore the module or update the composer's delegation target."
+                )
+            else:
+                try:
+                    host_text = host.read_text(encoding="utf-8")
+                except OSError as e:
+                    return violations + [f"  cannot read {host_module}.py: {e}"]
+                if f"def {delegate}(" not in host_text:
+                    violations.append(
+                        f"  decision_governor.py delegates Q13 to {host_module}.{delegate}, but "
+                        f"`def {delegate}(` no longer exists in scripts/tools/{host_module}.py. "
+                        "The delegate was renamed/removed; the composer would silently degrade "
+                        "Q13 to a NOTE (fail-open). Re-point the composer's delegation target "
+                        "(or restore the function name)."
+                    )
 
     return violations
 
