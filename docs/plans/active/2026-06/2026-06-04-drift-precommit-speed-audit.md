@@ -131,6 +131,55 @@ Required fields:
 
 Fail-closed rule: a blocking check with no `path_globs` and no explicit `stages` must remain broad until classified.
 
+### 2a. Per-check classifier (the resolution algorithm)
+
+The hot-path classifier (§1) maps **staged files → change class**; the typed registry (§2)
+maps **check → relevance metadata**. The per-check classifier is the deterministic function
+that joins them — `(staged_files, change_classes, registry, target_stage) → selected_checks`.
+It is the single decision point, so its rules must be explicit and fail-closed.
+
+**Selection rule, per registry entry, in order:**
+
+1. **Stage gate.** Drop the check if `target_stage` is not in its `stages`. (A `pre_push`-only
+   check never runs at commit time; a `post_edit_fast` check never blocks a push.)
+2. **Capital override.** If `capital_class` is true and any staged file matches a
+   live/runtime/profile/allocation/migration surface, the check is **forced in** regardless
+   of `path_globs` — capital-class checks are never path-pruned away.
+3. **Forced inclusion.** If any active change class is listed in `always_when`, include the
+   check (e.g. `dependency` forces lock/python-version checks even if no `path_globs` matched).
+4. **Path relevance.** Include the check iff at least one staged file matches its `path_globs`.
+5. **Unclassified → broad.** A blocking check with empty `path_globs` and no explicit `stages`
+   is treated as relevant to **every** commit (the §2 fail-closed rule), so it survives selection
+   until someone classifies it. Advisory unclassified checks may be deferred to pre-push.
+
+**Invariants (must hold for the classifier to be trustworthy):**
+
+- **Determinism.** Same staged set + same registry → same selection. No clock, no env, no
+  network reads in the decision path; cache/DB availability affects *execution*, never *selection*.
+- **Monotonic stage coverage.** Every blocking check selected at `pre_commit` is also selected
+  at `pre_push` for the same delta (pre-push is a strict superset). A check can only ever be
+  *promoted* to a later stage, never silently dropped from all stages.
+- **No silent skips.** Every excluded check emits a one-line reason via `--explain-selection`
+  (`stage-gate`, `path-miss`, `advisory-deferred`), and the selection is written to the
+  `last-drift-selection.json` sidecar (§3). A skip with no printed reason is a bug.
+- **Fail-closed on ambiguity.** Unknown change class, unreadable registry entry, or a staged
+  file matching no class → route to `unknown_or_global` and run the current broad gate (or set
+  `prepush_required=true`), never an empty plan.
+
+**Worked example** (commit staging only `docs/plans/2026-06-04-...md` + `HANDOFF.md`):
+
+```text
+change classes: {docs_plan_only}
+- claim_hygiene        : stages has pre_commit, path_globs match docs/**         -> SELECT (path)
+- promote_queue_drift  : capital_class=false, no path match, no always_when      -> skip (path-miss)
+- dsr_trial_lock       : pre_push-only                                           -> skip (stage-gate)
+- live_readiness_gate  : capital_class=true, but no live/runtime file staged     -> skip (path-miss)
+HOOK PLAN: class=docs_plan_only, py=0, drift=1, pytest=0, prepush_required=false
+```
+
+This is exactly the path the just-landed path-scoped drift gate (commit `ba246aa7`) opened;
+§2a names the rules that gate must obey so future check additions inherit them by construction.
+
 ### 3. Two-level drift execution
 
 Add explicit drift modes:
