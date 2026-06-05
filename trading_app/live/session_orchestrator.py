@@ -2163,8 +2163,17 @@ class SessionOrchestrator:
     @staticmethod
     def _bracket_stop_distance(event, strategy) -> float | None:
         event_risk = getattr(event, "risk_points", None)
-        if event_risk:
-            return float(event_risk)
+        if event_risk is not None:
+            # Risk field is PRESENT: trust it iff it is a valid positive distance.
+            # A present-but-<=0 value must FAIL CLOSED (return None -> caller flattens),
+            # NOT silently fall through to a guessed median bracket. Stage-1 audit
+            # finding on 9b3fc530: the old `if event_risk:` truthiness guard let a 0.0
+            # risk-points event take the median fallback, producing a positive guessed
+            # distance that passed the caller's `if not stop_dist` check.
+            if event_risk > 0:
+                return float(event_risk)
+            return None
+        # Risk field ABSENT: median fallback (median_risk * stop_multiplier) is legitimate.
         median_risk = getattr(strategy, "median_risk_points", None)
         if not median_risk:
             return None
@@ -2179,8 +2188,10 @@ class SessionOrchestrator:
         (entry filled, no bracket at broker) is the highest unattended-overnight risk:
         an adverse gap will run the full account without any automatic stop.
 
-        Three sub-paths that previously left a naked position:
-          1. No risk_points — bracket would be wrong; safer to flatten than guess.
+        Sub-paths that previously left a naked position:
+          1. No risk_points (absent, or present-but-<=0) — bracket would be wrong;
+             safer to flatten than guess. A present-but-zero risk_points must NOT
+             take the median fallback (Stage-1 audit finding on 9b3fc530).
           2. build_bracket_spec returns None — broker cannot represent this bracket.
           3. submit() raises — network/auth failure; bracket never reached broker.
 
