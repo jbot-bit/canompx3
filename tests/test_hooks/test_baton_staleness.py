@@ -38,9 +38,7 @@ def _load_helper() -> ModuleType:
 
 
 def _run(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=repo, capture_output=True, text=True, check=True
-    ).stdout.strip()
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True).stdout.strip()
 
 
 @pytest.fixture
@@ -56,9 +54,7 @@ def repo_with_origin(tmp_path: Path) -> tuple[Path, str, str]:
     subprocess.run(["git", "commit", "-qm", "c1"], cwd=repo, check=True)
     merged_sha = _run(repo, "rev-parse", "HEAD")
     # Make origin/main point at this commit (no real remote needed).
-    subprocess.run(
-        ["git", "update-ref", "refs/remotes/origin/main", merged_sha], cwd=repo, check=True
-    )
+    subprocess.run(["git", "update-ref", "refs/remotes/origin/main", merged_sha], cwd=repo, check=True)
     # A second commit NOT reachable from origin/main.
     (repo / "b.txt").write_text("2")
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
@@ -77,9 +73,7 @@ def test_proven_stale_claim_is_flagged(repo_with_origin, tmp_path):
     mem = tmp_path / "memory"
     mem.mkdir()
     # The exact this-session failure shape.
-    (mem / "baton.md").write_text(
-        f"- `{merged_sha[:8]}` (Stage-1 guard commit) is NOT on origin/main — unmerged.\n"
-    )
+    (mem / "baton.md").write_text(f"- `{merged_sha[:8]}` (Stage-1 guard commit) is NOT on origin/main — unmerged.\n")
     mod = _load_helper()
     _patch_paths(mod, repo, mem)
     findings = mod.scan_stale_batons()
@@ -92,9 +86,7 @@ def test_genuinely_unmerged_claim_is_silent(repo_with_origin, tmp_path):
     repo, _, unmerged_sha = repo_with_origin
     mem = tmp_path / "memory"
     mem.mkdir()
-    (mem / "baton.md").write_text(
-        f"- `{unmerged_sha[:8]}` committed local-only, NOT on origin/main yet.\n"
-    )
+    (mem / "baton.md").write_text(f"- `{unmerged_sha[:8]}` committed local-only, NOT on origin/main yet.\n")
     mod = _load_helper()
     _patch_paths(mod, repo, mem)
     assert mod.scan_stale_batons() == []  # claim is TRUE -> no nag
@@ -106,8 +98,7 @@ def test_unmerged_prose_without_adjacent_sha_is_silent(repo_with_origin, tmp_pat
     mem.mkdir()
     # SHA present, but on a DIFFERENT line from the not-merged phrasing.
     (mem / "baton.md").write_text(
-        "Discussion of unmerged work in the abstract.\n"
-        f"Separately, commit {merged_sha[:8]} did something.\n"
+        f"Discussion of unmerged work in the abstract.\nSeparately, commit {merged_sha[:8]} did something.\n"
     )
     mod = _load_helper()
     _patch_paths(mod, repo, mem)
@@ -145,9 +136,7 @@ def test_scan_fail_open_on_missing_memory_dir(repo_with_origin, tmp_path):
 
 def _write_baton(mem: Path, name: str, type_: str, desc: str) -> Path:
     p = mem / name
-    p.write_text(
-        f"---\nname: {name[:-3]}\ndescription: {desc}\nmetadata:\n  type: {type_}\n---\nbody\n"
-    )
+    p.write_text(f"---\nname: {name[:-3]}\ndescription: {desc}\nmetadata:\n  type: {type_}\n---\nbody\n")
     return p
 
 

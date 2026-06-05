@@ -679,9 +679,15 @@ echo "  PASSED"
 
 # 7. Claim hygiene for staged result docs (~sub-second)
 _stage "[7/8] Claim hygiene..."
-STAGED_RESULT_DOCS=$(echo "$STAGED_ALL" | grep '^docs/audit/results/.*\.md$' || true)
+# Feed ALL staged .md files under the claim-hygiene scope folders, not just
+# docs/audit/results/. check_claim_hygiene.py self-routes each path: result docs
+# get check_result_doc, and any doc under docs/audit|institutional|plans + research/
+# gets the stat-claim literature-anchor gate (_in_stat_claim_scope). Staged-only,
+# so history is grandfathered. Keep the checker as the single source of which
+# check applies — the hook just delivers the candidate set.
+STAGED_RESULT_DOCS=$(echo "$STAGED_ALL" | grep -E '^(docs/audit/|docs/institutional/|docs/plans/|research/).*\.md$' || true)
 if [ -z "$STAGED_RESULT_DOCS" ]; then
-    echo "  No staged result docs"
+    echo "  No staged claim-hygiene docs"
 else
     RESULT_DOC_ARGS=()
     while IFS= read -r staged_file; do
