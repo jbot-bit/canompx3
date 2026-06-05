@@ -1291,16 +1291,25 @@ class SessionOrchestrator:
                     loop = asyncio.get_running_loop()
                     loop.create_task(self._emergency_flatten())
                 except RuntimeError:
-                    # No running event loop (post_session context) — cannot schedule.
-                    # Alert the operator: this is the one flatten path that fails
-                    # silently to Telegram (log-only), and it fires with a position
-                    # open + feed dead — the worst moment to be invisible.
-                    msg = (
-                        f"FEED DEAD: cannot schedule flatten for {self.instrument} "
-                        "(no event loop) — MANUAL CLOSE REQUIRED"
-                    )
-                    log.critical(msg)
-                    self._notify(msg)
+                    # No running event loop (post_session context). Row 09 Gap 3:
+                    # previously the flatten was DROPPED here (log+notify only) —
+                    # a silent-exposure window with a position open + feed dead,
+                    # the worst moment to be invisible. Run the flatten
+                    # SYNCHRONOUSLY via asyncio.run() so the position is actually
+                    # closed. asyncio.run() is safe here precisely because we are
+                    # in the except branch — there is no running loop to conflict.
+                    try:
+                        asyncio.run(self._emergency_flatten())
+                    except Exception as flatten_exc:
+                        # Fail-closed fallback: the synchronous flatten itself
+                        # failed (broker dead, etc.). Alert the operator —
+                        # exposure persists until manual close.
+                        msg = (
+                            f"FEED DEAD: synchronous flatten failed for {self.instrument} "
+                            f"({flatten_exc}) — MANUAL CLOSE REQUIRED"
+                        )
+                        log.critical(msg)
+                        self._notify(msg)
         else:
             self._feed_status["status"] = "stale"
             self._feed_status["dead"] = False
@@ -3096,10 +3105,28 @@ class SessionOrchestrator:
                     )
                     result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
                     order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
+                    fill_price = (
+                        result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+                    )
                     msg = f"KILL SWITCH FLATTEN: {record.strategy_id} {direction} → orderId={order_id} (attempt {attempt + 1})"
                     log.critical(msg)
                     self._notify(msg)
-                    self._positions.on_exit_filled(record.strategy_id)
+                    # Row 09 Gap 2: only mark FLAT when the broker confirmed a
+                    # fill. A bare order acknowledgement (order_id, no fill_price)
+                    # is acceptance, not execution — marking FLAT then is the
+                    # submit-before-fill lie. Leave PENDING_EXIT so the EOD
+                    # broker-truth re-query (_kill_switch_positions_confirmed_flat)
+                    # reconciles it against the broker rather than local state.
+                    if fill_price is not None:
+                        self._positions.on_exit_filled(record.strategy_id)
+                    else:
+                        self._positions.on_exit_sent(record.strategy_id)
+                        log.critical(
+                            "KILL SWITCH FLATTEN: %s submit accepted (orderId=%s) but NO fill "
+                            "confirmation — left PENDING_EXIT for EOD broker-truth reconcile.",
+                            record.strategy_id,
+                            order_id,
+                        )
                     # Persist kill switch exit to journal (fail-open)
                     if record.journal_trade_id:
                         self.journal.record_exit(

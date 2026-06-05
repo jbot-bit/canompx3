@@ -1156,29 +1156,155 @@ class TestKillSwitch:
         # Position still active (couldn't flatten)
         assert len(orch._positions.active_positions()) == 1
 
-    async def test_feed_dead_no_event_loop_alerts_operator(self):
-        """Feed dead + open position + no event loop → _notify fires (not log-only).
+    async def test_emergency_flatten_no_fill_stays_pending_exit(self):
+        """Row 09 Gap 2 guard: kill-switch flatten whose submit is ACCEPTED but
+        returns no fill_price must NOT be marked FLAT — it stays PENDING_EXIT so
+        the EOD broker-truth re-query reconciles it. Marking FLAT on a bare ack
+        is the submit-before-fill lie.
+        """
+        # Broker accepts the order (returns order_id) but reports no fill.
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=None))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
 
-        The one flatten path that fails silently: _on_feed_stale runs from a
-        sync/post_session context (no running loop), so create_task raises
-        RuntimeError and the flatten cannot be scheduled. The operator MUST be
-        alerted via _notify, not just the log, because this fires with a position
-        open + feed dead — the worst moment to be invisible.
+        await orch._emergency_flatten()
+
+        # Submit was accepted, but with no fill confirmation the position must
+        # remain non-FLAT (PENDING_EXIT), still visible to active_positions().
+        active = orch._positions.active_positions()
+        assert len(active) == 1, f"no-fill flatten must stay active (PENDING_EXIT), got {active}"
+        assert active[0].state == PositionState.PENDING_EXIT
+
+    async def test_feed_dead_no_event_loop_executes_flatten(self):
+        """Feed dead + open position + no event loop → flatten EXECUTES (not dropped).
+
+        Row 09 Gap 3 fix: _on_feed_stale may run from a sync/post_session context
+        (no running loop), so loop.create_task() raises RuntimeError. Previously
+        the flatten was SKIPPED entirely (log+notify only) — a silent-exposure
+        window with a position open + feed dead. The fix runs the flatten
+        synchronously via asyncio.run() so the position is actually closed.
         """
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
         orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
         orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
         orch._notify = MagicMock()
 
-        # Force the no-running-loop branch: get_running_loop raises RuntimeError,
-        # exactly as it would when _on_feed_stale is reached outside the loop.
-        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+        # Faithfully model the post_session no-loop context. In production there
+        # is no running loop, so: get_running_loop() raises (→ except branch),
+        # and asyncio.run() succeeds. pytest-asyncio runs THIS test inside a loop,
+        # so we must simulate both: patch get_running_loop to raise, and route
+        # asyncio.run() through a real fresh loop (what it does for real off-loop).
+        def _run_in_fresh_loop(coro):
+            # Run in a worker THREAD with its own loop. pytest-asyncio holds a
+            # running loop in the test thread, so asyncio.run()/run_until_complete
+            # would reject here; a separate thread faithfully models the real
+            # post_session no-loop context where asyncio.run() simply works.
+            import threading
+
+            box: dict = {}
+
+            def _worker():
+                new_loop = asyncio.new_event_loop()
+                try:
+                    box["result"] = new_loop.run_until_complete(coro)
+                except BaseException as exc:  # noqa: BLE001 — propagate to caller
+                    box["error"] = exc
+                finally:
+                    new_loop.close()
+
+            t = threading.Thread(target=_worker)
+            t.start()
+            t.join()
+            if "error" in box:
+                raise box["error"]
+            return box.get("result")
+
+        # Raise ONLY for the _on_feed_stale decision check (first call), then
+        # delegate to the real get_running_loop so _emergency_flatten's own
+        # internal get_running_loop() (inside the worker thread's real loop)
+        # still works. A blanket raise would poison the flatten itself.
+        _real_get_running_loop = asyncio.get_running_loop
+
+        def _raise_once_then_real():
+            if not getattr(_raise_once_then_real, "_fired", False):
+                _raise_once_then_real._fired = True
+                raise RuntimeError("no loop")
+            return _real_get_running_loop()
+
+        with (
+            patch("asyncio.get_running_loop", side_effect=_raise_once_then_real),
+            patch("trading_app.live.session_orchestrator.asyncio.run", side_effect=_run_in_fresh_loop),
+        ):
             orch._on_feed_stale(gap_seconds=600.0, stale_count=-1)
 
-        # Kill switch fired and operator was alerted on the silent path.
+        # Kill switch fired AND the flatten actually executed (position closed),
+        # rather than being silently dropped with only an alert.
         assert orch._kill_switch_fired is True
+        assert orch._positions.active_positions() == [], (
+            "no-loop path must EXECUTE the flatten, not drop it; "
+            f"positions still open={orch._positions.active_positions()}"
+        )
+
+    async def test_feed_dead_no_loop_flatten_failure_alerts_operator(self):
+        """Row 09 Gap 3 fallback: if the synchronous flatten itself fails, the
+        operator MUST still be alerted (MANUAL CLOSE REQUIRED) — fail-closed."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        orch._notify = MagicMock()
+        # Broker dead → the synchronous flatten exhausts retries, position stays open.
+        orch.order_router.submit = MagicMock(side_effect=ConnectionError("broker dead"))
+
+        def _run_in_fresh_loop(coro):
+            # Run in a worker THREAD with its own loop. pytest-asyncio holds a
+            # running loop in the test thread, so asyncio.run()/run_until_complete
+            # would reject here; a separate thread faithfully models the real
+            # post_session no-loop context where asyncio.run() simply works.
+            import threading
+
+            box: dict = {}
+
+            def _worker():
+                new_loop = asyncio.new_event_loop()
+                try:
+                    box["result"] = new_loop.run_until_complete(coro)
+                except BaseException as exc:  # noqa: BLE001 — propagate to caller
+                    box["error"] = exc
+                finally:
+                    new_loop.close()
+
+            t = threading.Thread(target=_worker)
+            t.start()
+            t.join()
+            if "error" in box:
+                raise box["error"]
+            return box.get("result")
+
+        # Raise ONLY for the _on_feed_stale decision check (first call), then
+        # delegate to the real get_running_loop so _emergency_flatten's own
+        # internal get_running_loop() (inside the worker thread's real loop)
+        # still works. A blanket raise would poison the flatten itself.
+        _real_get_running_loop = asyncio.get_running_loop
+
+        def _raise_once_then_real():
+            if not getattr(_raise_once_then_real, "_fired", False):
+                _raise_once_then_real._fired = True
+                raise RuntimeError("no loop")
+            return _real_get_running_loop()
+
+        with (
+            patch("asyncio.get_running_loop", side_effect=_raise_once_then_real),
+            patch("trading_app.live.session_orchestrator.asyncio.run", side_effect=_run_in_fresh_loop),
+        ):
+            orch._on_feed_stale(gap_seconds=600.0, stale_count=-1)
+
+        assert orch._kill_switch_fired is True
+        # Position still open (broker dead) AND operator was alerted. _emergency_flatten
+        # exhausts its 3 retries and logs its own MANUAL CLOSE REQUIRED (it does not
+        # re-raise), so the alert comes from the flatten's retry-exhaustion path.
+        assert len(orch._positions.active_positions()) == 1
         manual_close_alerts = [str(c) for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
-        assert manual_close_alerts, f"operator not alerted on no-loop flatten path; calls={orch._notify.call_args_list}"
+        assert manual_close_alerts, f"operator not alerted when no-loop flatten failed; calls={orch._notify.call_args_list}"
 
     async def test_watchdog_survives_internal_errors(self):
         """Watchdog doesn't die from its own errors (crash-resistant)."""
