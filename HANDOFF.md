@@ -109,13 +109,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-05
-- **Commit:** f1fd7a90 — fix(c11-s1): [judgment] fail-closed guard on present-but-<=0 event.risk_points + honest audit provenance
-- **Files changed:** 5 files
+- **Commit:** dbaf2289 — test(c11-s1d): [judgment] close bracket-parity audit gate CONDITIONAL — add end-to-end safety-gate test
+- **Files changed:** 6 files
+  - `HANDOFF.md`
   - `docs/audit/results/2026-06-03-bracket-risk-parity-closeout.md`
   - `docs/runtime/decision-ledger.md`
   - `docs/runtime/stages/2026-06-05-c11-s1-bracket-parity-audit.md`
+  - `scripts/tools/commit_msg_scratch.sh`
   - `tests/test_trading_app/test_session_orchestrator.py`
-  - `trading_app/live/session_orchestrator.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
