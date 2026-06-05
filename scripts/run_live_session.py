@@ -546,9 +546,35 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, f"FAILED: repo behind origin ({branch})")
     if "ahead" in branch.lower():
         return CheckResult(False, f"FAILED: repo ahead of origin ({branch}); push or isolate before live launch")
-    if changes:
-        return CheckResult(False, f"FAILED: repo dirty ({len(changes)} path(s)); clean or isolate live launch branch")
-    return CheckResult(True, f"OK ({branch})")
+
+    # Exclude files that are legitimately-always-dirty in the real multi-terminal
+    # + live-journal operating environment, so the gate fails ONLY on genuine
+    # code/config drift (the thing that actually risks capital):
+    #   - live_journal.db  : the running session writes it every tick — never clean
+    #   - HANDOFF.md       : a peer terminal's session-log surface, churns constantly
+    #   - untracked ('??')  : new docs/scratch are not committed code drift
+    # A change touching trading_app/, scripts/, pipeline/, trading config, or any
+    # tracked source file STILL fails closed — that is the capital-protecting intent.
+    _DRIFT_IGNORE_SUFFIXES = ("live_journal.db", "HANDOFF.md")
+    material_changes = []
+    for line in changes:
+        status_code = line[:2]
+        path = line[3:].strip().strip('"')
+        if status_code.strip() == "??":
+            continue  # untracked: not committed-code drift
+        if any(path.endswith(suffix) for suffix in _DRIFT_IGNORE_SUFFIXES):
+            continue  # always-dirty operational file
+        material_changes.append(line)
+
+    if material_changes:
+        return CheckResult(
+            False,
+            f"FAILED: repo has uncommitted CODE/config drift ({len(material_changes)} path(s): "
+            f"{', '.join(c[3:].strip() for c in material_changes[:5])}); commit or isolate before live launch",
+        )
+    ignored = len(changes) - len(material_changes)
+    note = f"; {ignored} always-dirty/untracked path(s) ignored" if ignored else ""
+    return CheckResult(True, f"OK ({branch}{note})")
 
 
 def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
