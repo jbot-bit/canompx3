@@ -116,12 +116,12 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-05
-- **Commit:** f180ef38 — fix(drift): anchor self-funded margin-guard marker to ACCOUNT_TIERS dict
+- **Date:** 2026-06-06
+- **Commit:** 84f1ba3f — feat(START_BOT): add live/demo mode arg so operator arms live from the front-end launcher
 - **Files changed:** 3 files
-  - `docs/superpowers/specs/2026-06-05-self-funded-marker-anchor-fix-design.md`
-  - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift_self_funded_sizing.py`
+  - `START_BOT.bat`
+  - `docs/plans/2026-06-05-c11-stage1-stage2-design.md`
+  - `docs/research-input/topstep/topstep_payout_economics_2026-06-06.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
