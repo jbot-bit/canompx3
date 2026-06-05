@@ -109,10 +109,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-05
-- **Commit:** b85147d9 — docs(c11-s2): pre-register cap_x0.80 C11 remediation (RULE 10, K=2 family)
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-06-05-c11-cap-x080-remediation-v1.yaml`
+- **Commit:** 9e79e8a3 — fix(autopilot): register autopilot-tier-guard.py PreToolUse hook (was dead safety code)
+- **Files changed:** 1 files
+  - `.claude/settings.json`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
