@@ -32,7 +32,7 @@ import os
 import subprocess
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -212,6 +212,7 @@ class PreflightContext:
     requested_account_id: int | None = None
     signal_only: bool = False
     requested_copies: int = 0
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -231,13 +232,42 @@ def _check_auth(ctx: PreflightContext) -> CheckResult:
     """Auth check"""
     from trading_app.live.broker_factory import create_broker_components
 
+    env_warning = _projectx_env_example_warning(ctx)
     try:
         ctx.components = create_broker_components(ctx.broker_name, demo=ctx.demo)
         token = ctx.components["auth"].get_token()
-        return CheckResult(True, f"OK (token: {token[:8]}...)")
+        return CheckResult(True, _append_preflight_warning(f"OK (token: {token[:8]}...)", env_warning))
     except Exception as e:
         ctx.components = None
-        return CheckResult(False, f"FAILED: {e}")
+        return CheckResult(False, _append_preflight_warning(f"FAILED: {e}", env_warning))
+
+
+def _projectx_env_example_warning(ctx: PreflightContext) -> str | None:
+    if ctx.broker_name.lower() != "projectx":
+        return None
+    try:
+        from trading_app.live.env_bootstrap import detect_tracked_env_example_secret_shapes
+
+        warning = detect_tracked_env_example_secret_shapes()
+    except Exception as exc:  # noqa: BLE001 - warning-only hygiene probe
+        log.warning("ProjectX env-example hygiene probe failed: %s", exc)
+        return None
+    if warning is None:
+        return None
+    key_list = ", ".join(warning.keys)
+    message = (
+        f"tracked {warning.path.name} contains secret-shaped values for {key_list}; "
+        "runtime ignores .env.example; keep real ProjectX credentials in untracked .env"
+    )
+    if message not in ctx.warnings:
+        ctx.warnings.append(message)
+    return message
+
+
+def _append_preflight_warning(message: str, warning: str | None) -> str:
+    if not warning:
+        return message
+    return f"{message}\n    WARN: {warning}"
 
 
 def _check_portfolio(ctx: PreflightContext) -> CheckResult:
@@ -811,8 +841,13 @@ def _run_preflight(
 
     print(f"\nPreflight: {checks_passed}/{checks_total} passed")
     if checks_passed == checks_total:
-        if not ctx.components_all_pass:
-            print("All checks passed, but component warnings present. Review above.\n")
+        if ctx.warnings or not ctx.components_all_pass:
+            print("All checks passed, but warnings present. Review above.")
+            for warning in ctx.warnings:
+                print(f"  WARN: {warning}")
+            if not ctx.components_all_pass:
+                print("  WARN: component probe warnings present")
+            print()
         else:
             print("All clear — ready to trade.\n")
     else:

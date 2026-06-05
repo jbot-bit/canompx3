@@ -12,7 +12,7 @@ import logging
 import os
 import time
 
-from dotenv import load_dotenv
+from trading_app.live.env_bootstrap import load_runtime_env
 
 from ..broker_base import BrokerAuth
 from ..http_client import (
@@ -21,16 +21,57 @@ from ..http_client import (
     BrokerProtocolError,
 )
 
-load_dotenv()
+load_runtime_env()
 log = logging.getLogger(__name__)
 
 # Base URLs — configurable via PROJECTX_BASE_URL env var.
 # Canonical: https://api.thefuturesdesk.projectx.com (per official API spec).
 # See docs/reference/PROJECTX_API_REFERENCE.md for ground truth.
 _DEFAULT_BASE = "https://api.thefuturesdesk.projectx.com"
-BASE_URL = os.environ.get("PROJECTX_BASE_URL", _DEFAULT_BASE).rstrip("/")
-MARKET_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/market"
-USER_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/user"
+
+
+def projectx_base_url() -> str:
+    load_runtime_env()
+    return os.environ.get("PROJECTX_BASE_URL", _DEFAULT_BASE).rstrip("/")
+
+
+def projectx_market_hub_url(base_url: str | None = None) -> str:
+    base = (base_url or projectx_base_url()).rstrip("/")
+    return base.replace("://api.", "://rtc.") + "/hubs/market"
+
+
+def projectx_user_hub_url(base_url: str | None = None) -> str:
+    base = (base_url or projectx_base_url()).rstrip("/")
+    return base.replace("://api.", "://rtc.") + "/hubs/user"
+
+
+BASE_URL = projectx_base_url()
+MARKET_HUB_URL = projectx_market_hub_url(BASE_URL)
+USER_HUB_URL = projectx_user_hub_url(BASE_URL)
+
+
+def _projectx_env_error(missing_keys: tuple[str, ...]) -> RuntimeError:
+    load_result = load_runtime_env()
+    attempted = ", ".join(str(path) for path in load_result.attempted_paths) or "none"
+    loaded = str(load_result.env_path) if load_result.env_path else "none"
+    return RuntimeError(
+        "Missing ProjectX env var(s): "
+        f"{', '.join(missing_keys)}; checked shell environment and runtime .env paths: "
+        f"{attempted}; loaded_env={loaded}"
+    )
+
+
+def _projectx_login_credentials() -> tuple[str, str]:
+    user = os.environ.get("PROJECTX_USERNAME") or os.environ.get("PROJECTX_USER")
+    missing: list[str] = []
+    if not user:
+        missing.append("PROJECTX_USERNAME or PROJECTX_USER")
+    api_key = os.environ.get("PROJECTX_API_KEY")
+    if not api_key:
+        missing.append("PROJECTX_API_KEY")
+    if missing:
+        raise _projectx_env_error(tuple(missing))
+    return user, api_key
 
 
 class ProjectXAuth(BrokerAuth):
@@ -47,7 +88,7 @@ class ProjectXAuth(BrokerAuth):
         # already a fail-loud RuntimeError. Continuous broker reads
         # (positions/contracts/orders) DO get the breaker — they read
         # ``self.failure_hook`` (set by orchestrator) at their own __init__.
-        self._http = BrokerHTTPClient(base_url=BASE_URL, name="projectx-auth")
+        self._http = BrokerHTTPClient(base_url=projectx_base_url(), name="projectx-auth")
 
     def get_token(self) -> str:
         if self._token and time.time() < self._acquired_at + self._token_lifetime:
@@ -80,8 +121,7 @@ class ProjectXAuth(BrokerAuth):
             self._validate_or_login()
 
     def _login(self) -> str:
-        user = os.environ.get("PROJECTX_USERNAME") or os.environ["PROJECTX_USER"]
-        api_key = os.environ["PROJECTX_API_KEY"]
+        user, api_key = _projectx_login_credentials()
         data = self._http.post_json(
             "/api/Auth/loginKey",
             headers={"Content-Type": "application/json", "Accept": "text/plain"},

@@ -7,6 +7,7 @@ import argparse
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +92,19 @@ def build_launch_step(config: LivePilotConfig) -> CommandStep:
     )
 
 
+def build_post_session_steps() -> list[CommandStep]:
+    return [
+        CommandStep(
+            "Fetch TopstepX broker fills",
+            _py("scripts/tools/fetch_broker_fills.py", "--broker", "topstepx"),
+        ),
+        CommandStep(
+            "Reconcile live fills",
+            _py("scripts/tools/reconcile_live_fills.py", "--trading-day", date.today().isoformat()),
+        ),
+    ]
+
+
 def _format_command(argv: tuple[str, ...]) -> str:
     return " ".join(f'"{part}"' if " " in part else part for part in argv)
 
@@ -110,13 +124,15 @@ def run_live_pilot(
     refresh_control_state: bool = True,
     preflight_only: bool = False,
     dry_run: bool = False,
+    post_session_reconcile: bool = True,
 ) -> int:
     gate_steps = build_gate_steps(config, refresh_control_state=refresh_control_state)
     launch_step = build_launch_step(config)
+    post_session_steps = build_post_session_steps() if post_session_reconcile else []
 
     if dry_run:
         print("Topstep MNQ live pilot command plan:")
-        for step in [*gate_steps, launch_step]:
+        for step in [*gate_steps, launch_step, *post_session_steps]:
             print(f"- {step.name}: {_format_command(step.argv)}")
         return 0
 
@@ -137,7 +153,17 @@ def run_live_pilot(
         return 0
 
     print("Handing off to the canonical live runner. Type CONFIRM there to arm real-money orders.")
-    return _run_step(launch_step)
+    launch_rc = _run_step(launch_step)
+    if launch_rc != 0:
+        print("\nLaunch exited non-zero; post-session reconciliation not run automatically.")
+        print("If any orders reached the broker, run fetch_broker_fills.py and reconcile_live_fills.py manually.")
+        return launch_rc
+
+    for step in post_session_steps:
+        rc = _run_step(step)
+        if rc != 0:
+            return rc
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -145,12 +171,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print the command plan without running anything")
     parser.add_argument("--preflight-only", action="store_true", help="Run gates and stop before live launch")
     parser.add_argument("--skip-control-refresh", action="store_true", help="Do not refresh C11/C12 before gates")
+    parser.add_argument(
+        "--skip-post-session-reconcile",
+        action="store_true",
+        help="Do not fetch broker fills and reconcile after a successful live session",
+    )
     args = parser.parse_args(argv)
 
     return run_live_pilot(
         refresh_control_state=not args.skip_control_refresh,
         preflight_only=args.preflight_only,
         dry_run=args.dry_run,
+        post_session_reconcile=not args.skip_post_session_reconcile,
     )
 
 

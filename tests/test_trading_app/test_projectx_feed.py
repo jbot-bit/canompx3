@@ -133,6 +133,15 @@ class TestBrokerFeedABC:
         """Must implement flush()."""
         assert callable(feed.flush)
 
+    def test_market_hub_url_resolves_from_current_projectx_base_url(self, monkeypatch):
+        """New feed instances must not be pinned to auth.py import-time URL constants."""
+        monkeypatch.setenv("PROJECTX_BASE_URL", "https://api.dynamic-feed.test")
+        auth = MagicMock()
+
+        feed = ProjectXDataFeed(auth=auth, on_bar=MagicMock())
+
+        assert feed._market_hub_url == "https://rtc.dynamic-feed.test/hubs/market"
+
 
 class TestPysignalrStop:
     @pytest.mark.asyncio

@@ -35,6 +35,7 @@ from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.live.alert_engine import read_operator_alerts, summarize_operator_alerts
 from trading_app.live.bot_state import read_live_health, read_state
+from trading_app.live.env_bootstrap import load_runtime_env
 from trading_app.live.instance_lock import is_pid_alive
 
 log = logging.getLogger(__name__)
@@ -109,9 +110,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 log.warning("Startup: failed to parse heartbeat %r — keeping state as-is", hb)
 
     # ── Connect brokers ──
-    from dotenv import load_dotenv as _ld
-
-    _ld(PROJECT_ROOT / ".env")
+    load_runtime_env()
     from trading_app.live.broker_connections import connection_manager
 
     connection_manager.load()

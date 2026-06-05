@@ -10,6 +10,7 @@ def test_gate_plan_pins_single_copy_live_pilot():
 
     steps = pilot.build_gate_steps(config)
     launch = pilot.build_launch_step(config)
+    post_session = pilot.build_post_session_steps()
 
     assert [step.name for step in steps] == [
         "Refresh C11/C12 control state",
@@ -38,6 +39,13 @@ def test_gate_plan_pins_single_copy_live_pilot():
     assert "1" in launch_argv
     assert "--auto-confirm" not in launch_argv
     assert "--preflight" not in launch_argv
+
+    assert [step.name for step in post_session] == ["Fetch TopstepX broker fills", "Reconcile live fills"]
+    assert "scripts/tools/fetch_broker_fills.py" in post_session[0].argv
+    assert "--broker" in post_session[0].argv
+    assert "topstepx" in post_session[0].argv
+    assert "scripts/tools/reconcile_live_fills.py" in post_session[1].argv
+    assert "--trading-day" in post_session[1].argv
 
 
 def test_skip_control_refresh_removes_refresh_step():
@@ -79,6 +87,50 @@ def test_preflight_only_does_not_launch(monkeypatch):
     assert all("--preflight" in call or call[1].endswith(("refresh_control_state.py", "live_readiness_report.py")) for call in calls)
 
 
+def test_successful_launch_runs_post_session_reconciliation(monkeypatch):
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(argv, cwd):  # noqa: ANN001
+        calls.append(tuple(argv))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(pilot.subprocess, "run", fake_run)
+
+    rc = pilot.run_live_pilot()
+
+    assert rc == 0
+    assert calls[-2][1] == "scripts/tools/fetch_broker_fills.py"
+    assert calls[-1][1] == "scripts/tools/reconcile_live_fills.py"
+
+
+def test_nonzero_launch_skips_post_session_reconciliation(monkeypatch):
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(argv, cwd):  # noqa: ANN001
+        calls.append(tuple(argv))
+        if argv[1:] == (
+            "-m",
+            "scripts.run_live_session",
+            "--profile",
+            "topstep_50k_mnq_auto",
+            "--instrument",
+            "MNQ",
+            "--live",
+            "--copies",
+            "1",
+        ):
+            return SimpleNamespace(returncode=2)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(pilot.subprocess, "run", fake_run)
+
+    rc = pilot.run_live_pilot()
+
+    assert rc == 2
+    assert not any(any("fetch_broker_fills.py" in part for part in call) for call in calls)
+    assert not any(any("reconcile_live_fills.py" in part for part in call) for call in calls)
+
+
 def test_dry_run_never_invokes_subprocess(monkeypatch, capsys):
     def fake_run(*_args, **_kwargs):
         raise AssertionError("dry-run must not invoke subprocess")
@@ -91,3 +143,4 @@ def test_dry_run_never_invokes_subprocess(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "Topstep MNQ live pilot command plan" in out
     assert "--auto-confirm" not in out
+    assert "reconcile_live_fills.py" in out

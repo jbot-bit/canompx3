@@ -208,6 +208,7 @@ class TestTradovateOrderRouter:
         assert spec["action"] == "Sell"
         assert spec["orderType"] == "Market"
         assert spec["isAutomated"] is True
+        assert spec["clOrdId"]
 
     def test_build_exit_spec_short(self, router):
         spec = router.build_exit_spec("short", "MNQM6")
@@ -241,6 +242,7 @@ class TestTradovateOrderRouter:
         assert result["order_id"] == 42
         assert result["status"] == "submitted"
         assert result["fill_price"] == 100.0
+        assert result["client_order_id"] == spec["clOrdId"]
 
     @patch("trading_app.live.tradovate.order_router.request_with_retry")
     def test_submit_no_orderid_raises(self, mock_req, router):
@@ -347,6 +349,12 @@ class TestTradovateOrderRouter:
         spec1 = router.build_order_spec("long", "E1", 0, "MNQM6")
         spec2 = router.build_order_spec("long", "E1", 0, "MNQM6")
         assert spec1["clOrdId"] != spec2["clOrdId"], "clOrdId must be unique per build_order_spec call"
+
+    def test_build_exit_spec_cl_ord_ids_are_unique(self, router):
+        """Each exit order gets its own clOrdId for journal attribution."""
+        spec1 = router.build_exit_spec("long", "MNQM6")
+        spec2 = router.build_exit_spec("long", "MNQM6")
+        assert spec1["clOrdId"] != spec2["clOrdId"]
 
     @patch("trading_app.live.tradovate.order_router.request_with_retry")
     def test_submit_uses_order_policy(self, mock_req, router):

@@ -258,8 +258,80 @@ def test_auth_fail_cascades(monkeypatch, capsys, stub_daily_features, stub_telem
     # Trade journal is independent of components and still runs OK.
     n = len(rls.PREFLIGHT_CHECKS)
     assert f"[8/{n}] Trade journal health" in out
-    # Final return reflects failures (auth, contracts, notifications).
     assert result is False
+
+
+def test_projectx_auth_check_surfaces_env_example_warning_without_values(monkeypatch, all_pass_components):
+    import trading_app.live.broker_factory as bf
+
+    class Warning:
+        path = Path("C:/tmp/.env.example")
+        keys = ("PROJECTX_USERNAME", "PROJECTX_API_KEY")
+
+        def format_message(self):
+            return (
+                "tracked .env.example contains secret-shaped values for "
+                "PROJECTX_USERNAME, PROJECTX_API_KEY; secret=super_secret_value"
+            )
+
+    monkeypatch.setattr(bf, "create_broker_components", lambda *a, **kw: all_pass_components)
+    monkeypatch.setattr(
+        "trading_app.live.env_bootstrap.detect_tracked_env_example_secret_shapes",
+        lambda: Warning(),
+    )
+
+    ctx = rls.PreflightContext(
+        instrument="MNQ",
+        broker_name="projectx",
+        demo=False,
+        portfolio=_build_portfolio(),
+    )
+
+    result = rls._check_auth(ctx)
+
+    assert result.passed is True
+    assert "WARN:" in result.message
+    assert "PROJECTX_USERNAME" in result.message
+    assert "PROJECTX_API_KEY" in result.message
+    assert "super_secret_value" not in result.message
+    assert ctx.warnings
+
+
+def test_preflight_summary_reports_warning_only_state(
+    monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature, stub_capital_state_ok
+):
+    """A warning-only preflight pass must not print a plain all-clear summary."""
+
+    class Warning:
+        path = Path("C:/tmp/.env.example")
+        keys = ("PROJECTX_USERNAME", "PROJECTX_API_KEY")
+
+    import trading_app.live.broker_factory as bf
+    import trading_app.live.trade_journal as tj
+
+    monkeypatch.setattr(
+        "trading_app.live.env_bootstrap.detect_tracked_env_example_secret_shapes",
+        lambda: Warning(),
+    )
+    monkeypatch.setattr(bf, "create_broker_components", lambda *a, **kw: all_pass_components)
+    monkeypatch.setattr(bf, "get_broker_name", lambda: "projectx")
+    monkeypatch.setattr(
+        rls,
+        "_run_lightweight_component_self_tests",
+        lambda *, instrument, components=None: {"notifications": True, "brackets": True, "fill_poller": True},
+    )
+    monkeypatch.setattr(tj, "TradeJournal", lambda *a, **kw: SimpleNamespace(is_healthy=True))
+
+    result = rls._run_preflight(
+        "MNQ", "projectx", demo=True, portfolio=_build_portfolio(), profile_id="topstep_50k_mnq_auto"
+    )
+
+    out = capsys.readouterr().out
+    assert result is True
+    assert "All checks passed, but warnings present" in out
+    assert "All clear" not in out
+    assert "PROJECTX_USERNAME" in out
+    assert "PROJECTX_API_KEY" in out
 
 
 def test_survival_report_check_blocks_capital_profile(monkeypatch):

@@ -18,7 +18,7 @@ from typing import Any
 
 from ..bar_aggregator import Bar, BarAggregator
 from ..broker_base import BrokerAuth, BrokerFeed
-from .auth import MARKET_HUB_URL
+from .auth import projectx_market_hub_url
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +62,7 @@ class ProjectXDataFeed(BrokerFeed):
         self._last_data_at: datetime | None = None
         self._stale_count: int = 0
         self._quote_count: int = 0
+        self._market_hub_url = projectx_market_hub_url()
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -129,7 +130,7 @@ class ProjectXDataFeed(BrokerFeed):
                 )
 
                 token = self.auth.get_token()
-                url = f"{MARKET_HUB_URL}?access_token={token}"
+                url = f"{self._market_hub_url}?access_token={token}"
                 client = SignalRClient(
                     url,
                     access_token_factory=lambda: self.auth.get_token(),
@@ -215,7 +216,7 @@ class ProjectXDataFeed(BrokerFeed):
                 token = self.auth.get_token()
                 hub = (
                     HubConnectionBuilder()
-                    .with_url(f"{MARKET_HUB_URL}?access_token={token}")
+                    .with_url(f"{self._market_hub_url}?access_token={token}")
                     .with_automatic_reconnect({"type": "interval", "intervals": [5, 10, 30, 60]})
                     .build()
                 )

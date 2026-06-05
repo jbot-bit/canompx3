@@ -214,6 +214,7 @@ class FakeRouter:
             "order_id": 99,
             "status": "submitted",
             "fill_price": self._fill_price,
+            "client_order_id": "fake-client-order-id",
         }
 
     def supports_native_brackets(self) -> bool:
@@ -338,6 +339,8 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._blocked_strategy_reasons = {}
     orch._safety_state = MagicMock()  # SessionSafetyState — mocked to avoid file I/O
     orch._profile_id_for_lane_ctl = None
+    orch._profile_id = "test_profile"
+    orch._runtime_session_id = "test-runtime-session"
     orch._orb_caps = {}  # ORB cap map — populated per test
     orch._max_risk_per_trade = None  # Dollar cap — populated per test
     orch._regime_paused = set()  # Regime gate — populated per test
@@ -795,6 +798,37 @@ class TestNQMiniExecutionSubstitution:
         assert submitted["type"] == "fake_exit"
         assert submitted["symbol"] == "NQM6"
         assert submitted["qty"] == 1
+
+
+class TestJournalAttributionContext:
+    async def test_live_entry_journal_receives_profile_account_contract_session_and_client_order_id(self):
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2351.0))
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        kwargs = orch.journal.record_entry.call_args.kwargs
+        assert kwargs["profile_id"] == "test_profile"
+        assert kwargs["account_id"] == 12345
+        assert kwargs["copy_id"] == "primary"
+        assert kwargs["runtime_session_id"] == "test-runtime-session"
+        assert kwargs["contract_id"] == "MGCJ6"
+        assert kwargs["session_id"] == "CME_REOPEN"
+        assert kwargs["orb_minutes"] == 5
+        assert kwargs["client_order_id"] == "fake-client-order-id"
+
+    async def test_signal_entry_journal_receives_signal_identity_context(self):
+        orch = build_orchestrator(FakeBrokerComponents(signal_only=True))
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        kwargs = orch.journal.record_entry.call_args.kwargs
+        assert kwargs["profile_id"] == "test_profile"
+        assert kwargs["account_id"] is None
+        assert kwargs["copy_id"] == "signal"
+        assert kwargs["runtime_session_id"] == "test-runtime-session"
+        assert kwargs["contract_id"] == "MGCJ6"
+        assert kwargs["session_id"] == "CME_REOPEN"
+        assert kwargs["orb_minutes"] == 5
 
 
 class TestBestPrice:

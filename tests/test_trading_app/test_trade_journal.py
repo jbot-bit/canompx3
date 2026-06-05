@@ -49,6 +49,59 @@ class TestTradeJournalInit:
         j2 = TradeJournal(journal_path, mode="live")
         j2.close()
 
+    def test_live_trades_schema_has_attribution_identity_columns(self, journal_path):
+        j = TradeJournal(journal_path, mode="live")
+        try:
+            cols = {r[1] for r in j._con.execute("PRAGMA table_info('live_trades')").fetchall()}
+        finally:
+            j.close()
+
+        assert {
+            "profile_id",
+            "account_id",
+            "copy_id",
+            "runtime_session_id",
+            "contract_id",
+            "session_id",
+            "orb_minutes",
+            "client_order_id_exit",
+            "broker_fill_id_entry",
+            "broker_fill_id_exit",
+        }.issubset(cols)
+
+    def test_migrates_old_live_trades_table_to_identity_schema(self, journal_path):
+        con = duckdb.connect(str(journal_path))
+        con.execute(
+            """
+            CREATE TABLE live_trades (
+                trade_id TEXT PRIMARY KEY,
+                trading_day DATE NOT NULL,
+                instrument TEXT NOT NULL,
+                strategy_id TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                entry_model TEXT NOT NULL,
+                engine_entry DOUBLE,
+                fill_entry DOUBLE,
+                broker TEXT,
+                order_id_entry TEXT,
+                client_order_id TEXT,
+                contracts INTEGER DEFAULT 1,
+                session_mode TEXT NOT NULL
+            )
+            """
+        )
+        con.close()
+
+        j = TradeJournal(journal_path, mode="live")
+        try:
+            cols = {r[1] for r in j._con.execute("PRAGMA table_info('live_trades')").fetchall()}
+        finally:
+            j.close()
+
+        assert "account_id" in cols
+        assert "runtime_session_id" in cols
+        assert "client_order_id_exit" in cols
+
     def test_invalid_path_fails_open(self, tmp_path):
         """Journal with bad path should not raise — fails open."""
         bad_path = tmp_path / "nonexistent_dir" / "sub" / "journal.db"
@@ -117,7 +170,6 @@ class TestTradeJournalLocked:
         finally:
             j.close()
 
-
 class TestRecordEntry:
     def test_basic_entry(self, journal):
         tid = generate_trade_id()
@@ -136,6 +188,52 @@ class TestRecordEntry:
         )
         rows = journal._con.execute("SELECT * FROM live_trades WHERE trade_id = ?", [tid]).fetchall()
         assert len(rows) == 1
+
+    def test_entry_persists_independent_attribution_context(self, journal):
+        tid = generate_trade_id()
+        journal.record_entry(
+            trade_id=tid,
+            trading_day=date(2026, 3, 14),
+            instrument="MNQ",
+            strategy_id="MNQ_TOKYO_OPEN_E2_CB1_ORB_G4_long_RR2.0",
+            direction="long",
+            entry_model="E2",
+            engine_entry=18450.0,
+            fill_entry=18450.25,
+            broker="projectx",
+            order_id_entry=12345,
+            client_order_id="entry-cid-1",
+            contracts=1,
+            profile_id="topstep_50k_mnq_auto",
+            account_id=20372221,
+            copy_id="primary",
+            runtime_session_id="run-20260314-001",
+            contract_id="CON.F.US.MNQ.H26",
+            session_id="TOKYO_OPEN",
+            orb_minutes=5,
+            broker_fill_id_entry="topstepx-777",
+        )
+
+        row = journal._con.execute(
+            """
+            SELECT profile_id, account_id, copy_id, runtime_session_id, contract_id,
+                   session_id, orb_minutes, client_order_id, broker_fill_id_entry
+            FROM live_trades WHERE trade_id = ?
+            """,
+            [tid],
+        ).fetchone()
+
+        assert row == (
+            "topstep_50k_mnq_auto",
+            "20372221",
+            "primary",
+            "run-20260314-001",
+            "CON.F.US.MNQ.H26",
+            "TOKYO_OPEN",
+            5,
+            "entry-cid-1",
+            "topstepx-777",
+        )
 
     def test_entry_without_fill(self, journal):
         """E2 stop-market: fill comes later via poller."""
@@ -216,14 +314,22 @@ class TestRecordExit:
             pnl_dollars=28.0,
             exit_reason="target",
             order_id_exit=101,
+            client_order_id_exit="exit-cid-1",
+            broker_fill_id_exit="topstepx-778",
             cusum_alarm=False,
         )
         row = journal._con.execute(
-            "SELECT actual_r, exit_reason, exited_at FROM live_trades WHERE trade_id = ?", [tid]
+            """
+            SELECT actual_r, exit_reason, exited_at, client_order_id_exit, broker_fill_id_exit
+            FROM live_trades WHERE trade_id = ?
+            """,
+            [tid],
         ).fetchone()
         assert row[0] == pytest.approx(0.85)
         assert row[1] == "target"
         assert row[2] is not None  # exited_at timestamp set
+        assert row[3] == "exit-cid-1"
+        assert row[4] == "topstepx-778"
 
     def test_kill_switch_exit(self, journal):
         tid = generate_trade_id()

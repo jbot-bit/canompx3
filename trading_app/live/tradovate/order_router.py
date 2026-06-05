@@ -128,8 +128,9 @@ class TradovateOrderRouter(BrokerRouter):
 
         # Strip internal routing fields before sending to Tradovate API
         wire_spec = {k: v for k, v in spec.items() if not k.startswith("_")}
+        wire_spec.setdefault("clOrdId", str(uuid.uuid4()))
 
-        cl_ord_id = wire_spec.get("clOrdId", "<none>")
+        cl_ord_id = wire_spec["clOrdId"]
         log.info("TRADOVATE ORDER SUBMIT (cid=%s): %s", cl_ord_id, _json.dumps(wire_spec, default=str))
 
         # Use placeOSO if bracket fields present, otherwise placeorder
@@ -173,6 +174,7 @@ class TradovateOrderRouter(BrokerRouter):
             "order_id": order_id,
             "status": "submitted",
             "fill_price": float(fill_price) if fill_price is not None else None,
+            "client_order_id": cl_ord_id,
         }
 
     def build_exit_spec(self, direction: str, symbol: str, qty: int = 1) -> dict:
@@ -185,6 +187,7 @@ class TradovateOrderRouter(BrokerRouter):
             "orderQty": qty,
             "orderType": "Market",
             "isAutomated": True,
+            "clOrdId": str(uuid.uuid4()),
         }
 
     def cancel(self, order_id: int) -> None:

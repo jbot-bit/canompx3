@@ -54,7 +54,7 @@ research/
     analyze_1100_conditional.py
     analyze_1100_ib_alignment.py
     analyze_1100_midday_reversal.py
-... and 1525 more entries
+... and 1542 more entries
 ```
 
 ## Module Index
@@ -71,7 +71,7 @@ research/
 | `pipeline/calendar_filters.py` | 259 | Calendar-based date flags: NFP, OPEX, FOMC, CPI, month-end, OPEX-week, day-of... | is_nfp_day, is_opex_day, is_friday, is_monday, is_tuesday |
 | `pipeline/canonical_inline_copies.py` | 317 | Canonical-inline-copy meta-registry (Layer 2 of 3-layer hardening). | InlineCopyPair |
 | `pipeline/check_db.py` | 61 | Check database contents and integrity. | check_db |
-| `pipeline/check_drift.py` | 12726 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
+| `pipeline/check_drift.py` | 12789 | Drift detection for the multi-instrument pipeline. | check_hardcoded_mgc_sql, check_apply_iterrows, check_non_bars1m_writes, check_schema_query_consistency, check_import_cycles |
 | `pipeline/check_drift_crg_helpers.py` | 163 | CRG (code-review-graph) helpers for pipeline/check_drift.py. | crg_is_available, get_surprising_connections, query_tests_for, find_large_functions, get_bridge_nodes |
 | `pipeline/cost_model.py` | 330 | Cost model for futures instruments. | CostSpec, get_session_cost_spec, get_cost_spec, list_validated_instruments, risk_in_dollars |
 | `pipeline/daily_backfill.py` | 140 | Nightly data backfill: ingest new bars → 5m bars → daily features → outcomes. | get_last_ingested_date, is_up_to_date, run_backfill_for_instrument, main |
@@ -121,7 +121,7 @@ research/
 | `trading_app/calendar_overlay.py` | 108 | Calendar overlay for per-instrument x session calendar rules. | CalendarAction, get_calendar_action |
 | `trading_app/cascade_table.py` | 92 | Cross-session conditional probability table. | build_cascade_table, lookup_cascade |
 | `trading_app/chordia.py` | 383 | Chordia t-statistic gate — Chordia, Goyal, Saretto (2018). | chordia_threshold, compute_chordia_t, chordia_gate, ChordiaAuditEntry, ChordiaAuditLog |
-| `trading_app/conditional_overlays.py` | 441 | Shadow-only conditional overlay registry and derived-state helpers. | ConditionalOverlaySpec, get_overlay_specs_for_profile, get_overlay_state_path, refresh_overlay_state, read_overlay_states |
+| `trading_app/conditional_overlays.py` | 442 | Shadow-only conditional overlay registry and derived-state helpers. | ConditionalOverlaySpec, get_overlay_specs_for_profile, get_overlay_state_path, refresh_overlay_state, read_overlay_states |
 | `trading_app/config.py` | 3248 | Strategy configuration: filters, entry models, and grid parameters. | is_e2_lookahead_filter, is_e2_deployment_unsafe_filter, e2_deployment_unsafe_reason, AtomDescription, StrategyFilter |
 | `trading_app/consistency_tracker.py` | 345 | Prop firm compliance monitors — consistency rule, payout eligibility, | ConsistencyResult, PayoutEligibility, MicroscalpResult, check_consistency, check_payout_eligibility |
 | `trading_app/db_access.py` | 318 | Read-safe gold.db access helpers for MCP and remote-agent snapshots. | db_access_policy, db_freshness, db_health, validate_snapshot_manifest, snapshot_manifest |
@@ -164,9 +164,9 @@ research/
 | `trading_app/live/planned_launch.py` | 175 | Canonical writer/reader for the dashboard's planned-launch surface. | write_planned_launch, read_planned_launch, clear_planned_launch |
 | `trading_app/live/position_tracker.py` | 215 | Position lifecycle state machine for live trading. | PositionState, PositionRecord, PositionTracker |
 | `trading_app/live/projectx/__init__.py` | 13 | ProjectX (TopstepX) broker implementation. |  |
-| `trading_app/live/projectx/auth.py` | 99 | ProjectX Gateway API authentication. | ProjectXAuth |
+| `trading_app/live/projectx/auth.py` | 127 | ProjectX Gateway API authentication. | projectx_base_url, projectx_market_hub_url, projectx_user_hub_url, ProjectXAuth |
 | `trading_app/live/projectx/contract_resolver.py` | 101 | ProjectX contract resolution and account discovery. | ProjectXContracts |
-| `trading_app/live/projectx/data_feed.py` | 363 | ProjectX real-time market data via SignalR. | ProjectXDataFeed |
+| `trading_app/live/projectx/data_feed.py` | 364 | ProjectX real-time market data via SignalR. | ProjectXDataFeed |
 | `trading_app/live/projectx/order_router.py` | 436 | ProjectX order routing via REST API. | generate_client_order_id, ProjectXOrderRouter |
 | `trading_app/live/projectx/positions.py` | 143 | ProjectX position queries for crash recovery. | ProjectXPositions |
 | `trading_app/live/rithmic/__init__.py` | 16 | Rithmic broker adapter — order routing via Protocol Buffer over WebSocket. |  |
@@ -174,13 +174,13 @@ research/
 | `trading_app/live/rithmic/contracts.py` | 101 | Rithmic contract resolution and account discovery. | RithmicContracts |
 | `trading_app/live/rithmic/order_router.py` | 326 | Rithmic order routing via Protocol Buffer over WebSocket. | RithmicOrderRouter |
 | `trading_app/live/rithmic/positions.py` | 87 | Rithmic position queries for crash recovery and equity tracking. | RithmicPositions |
-| `trading_app/live/session_orchestrator.py` | 3154 | Live trading session orchestrator. | SessionStats, SessionOrchestrator |
+| `trading_app/live/session_orchestrator.py` | 3188 | Live trading session orchestrator. | SessionStats, SessionOrchestrator |
 | `trading_app/live/session_safety_state.py` | 107 | Crash-recoverable persistence for critical session safety flags. | SessionSafetyState |
 | `trading_app/live/signal_log_rotator.py` | 149 | Daily rotation helper for live_signals JSONL log files. | signals_file_for_day, SignalLogRotator |
 | `trading_app/live/sr_monitor.py` | 139 | Score-based Shiryaev-Roberts drift monitor. | calibrate_sr_threshold, ShiryaevRobertsMonitor |
 | `trading_app/live/telemetry_maturity.py` | 215 | Live-telemetry maturity gate — 30-trading-day floor (advisory). | TelemetryMaturityReport, evaluate_telemetry_maturity, iter_known_uptime_record_types |
-| `trading_app/live/trade_journal.py` | 318 | Persistent trade journal for live trading sessions. | TradeJournalLockedError, generate_trade_id, TradeJournal |
-... and 1094 more modules
+| `trading_app/live/trade_journal.py` | 377 | Persistent trade journal for live trading sessions. | TradeJournalLockedError, generate_trade_id, TradeJournal |
+... and 1110 more modules
 
 ## Cross-Package Dependencies
 
@@ -233,7 +233,7 @@ research/
 - `trading_app/eligibility/__init__.py` -> trading_app
 - `trading_app/eligibility/builder.py` -> pipeline, trading_app
 - `trading_app/entry_rules.py` -> trading_app
-... and 823 more edges
+... and 839 more edges
 
 ## CLI Entry Points
 
@@ -261,4 +261,4 @@ research/
 - `python trading_app/db_manager.py` -- (no argparse description)
 - `python trading_app/lane_ctl.py` -- (no argparse description)
 - `python trading_app/live/bot_dashboard.py` -- Bot Operations Dashboard
-... and 611 more entry points
+... and 618 more entry points
