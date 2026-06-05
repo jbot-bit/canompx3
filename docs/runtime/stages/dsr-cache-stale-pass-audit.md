@@ -1,8 +1,20 @@
 # Stage: DSR drift-cache stale-PASS audit (Codex high-risk finding)
 
 task: Verify and (if real) fix whether the DSR reference-universe-lock drift check can serve a STALE PASS after its own verdict logic in pipeline/check_drift.py changes.
-mode: TRUTH AUDIT (not yet IMPLEMENTATION — finding is PLAUSIBLE, NOT PROVEN)
-status: OPEN — next session
+mode: IMPLEMENTATION (finding PROVEN by execution 2026-06-04; Option C applied)
+status: FIX APPLIED + ALL GATES GREEN — awaiting operator GO to commit (Tier B, no merge/push without approval)
+
+## Fix landed (worktree session/joshd-wt-06Thu04-20261905, UNCOMMITTED)
+- NEW pipeline/_dsr_policy.py: ALLOWED_DSR_TRIALS_DERIVATION (the extracted verdict constant).
+- pipeline/check_drift.py: import alias preserves in-file name _ALLOWED_DSR_TRIALS_DERIVATION;
+  literal removed; DSR cache entry file_deps []→["pipeline/_dsr_policy.py"]; false comment fixed.
+- tests/test_pipeline/test_drift_cache.py: completeness test flipped; +2 anti-regression tests.
+- Verification: RED proven (3 DSR tests fail on old code) → GREEN (36 pass + 2 slow real-dispatch
+  parity pass); key probe (policy edit changes key, check_drift.py NOT a dep so unrelated edits
+  don't cold-run DSR); `python pipeline/check_drift.py` → NO DRIFT, 176 passed, DSR Check 65 PASSED;
+  dead-code sweep clean; ruff clean.
+- Adversarial-audit gate (.claude/rules/adversarial-audit-gate.md): evidence-auditor independent
+  pass → VERDICT PASS, all 6 claims (A–F) verified by execution, highest-priority issue: none.
 
 ## Origin
 
@@ -105,6 +117,13 @@ Per Codex recommendation + repo's own cache doctrine:
 ## scope_lock
 - pipeline/check_drift.py
 - tests/test_pipeline/test_drift_cache.py
+- pipeline/_dsr_policy.py
+  (AMENDED 2026-06-04: Option C extracts the DSR verdict constant
+  _ALLOWED_DSR_TRIALS_DERIVATION into this new private module so the DSR cache
+  entry can dep on it precisely — invalidates only when DSR policy changes, not
+  on every check_drift.py edit (12.5%-commit cold-run tax of the rejected
+  Option A). Mirrors the trading_app/chordia.py dep precedent. This +1 path is
+  the first recorded action of the implementation session.)
 
 ## Do NOT
 - Do NOT fix based on Codex's inference alone — PROVE it first (step 2 execution).
