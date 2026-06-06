@@ -407,6 +407,27 @@ def _load_lane_daily_pnl(
     return daily
 
 
+def _lane_atr_by_day(con, instrument: str, orb_minutes: int, days: set) -> dict:
+    """Per-day atr_20 for an instrument over the given trade days (one batched query).
+
+    Uses orb_minutes=5 because atr_20 is a per-day, non-aperture value (verified:
+    0 symbol-days with cross-aperture variance). Days with NULL atr_20 are omitted
+    — the caller falls back to vol_scalar=1.0 (engine parity, execution_engine.py:280).
+
+    Errors (missing table / query failure) propagate intentionally: a structural
+    inability to read ATR must fail the gate closed, not silently fall back.
+    """
+    if not days:
+        return {}
+    rows = con.execute(
+        """SELECT trading_day, atr_20 FROM daily_features
+           WHERE symbol = ? AND orb_minutes = ? AND atr_20 IS NOT NULL""",
+        [instrument, orb_minutes],
+    ).fetchall()
+    wanted = set(days)
+    return {r[0]: float(r[1]) for r in rows if r[0] in wanted}
+
+
 def _load_lane_trade_paths(
     con: duckdb.DuckDBPyConnection,
     strategy_id: str,

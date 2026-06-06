@@ -1042,3 +1042,21 @@ def test_sizing_context_carries_engine_inputs_and_resolves_cap():
     assert ctx.max_contracts_for("A") == 3
     assert ctx.max_contracts_for("B") == 1
     assert ctx.max_contracts_for("UNKNOWN") == 1  # fail closed to 1, never unbounded
+
+
+def test_lane_atr_by_day_returns_per_day_atr_map():
+    import duckdb
+    from trading_app.account_survival import _lane_atr_by_day
+    con = duckdb.connect(":memory:")
+    con.execute(
+        "CREATE TABLE daily_features (symbol VARCHAR, orb_minutes INT, trading_day DATE, atr_20 DOUBLE)"
+    )
+    con.execute(
+        "INSERT INTO daily_features VALUES "
+        "('MNQ',5,DATE '2026-01-02',12.5),"
+        "('MNQ',15,DATE '2026-01-02',12.5),"   # other aperture, deduped by orb_minutes=5
+        "('MNQ',5,DATE '2026-01-05',NULL)"     # NULL atr -> omitted from map
+    )
+    m = _lane_atr_by_day(con, "MNQ", 5, {date(2026, 1, 2), date(2026, 1, 5)})
+    assert m[date(2026, 1, 2)] == 12.5
+    assert date(2026, 1, 5) not in m   # NULL not mapped; caller falls back to vol_scalar=1.0
