@@ -48,6 +48,7 @@ Use skills only after the route narrows what should be read.
 - Real-capital scrutiny / bias check / before deploy -> `/capital-review`
 - Decision/deploy/portfolio/account-sizing candidate / "should we deploy X / add this lane / size this account / which class is this" -> `/decision-governor` (composes the 13-Q anti-tunnel checklist via `scripts/tools/decision_governor.py`; routes a candidate through its decision class before any deep dive — forces Q13 "what higher-EV item are we ignoring?")
 - Review / check my work / before I commit -> `/code-review`
+- Check before/after running / audit my work / "is this safe to run" -> `/check` (institutional audit: gaps/silences/unsupported claims/edge/blast; applies smallest safe diff or STOPS on capital/schema/canonical/live)
 - Editing schema or canonical config -> full stage-gate
 - Improve a skill -> `/skill-improve`
 

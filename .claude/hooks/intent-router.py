@@ -72,6 +72,8 @@ INTENT_RULES: list[tuple[str, str, int]] = [
     (r"\b(should we deploy|decision (class|governor)|add (a |an |this )?(new |fourth |another |\w+ )?lane|which (decision )?class|portfolio (decision|add|reweight)|reweight (the )?(portfolio|book|lane)|account.sizing|size (the |this )?account|higher[- ]ev|what are we ignoring)\b", "/decision-governor", 52),
     # Review / check my work / before I commit → /code-review
     (r"\b(check my work|before I commit|code review this|review this (change|pr|commit))\b", "/code-review", 24),
+    # Institutional audit before/after running own work → /check
+    (r"\b(check (my|this)\b|before i run|sanity check this|audit this|check my shit)\b", "/check", 51),
     # Improve a skill → /skill-improve
     (r"\b(improve a? skill|optimize a? skill|skill loop)\b", "/skill-improve", 26),
     # CRG: where is X / what calls X / find Y / who imports Z → /crg-search
