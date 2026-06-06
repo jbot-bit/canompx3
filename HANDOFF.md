@@ -117,11 +117,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** 84f1ba3f — feat(START_BOT): add live/demo mode arg so operator arms live from the front-end launcher
-- **Files changed:** 3 files
-  - `START_BOT.bat`
-  - `docs/plans/2026-06-05-c11-stage1-stage2-design.md`
-  - `docs/research-input/topstep/topstep_payout_economics_2026-06-06.md`
+- **Commit:** 2eab92a5 — fix(lint): rename unused orphan-clear loop var to _attempt (B007)
+- **Files changed:** 1 files
+  - `trading_app/live/instance_lock.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

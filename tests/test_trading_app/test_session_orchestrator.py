@@ -4216,12 +4216,8 @@ class TestBracketOrders:
 
         await orch._handle_event(_entry_event(2350.5))
 
-        assert orch._kill_switch_fired is True, (
-            "Confirmed-naked position must fire the kill switch"
-        )
-        assert flatten_calls, (
-            "Confirmed-naked position must trigger emergency flatten"
-        )
+        assert orch._kill_switch_fired is True, "Confirmed-naked position must fire the kill switch"
+        assert flatten_calls, "Confirmed-naked position must trigger emergency flatten"
         assert orch._stats.brackets_submitted == 0, (
             "A failed/naked bracket must NOT be counted as submitted; "
             f"got brackets_submitted={orch._stats.brackets_submitted}"
@@ -4259,12 +4255,8 @@ class TestBracketOrders:
 
         await orch._handle_event(_entry_event(2350.5))
 
-        assert orch._kill_switch_fired is True, (
-            "Missing-stop position must fire the kill switch"
-        )
-        assert flatten_calls, (
-            "Missing-stop position must trigger emergency flatten"
-        )
+        assert orch._kill_switch_fired is True, "Missing-stop position must fire the kill switch"
+        assert flatten_calls, "Missing-stop position must trigger emergency flatten"
         assert orch._stats.brackets_submitted == 0, (
             "A missing-stop bracket must NOT be counted as submitted; "
             f"got brackets_submitted={orch._stats.brackets_submitted}"
