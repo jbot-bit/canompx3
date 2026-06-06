@@ -75,3 +75,37 @@ the LLM to choose." SessionStart fires on start/resume/clear/compact and can inj
 - Official: code.claude.com/docs/en/hooks-guide ; git-scm.com/docs/git-reset
 - htdocs.dev/posts/from-conductor-to-orchestrator-a-practical-guide-to-multi-agent-coding-in-2026
 - beam.ai/agentic-insights/multi-agent-orchestration-patterns-production
+
+---
+
+## Audit review (separate session, 2026-06-06 — for the owner)
+
+> Added by a third session (NOT the capital-lane author). Review note only — the
+> peer's text above is unchanged. Verify before building.
+
+**[HIGH] Wrong injection channel.** The scope says the cue "extends the existing
+session-start additionalContext path" (§"Proposed Stage 5 scope"). Verified against
+repo source-of-truth: `.claude/hooks/session-start.py` does **not** use
+`additionalContext` — it prints to **stderr** and `sys.exit(0)` (see its `main()`,
+`print(..., file=sys.stderr)`). stderr is operator-visible but NOT the model-visible
+channel. The model-visible `hookSpecificOutput.additionalContext` path lives in the
+**sibling** SessionStart hook `.claude/hooks/memory-capture-sessionstart.py:126-128`
+(both are registered in `.claude/settings.json`). Its own docstring documents the
+split: *"different channel: stdout-JSON additionalContext vs session-start.py's stderr
+text."* If Stage 5 is built on `session-start.py` as written, the operator sees
+`[MISSION]…` while the model — the stated beneficiary — may never receive it
+(silent value-loss, stale-PASS-class).
+
+**Fix (1-line scope correction):** emit via the SessionStart **stdout-JSON
+`additionalContext`** channel (the model-visible path — same channel as
+`memory-capture-sessionstart.py`), NOT `session-start.py`'s stderr.
+
+**Secondary (verify before build):**
+- NORTH_STAR.md self-labels `DRAFT — operator must approve` (line 3); the proposal
+  calls it "operator-confirmed." Resolve before the director surfaces it as authoritative.
+- Add a fail-open + latency budget for the `fleet_state()` call — `session-start.py`
+  is already a heavy hook (process reaper up to ~35s inside a 30s registration).
+
+**Verified-OK claims:** `fleet_state()`, `project_pulse --fast`, `decision_governor`,
+Stage-2 worktree isolation all exist; `mcp-git-guard.py` IS orphaned (absent from
+settings.json) — the registration-drift-check precedent is real.
