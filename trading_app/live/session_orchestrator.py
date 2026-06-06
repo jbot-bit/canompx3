@@ -3238,6 +3238,101 @@ class SessionOrchestrator:
             return False
         return True
 
+    async def _reconcile_positions_on_reconnect(self, reconnect_count: int) -> None:
+        """Re-sync local position state against broker truth after a reconnect.
+
+        Row 08 MED #2 (overnight capital audit, 2026-06-06): the mid-session
+        reconnect loop previously only bumped ``_fill_reconnect_gen`` — it never
+        re-queried the broker. If a fill arrived during the disconnect window, the
+        broker holds a position the local tracker is blind to; on resume the engine
+        could ``cancel_trade``/act as if flat while a REAL position is open at the
+        broker → naked exposure desynced from broker truth. Startup reconciles
+        (``query_open`` at session start), but reconnect did not. This re-couples
+        the local tracker to broker truth on every reconnect (the audit's
+        cross-cutting "decoupled safety check" defect class).
+
+        Danger signal: the broker reports an OPEN position that the local tracker
+        does not account for. Fail-closed response mirrors the F4-3 /
+        feed-dead path (``_on_feed_stale``): fire the kill switch + emergency
+        flatten so the untracked broker position is actually closed, not left
+        naked. We do NOT silently adopt the broker position into the local tracker
+        (we cannot reconstruct its strategy_id / bracket state) — closing it is the
+        capital-safe action.
+
+        Cases (mirrors ``_confirmed_flat_at_broker`` semantics):
+        - signal-only / no router / no positions adapter → no live position
+          possible → nothing to reconcile.
+        - ``query_open`` empty → broker flat → in-sync, resume.
+        - ``query_open`` shows open position(s) while local tracker is flat →
+          untracked broker position → KILL + FLATTEN + notify (fail-closed).
+        - ``query_open`` shows open position(s) and local tracker also active →
+          a position is genuinely open across the reconnect; log+notify for
+          operator visibility but resume (the live engine continues managing it).
+        - ``NotImplementedError`` → adapter cannot verify → warn, fall back to the
+          local tracker (cannot prove a desync, do not block resume).
+        - generic ``Exception`` → fail-closed: notify the operator that broker
+          state could NOT be verified on reconnect; do not silently resume clean.
+        """
+        if self.signal_only or self.order_router is None or self.positions is None:
+            return
+        try:
+            broker_open = self.positions.query_open(self.order_router.account_id)
+        except NotImplementedError:
+            log.warning(
+                "Reconnect resync (attempt %d): %s broker does not implement query_open() — "
+                "cannot verify broker positions; relying on local tracker.",
+                reconnect_count,
+                self._broker_name,
+            )
+            return
+        except Exception as e:  # noqa: BLE001 — fail-closed, never silent
+            msg = (
+                f"RECONNECT RESYNC FAILED (attempt {reconnect_count}): broker position query "
+                f"failed ({e}) — cannot verify broker state. Verify no untracked position is open."
+            )
+            log.critical(msg)
+            self._notify(msg)
+            return
+
+        if not broker_open:
+            return  # broker flat — in sync, nothing to do
+
+        local_active = self._positions.active_positions()
+        if not local_active:
+            # The dangerous desync: broker holds a position we never tracked
+            # (fill landed during the disconnect window). Close it — do not resume
+            # blind. Mirror the F4-3 / feed-dead fail-closed sequence.
+            msg = (
+                f"RECONNECT DESYNC (attempt {reconnect_count}): broker shows {len(broker_open)} "
+                f"OPEN position(s) but local tracker is flat — untracked fill during disconnect. "
+                f"Firing kill switch + emergency flatten. Positions: {broker_open}"
+            )
+            log.critical(msg)
+            self._notify(msg)
+            if not self._kill_switch_fired:
+                self._fire_kill_switch()
+                try:
+                    await self._emergency_flatten()
+                except Exception as flatten_exc:  # noqa: BLE001 — fail-closed alert
+                    fail_msg = (
+                        f"RECONNECT DESYNC: emergency flatten failed ({flatten_exc}) — "
+                        "MANUAL CLOSE REQUIRED; untracked broker position remains open."
+                    )
+                    log.critical(fail_msg)
+                    self._notify(fail_msg)
+            return
+
+        # Broker open AND local tracker active: a position is genuinely open across
+        # the reconnect. The live engine continues managing it; surface for operator
+        # visibility but do not halt (this is the expected hold-through-reconnect case).
+        log.warning(
+            "Reconnect resync (attempt %d): broker shows %d open position(s), local tracker "
+            "has %d active — position held across reconnect, resuming management.",
+            reconnect_count,
+            len(broker_open),
+            len(local_active),
+        )
+
     async def _watchdog(self) -> None:
         """Independent watchdog task — fires kill switch if feed goes silent
         OR if the broker stops acknowledging equity reads with positions open.
@@ -3817,12 +3912,36 @@ class SessionOrchestrator:
             # R3: use a mutable counter (not range()) so stable-run reset can lower it
             # back to 0 without re-entering the loop from scratch.
             reconnect_count = 0
+            # Row 08 MED #2: "have we connected before in THIS run()?" is a distinct
+            # question from reconnect_count (which the R3 stable-run reset zeroes).
+            # The resync must gate on this flag, NOT reconnect_count — after a long
+            # stable run drops, R3 resets reconnect_count to 0, but that IS a
+            # reconnect (a fill could have landed during the drop), so a
+            # reconnect_count-based guard would skip resync exactly when it matters.
+            has_connected_once = False
             while reconnect_count <= self.ORCHESTRATOR_MAX_RECONNECTS:
                 if self._kill_switch_fired:
                     msg = "Kill switch fired — not reconnecting"
                     log.critical(msg)
                     self._notify(msg)
                     return
+
+                # Row 08 MED #2: on a RECONNECT iteration (we have connected before
+                # in this run(); startup reconciles separately at session start via
+                # the orphan check), re-sync local position state against broker
+                # truth BEFORE re-subscribing and resuming. A fill that landed during
+                # the disconnect window leaves the broker holding a position the
+                # local tracker is blind to — this catches it and fails closed
+                # (kill + flatten) rather than resuming naked. Gated on
+                # has_connected_once (NOT reconnect_count, which R3 zeroes). If it
+                # fired the kill switch, exit cleanly.
+                if has_connected_once:
+                    await self._reconcile_positions_on_reconnect(reconnect_count)
+                    if self._kill_switch_fired:
+                        msg = "Kill switch fired during reconnect resync — not resuming"
+                        log.critical(msg)
+                        self._notify(msg)
+                        return
 
                 # Feedless brokers (e.g. Tradovate, webhook entry) must not reach
                 # the feed-based reconnect loop. Assertion fires only if invariant
@@ -3851,6 +3970,11 @@ class SessionOrchestrator:
                 feed_started_at = datetime.now(UTC)
                 try:
                     self._last_bar_at = None  # reset heartbeat to avoid false watchdog trigger
+                    # Row 08 MED #2: mark that a connection has been established in
+                    # this run() BEFORE the blocking run() — so even a mid-session
+                    # crash (feed.run raising) still arms the next iteration's
+                    # broker-truth resync. Independent of reconnect_count (R3-zeroed).
+                    has_connected_once = True
                     await feed.run(self.contract_symbol)
 
                     # Distinguish stop-file exit from feed exhaustion

@@ -7557,6 +7557,79 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
     return violations
 
 
+def check_active_profiles_survival_state_current(con=None) -> list[str]:  # noqa: ARG001
+    """Row 05 (overnight capital audit): every ACTIVE prop profile must carry a
+    CURRENT, PASSING Criterion-11 account-survival proof.
+
+    Re-couples the survival GATE to the active-profile REGISTRY — the audit's
+    cross-cutting defect class ("safety checks decoupled from live behavior").
+    A profile can be flipped ``active=True`` (deploy-readiness) while its survival
+    state file is stale (DB advanced) or regressed (op_pass dropped below floor /
+    strict DD breach). Without this, the stale/regressed state is invisible until
+    arm-time preflight.
+
+    PERFORMANCE — no average drift slowdown. This does NOT re-run the 10 000-path
+    Monte-Carlo survival sim. It calls the existing cheap validator
+    ``check_survival_report_gate`` (account_survival.py), which reads the persisted
+    state envelope + computes the cheap db_identity/code fingerprints (a few
+    COUNT/MAX queries). Re-encodes ZERO survival logic — it delegates to the
+    canonical gate the arm-time preflight already uses (rigor § "never re-encode
+    canonical logic"). The check is correctly NON-cacheable (its verdict tracks
+    gold.db content, which is not file-content-hashable — same class as the
+    deliberately-uncached FAST_LANE PROMOTE check), but cheap enough that running
+    it every pass does not move the average.
+
+    SEVERITY — ADVISORY (non-blocking). results/05.md classifies this as
+    "deploy-readiness only ... no blind path to live execution": the arm-time
+    ``check_survival_report_gate`` preflight is the real fail-closed CAPITAL gate;
+    this drift check is the VISIBILITY layer. Routine daily ingest advances the DB
+    and naturally staleness the state — blocking every commit on that would punish
+    data updates, not catch a real regression. So staleness/freshness misses are
+    surfaced as ADVISORY warnings; the operator re-runs the survival gate when
+    arming. (The hard fail-closed coupling lives at the arm path, not here.)
+
+    Fail-open on infrastructure error (missing DB, import error) — an
+    unverifiable check is an advisory, never a silent pass and never a hard block.
+    """
+    try:
+        # pipeline.paths.GOLD_DB_PATH is the canonical DB path (CLAUDE.md § Volatile
+        # Data Rule) — never hardcode, never use the deprecated scratch copy.
+        from pipeline.paths import GOLD_DB_PATH
+        from trading_app.account_survival import check_survival_report_gate
+        from trading_app.prop_profiles import get_active_profile_ids
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ADVISORY: could not import survival gate to verify active profiles: {exc}")
+        return []
+
+    try:
+        active_ids = get_active_profile_ids()
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ADVISORY: could not resolve active prop profiles for survival check: {exc}")
+        return []
+
+    if not active_ids:
+        # No active prop profile is a valid state (nothing armed) — nothing to verify.
+        return []
+
+    db_path = GOLD_DB_PATH_FOR_CHECKS or GOLD_DB_PATH
+    for profile_id in active_ids:
+        try:
+            ok, msg = check_survival_report_gate(profile_id, db_path=db_path)
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"  ADVISORY: active profile {profile_id!r} survival gate could not be "
+                f"evaluated ({type(exc).__name__}: {exc}) — re-run account survival."
+            )
+            continue
+        if not ok:
+            # Single distinct message per profile. The gate's own message already
+            # discriminates staleness ("db identity mismatch" / "is Nd old") from
+            # regression ("operational pass ... <" / "strict ... failed"); we surface
+            # it verbatim so the operator sees exactly which class fired.
+            print(f"  ADVISORY: active profile {profile_id!r} survival gate not current — {msg}")
+    return []
+
+
 def check_live_funded_firms_declare_max_live_accounts() -> list[str]:
     """Every firm with a ``live_funded`` payout policy must declare the hard
     live-account cap as structured data.
@@ -15640,6 +15713,12 @@ CHECKS = [
     (
         "Uncovered FDR+WF strategies (FDR-validated but no live_config spec)",
         check_uncovered_fdr_strategies,
+        True,
+        True,
+    ),  # ADVISORY, requires_db
+    (
+        "Active prop profiles carry a current+passing survival proof (Row 05)",
+        check_active_profiles_survival_state_current,
         True,
         True,
     ),  # ADVISORY, requires_db
