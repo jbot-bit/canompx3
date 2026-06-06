@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: 2026-05-30T00:00:00+10:00
+updated_at: 2026-06-06T00:00:00+10:00
 items:
   - id: remote_control_task_reregister_2026_05_30
     title: Re-register ClaudeRemoteControl_canompx3 scheduled task (host auto-start gone)
@@ -1048,3 +1048,108 @@ items:
       Routed to PARK by the promote-queue scanner's
       REJECTED_OOS_UNPOWERED disposition. No revocation sidecar:
       the IS edge is not refuted, the cell is unvalidatable.
+
+  - id: daily_features_bars_present_features_absent_gap_2026_06_06
+    title: Finding 4 — active-instrument days with bars_1m present but daily_features absent (UNBUILT coverage gap)
+    class: debt
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: claude-or-codex
+    last_verified_at: 2026-06-06
+    freshness_sla_days: 30
+    next_action: |
+      Operator-ordered SEPARATE ticket, split out of the 2026-06-06 live-bridge
+      partial-day fix (commit 43d58129, Option W). Option W fixed the
+      live-partial loop (1-of-3 aperture day). This entry is the DISTINCT second
+      defect class the audit surfaced (audit § Finding 4 + § "Finding 4 root-cause
+      investigation"): full bar data present, daily_features simply never built.
+      NOT remediated yet, per directive — investigation only is done.
+
+      EXACT DEFECT (audit-confirmed, read-only):
+        active-instrument trading days that HAVE full bars_1m coverage but have
+        ZERO daily_features rows (0-of-3 apertures, not 1-of-3). Confirmed
+        instances: MES 2026-05-26 (1320 bars, 0 aps), MES 2026-05-14 (1320, 0),
+        MGC 2026-04-20 / 04-21 / 04-22 (~1380, 0). Per-(instrument,date), not
+        global (same date has 3 aps on other instruments → rules out
+        holiday/calendar). Isolated INTERIOR gaps, not trailing → refutes the
+        "incremental date-range skip" hypothesis. Root cause: the day was absent
+        from `trading_days` for whatever build run would have built it (narrow /
+        interrupted incremental --start/--end range, or a run whose range ended
+        before that day's bars landed). build_daily_features.py:1373-1390
+        iterates unconditionally — no per-day skip — so absence = never covered.
+        There is NO drift check for "bars present but daily_features absent" on
+        active instruments today; Check 77 only catches the 1-of-3 partial, never
+        the 0-of-3 gap. So new gaps of this class can recur silently.
+
+      PROPOSED DRIFT CHECK (detect-the-generator-gap, fail-closed):
+        Add a new check to pipeline/check_drift.py:
+        `check_active_instrument_bars_without_daily_features` — for each active
+        instrument (pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS), flag any
+        trading_day with >= 200 bars_1m but 0 daily_features rows. Fails closed
+        on any hit. Must EXCLUDE the current in-progress trading day (reuse the
+        Option W wall-clock guard: compute_trading_day_utc_range(td)[1] vs now)
+        so it never fires on today's legitimately-unbuilt live day. Threshold
+        (>=200 bars) and exclusion mirror the verification SQL below; do NOT
+        re-encode the trading-day formula — import compute_trading_day_utc_range
+        from pipeline.dst. Add a companion test that injects a known
+        bars-without-features day and confirms the check catches it
+        (known-violation injection per integrity-guardian.md § 7).
+
+      ONE-TIME BACKFILL (after the check is built, separate verified step):
+        Re-run `python -m pipeline.build_daily_features` for the EXACT gap dates
+        per instrument (enumerate via the verification SQL below), then re-run
+        the new drift check and confirm 0 remaining. All-3-or-nothing per
+        (day, symbol) — never leave a 1-of-3 state. This is a data write → Tier B,
+        requires its own GO before execution.
+
+      VERIFICATION SQL (proves zero active-instrument bars-without-features days;
+      enumerates the gap dates for the backfill, and is the post-backfill gate):
+        WITH bars AS (
+          SELECT symbol,
+                 CAST((ts_utc AT TIME ZONE 'Australia/Brisbane' - INTERVAL '9 hours') AS DATE) td,
+                 COUNT(*) n
+          FROM bars_1m WHERE symbol IN ('MES','MNQ','MGC') GROUP BY 1,2),
+        feat AS (
+          SELECT symbol, trading_day td FROM daily_features
+          WHERE symbol IN ('MES','MNQ','MGC') GROUP BY 1,2)
+        SELECT b.symbol, b.td, b.n
+        FROM bars b LEFT JOIN feat f ON b.symbol=f.symbol AND b.td=f.td
+        WHERE f.td IS NULL AND b.n >= 200 ORDER BY b.td;   -- expect 0 rows after backfill
+        -- NOTE: instrument list must come from ACTIVE_ORB_INSTRUMENTS in code, not
+        -- the hardcoded literal above (literal is illustrative for the SQL only).
+
+      OWNER / NEXT STEP:
+        owner = claude-or-codex. Next step (in order): (1) build the drift check +
+        injection test (Tier B, pipeline/ — needs GO + adversarial-audit gate per
+        .claude/rules/adversarial-audit-gate.md since it touches truth-layer);
+        (2) on GO, run the one-time backfill for the enumerated dates; (3) re-run
+        the verification SQL + new drift check → confirm 0 rows. Do NOT fold any
+        of this into the Option W commit — it stays separate per operator order.
+        Also note (audit Finding 4 #5, not proven causal): MES 2026-05-26 bars
+        start at 10:00 not 09:00 (first ORB hour missing) — flag during backfill.
+    exit_criteria: |
+      (a) A fail-closed drift check exists that detects active-instrument
+      trading days with bars_1m present (>=200 bars) but 0 daily_features rows,
+      excluding the in-progress day, with a known-violation injection test; AND
+      (b) the verification SQL returns 0 rows after a one-time backfill of the
+      enumerated gap dates; AND (c) check_drift.py still exits 0.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/2026-06-06-live-bar-bridge-partial-day-audit.md
+      - .claude/rules/adversarial-audit-gate.md
+      - .claude/rules/integrity-guardian.md
+    evidence_refs:
+      - docs/audit/2026-06-06-live-bar-bridge-partial-day-audit.md
+      - pipeline/build_daily_features.py
+      - pipeline/check_drift.py
+      - pipeline/dst.py
+      - pipeline/asset_configs.py
+    notes_ref: docs/audit/2026-06-06-live-bar-bridge-partial-day-audit.md
+    override_note: |
+      Split from the Option W live-bridge partial-day fix (commit 43d58129) per
+      operator directive 2026-06-06: "Finding 4 is a separate ticket." Audit found
+      this is an UNBUILT coverage gap (0-of-3 aperture), a DIFFERENT defect class
+      from the live-partial loop (1-of-3) that Option W fixed — a completeness
+      guard does not fix it and must not skip these days. Investigation complete;
+      remediation (drift check + backfill) NOT yet implemented, awaiting GO.

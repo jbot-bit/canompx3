@@ -164,12 +164,22 @@ class TestBarPersister:
             count = bp.flush_to_db()
         assert count == 0
         crit = [r for r in caplog.records if r.levelno == logging.CRITICAL]
-        assert crit, "flush failure must log at CRITICAL"
-        # Exception class name must appear in the record (observability requirement).
-        assert any(
-            type(r.exc_info[1]).__name__ in r.getMessage() or (r.exc_info and r.exc_info[1]) for r in crit if r.exc_info
-        ) or any("Error" in r.getMessage() or "OSError" in r.getMessage() for r in crit), (
-            "CRITICAL log must record the exception class/detail"
+        assert len(crit) == 1, f"flush failure must log exactly one CRITICAL record, got {len(crit)}"
+        rec = crit[0]
+        # The exception must be attached via exc_info (so the traceback reaches the trace).
+        assert rec.exc_info is not None and rec.exc_info[1] is not None, (
+            "CRITICAL log must attach the exception via exc_info"
+        )
+        # The exception CLASS NAME must appear in the rendered message — this is the
+        # observability requirement (a silent bars_captured>0 → n_persisted=0 loss must
+        # name what failed). type(e).__name__ is interpolated by the production log call.
+        exc_class_name = type(rec.exc_info[1]).__name__
+        assert exc_class_name in rec.getMessage(), (
+            f"CRITICAL message must name the exception class; expected '{exc_class_name}' in: {rec.getMessage()!r}"
+        )
+        # The captured-bar count must be in the message (proves the loss magnitude is logged).
+        assert "1 captured bars" in rec.getMessage(), (
+            f"CRITICAL message must record the lost-bar count; got: {rec.getMessage()!r}"
         )
 
     def test_append_enqueues_to_ring(self, isolated_ring_dir):

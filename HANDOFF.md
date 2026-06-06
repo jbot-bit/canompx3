@@ -117,16 +117,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** 43d58129 — fix(live-bridge): Option W wall-clock partial-day guard + Site 3 CRITICAL flush log
-- **Files changed:** 8 files
+- **Commit:** 045a7ef8 — docs: add operator-confirmed NORTH_STAR mission anchor + Stage 5 director proposal
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/live-bridge-partial-day-hardening.md`
-  - `pipeline/build_daily_features.py`
-  - `pipeline/daily_backfill.py`
-  - `tests/test_pipeline/test_build_daily_features.py`
-  - `tests/test_pipeline/test_daily_backfill.py`
-  - `tests/test_trading_app/test_bar_persister.py`
-  - `trading_app/live/bar_persister.py`
+  - `NORTH_STAR.md`
+  - `docs/proposals/2026-06-06-stage5-mission-director-PROPOSAL.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
