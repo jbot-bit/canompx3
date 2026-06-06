@@ -151,6 +151,27 @@ class TestBarPersister:
         count = bp.flush_to_db()
         assert count == 0
 
+    def test_flush_failure_logs_critical_with_exc_class(self, caplog):
+        """Site 3 (audit 2026-06-06): a failed flush on a CAPITAL data write
+        must log at CRITICAL (not ERROR) and record the exception class, so a
+        silent bars_captured>0 → n_persisted=0 loss is visible in the trace.
+        Return value stays 0 (fail-open unchanged)."""
+        import logging
+
+        bp = BarPersister("MNQ", db_path="/nonexistent/path/db.db")
+        bp.append(_bar(0))
+        with caplog.at_level(logging.CRITICAL, logger="trading_app.live.bar_persister"):
+            count = bp.flush_to_db()
+        assert count == 0
+        crit = [r for r in caplog.records if r.levelno == logging.CRITICAL]
+        assert crit, "flush failure must log at CRITICAL"
+        # Exception class name must appear in the record (observability requirement).
+        assert any(
+            type(r.exc_info[1]).__name__ in r.getMessage() or (r.exc_info and r.exc_info[1]) for r in crit if r.exc_info
+        ) or any("Error" in r.getMessage() or "OSError" in r.getMessage() for r in crit), (
+            "CRITICAL log must record the exception class/detail"
+        )
+
     def test_append_enqueues_to_ring(self, isolated_ring_dir):
         bp = BarPersister("MNQ", session_id="sess-1")
         bp.append(_bar(0))

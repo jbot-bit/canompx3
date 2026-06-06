@@ -153,13 +153,25 @@ def compute_trading_day(ts_utc: pd.Timestamp) -> date:
 
 
 def get_trading_days_in_range(
-    con: duckdb.DuckDBPyConnection, symbol: str, start_date: date, end_date: date
+    con: duckdb.DuckDBPyConnection,
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    now: datetime | None = None,
 ) -> list[date]:
     """
     Get distinct trading days that have bars_1m data in the date range.
 
     Uses the trading day formula in SQL:
       CAST((ts_utc AT TIME ZONE 'Australia/Brisbane' - INTERVAL '9 hours') AS DATE)
+
+    Option W wall-clock guard (2026-06-06): the CURRENT in-progress trading day
+    is EXCLUDED — the live bridge writes partial bars for it, and building it
+    yields a partial (1-of-3 aperture) row that trips drift Check 77. A day is
+    buildable only once its trading-day UTC window has fully elapsed. Past days
+    (including CME half-days, whose bars stop early) are always included; the
+    guard keys on wall-clock, never on bar count/span/max-ts (all 5 bar-derived
+    signals were falsified — audit 2026-06-06). `now` is injectable for tests.
     """
     query = """
         SELECT DISTINCT
@@ -171,7 +183,15 @@ def get_trading_days_in_range(
         ORDER BY trading_day
     """
     rows = con.execute(query, [symbol, start_date, end_date]).fetchall()
-    return [r[0] for r in rows]
+    current = now or datetime.now(UTC_TZ)
+    days = []
+    for (td,) in rows:
+        _, td_window_end = compute_trading_day_utc_range(td)
+        if current < td_window_end:
+            # In-progress day — its session has not closed; skip until elapsed.
+            continue
+        days.append(td)
+    return days
 
 
 def get_bars_for_trading_day(con: duckdb.DuckDBPyConnection, symbol: str, trading_day: date) -> pd.DataFrame:

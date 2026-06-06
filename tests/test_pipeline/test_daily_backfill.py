@@ -1,6 +1,6 @@
 import os
 import tempfile
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import patch
 
 import duckdb
@@ -60,6 +60,76 @@ def test_is_up_to_date_false():
     db = _make_db([("2026-02-28 15:00:00+00", "MGC")])
     try:
         assert is_up_to_date(db, "MGC", date(2026, 3, 1)) is False
+    finally:
+        os.unlink(db)
+
+
+# ── Option W tests: in-progress trading day must NOT count as up-to-date ───────
+#
+# Root cause (audit 2026-06-06): the live bridge writes partial bars for the
+# CURRENT trading day; that advances MAX(ts_utc) so is_up_to_date returned True
+# and suppressed the Databento full-day ingest. Completeness is NOT inferable
+# from bars (a 60-bar partial is identical to a 60-bar quiet complete day), so
+# the guard is WALL-CLOCK: a day counts as up-to-date only if its trading-day
+# UTC window has fully elapsed. Past days (incl. CME half-days) are unaffected.
+
+
+def test_is_up_to_date_false_for_in_progress_day():
+    """A day whose trading-day window has NOT yet elapsed is never up-to-date,
+    even if a (live-partial) bar already advanced MAX(ts_utc)."""
+    from pipeline.daily_backfill import is_up_to_date
+
+    # Bar exists at the start of 2026-06-05 (live partial), but "now" is during
+    # that same trading day → window not elapsed → must be False.
+    db = _make_db([("2026-06-04 23:30:00+00", "MGC")])  # ~09:30 Brisbane on td 2026-06-05
+    now = datetime(2026, 6, 5, 2, 0, tzinfo=UTC)  # mid-trading-day 2026-06-05
+    try:
+        assert is_up_to_date(db, "MGC", date(2026, 6, 5), now=now) is False
+    finally:
+        os.unlink(db)
+
+
+def test_is_up_to_date_true_for_elapsed_past_day():
+    """A fully-elapsed past day with bars is up-to-date (Option W must not
+    regress the normal past-day case)."""
+    from pipeline.daily_backfill import is_up_to_date
+
+    db = _make_db([("2026-03-01 15:00:00+00", "MGC")])
+    now = datetime(2026, 6, 5, 2, 0, tzinfo=UTC)  # long after 2026-03-01
+    try:
+        assert is_up_to_date(db, "MGC", date(2026, 3, 1), now=now) is True
+    finally:
+        os.unlink(db)
+
+
+def test_is_up_to_date_false_when_target_day_itself_has_no_bars():
+    """Global MAX(ts_utc) must NOT mask a missing target day. A live partial for
+    a LATER trading day advances global MAX, but the target day (here 06-04) has
+    no real bars → must be False so Databento ingest runs for it. This closes the
+    original Gap A (max-ts-alone) that Option W's wall-clock guard alone leaves."""
+    from pipeline.daily_backfill import is_up_to_date
+
+    # Bar maps to trading_day 2026-06-05 (~09:30 Brisbane = 23:30 UTC on 06-04),
+    # but its CALENDAR date is 06-04. Target 06-04 has NO real bars of its own.
+    db = _make_db([("2026-06-04 23:30:00+00", "MGC")])
+    now = datetime(2026, 6, 5, 2, 0, tzinfo=UTC)  # 06-04 window has elapsed
+    try:
+        assert is_up_to_date(db, "MGC", date(2026, 6, 4), now=now) is False
+    finally:
+        os.unlink(db)
+
+
+def test_is_up_to_date_halfday_not_excluded_by_wallclock():
+    """A CME half-day in the past is up-to-date — Option W keys on wall-clock,
+    not on whether bars reached the last-session window (which half-days don't)."""
+    from pipeline.daily_backfill import is_up_to_date
+
+    # Half-day bars stop early (18:14 UTC on the half-day), but the day is in the
+    # past → window elapsed → up-to-date.
+    db = _make_db([("2025-11-28 18:14:00+00", "MES")])
+    now = datetime(2026, 6, 5, 2, 0, tzinfo=UTC)
+    try:
+        assert is_up_to_date(db, "MES", date(2025, 11, 28), now=now) is True
     finally:
         os.unlink(db)
 

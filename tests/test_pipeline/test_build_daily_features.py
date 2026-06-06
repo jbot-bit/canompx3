@@ -1486,3 +1486,56 @@ class TestHTFLevelFields:
         assert feb3["prev_month_close"] == 50.0, "Jan 31 Friday close is Jan-last"
         assert feb3["prev_month_range"] == 25.0
         assert feb3["prev_month_mid"] == 57.5
+
+
+# =============================================================================
+# OPTION W: get_trading_days_in_range excludes the in-progress trading day
+# =============================================================================
+#
+# Root cause (audit 2026-06-06): the live bridge writes partial bars for the
+# CURRENT in-progress day; building it produces a partial (1-of-3 aperture) row
+# that trips drift Check 77. Completeness is NOT inferable from bars, so the
+# guard is wall-clock: a trading day is buildable only once its trading-day UTC
+# window has fully elapsed. Past days (incl. CME half-days) are always buildable.
+
+
+class TestGetTradingDaysInRangeWallClock:
+    def _make_db(self, bars):
+        """bars: list of (ts_utc_str, symbol)."""
+        con = duckdb.connect(":memory:")
+        con.execute("CREATE TABLE bars_1m (ts_utc TIMESTAMPTZ, symbol VARCHAR)")
+        for ts, sym in bars:
+            con.execute("INSERT INTO bars_1m VALUES (?, ?)", [ts, sym])
+        return con
+
+    def test_excludes_in_progress_day(self):
+        from pipeline.build_daily_features import get_trading_days_in_range
+
+        # Two days of bars: 2026-06-04 (past, complete) and 2026-06-05 (live partial).
+        con = self._make_db(
+            [
+                ("2026-06-04 02:00:00+00", "MGC"),  # td 2026-06-04 (NYSE_OPEN-ish)
+                ("2026-06-04 23:30:00+00", "MGC"),  # td 2026-06-05 ~09:30 Brisbane (live partial)
+            ]
+        )
+        now = datetime(2026, 6, 5, 2, 0, tzinfo=ZoneInfo("UTC"))  # mid-day 2026-06-05
+        days = get_trading_days_in_range(con, "MGC", date(2026, 6, 4), date(2026, 6, 5), now=now)
+        assert date(2026, 6, 4) in days, "completed past day must be built"
+        assert date(2026, 6, 5) not in days, "in-progress day must be excluded"
+
+    def test_includes_halfday_past(self):
+        from pipeline.build_daily_features import get_trading_days_in_range
+
+        # Half-day bars stop early (18:14 UTC) but the day is in the past → built.
+        con = self._make_db([("2025-11-28 18:14:00+00", "MES")])
+        now = datetime(2026, 6, 5, 2, 0, tzinfo=ZoneInfo("UTC"))
+        days = get_trading_days_in_range(con, "MES", date(2025, 11, 28), date(2025, 11, 28), now=now)
+        assert date(2025, 11, 28) in days, "past CME half-day must be built"
+
+    def test_default_now_is_real_utc(self):
+        """When now is omitted it defaults to real UTC now — a clearly-past day builds."""
+        from pipeline.build_daily_features import get_trading_days_in_range
+
+        con = self._make_db([("2025-01-15 02:00:00+00", "MGC")])
+        days = get_trading_days_in_range(con, "MGC", date(2025, 1, 15), date(2025, 1, 15))
+        assert date(2025, 1, 15) in days

@@ -10,12 +10,13 @@ Usage:
 import argparse
 import subprocess
 import sys
-from datetime import UTC, date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.db_config import configure_connection
+from pipeline.dst import compute_trading_day_utc_range
 from pipeline.paths import GOLD_DB_PATH
 
 
@@ -34,12 +35,56 @@ def get_last_ingested_date(db_path: str, symbol: str):
         con.close()
 
 
-def is_up_to_date(db_path: str, symbol: str, as_of: date) -> bool:
-    """True if bars_1m has data through as_of date for symbol."""
-    last = get_last_ingested_date(db_path, symbol)
-    if last is None:
+def _target_day_has_bars(db_path: str, symbol: str, trading_day: date) -> bool:
+    """True if bars_1m has ANY bar within the target trading day's own UTC window.
+
+    Checks the TARGET day specifically — not global MAX(ts_utc). A live partial
+    for a later day advances global MAX but does not put bars in an earlier
+    target day's window, so the global-MAX comparison could mask a genuinely
+    un-ingested target day (original Gap A, audit 2026-06-06).
+    """
+    td_start, td_end = compute_trading_day_utc_range(trading_day)
+    con = duckdb.connect(db_path, read_only=True)
+    configure_connection(con)
+    try:
+        row = con.execute(
+            "SELECT COUNT(*) FROM bars_1m WHERE symbol = ? AND ts_utc >= ? AND ts_utc < ?",
+            [symbol, td_start, td_end],
+        ).fetchone()
+        return bool(row and row[0] and row[0] > 0)
+    finally:
+        con.close()
+
+
+def is_up_to_date(db_path: str, symbol: str, as_of: date, now: datetime | None = None) -> bool:
+    """True if bars_1m has fully-ingested data for the as_of trading day.
+
+    Option W (wall-clock guard, 2026-06-06): the live bridge writes PARTIAL bars
+    for the CURRENT in-progress trading day. Those bars advance MAX(ts_utc) but
+    do NOT represent a complete day. Completeness is NOT inferable from the bars
+    themselves — a 60-bar live-partial is bar-for-bar identical to a 60-bar quiet
+    complete day (audit 2026-06-06, 5 bar-derived signals falsified). So the only
+    sound signal is wall-clock: a day is up-to-date only once its trading-day UTC
+    window has FULLY ELAPSED. A live partial on the in-progress day can therefore
+    never suppress the Databento full-day ingest of a completed target day.
+
+    Past days (including CME half-days, whose bars stop early) are unaffected:
+    their window has elapsed, so the only remaining condition is "has bars".
+
+    `now` is injectable for deterministic testing; defaults to real UTC now.
+    """
+    # Wall-clock guard: an in-progress (not-yet-elapsed) trading day is never
+    # "up to date" — its full session has not closed, so Databento ingest is
+    # still pending regardless of any live-partial bars already present.
+    current = now or datetime.now(UTC)
+    _, td_window_end = compute_trading_day_utc_range(as_of)
+    if current < td_window_end:
         return False
-    return last.date() >= as_of
+
+    # Target-day-specific check (closes original Gap A): the as_of day must have
+    # its OWN bars. Global MAX(ts_utc) is insufficient — a live partial for a
+    # later day advances global MAX but leaves an earlier target day un-ingested.
+    return _target_day_has_bars(db_path, symbol, as_of)
 
 
 def _run(cmd: list[str], desc: str) -> None:

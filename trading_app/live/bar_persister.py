@@ -122,7 +122,19 @@ class BarPersister:
             )
             return len(rows)
         except (duckdb.Error, OSError) as e:
-            log.error("BarPersister: flush failed (trading unaffected): %s", e)
+            # Site 3 (audit 2026-06-06): a failed flush on a CAPITAL data write
+            # silently loses captured bars (bars_captured>0 → n_persisted=0).
+            # Log at CRITICAL (not ERROR) with the exception class/detail so the
+            # loss is unmistakable in the shutdown trace. Return value stays 0 —
+            # fail-open is unchanged; trading is unaffected (ring file is the net).
+            log.critical(
+                "BarPersister: flush FAILED — %d captured bars NOT persisted for %s (trading unaffected; %s: %s)",
+                len(bars),
+                self.symbol,
+                type(e).__name__,
+                e,
+                exc_info=True,
+            )
             return 0
 
     def clear(self) -> None:

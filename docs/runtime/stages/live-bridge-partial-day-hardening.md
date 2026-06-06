@@ -1,6 +1,6 @@
 ---
-task: Harden the live-bar bridge × daily_features chain against partial trailing-day artifacts (3-gap fix, grounded 2026-06-06 audit)
-mode: DESIGN
+task: Harden the live-bar bridge × daily_features chain against partial trailing-day artifacts (Option W wall-clock + Site 3, grounded 2026-06-06 audit)
+mode: IMPLEMENTATION
 scope_lock:
   - pipeline/daily_backfill.py
   - pipeline/build_daily_features.py

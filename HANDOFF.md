@@ -117,15 +117,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** 18fdfa17 — @ fix(live): fail closed on ambiguous multi-account in singular resolve_account_id
-- **Files changed:** 7 files
+- **Commit:** b57aa56c — @ docs(live-bridge): falsify mandated completeness signal; reopen Sites 1+2 design
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_projectx_contract_resolver.py`
-  - `tests/test_trading_app/test_rithmic_router.py`
-  - `tests/test_trading_app/test_tradovate.py`
-  - `trading_app/live/projectx/contract_resolver.py`
-  - `trading_app/live/rithmic/contracts.py`
-  - `trading_app/live/tradovate/contracts.py`
+  - `docs/audit/2026-06-06-live-bar-bridge-partial-day-audit.md`
+  - `docs/runtime/stages/live-bridge-partial-day-hardening.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
