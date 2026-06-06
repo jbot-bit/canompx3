@@ -1026,3 +1026,19 @@ def test_evaluate_profile_survival_gate_fails_closed_on_sizing_parity_violation(
     )
 
     assert summary.gate_pass is False, "C11 gate must fail closed when D-3 sizing parity is violated"
+
+
+def test_sizing_context_carries_engine_inputs_and_resolves_cap():
+    from trading_app.account_survival import SizingContext
+    ctx = SizingContext(
+        account_equity=25000.0,
+        risk_per_trade_pct=2.0,
+        account_size=50000,
+        max_contracts_by_strategy={"A": 3, "B": 1},
+    )
+    assert ctx.account_equity == 25000.0
+    assert ctx.risk_per_trade_pct == 2.0
+    assert ctx.account_size == 50000
+    assert ctx.max_contracts_for("A") == 3
+    assert ctx.max_contracts_for("B") == 1
+    assert ctx.max_contracts_for("UNKNOWN") == 1  # fail closed to 1, never unbounded
