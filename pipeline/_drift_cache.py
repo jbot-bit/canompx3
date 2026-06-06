@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -44,11 +45,37 @@ def _cache_dir() -> Path | None:
             d = git / ".drift-cache"
             d.mkdir(parents=True, exist_ok=True)
             return d
+        common = _git_common_dir()
+        if common is not None:
+            d = common / ".drift-cache"
+            d.mkdir(parents=True, exist_ok=True)
+            return d
     except OSError:
         return None
-    # Worktree (.git is a file) or any other shape: disable caching rather than
-    # risk writing a cache to a tracked path. Correctness over speed.
     return None
+
+
+def _git_common_dir() -> Path | None:
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    common = Path(r.stdout.strip())
+    if not common.is_absolute():
+        common = PROJECT_ROOT / common
+    try:
+        return common.resolve()
+    except OSError:
+        return None
 
 
 def _hash_dep(path: Path) -> str:
