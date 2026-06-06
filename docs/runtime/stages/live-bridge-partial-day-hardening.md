@@ -1,6 +1,6 @@
 ---
 task: Harden the live-bar bridge × daily_features chain against partial trailing-day artifacts (Option W wall-clock + Site 3, grounded 2026-06-06 audit)
-mode: IMPLEMENTATION
+mode: CLOSED
 scope_lock:
   - pipeline/daily_backfill.py
   - pipeline/build_daily_features.py
@@ -8,6 +8,35 @@ scope_lock:
   - tests/test_pipeline/test_daily_backfill.py
   - tests/test_pipeline/test_build_daily_features.py
   - tests/test_trading_app/test_bar_persister.py
+---
+
+## ✅ CLOSED (2026-06-07) — all shipped work landed; only Option P remains, and it is separately Tier-B gated
+
+Status-truth correction (verified against `origin/main`, not from this file's prior framing):
+
+- **Option W (wall-clock, Sites 1 & 2) — LANDED.** Commit `43d58129` on `origin/main`.
+  Verified live: `pipeline/daily_backfill.py:80-87` and `build_daily_features.py:186-191`
+  carry the wall-clock guards that exclude only the CURRENT in-progress trading day. This
+  is the sound replacement for the falsified bar-count signal (see below) — no schema change,
+  half-day-safe by construction.
+- **Site 3 (CRITICAL flush log) — LANDED.** Shipped as written; observability-only, return
+  value unchanged.
+- **Finding-4 (bars-present-features-absent) drift check — LANDED.** Commit `ed29aac7` on
+  `origin/main` (also current HEAD).
+- **Bar-count completeness design — CORRECTLY FALSIFIED-AND-DISCARDED.** The "DESIGN REOPENED"
+  banner below refers to the ORIGINAL bar-derived signal (`MAX(ts_utc) >= last-session ORB
+  window end`, 5 variants tested) that was proven unable to separate a live-partial day from a
+  quiet complete day. That falsification was the correct outcome; Option W superseded it. The
+  banner is retained as history, NOT as an open action.
+
+**Sole remaining follow-up — Option P (gated, do NOT action here):**
+- **Option P (provenance):** add a `feed_source` column to `bars_1m` to distinguish
+  Databento-ingested bars from live-bridge bars at the source. This is a **Tier-B schema
+  migration** and needs its **own explicit GO** before any work — it is not unblocked by this
+  closure.
+
+Everything below this line is the original investigation record, preserved unchanged.
+
 ---
 
 ## ⚠ DESIGN REOPENED (2026-06-06, second investigation pass)
