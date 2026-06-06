@@ -145,7 +145,9 @@ def test_read_session_start_missing_file_returns_none(tmp_path):
 def test_read_session_start_parses_iso(tmp_path):
     lock = tmp_path / ".claude.pid"
     lock.write_text('{"pid": 1, "iso_started": "2026-05-29T03:00:32.5+00:00"}', encoding="utf-8")
-    ts = read_session_start(lock)
+    # Inject a live oracle so this test exercises ISO PARSING (its purpose),
+    # not real PID-1 liveness — the dead-holder guard is covered separately.
+    ts = read_session_start(lock, is_alive=lambda _pid: True)
     assert ts is not None
     assert ts.year == 2026 and ts.hour == 3
 
@@ -154,6 +156,53 @@ def test_read_session_start_corrupt_returns_none(tmp_path):
     lock = tmp_path / ".claude.pid"
     lock.write_text("not json {{{", encoding="utf-8")
     assert read_session_start(lock) is None
+
+
+def test_read_session_start_dead_holder_returns_none(tmp_path):
+    """A lock whose holder PID is PROVABLY DEAD must NOT anchor the reaper.
+
+    The 2026-06-06 incident: a 104h-old lock for a dead PID made every
+    prior-session MCP tree test as "newer than session_start" -> 0 candidates
+    while 32 stale processes piled up. A dead-holder lock is a corpse, not the
+    live session — its timestamp must be ignored so the age rules don't invert.
+    """
+    lock = tmp_path / ".claude.pid"
+    lock.write_text('{"pid": 13716, "iso_started": "2026-06-01T22:33:24+00:00"}', encoding="utf-8")
+    # is_alive injected so the test is deterministic (no real PID 13716 needed).
+    assert read_session_start(lock, is_alive=lambda _pid: False) is None
+
+
+def test_read_session_start_live_holder_parses_normally(tmp_path):
+    """A lock whose holder PID is ALIVE anchors as today — no regression."""
+    lock = tmp_path / ".claude.pid"
+    lock.write_text('{"pid": 4242, "iso_started": "2026-05-29T03:00:00+00:00"}', encoding="utf-8")
+    ts = read_session_start(lock, is_alive=lambda _pid: True)
+    assert ts is not None
+    assert ts.year == 2026 and ts.hour == 3
+
+
+def test_read_session_start_oracle_unavailable_keeps_timestamp(tmp_path):
+    """If the liveness oracle cannot prove death (assume-alive, e.g. the
+    worktree_guard import failed), the dead-holder guard must NOT fire — the
+    lock's timestamp is kept, so behavior degrades to exactly pre-fix
+    (fail-closed: never declare a live session's lock dead on a missing oracle).
+    """
+    lock = tmp_path / ".claude.pid"
+    lock.write_text('{"pid": 13716, "iso_started": "2026-06-01T22:33:24+00:00"}', encoding="utf-8")
+    ts = read_session_start(lock, is_alive=lambda _pid: True)  # oracle says "alive"
+    assert ts is not None
+    assert ts.year == 2026
+
+
+def test_read_session_start_no_pid_field_parses_normally(tmp_path):
+    """A lock with a valid iso_started but no pid field cannot be liveness-checked;
+    fall back to trusting the timestamp (the old behavior) rather than failing
+    closed — a missing pid is not proof of death."""
+    lock = tmp_path / ".claude.pid"
+    lock.write_text('{"iso_started": "2026-05-29T03:00:00+00:00"}', encoding="utf-8")
+    ts = read_session_start(lock, is_alive=lambda _pid: False)
+    assert ts is not None
+    assert ts.year == 2026
 
 
 def test_duplicate_generation_keeps_newest_pair_reaps_older():
@@ -475,6 +524,22 @@ def test_read_session_start_recovers_from_unescaped_windows_path(tmp_path):
         '"worktree": "C:\\Users\\joshd\\canompx3", "branch_at_start": "main"}',
         encoding="utf-8",
     )
-    ts = read_session_start(lock)
+    # Live oracle so this test exercises Windows-path REGEX RECOVERY of
+    # iso_started (its purpose), not real PID-63904 liveness.
+    ts = read_session_start(lock, is_alive=lambda _pid: True)
     assert ts is not None
     assert ts.year == 2026 and ts.month == 5 and ts.day == 24
+
+
+def test_read_session_start_dead_holder_on_unescaped_windows_lock_returns_none(tmp_path):
+    """The real-world corpse case: the lock is the malformed-JSON Windows form
+    (unescaped backslashes) AND its holder is dead. The dead-holder guard must
+    still fire via regex-recovered ``pid`` — this is the exact 2026-06-06
+    incident lock shape, so the guard cannot depend on JSON parsing succeeding.
+    """
+    lock = tmp_path / ".claude.pid"
+    lock.write_text(
+        '{"pid": 13716, "iso_started": "2026-06-01T22:33:24+00:00", "worktree": "C:\\Users\\joshd\\canompx3"}',
+        encoding="utf-8",
+    )
+    assert read_session_start(lock, is_alive=lambda _pid: False) is None

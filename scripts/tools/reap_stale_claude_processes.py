@@ -103,21 +103,61 @@ def _cmd_matches(cmdline: str, signatures: tuple[str, ...]) -> bool:
     return any(sig.lower() in low for sig in signatures)
 
 
-def read_session_start(lock_path: Path) -> datetime | None:
+def _pid_is_alive(pid: int) -> bool:
+    """Cross-platform PID liveness, DELEGATED to the canonical oracle.
+
+    Per ``fleet_state.py`` (the institutional rule): "don't add a third oracle"
+    — liveness is resolved ONLY via ``worktree_guard._pid_is_alive``, which has
+    the load-bearing Windows path (``OpenProcess``/STILL_ACTIVE + create-time
+    PID-reuse defense). A naive ``os.kill(pid, 0)`` here is the documented
+    anti-pattern: on Windows it raises WinError 87 for a dead PID, which a
+    conservative fallback misreads as "alive" — so the dead-holder guard would
+    never fire (the 2026-06-06 corpse-lock incident).
+
+    Guarded import: if worktree_guard is unavailable, FAIL CLOSED toward
+    "assume alive" so a missing oracle never lets us treat a live session's
+    lock as dead. (assume-alive -> dead-holder guard doesn't fire -> anchor
+    behavior is exactly as it was before this fix.)
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        from scripts.tools import worktree_guard as _wg
+
+        return _wg._pid_is_alive(pid)
+    except Exception:
+        return True  # oracle unavailable — conservative, never a false reclaim
+
+
+def read_session_start(lock_path: Path, is_alive=_pid_is_alive) -> datetime | None:
     """Return the current session lock's ``iso_started`` as aware UTC, or None.
 
-    None means "no readable lock" — under the fail-closed contract, callers
+    None means "no usable anchor" — under the fail-closed contract, callers
     treat None as "cannot prove anything is older than the session", so
     age-based candidacy (rule b) is disabled and only dead-parent orphans
     (rule a) remain killable.
+
+    DEAD-HOLDER GUARD (2026-06-06 incident): if the lock records a ``pid`` and
+    that PID is PROVABLY DEAD, the lock is a corpse from an abandoned session —
+    its ``iso_started`` (e.g. 104h old) must NOT anchor the reaper, or every
+    genuinely-stale prior-session process tests as "newer than session_start"
+    and is wrongly kept (observed: 0 candidates while 32 stale procs piled up).
+    We return None in that case so the caller fails closed on the age rule
+    while Rule (a) orphans + Rule (d) launcher checks still apply. A lock with
+    NO ``pid`` field cannot be liveness-checked — a missing pid is not proof of
+    death, so we trust its timestamp (prior behavior). ``is_alive`` is injected
+    for deterministic testing.
     """
     try:
         raw = lock_path.read_text(encoding="utf-8")
     except Exception:
         return None
+    holder_pid = None
     iso = ""
     try:
-        iso = json.loads(raw).get("iso_started", "")
+        parsed = json.loads(raw)
+        iso = parsed.get("iso_started", "")
+        holder_pid = parsed.get("pid")
     except Exception:
         # session-start.py writes the lock with an unescaped Windows ``worktree``
         # path (e.g. "C:\\Users\\...") which is invalid JSON — the iso_started
@@ -128,7 +168,15 @@ def read_session_start(lock_path: Path) -> datetime | None:
         m = re.search(r'"iso_started"\s*:\s*"([^"\\]+)"', raw)
         if m:
             iso = m.group(1)
+        m_pid = re.search(r'"pid"\s*:\s*(\d+)', raw)
+        if m_pid:
+            holder_pid = int(m_pid.group(1))
     if not iso:
+        return None
+    # Dead-holder guard: a lock for a provably-dead PID is a corpse from an
+    # abandoned session. Drop its timestamp so the age rule fails closed rather
+    # than anchoring on a stale clock (which would protect every stale process).
+    if isinstance(holder_pid, int) and not is_alive(holder_pid):
         return None
     try:
         ts = datetime.fromisoformat(iso.replace("Z", "+00:00"))
@@ -519,6 +567,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     lock_path = PROJECT_ROOT / ".git" / ".claude.pid"
+    # session_start uses the DEFAULT is_alive (delegates to the canonical
+    # worktree_guard oracle — ONE liveness source, per fleet_state.py's rule).
+    # The dead-holder guard inside read_session_start drops a corpse lock's
+    # timestamp so it can't anchor the age rule (2026-06-06 incident).
     session_start = read_session_start(lock_path)
     procs = _enumerate_processes()
     self_pid = os.getpid()
