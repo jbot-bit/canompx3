@@ -117,10 +117,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-07
-- **Commit:** 59c39c7d — docs(plans): record completed worktree-cleanup handoff (DONE 2026-06-06)
-- **Files changed:** 2 files
+- **Commit:** 0c44d20c — fix(capital): pin code-fingerprint staleness registries + close instance-lock empty-orphan double-instance race
+- **Files changed:** 6 files
   - `HANDOFF.md`
-  - `docs/plans/2026-06-06-worktree-cleanup-handoff.md`
+  - `docs/runtime/stages/capital-review-phase1-mechanical-fixes.md`
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift_c11_fingerprint_list.py`
+  - `tests/test_trading_app/test_instance_lock.py`
+  - `trading_app/live/instance_lock.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

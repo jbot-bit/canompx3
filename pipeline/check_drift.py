@@ -13953,6 +13953,141 @@ def check_code_fingerprint_registries_pinned(
     return violations
 
 
+# Fields read off `profile` inside account_survival.py that are NOT
+# survival-VERDICT inputs and therefore need not be in the profile fingerprint.
+# Each entry is label/lookup-only (used for identity, logging, or to look up a
+# canonical tier/firm-spec whose own values ARE fingerprinted via firm/
+# account_size). Adding to this allowlist is a DELIBERATE, reviewed act — a new
+# survival-relevant field must go into the fingerprint, not into this list.
+_PROFILE_FINGERPRINT_FIELD_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "profile_id",  # identity/label only
+        "copies",  # per-account semantic; sim runs one account, copies don't change a single account's verdict
+        "max_slots",  # cognitive cap on lane count; not a survival-math input
+        "active",  # gates whether the profile runs at all, not the verdict for a run
+        "allowed_sessions",  # routing filter; affects which lanes, captured via daily_lanes in the fingerprint
+        "allowed_instruments",  # routing filter; same as above
+        "notes",  # free-text documentation
+        "execution_symbol_map",  # execution-layer symbol substitution; not read by the survival sim
+        "execution_qty_divisor",  # execution-layer qty math; not read by the survival sim
+    }
+)
+
+
+def _profile_attr_reads(func_or_module: "ast.AST") -> set[str]:
+    """All AccountProfile field names read as ``profile.<attr>`` or
+    ``getattr(profile, "<attr>", ...)`` within the given AST node.
+
+    Catches BOTH access forms because the survival sim uses each: direct
+    attribute access (``profile.daily_loss_dollars``) and defensive getattr
+    (``getattr(profile, "self_imposed_dd_dollars", None)`` — the exact form of
+    the field that motivated this check). Missing the getattr form would skip
+    the very field the coverage check exists to pin.
+    """
+    names: set[str] = set()
+    for node in ast.walk(func_or_module):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "profile":
+            names.add(node.attr)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id == "profile"
+            and isinstance(node.args[1], ast.Constant)
+            and isinstance(node.args[1].value, str)
+        ):
+            names.add(node.args[1].value)
+    return names
+
+
+def _profile_fingerprint_payload_keys(derived_state_tree: "ast.AST") -> set[str] | None:
+    """String keys of the dict literal assigned to ``payload`` inside
+    ``build_profile_fingerprint``. Returns None if the function or the dict
+    literal cannot be located (fail-closed: the caller treats None as a
+    violation rather than silently passing)."""
+    func_node = next(
+        (
+            n
+            for n in ast.walk(derived_state_tree)
+            if isinstance(n, ast.FunctionDef) and n.name == "build_profile_fingerprint"
+        ),
+        None,
+    )
+    if func_node is None:
+        return None
+    for node in ast.walk(func_node):
+        if (
+            isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "payload" for t in node.targets)
+            and isinstance(node.value, ast.Dict)
+        ):
+            return {k.value for k in node.value.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+    return None
+
+
+def check_profile_fingerprint_field_coverage(
+    project_root: Path | None = None,
+) -> list[str]:
+    """Every survival-verdict profile field must be in the profile fingerprint.
+
+    Companion to ``check_code_fingerprint_registries_pinned`` (which pins the
+    code-content fingerprint). This pins the CONFIG-VALUE fingerprint
+    (``build_profile_fingerprint``): any ``AccountProfile`` field the survival
+    sim reads — and that is not on the reviewed label/lookup-only allowlist —
+    must be hashed, or an operator could edit it (e.g. loosen
+    ``self_imposed_dd_dollars`` / ``daily_loss_dollars``) while a cached PASS
+    stayed valid ("fresh-by-fingerprint, stale-by-reality"). 2026-06-07 capital
+    review, Fork #2.
+
+    The required set is DERIVED from real usage (a static AST scan of
+    ``profile.<attr>`` and ``getattr(profile, "...")`` reads in
+    account_survival.py), so the check itself cannot drift the way a hardcoded
+    list would. Fail-closed on: missing module, parse error, or an unlocatable
+    fingerprint payload.
+    """
+    root = project_root or PROJECT_ROOT
+    violations: list[str] = []
+
+    survival_path = root / "trading_app" / "account_survival.py"
+    derived_path = root / "trading_app" / "derived_state.py"
+
+    for rel, path in (("account_survival.py", survival_path), ("derived_state.py", derived_path)):
+        if not path.exists():
+            return [f"check_profile_fingerprint_field_coverage: missing module trading_app/{rel}."]
+
+    try:
+        survival_tree = ast.parse(survival_path.read_text(encoding="utf-8"))
+        derived_tree = ast.parse(derived_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError) as e:
+        return [f"check_profile_fingerprint_field_coverage: parse error: {type(e).__name__}: {e}"]
+
+    payload_keys = _profile_fingerprint_payload_keys(derived_tree)
+    if payload_keys is None:
+        return [
+            "check_profile_fingerprint_field_coverage: could not locate the "
+            "`payload` dict literal in build_profile_fingerprint() — cannot "
+            "verify field coverage. Fail-closed."
+        ]
+
+    required = _profile_attr_reads(survival_tree) - _PROFILE_FINGERPRINT_FIELD_ALLOWLIST
+    missing = sorted(required - payload_keys)
+    if missing:
+        violations.append(
+            "check_profile_fingerprint_field_coverage: account_survival.py reads "
+            f"profile field(s) {missing} that are NOT in the profile fingerprint "
+            "and NOT on the reviewed label-only allowlist. A change to such a "
+            "field would alter the survival verdict while a cached PASS stayed "
+            "valid (silent stale-PASS). Add the field to the payload in "
+            "trading_app/derived_state.py::build_profile_fingerprint, or — if it "
+            "is genuinely label/lookup-only — add it to "
+            "_PROFILE_FINGERPRINT_FIELD_ALLOWLIST with review."
+        )
+
+    return violations
+
+
 def check_triage_provenance_completeness(
     drafts_dir: Path | None = None,
 ) -> list[str]:
@@ -16292,6 +16427,7 @@ CHECKS = [
         False,
     ),
     ("Shared profile fingerprint helper is canonical", check_shared_profile_fingerprint_canonical, False, False),
+    ("Profile fingerprint covers survival-verdict fields", check_profile_fingerprint_field_coverage, False, False),
     ("SR state writer uses derived-state contract envelope", check_sr_state_contract_writer, False, False),
     ("SR state reader validates envelope before trust", check_sr_state_contract_reader, False, False),
     ("Preflight launchers pass explicit claim modes", check_preflight_launcher_modes, False, False),
