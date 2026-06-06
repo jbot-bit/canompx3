@@ -117,13 +117,15 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** d755385b — fix(capital): Row 05 survival-state drift check + Row 08 reconnect resync + MED#1 finding
-- **Files changed:** 5 files
-  - `docs/audit/overnight_dispatch/results/08.md`
-  - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift_survival_state_current.py`
-  - `tests/test_trading_app/test_reconnect_position_resync.py`
-  - `trading_app/live/session_orchestrator.py`
+- **Commit:** 18fdfa17 — @ fix(live): fail closed on ambiguous multi-account in singular resolve_account_id
+- **Files changed:** 7 files
+  - `HANDOFF.md`
+  - `tests/test_trading_app/test_projectx_contract_resolver.py`
+  - `tests/test_trading_app/test_rithmic_router.py`
+  - `tests/test_trading_app/test_tradovate.py`
+  - `trading_app/live/projectx/contract_resolver.py`
+  - `trading_app/live/rithmic/contracts.py`
+  - `trading_app/live/tradovate/contracts.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

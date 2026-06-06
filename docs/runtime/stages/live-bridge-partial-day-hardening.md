@@ -1,6 +1,6 @@
 ---
 task: Harden the live-bar bridge × daily_features chain against partial trailing-day artifacts (3-gap fix, grounded 2026-06-06 audit)
-mode: IMPLEMENTATION
+mode: DESIGN
 scope_lock:
   - pipeline/daily_backfill.py
   - pipeline/build_daily_features.py
@@ -10,7 +10,29 @@ scope_lock:
   - tests/test_trading_app/test_bar_persister.py
 ---
 
-## Blast Radius
+## ⚠ DESIGN REOPENED (2026-06-06, second investigation pass)
+
+The completeness signal this stage mandated (`MAX(ts_utc) >= last-session ORB window end`)
+is **FALSIFIED against real DB data** — it wrongly excludes legitimate CME half-days, and
+NO bar-derived signal (window-end, window-start, own-window-end, span, bar-count — 5 tested)
+can separate a live-partial day from a quiet low-volume complete day (they are bar-for-bar
+identical: MES 2026-06-05 partial = MES 2026-06-03 complete = 60 bars/1.0h). The blocker is
+currently CLEARED (peers deleted the partial rows; `check_drift.py` exits 0).
+
+**Do NOT implement Sites 1 & 2 as written below.** The two sound replacements are:
+- **Option W (wall-clock):** exclude only the CURRENT in-progress trading day (buildable iff
+  `now >= compute_trading_day_utc_range(td)[1]`). Half-day-safe by construction. No schema change.
+- **Option P (provenance):** add `feed_source` to `bars_1m`; Tier B schema migration.
+
+**Site 3 (CRITICAL flush log) is unaffected and still valid as written.**
+
+Full evidence + the operator-ordered Finding-4 (bars-present-features-absent, 6 days)
+root-cause investigation: `docs/audit/2026-06-06-live-bar-bridge-partial-day-audit.md`
+§§ "Completeness-signal correction" and "Finding 4 root-cause investigation".
+
+AWAITING operator design decision (Option W vs P; Finding-4 remediation) before re-entering IMPLEMENTATION.
+
+## Blast Radius (ORIGINAL — Sites 1 & 2 premise falsified, see correction above)
 
 Root cause (audited, MEASURED): live bridge writes partial trailing-day bars →
 `is_up_to_date` (max-ts only) skips Databento full ingest → `get_trading_days_in_range`
