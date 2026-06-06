@@ -117,14 +117,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-07
-- **Commit:** 0c44d20c — fix(capital): pin code-fingerprint staleness registries + close instance-lock empty-orphan double-instance race
+- **Commit:** 0bbe9b5d — fix(capital): close Fork #2 - profile fingerprint omitted survival-verdict fields
 - **Files changed:** 6 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/capital-review-phase1-mechanical-fixes.md`
+  - `docs/runtime/stages/profile-fingerprint-field-coverage.md`
   - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift_c11_fingerprint_list.py`
-  - `tests/test_trading_app/test_instance_lock.py`
-  - `trading_app/live/instance_lock.py`
+  - `tests/test_pipeline/test_check_drift_profile_fingerprint_coverage.py`
+  - `tests/test_trading_app/test_account_survival.py`
+  - `trading_app/derived_state.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
