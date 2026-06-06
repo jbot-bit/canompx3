@@ -117,11 +117,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** 045a7ef8 — docs: add operator-confirmed NORTH_STAR mission anchor + Stage 5 director proposal
+- **Commit:** 258774c4 — @ fix(live): harden repo-drift gate — exact-match ignore + parse renames
 - **Files changed:** 3 files
   - `HANDOFF.md`
-  - `NORTH_STAR.md`
-  - `docs/proposals/2026-06-06-stage5-mission-director-PROPOSAL.md`
+  - `scripts/run_live_session.py`
+  - `tests/test_scripts/test_run_live_session_preflight.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

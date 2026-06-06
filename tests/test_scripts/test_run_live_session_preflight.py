@@ -835,6 +835,66 @@ def test_repo_drift_gate_blocks_ahead_live_repo(monkeypatch):
     assert "repo ahead" in result.message
 
 
+def test_repo_drift_gate_ignores_only_root_operational_files(monkeypatch):
+    """Exact-match (not endswith) regression: a clean tree with ONLY the two
+    always-dirty root files (HANDOFF.md, live_journal.db) must PASS — the
+    operational-noise exemption still works."""
+    monkeypatch.setattr(
+        rls.subprocess,
+        "run",
+        lambda *_a, **_kw: SimpleNamespace(
+            returncode=0,
+            stdout="## main...origin/main\n M HANDOFF.md\n M live_journal.db\n",
+            stderr="",
+        ),
+    )
+    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
+    result = rls._check_repo_drift_for_live(ctx)
+    assert result.passed is True, result.message
+    assert "always-dirty" in result.message
+
+
+def test_repo_drift_gate_does_not_ignore_nonroot_lookalike(monkeypatch):
+    """Exact-match tightening: a tracked CODE file whose name merely ENDS in
+    HANDOFF.md (or live_journal.db) is NOT at the repo root → must FAIL closed.
+    Pre-fix the over-broad `endswith` waved these past the live-arm gate."""
+    monkeypatch.setattr(
+        rls.subprocess,
+        "run",
+        lambda *_a, **_kw: SimpleNamespace(
+            returncode=0,
+            stdout="## main...origin/main\n M trading_app/foo_HANDOFF.md\n",
+            stderr="",
+        ),
+    )
+    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
+    result = rls._check_repo_drift_for_live(ctx)
+    assert result.passed is False
+    assert "uncommitted CODE/config drift" in result.message
+
+
+def test_repo_drift_gate_parses_renamed_source_file(monkeypatch):
+    """Rename-parsing regression: a porcelain rename entry `R  old -> new`
+    must gate on the renamed-to path. A renamed SOURCE file is NOT ignored
+    (fails closed); pre-fix `line[3:]` yielded the raw `old -> new` string and
+    mis-bucketed it."""
+    monkeypatch.setattr(
+        rls.subprocess,
+        "run",
+        lambda *_a, **_kw: SimpleNamespace(
+            returncode=0,
+            stdout="## main...origin/main\nR  scripts/old.py -> scripts/new.py\n",
+            stderr="",
+        ),
+    )
+    ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
+    result = rls._check_repo_drift_for_live(ctx)
+    assert result.passed is False
+    assert "uncommitted CODE/config drift" in result.message
+    # The reported path is the renamed-to file, not the raw "old -> new" string.
+    assert "scripts/new.py" in result.message
+
+
 def test_project_pulse_gate_blocks_live_capital_recommendation(monkeypatch):
     payload = {
         "capital_recommendation": "NO_CHANGE: capital evidence blocked - topstep_50k_mnq_auto: live journal unavailable",

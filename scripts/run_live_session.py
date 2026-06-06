@@ -565,15 +565,24 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
     #   - untracked ('??')  : new docs/scratch are not committed code drift
     # A change touching trading_app/, scripts/, pipeline/, trading config, or any
     # tracked source file STILL fails closed — that is the capital-protecting intent.
-    _DRIFT_IGNORE_SUFFIXES = ("live_journal.db", "HANDOFF.md")
+    # Exact repo-root paths (NOT suffixes): both ignored files live at the repo
+    # root, so porcelain emits them as exactly "HANDOFF.md" / "live_journal.db".
+    # A suffix match (`endswith`) was over-broad — any tracked CODE file ending
+    # in those names (e.g. trading_app/foo_HANDOFF.md, data/test_live_journal.db)
+    # would be waved past this live-arming capital gate. Exact-match is strictly
+    # tighter and closes that hole.
+    _DRIFT_IGNORE_PATHS = frozenset({"live_journal.db", "HANDOFF.md"})
     material_changes = []
     for line in changes:
         status_code = line[:2]
-        path = line[3:].strip().strip('"')
         if status_code.strip() == "??":
             continue  # untracked: not committed-code drift
-        if any(path.endswith(suffix) for suffix in _DRIFT_IGNORE_SUFFIXES):
-            continue  # always-dirty operational file
+        # Porcelain rename entries are "R  old -> new" — gate on the current
+        # (renamed-to) path, not the raw "old -> new" string. split(' -> ')[-1]
+        # yields `new` for renames and is a no-op for ordinary entries.
+        path = line[3:].strip().split(" -> ")[-1].strip().strip('"')
+        if path in _DRIFT_IGNORE_PATHS:
+            continue  # always-dirty operational file (root HANDOFF.md / live_journal.db)
         material_changes.append(line)
 
     if material_changes:
