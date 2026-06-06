@@ -258,12 +258,15 @@ def project_total_open_lots(
             total_open_lots).
         new_instrument: instrument symbol of the proposed new entry.
         new_contracts: contract count of the proposed new entry. Defaults
-            to 1 because the risk_manager F-1 check is called before the
-            execution engine sizes the position.
+            to 1 for legacy callers, but live execution passes the already
+            computed pending order size before broker submission.
 
     Returns:
         Total mini-equivalent lot count assuming the new entry lands.
     """
+    if not isinstance(new_contracts, int) or isinstance(new_contracts, bool) or new_contracts < 1:
+        raise ValueError(f"new_contracts must be an int >= 1, got {new_contracts!r}")
+
     contracts_by_inst = _aggregate_open_contracts(active_trades)
     contracts_by_inst[new_instrument] = contracts_by_inst.get(new_instrument, 0) + new_contracts
     total = 0

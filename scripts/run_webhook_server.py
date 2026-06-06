@@ -14,6 +14,8 @@ Environment variables (.env):
     WEBHOOK_SECRET=your-secret-here   # Required for live mode
     WEBHOOK_PORT=8765                 # Optional, default 8765
     WEBHOOK_DEMO=true                 # Overridden by --live flag
+    WEBHOOK_PROFILE_ID=topstep_50k_mnq_auto  # Required for --live profile binding
+    WEBHOOK_LIVE_RISK_ACK=ENABLE_UNMANAGED_LIVE_WEBHOOK  # Required for --live
 
 Security checklist before going live:
     [ ] WEBHOOK_SECRET set in .env (at least 32 random chars)
@@ -21,6 +23,7 @@ Security checklist before going live:
     [ ] Prop firm allows automated API trading (Tradeify/TopStep YES, Apex NO)
     [ ] Rate limit tested (max 3 orders / 60s)
     [ ] Tested in DEMO mode for 5+ sessions before live
+    [ ] Documented why webhook live orders are acceptable despite bypassing SessionOrchestrator risk/HWM/F-1/kill-switch controls
 """
 
 import argparse
@@ -59,9 +62,22 @@ def main() -> None:
             log.error("Add WEBHOOK_SECRET=<random-string> to your .env file")
             sys.exit(1)
 
+        risk_ack = os.environ.get("WEBHOOK_LIVE_RISK_ACK", "")
+        expected_ack = "ENABLE_UNMANAGED_LIVE_WEBHOOK"
+        if risk_ack != expected_ack:
+            log.error("BLOCKED: webhook live mode bypasses SessionOrchestrator risk/HWM/F-1/kill-switch controls")
+            log.error("Set WEBHOOK_LIVE_RISK_ACK=%s only after documented operator approval", expected_ack)
+            sys.exit(1)
+
+        profile_id = os.environ.get("WEBHOOK_PROFILE_ID", "")
+        if not profile_id:
+            log.error("BLOCKED: WEBHOOK_PROFILE_ID is required for live webhook routing")
+            sys.exit(1)
+
         confirm = input(
             "\n⚠  LIVE MODE — real money orders will be placed.\n"
             "   Verify cloudflared tunnel is named (not trycloudflare.com).\n"
+            "   Verify WEBHOOK_PROFILE_ID is the intended live account profile.\n"
             "   Type CONFIRM to proceed: "
         ).strip()
         if confirm != "CONFIRM":

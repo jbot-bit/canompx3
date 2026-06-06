@@ -947,6 +947,7 @@ class ExecutionEngine:
                     orb_minutes=trade.orb_minutes,
                     instrument=trade.strategy.instrument,  # F-2 hedging guard
                     direction=trade.direction,  # F-2 hedging guard
+                    new_contracts=trade.contracts,  # F-1 scaling-plan projection
                 )
                 if not can_enter:
                     trade.state = TradeState.EXITED
@@ -1168,6 +1169,7 @@ class ExecutionEngine:
                             orb_minutes=trade.orb_minutes,
                             instrument=trade.strategy.instrument,  # F-2 hedging guard
                             direction=trade.direction,  # F-2 hedging guard
+                            new_contracts=trade.contracts,  # F-1 scaling-plan projection
                         )
                         if not can_enter:
                             trade.state = TradeState.EXITED
@@ -1344,6 +1346,7 @@ class ExecutionEngine:
                                 orb_minutes=trade.orb_minutes,
                                 instrument=trade.strategy.instrument,  # F-2 hedging guard
                                 direction=trade.direction,  # F-2 hedging guard
+                                new_contracts=trade.contracts,  # F-1 scaling-plan projection
                             )
                             if not can_enter:
                                 trade.state = TradeState.EXITED

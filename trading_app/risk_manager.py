@@ -7,7 +7,9 @@ concentration limits. Designed to work with ExecutionEngine.
 Usage:
     limits = RiskLimits(max_daily_loss_r=-5.0, max_concurrent_positions=3)
     rm = RiskManager(limits)
-    allowed, reason = rm.can_enter(trade, active_trades, daily_pnl_r)
+    allowed, reason, factor = rm.can_enter(
+        "strategy_id", "orb_label", active_trades, daily_pnl_r, new_contracts=1
+    )
 """
 
 import logging
@@ -143,8 +145,11 @@ class RiskManager:
         orb_minutes: int | None = None,
         instrument: str | None = None,
         direction: str | None = None,
+        new_contracts: int = 1,
     ) -> tuple[bool, str, float]:  # Added float to return type
         suggested_contract_factor = 1.0
+        if not isinstance(new_contracts, int) or isinstance(new_contracts, bool) or new_contracts < 1:
+            return False, f"invalid_contracts: new_contracts={new_contracts!r} must be an int >= 1", 0.0
 
         # Check 0: Multi-day equity drawdown
         if self._equity_halted:
@@ -265,19 +270,18 @@ class RiskManager:
                     0.0,
                 )
 
-            # Project total exposure assuming the new entry lands with 1 contract.
+            # Project total exposure using the already-computed entry size.
             # project_total_open_lots aggregates contracts per instrument BEFORE
             # applying the micro-to-mini ceiling, matching the canonical rule
             # "2 lots = 20 micros = any combination summing to 2 mini-equivalents".
             # See docs/audit/2026-04-11-criterion-11-f1-false-alarm.md for the
             # false-alarm audit that this fix closes.
             #
-            # Note: the execution engine sizes the actual position AFTER this
-            # check. If a larger size would push exposure above day_max, the
-            # engine's pre-submit guard must re-check with the real contract
-            # count. For the common 1-contract-per-lane case this projection
-            # is exact.
-            projected = project_total_open_lots(active_trades, instrument, new_contracts=1)
+            # The execution engine computes trade.contracts before this check.
+            # Passing the real pending quantity is required for live-capital
+            # correctness: assuming 1 would under-project multi-contract lanes
+            # and could violate the TopStep XFA same-day scaling ceiling.
+            projected = project_total_open_lots(active_trades, instrument, new_contracts=new_contracts)
 
             if projected > day_max:
                 return (

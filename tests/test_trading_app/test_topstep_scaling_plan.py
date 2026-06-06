@@ -16,6 +16,7 @@ from trading_app.topstep_scaling_plan import (
     lots_for_position,
     max_lots_for_xfa,
     micros_to_mini_equivalent,
+    project_total_open_lots,
     total_open_lots,
 )
 
@@ -228,6 +229,20 @@ class TestTotalOpenLots:
         assert total_open_lots(active, instrument="MES") == 1
         assert total_open_lots(active, instrument="MGC") == 0
         assert total_open_lots(active) == 2  # both
+
+
+class TestProjectedOpenLots:
+    """Projected exposure must use the actual pending order size."""
+
+    def test_projects_multi_contract_pending_order_before_ceiling(self):
+        active = [_Trade(_Strategy("MNQ"), 1) for _ in range(19)]
+
+        assert project_total_open_lots(active, "MNQ", new_contracts=2) == 3
+
+    @pytest.mark.parametrize("bad_contracts", [0, -1, 1.5, True])
+    def test_rejects_invalid_pending_contract_count(self, bad_contracts):
+        with pytest.raises(ValueError, match="new_contracts must be an int >= 1"):
+            project_total_open_lots([], "MNQ", new_contracts=bad_contracts)
 
 
 # ─── Day-1 scenario: 2026-04-11 audit corrected F-1 false alarm ────────

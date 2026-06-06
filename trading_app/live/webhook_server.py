@@ -31,7 +31,7 @@ from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
@@ -44,6 +44,8 @@ DEMO = os.environ.get("WEBHOOK_DEMO", "true").lower() != "false"
 PORT = int(os.environ.get("WEBHOOK_PORT", "8765"))
 BROKER = os.environ.get("WEBHOOK_BROKER", "tradovate")  # "tradovate" | "projectx"
 WEBHOOK_PROFILE_ID = os.environ.get("WEBHOOK_PROFILE_ID", "")
+WEBHOOK_LIVE_RISK_ACK = os.environ.get("WEBHOOK_LIVE_RISK_ACK", "")
+_WEBHOOK_LIVE_RISK_ACK_VALUE = "ENABLE_UNMANAGED_LIVE_WEBHOOK"
 
 # Dedup: reject identical (instrument, direction, action) within window (guards against TV double-fire)
 DEDUP_WINDOW = float(os.environ.get("WEBHOOK_DEDUP_SECONDS", "10"))
@@ -153,6 +155,16 @@ async def lifespan(app: FastAPI):
     log.info("Webhook server starting — demo=%s port=%d", DEMO, PORT)
     if not WEBHOOK_SECRET:
         raise RuntimeError("WEBHOOK_SECRET env var is required — refusing to start without authentication")
+    if not DEMO:
+        if WEBHOOK_LIVE_RISK_ACK != _WEBHOOK_LIVE_RISK_ACK_VALUE:
+            raise RuntimeError(
+                "WEBHOOK live mode blocked: webhook_server bypasses SessionOrchestrator "
+                "portfolio risk, HWM/drawdown, F-1 scaling, and kill-switch controls. "
+                f"Set WEBHOOK_LIVE_RISK_ACK={_WEBHOOK_LIVE_RISK_ACK_VALUE} only after documented operator approval."
+            )
+        if not WEBHOOK_PROFILE_ID:
+            raise RuntimeError("WEBHOOK live mode requires WEBHOOK_PROFILE_ID so execution routing is profile-bound")
+        _get_account_profile()  # validate profile id at startup, not after first alert
     yield
     log.info("Webhook server shutting down")
 
@@ -165,7 +177,7 @@ class TradeRequest(BaseModel):
     instrument: str
     direction: str  # "long" | "short"
     action: str = "entry"  # "entry" | "exit"
-    qty: int = 1
+    qty: int = Field(default=1, ge=1, strict=True)
     entry_model: str = "E1"  # "E1" (market) | "E2" (stop-market)
     entry_price: float | None = None  # required only for E2 stop orders
     secret: str = ""
@@ -184,6 +196,13 @@ class TradeRequest(BaseModel):
         v = v.lower()
         if v not in ("entry", "exit"):
             raise ValueError(f"action must be 'entry' or 'exit', got '{v}'")
+        return v
+
+    @field_validator("qty")
+    @classmethod
+    def validate_qty(cls, v: int) -> int:
+        if not isinstance(v, int) or isinstance(v, bool) or v < 1:
+            raise ValueError(f"qty must be an integer >= 1, got {v!r}")
         return v
 
     @field_validator("entry_model")

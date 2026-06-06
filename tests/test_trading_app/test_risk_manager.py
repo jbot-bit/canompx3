@@ -897,6 +897,46 @@ class TestF1ScalingPlanIntegration:
         )
         assert allowed is False
 
+    def test_pending_contract_count_used_for_scaling_projection(self):
+        """A multi-contract pending order must not be projected as a single micro.
+
+        Day-1 50K XFA cap = 2 mini-equivalent lots = 20 MNQ micros. With
+        19 active micros, a 2-micro pending order projects to 21 micros,
+        ceilings to 3 lots, and must fail closed. This catches the live-capital
+        bug where can_enter hardcoded new_contracts=1.
+        """
+        rm = self._make_rm(50_000)
+        rm.set_topstep_xfa_eod_balance(0.0)
+        active = [self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(19)]
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_MULTI_PENDING",
+            orb_label="EUROPE_FLOW",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+            new_contracts=2,
+        )
+        assert allowed is False
+        assert "topstep_scaling_plan" in reason
+        assert "projected 3" in reason
+
+    @pytest.mark.parametrize("bad_contracts", [0, -1, 1.5, True])
+    def test_invalid_pending_contract_count_fails_closed(self, bad_contracts):
+        rm = self._make_rm(50_000)
+        rm.set_topstep_xfa_eod_balance(0.0)
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_BAD_SIZE",
+            orb_label="EUROPE_FLOW",
+            active_trades=[],
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+            new_contracts=bad_contracts,
+        )
+        assert allowed is False
+        assert "invalid_contracts" in reason
+
     def test_disabled_when_account_size_none(self):
         """Non-TopStep deployments don't use topstep_xfa_account_size → check skipped."""
         limits = RiskLimits(

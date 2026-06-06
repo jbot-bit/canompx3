@@ -35,6 +35,9 @@ def _load_ws(secret: str = "s3cret"):
         import trading_app.live.webhook_server as ws
 
     ws.WEBHOOK_SECRET = secret
+    ws.DEMO = True
+    ws.WEBHOOK_PROFILE_ID = ""
+    ws.WEBHOOK_LIVE_RISK_ACK = ""
     ws.DEDUP_WINDOW = 10.0
     ws.MAX_OPEN_POSITIONS = 10
     ws.MAX_ORDER_QTY = 5
@@ -110,6 +113,47 @@ async def test_webhook_lifespan_blocks_empty_secret():
 
     with pytest.raises(RuntimeError, match="WEBHOOK_SECRET env var is required"):
         await _enter()
+
+
+async def test_webhook_lifespan_blocks_live_without_risk_ack():
+    """LIVE webhook is blocked by default because it bypasses orchestrator risk controls."""
+    ws = _load_ws(secret="live-secret")
+    ws.DEMO = False
+    ws.WEBHOOK_PROFILE_ID = "topstep_50k_mnq_auto"
+    ws.WEBHOOK_LIVE_RISK_ACK = ""
+
+    async def _enter():
+        async with ws.lifespan(ws.app):
+            pass
+
+    with pytest.raises(RuntimeError, match="WEBHOOK live mode blocked"):
+        await _enter()
+
+
+async def test_webhook_lifespan_blocks_live_without_profile():
+    """Even with explicit risk ack, live webhook must be bound to a known profile."""
+    ws = _load_ws(secret="live-secret")
+    ws.DEMO = False
+    ws.WEBHOOK_PROFILE_ID = ""
+    ws.WEBHOOK_LIVE_RISK_ACK = ws._WEBHOOK_LIVE_RISK_ACK_VALUE
+
+    async def _enter():
+        async with ws.lifespan(ws.app):
+            pass
+
+    with pytest.raises(RuntimeError, match="requires WEBHOOK_PROFILE_ID"):
+        await _enter()
+
+
+async def test_webhook_lifespan_accepts_live_with_ack_and_profile():
+    """The live escape hatch is explicit and validates profile id at startup."""
+    ws = _load_ws(secret="live-secret")
+    ws.DEMO = False
+    ws.WEBHOOK_PROFILE_ID = "topstep_50k_mnq_auto"
+    ws.WEBHOOK_LIVE_RISK_ACK = ws._WEBHOOK_LIVE_RISK_ACK_VALUE
+
+    async with ws.lifespan(ws.app):
+        pass
 
 
 async def test_dedup_blocks_duplicate_within_window():
@@ -215,6 +259,15 @@ async def test_known_instrument_accepted():
     ):
         resp = await _run_trade(ws, _ENTRY_PAYLOAD)
         assert resp.status == "submitted"
+
+
+@pytest.mark.parametrize("bad_qty", [0, -1, True, 1.5, "1"])
+def test_webhook_request_rejects_invalid_qty(bad_qty):
+    """Qty must be a strict positive integer before any router call can be built."""
+    ws = _load_ws()
+
+    with pytest.raises(ValueError):
+        ws.TradeRequest(**{**_ENTRY_PAYLOAD, "qty": bad_qty})
 
 
 async def test_qty_exceeds_max_rejected():
