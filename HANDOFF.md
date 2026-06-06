@@ -117,11 +117,16 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** b57aa56c — @ docs(live-bridge): falsify mandated completeness signal; reopen Sites 1+2 design
-- **Files changed:** 3 files
+- **Commit:** 43d58129 — fix(live-bridge): Option W wall-clock partial-day guard + Site 3 CRITICAL flush log
+- **Files changed:** 8 files
   - `HANDOFF.md`
-  - `docs/audit/2026-06-06-live-bar-bridge-partial-day-audit.md`
   - `docs/runtime/stages/live-bridge-partial-day-hardening.md`
+  - `pipeline/build_daily_features.py`
+  - `pipeline/daily_backfill.py`
+  - `tests/test_pipeline/test_build_daily_features.py`
+  - `tests/test_pipeline/test_daily_backfill.py`
+  - `tests/test_trading_app/test_bar_persister.py`
+  - `trading_app/live/bar_persister.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
