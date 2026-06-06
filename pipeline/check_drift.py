@@ -13684,6 +13684,68 @@ def check_worktree_guard_lease_path_parity() -> list[str]:
     return violations
 
 
+def check_brain_consuming_hooks_registered() -> list[str]:
+    """Every fleet-state/lease-consuming hook must be wired in .claude/settings.json.
+
+    A hook that falls out of the settings.json hook table is silently DEAD — it
+    exists on disk, passes its own tests, but never fires. The orphaned
+    `mcp-git-guard.py` was exactly this (verified 2026-06-06: zero matches in
+    settings.json before Stage 2b) — `mcp__git__*` ops bypassed every Bash-tool
+    guard with no signal that protection was missing. This check makes that class
+    of silent unwiring fail-closed.
+
+    Asserts each required hook command appears verbatim in the settings.json hook
+    config. Fail-closed: a missing registration is a blocking drift violation.
+    The required set is the destructive-/branch-safety hooks that consume the
+    canonical brain or the session lease — losing any of them re-opens a
+    multi-terminal data-loss path.
+    """
+    import json
+
+    settings_path = PROJECT_ROOT / ".claude" / "settings.json"
+    required = (
+        "worktree_guard.py",
+        "worktree-destroy-guard.py",
+        "mcp-git-guard.py",
+        "branch-flip-guard.py",
+    )
+
+    if not settings_path.exists():
+        return [f"check_brain_consuming_hooks_registered: missing {settings_path}"]
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        return [f"check_brain_consuming_hooks_registered: read/parse error: {e}"]
+
+    # Flatten every hook `command` string across all events/matchers.
+    commands: list[str] = []
+    hooks_cfg = settings.get("hooks", {})
+    if isinstance(hooks_cfg, dict):
+        for entries in hooks_cfg.values():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                for hook in (entry or {}).get("hooks", []) or []:
+                    cmd = hook.get("command")
+                    if isinstance(cmd, str):
+                        commands.append(cmd)
+    blob = "\n".join(commands)
+
+    violations: list[str] = []
+    for hook_name in required:
+        # Match the hook filename as a path SEGMENT (preceded by `/` in the
+        # hardcoded `python C:/.../.claude/hooks/<name>` command), so a substring
+        # of a longer filename cannot satisfy the requirement.
+        if f"/{hook_name}" not in blob and f"\\{hook_name}" not in blob:
+            violations.append(
+                f"check_brain_consuming_hooks_registered: hook {hook_name!r} is "
+                "NOT registered in .claude/settings.json — it exists on disk but "
+                "never fires (silent dead-hook). Wire it into the hook table "
+                "(see Stage 2b of the fleet-state-brain plan)."
+            )
+    return violations
+
+
 def check_triage_provenance_completeness(
     drafts_dir: Path | None = None,
 ) -> list[str]:
@@ -16418,6 +16480,12 @@ CHECKS = [
         "Worktree-guard: lease/lock path parity (CLI<->hook canonical-source delegation)",
         check_worktree_guard_lease_path_parity,
         False,  # blocking -- inline copy of lease path in the hook silently desyncs concurrency guard
+        False,
+    ),
+    (
+        "Brain-consuming hooks registered in settings.json (no silent dead-hook)",
+        check_brain_consuming_hooks_registered,
+        False,  # blocking -- an unwired destructive-safety hook re-opens a data-loss path
         False,
     ),
     (

@@ -117,11 +117,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** 99caaa4e — fix(live): harden repo-drift gate — exact-match ignore + parse renames
+- **Commit:** ab50ae7d — docs(audit): clear PENDING inbox — finding [1] applied as 99caaa4e
 - **Files changed:** 3 files
   - `HANDOFF.md`
-  - `scripts/run_live_session.py`
-  - `tests/test_scripts/test_run_live_session_preflight.py`
+  - `docs/audit/results/2026-06-06-overnight-capital-review.md`
+  - `docs/audit/results/PENDING-OPERATOR-APPROVAL.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

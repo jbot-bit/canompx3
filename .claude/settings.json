@@ -77,6 +77,16 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/worktree-destroy-guard.py",
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write",
         "hooks": [
           {
@@ -174,6 +184,16 @@
           {
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/branch-flip-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__git__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/mcp-git-guard.py",
             "timeout": 5
           }
         ]
