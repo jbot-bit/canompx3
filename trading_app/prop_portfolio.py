@@ -35,6 +35,7 @@ from trading_app.prop_profiles import (
     ExcludedEntry,
     TradingBook,
     TradingBookEntry,
+    _compute_dd_per_contract,
     compute_profit_split_factor,
     effective_daily_lanes,
     get_account_tier,
@@ -44,41 +45,9 @@ from trading_app.strategy_fitness import compute_fitness  # noqa: F401
 from trading_app.validated_shelf import deployable_validated_relation
 
 # =========================================================================
-# DD estimation — per-lane from DB, with fallback constants
+# Book construction helpers
+# (DD-per-contract math relocated to prop_profiles to break the import cycle)
 # =========================================================================
-
-# Fallback constants when median_risk_points is unavailable.
-# Updated Apr 2026 from actual median_risk_points across validated strategies.
-# Old values (935/1350) were from a stale Monte Carlo — 23x too high.
-DD_PER_CONTRACT_075X = 100.0  # P95 of actual per-lane DD at S0.75
-DD_PER_CONTRACT_10X = 120.0  # P95 of actual per-lane DD at S1.0
-# Intraday trailing is stricter: unrealized PnL moves floor in real-time.
-INTRADAY_TRAILING_FACTOR = 1.4
-
-
-def _compute_dd_per_contract(
-    stop_multiplier: float,
-    dd_type: str,
-    median_risk_points: float | None = None,
-    point_value: float | None = None,
-    friction: float | None = None,
-) -> float:
-    """DD contribution per contract per lane.
-
-    If median_risk_points is provided (from experimental_strategies), computes
-    actual risk: median_risk_pts * stop_mult * point_value + friction.
-    Otherwise falls back to conservative P95 estimate.
-    """
-    if median_risk_points is not None and point_value is not None:
-        base = median_risk_points * stop_multiplier * point_value + (friction or 0)
-    elif stop_multiplier <= 0.75:
-        base = DD_PER_CONTRACT_075X
-    else:
-        base = DD_PER_CONTRACT_10X
-
-    if dd_type == "intraday_trailing":
-        return base * INTRADAY_TRAILING_FACTOR
-    return base
 
 
 def _apply_instrument_bans(

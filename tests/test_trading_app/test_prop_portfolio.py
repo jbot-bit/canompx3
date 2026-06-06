@@ -9,7 +9,6 @@ from trading_app.prop_portfolio import (
     DailyExecutionLane,
     _apply_instrument_bans,
     _calendar_gate_reason,
-    _compute_dd_per_contract,
     _deduplicate_sessions,
     _format_time_ampm,
     _query_paper_pnl,
@@ -20,6 +19,7 @@ from trading_app.prop_portfolio import (
 )
 from trading_app.prop_profiles import (
     AccountProfile,
+    _compute_dd_per_contract,
     get_account_tier,
 )
 

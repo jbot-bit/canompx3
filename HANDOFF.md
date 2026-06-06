@@ -116,12 +116,10 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-06
-- **Commit:** ab50ae7d — docs(audit): clear PENDING inbox — finding [1] applied as 99caaa4e
-- **Files changed:** 3 files
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-06-06-overnight-capital-review.md`
-  - `docs/audit/results/PENDING-OPERATOR-APPROVAL.md`
+- **Date:** 2026-06-07
+- **Commit:** e6471eea — chore: close trading-app-cohesion-clarity-fixes stage (work landed in b93122cd)
+- **Files changed:** 1 files
+  - `docs/runtime/stages/trading-app-cohesion-clarity-fixes.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

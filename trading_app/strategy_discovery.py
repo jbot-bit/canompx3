@@ -1661,7 +1661,9 @@ def run_discovery(
         # ---- BH FDR at discovery (Bloomey statistical hardening, Mar 2026) ----
         # Annotate each strategy with BH FDR significance across all K trials.
         # Informational — DSR/FST gates in validation are the hard filters.
-        from trading_app.strategy_validator import benjamini_hochberg
+        # Import from dsr (leaf) not strategy_validator — breaks the
+        # strategy_discovery <-> strategy_validator import cycle.
+        from trading_app.dsr import benjamini_hochberg
 
         p_pairs = [
             (s["strategy_id"], s["metrics"].get("p_value"))
