@@ -24,11 +24,27 @@ _locks: dict[str, tuple[int, Path]] = {}
 # Ctrl+C, the process is terminated without running atexit cleanup. Per the
 # Windows file-locking docs, the OS releases the process's byte-range lock and
 # closes its handle on termination, but NOT instantaneously — there is a brief
-# window where a stale handle to the orphan lock file lingers, so an immediate
-# unlink/open raises PermissionError [WinError 32]. We retry with a short
-# backoff to ride out that window instead of crashing the next launch.
+# window where a stale handle to the orphan lock file lingers, so open/lock can
+# raise PermissionError [WinError 32]. We retry with a short backoff to ride out
+# that window instead of crashing the next launch.
 _ORPHAN_RETRY_ATTEMPTS = 10
 _ORPHAN_RETRY_DELAY_S = 0.3
+
+
+class _LockBusy(OSError):
+    """Raised when the existing lock file is currently OS-locked."""
+
+
+class _AmbiguousLock(RuntimeError):
+    """Raised when a lock file exists but does not prove a dead owner."""
+
+
+class _LiveLock(RuntimeError):
+    """Raised when a lock file names a live owner PID."""
+
+    def __init__(self, pid: int) -> None:
+        super().__init__(f"live PID {pid}")
+        self.pid = pid
 
 
 def _lock_file_for(instrument: str) -> Path:
@@ -36,30 +52,89 @@ def _lock_file_for(instrument: str) -> Path:
     return _LOCK_DIR / f"bot_{instrument}.lock"
 
 
-def _unlink_with_retry(lock_path: Path) -> None:
-    """Remove an orphaned lock file, tolerating a briefly-leaked OS handle.
+def _try_lock_fd(lock_fd: int) -> None:
+    """Try to acquire the platform lock on an already-open lock file."""
+    if sys.platform == "win32":
+        import msvcrt
 
-    On a graceful exit the file is already gone; on an X-closed prior session
-    the OS may not have released the dead process's handle yet (WinError 32).
-    Retry with backoff; if it still cannot be removed after the window, fall
-    through and let the subsequent os.open() acquire attempt surface the real
-    contention (which itself retries).
-    """
-    last_exc: OSError | None = None
-    for attempt in range(_ORPHAN_RETRY_ATTEMPTS):
+        os.lseek(lock_fd, 0, os.SEEK_SET)
         try:
-            lock_path.unlink(missing_ok=True)
-            return
-        except OSError as exc:  # PermissionError is a subclass
-            last_exc = exc
-            time.sleep(_ORPHAN_RETRY_DELAY_S)
-    log.warning(
-        "Orphan lock %s still not removable after %d attempts (%s); "
-        "proceeding to acquire — the OS handle should clear shortly.",
-        lock_path,
-        _ORPHAN_RETRY_ATTEMPTS,
-        last_exc,
-    )
+            msvcrt.locking(lock_fd, msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            raise _LockBusy(*exc.args) from exc
+    else:
+        import fcntl
+
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise _LockBusy(*exc.args) from exc
+
+
+def _unlock_fd(lock_fd: int) -> None:
+    """Release the platform lock for a held lock fd."""
+    if sys.platform == "win32":
+        import msvcrt
+
+        os.lseek(lock_fd, 0, os.SEEK_SET)
+        msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+
+
+def _read_lock_pid(lock_path: Path) -> int | None:
+    """Return the PID encoded in a lock file, or None when absent/invalid."""
+    try:
+        content = lock_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not content:
+        return None
+    try:
+        return int(content)
+    except ValueError:
+        return None
+
+
+def _classify_existing_lock(lock_path: Path) -> None:
+    """Fail closed on live/ambiguous existing locks before destructive cleanup.
+
+    This helper is for read-only guard surfaces (dashboard/shadow writer) that
+    must not acquire or delete the live bot's lock. A PID that is definitely dead
+    is considered stale; empty, unreadable, invalid, or live-PID lock files are
+    treated as active/ambiguous because they may represent a live process between
+    OS-lock acquisition and PID write.
+    """
+    try:
+        content = lock_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise _AmbiguousLock(f"unreadable lock file: {lock_path} ({exc})") from exc
+    if not content:
+        raise _AmbiguousLock(f"empty lock file: {lock_path}")
+    try:
+        pid = int(content)
+    except ValueError as exc:
+        raise _AmbiguousLock(f"invalid lock PID in {lock_path}: {content!r}") from exc
+    if is_pid_alive(pid):
+        raise _LiveLock(pid)
+
+
+def is_lock_file_active_or_ambiguous(lock_path: Path) -> tuple[bool, int | None, str]:
+    """Read-only status for lock observers.
+
+    Returns (active_or_ambiguous, pid, reason). Dead-PID locks return False;
+    live PID, empty, invalid, and unreadable locks return True to preserve the
+    fail-closed single-writer invariant during startup races.
+    """
+    try:
+        _classify_existing_lock(lock_path)
+    except _LiveLock as exc:
+        return True, exc.pid, "live"
+    except _AmbiguousLock as exc:
+        return True, None, str(exc)
+    return False, _read_lock_pid(lock_path), "dead"
 
 
 def acquire_instance_lock(instrument: str) -> None:
@@ -70,65 +145,33 @@ def acquire_instance_lock(instrument: str) -> None:
 
     lock_path = _lock_file_for(instrument)
 
-    # Check for stale PID in existing lock file.
-    #
-    # X-close handling: closing the orchestrator's console with the window [X]
-    # (instead of Ctrl+C) kills the process WITHOUT running atexit cleanup, so
-    # the lock file is left orphaned — and on Windows it is frequently left
-    # EMPTY (killed after create/truncate but before the PID is written) with
-    # the OS-level msvcrt handle briefly leaked. The old code only cleared the
-    # lock when it contained a LIVE-vs-dead PID; an empty orphan fell straight
-    # through to os.open() and crashed with PermissionError [WinError 32].
-    if lock_path.exists():
-        try:
-            content = lock_path.read_text().strip()
-        except OSError:
-            content = ""
-        if content:
-            try:
-                old_pid = int(content)
-            except ValueError:
-                old_pid = None
-            if old_pid is not None and is_pid_alive(old_pid):
-                log.critical(
-                    "Another bot instance is running (PID %d). If stale, delete %s and retry.",
-                    old_pid,
-                    lock_path,
-                )
-                print(
-                    f"\n!!! CRITICAL: Another bot instance for {instrument} is running (PID {old_pid}).\n"
-                    f"    If stale, delete {lock_path} and retry.\n"
-                )
-                sys.exit(1)
-            log.info("Stale lock file from dead/invalid PID %r — removing", content)
-        else:
-            # Empty orphan from an X-closed (non-graceful) prior session.
-            log.info("Empty orphan lock file (likely X-closed prior session) — removing")
-        # Remove the orphan, retrying briefly in case Windows has not yet
-        # released a leaked handle from the hard-killed process.
-        _unlink_with_retry(lock_path)
-
-    # Acquire exclusive lock, then write PID.
-    #
-    # We already established above that no LIVE holder owns this lock (a live
-    # PID exits at sys.exit(1)). So any OSError here is the X-close orphan-handle
-    # race, not real contention — retry with backoff to ride out the OS's
-    # not-yet-released handle before giving up.
-    lock_fd = None
-    last_exc: OSError | None = None
+    # Correctness rule: ownership is proved by the OS lock, not by lock-file
+    # contents. Empty files are possible both for true X-close orphans and for a
+    # live process in the tiny window after create/lock but before PID write. So
+    # never unlink/replace an existing path before first acquiring that same
+    # file's OS lock. On Unix, unlinking a locked empty file creates a new inode
+    # and can let a second bot acquire a separate lock for the same instrument.
+    lock_fd: int | None = None
+    last_exc: BaseException | None = None
     for attempt in range(_ORPHAN_RETRY_ATTEMPTS):
         try:
             lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
-            if sys.platform == "win32":
-                import msvcrt
+            _try_lock_fd(lock_fd)
 
-                msvcrt.locking(lock_fd, msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
+            # From this point onward we own the OS lock on this exact file, so a
+            # stale/empty/invalid PID is safe to replace. A live PID here means
+            # stale metadata from a different live process that no longer holds
+            # the OS lock; fail closed anyway rather than risk double trading.
+            old_pid = _read_lock_pid(lock_path)
+            if old_pid is not None and is_pid_alive(old_pid):
+                try:
+                    _unlock_fd(lock_fd)
+                except OSError:
+                    pass
+                os.close(lock_fd)
+                lock_fd = None
+                _abort_live_holder(instrument, lock_path, old_pid)
 
-                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-            # Truncate and write PID after lock is held (avoids race on read)
             os.ftruncate(lock_fd, 0)
             os.lseek(lock_fd, 0, os.SEEK_SET)
             os.write(lock_fd, str(os.getpid()).encode())
@@ -137,22 +180,37 @@ def acquire_instance_lock(instrument: str) -> None:
             log.info("Instance lock acquired: %s (PID %d)", lock_path, os.getpid())
             break
 
-        except OSError as e:
-            last_exc = e
-            if lock_fd is not None:
-                try:
-                    os.close(lock_fd)
-                except OSError:
-                    pass
-                lock_fd = None
+        except _LockBusy as exc:
+            last_exc = exc
+            _close_fd_quietly(lock_fd)
+            lock_fd = None
+            pid = _read_lock_pid(lock_path)
+            if pid is not None and is_pid_alive(pid):
+                _abort_live_holder(instrument, lock_path, pid)
             if attempt < _ORPHAN_RETRY_ATTEMPTS - 1:
                 log.info(
-                    "Lock acquire for %s blocked by a stale handle (attempt %d/%d: %s) — "
-                    "retrying after %.1fs",
+                    "Lock acquire for %s found an active/ambiguous lock (attempt %d/%d: %s) — retrying after %.1fs",
                     instrument,
                     attempt + 1,
                     _ORPHAN_RETRY_ATTEMPTS,
-                    e,
+                    exc,
+                    _ORPHAN_RETRY_DELAY_S,
+                )
+                time.sleep(_ORPHAN_RETRY_DELAY_S)
+        except OSError as exc:
+            last_exc = exc
+            _close_fd_quietly(lock_fd)
+            lock_fd = None
+            pid = _read_lock_pid(lock_path)
+            if pid is not None and is_pid_alive(pid):
+                _abort_live_holder(instrument, lock_path, pid)
+            if attempt < _ORPHAN_RETRY_ATTEMPTS - 1:
+                log.info(
+                    "Lock acquire for %s blocked by a stale handle (attempt %d/%d: %s) — retrying after %.1fs",
+                    instrument,
+                    attempt + 1,
+                    _ORPHAN_RETRY_ATTEMPTS,
+                    exc,
                     _ORPHAN_RETRY_DELAY_S,
                 )
                 time.sleep(_ORPHAN_RETRY_DELAY_S)
@@ -170,6 +228,28 @@ def acquire_instance_lock(instrument: str) -> None:
         atexit.register(release_instance_lock)
 
 
+def _close_fd_quietly(lock_fd: int | None) -> None:
+    if lock_fd is None:
+        return
+    try:
+        os.close(lock_fd)
+    except OSError:
+        pass
+
+
+def _abort_live_holder(instrument: str, lock_path: Path, pid: int) -> None:
+    log.critical(
+        "Another bot instance is running (PID %d). If stale, delete %s and retry.",
+        pid,
+        lock_path,
+    )
+    print(
+        f"\n!!! CRITICAL: Another bot instance for {instrument} is running (PID {pid}).\n"
+        f"    If stale, delete {lock_path} and retry.\n"
+    )
+    sys.exit(1)
+
+
 def release_instance_lock() -> None:
     """Release ALL held locks and clean up files."""
     for instrument in list(_locks.keys()):
@@ -182,18 +262,10 @@ def _release_one(instrument: str) -> None:
         return
     lock_fd, lock_path = _locks.pop(instrument)
     try:
-        if sys.platform == "win32":
-            import msvcrt
-
-            try:
-                os.lseek(lock_fd, 0, os.SEEK_SET)
-                msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, 1)
-            except OSError:
-                pass
-        else:
-            import fcntl
-
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        try:
+            _unlock_fd(lock_fd)
+        except OSError:
+            pass
         os.close(lock_fd)
     except OSError:
         pass

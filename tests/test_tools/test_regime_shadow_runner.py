@@ -385,6 +385,23 @@ def test_sync_refuses_when_live_session_lock_held(tmp_path, monkeypatch):
     assert _source_counts(db) == {"backfill": 1}
 
 
+def test_sync_refuses_ambiguous_empty_live_lock(tmp_path, monkeypatch):
+    """Empty lock files are fail-closed: live bot may be before PID write."""
+    db = _make_db(tmp_path, [datetime.date(2026, 6, 2)])
+    monkeypatch.setattr(runner, "build_universe", lambda **kw: [_lane()])
+
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    (lock_dir / "bot_MNQ.lock").write_text("")
+    import trading_app.live.instance_lock as il
+
+    monkeypatch.setattr(il, "_LOCK_DIR", lock_dir)
+
+    with pytest.raises(RuntimeError, match="ambiguous lock"):
+        runner.sync_shadow(db_path=db, as_of_date=FWD, universe_yaml=tmp_path / "u.yaml")
+    assert _source_counts(db) == {"backfill": 1}
+
+
 def test_sync_proceeds_when_lock_pid_dead(tmp_path, monkeypatch):
     """A stale lock file with a dead PID must NOT block the sync."""
     db = _make_db(tmp_path, [datetime.date(2026, 6, 2)])

@@ -35,7 +35,7 @@ from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.live.alert_engine import read_operator_alerts, summarize_operator_alerts
 from trading_app.live.bot_state import read_live_health, read_state
-from trading_app.live.instance_lock import is_pid_alive
+from trading_app.live.instance_lock import is_lock_file_active_or_ambiguous
 
 log = logging.getLogger(__name__)
 
@@ -101,15 +101,19 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if lock_dir.exists():
         for lock_file in lock_dir.glob("bot_*.lock"):
             try:
-                content = lock_file.read_text(encoding="utf-8").strip()
-                pid = int(content) if content else None
-                if pid and is_pid_alive(pid):
-                    log.info("Startup: keeping live lock %s (PID %d)", lock_file.name, pid)
+                active, pid, reason = is_lock_file_active_or_ambiguous(lock_file)
+                if active:
+                    if pid is not None:
+                        log.info("Startup: keeping live lock %s (PID %d)", lock_file.name, pid)
+                    else:
+                        log.warning(
+                            "Startup: keeping ambiguous lock %s (%s); live bot may be between lock and PID write",
+                            lock_file.name,
+                            reason,
+                        )
                     continue
-                lock_file.unlink()
-                log.info("Startup: removed stale lock %s", lock_file.name)
-            except ValueError:
                 lock_file.unlink(missing_ok=True)
+                log.info("Startup: removed stale lock %s", lock_file.name)
             except Exception:
                 pass
 
@@ -527,15 +531,9 @@ def _instance_lock_status() -> dict[str, object]:
     if not lock_dir.exists():
         return {"locked": False, "locks": active}
     for lock_file in lock_dir.glob("bot_*.lock"):
-        try:
-            content = lock_file.read_text(encoding="utf-8").strip()
-            pid = int(content) if content else None
-        except (OSError, ValueError):
-            pid = None
-        if pid and is_pid_alive(pid):
-            active.append({"path": str(lock_file), "pid": pid})
-        elif pid is None:
-            active.append({"path": str(lock_file), "pid": None})
+        locked, pid, reason = is_lock_file_active_or_ambiguous(lock_file)
+        if locked:
+            active.append({"path": str(lock_file), "pid": pid, "reason": reason})
     return {"locked": bool(active), "locks": active}
 
 

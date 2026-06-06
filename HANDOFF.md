@@ -115,13 +115,17 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
-- **Date:** 2026-06-06
-- **Commit:** 84f1ba3f — feat(START_BOT): add live/demo mode arg so operator arms live from the front-end launcher
-- **Files changed:** 3 files
-  - `START_BOT.bat`
-  - `docs/plans/2026-06-05-c11-stage1-stage2-design.md`
-  - `docs/research-input/topstep/topstep_payout_economics_2026-06-06.md`
+- **Tool:** Codex
+- **Date:** 2026-06-05
+- **Commit:** db04a63 — fix(instance-lock): fail closed on ambiguous live locks
+- **Files changed:** 7 files
+  - `HANDOFF.md`
+  - `scripts/tools/regime_shadow_runner.py`
+  - `tests/test_tools/test_regime_shadow_runner.py`
+  - `tests/test_trading_app/test_bot_dashboard.py`
+  - `tests/test_trading_app/test_instance_lock_orphan_recovery.py`
+  - `trading_app/live/bot_dashboard.py`
+  - `trading_app/live/instance_lock.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
@@ -200,3 +204,10 @@
 - Expanded `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md` from a conservative tiering memo into a supersonic implementation blueprint with explicit latency targets: docs-only p50 <1s/p95 <3s, small Python p50 <3s/p95 <8s, pipeline/trading p50 <8s/p95 <20s, push p50 <90s/p95 <4min.
 - Added concrete architecture: hot-path hook classifier, typed drift registry, staged drift modes, timing ledgers, staged-only Ruff/compile, test impact map, DB truth lanes, and parallel pre-push runner.
 - Added staged roadmap and first patch set that should produce immediate UX wins before any heavyweight drift check is moved: hook activation repair, staged Ruff/compile, docs-only hot path, serial pre-push gate, drift metadata substrate, then scoped whale checks.
+
+## 2026-06-05 Codex update — instance-lock race hardening
+
+- Ran a capital-at-risk `/code-review` stress pass on the current instance-lock orphan recovery change and found a second-process race: an empty-but-OS-locked file could be unlinked/replaced on Unix, allowing two distinct inodes and two bot instances for one instrument.
+- Hardened `trading_app/live/instance_lock.py` so acquisition proves ownership by locking the existing file descriptor before replacing PID metadata; empty/invalid files are only overwritten after the OS lock is held.
+- Aligned observer surfaces: dashboard startup/status and `regime_shadow_runner.assert_no_live_session()` now treat empty, invalid, unreadable, or live-PID lock files as active/ambiguous instead of deleting/ignoring them.
+- Added regressions for empty locked files, ambiguous shadow-writer refusal, and dashboard active status. Targeted tests and ruff passed; `session_preflight.py` passed after setting local `core.hooksPath=.githooks` and still reported only expected dirty-tree/active-stage warnings.

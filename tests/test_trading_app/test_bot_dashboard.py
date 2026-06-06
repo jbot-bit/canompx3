@@ -1398,3 +1398,17 @@ def test_api_status_self_heals_definitely_dead_state(monkeypatch):
     assert result["mode"] == "STOPPED"  # post-clear fallback
     assert result["is_running"] is False
     assert states[0] == {}  # state was actively cleared
+
+
+def test_instance_lock_status_treats_empty_lock_as_active(tmp_path, monkeypatch):
+    """Dashboard must not dismiss empty locks; bot may be before PID write."""
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    (lock_dir / "bot_MNQ.lock").write_text("")
+    monkeypatch.setattr(bot_dashboard, "_lock_dir", lambda: lock_dir)
+
+    status = bot_dashboard._instance_lock_status()
+
+    assert status["locked"] is True
+    assert status["locks"][0]["pid"] is None
+    assert "empty lock file" in status["locks"][0]["reason"]
