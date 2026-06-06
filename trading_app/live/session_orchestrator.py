@@ -1291,16 +1291,25 @@ class SessionOrchestrator:
                     loop = asyncio.get_running_loop()
                     loop.create_task(self._emergency_flatten())
                 except RuntimeError:
-                    # No running event loop (post_session context) — cannot schedule.
-                    # Alert the operator: this is the one flatten path that fails
-                    # silently to Telegram (log-only), and it fires with a position
-                    # open + feed dead — the worst moment to be invisible.
-                    msg = (
-                        f"FEED DEAD: cannot schedule flatten for {self.instrument} "
-                        "(no event loop) — MANUAL CLOSE REQUIRED"
-                    )
-                    log.critical(msg)
-                    self._notify(msg)
+                    # No running event loop (post_session context). Row 09 Gap 3:
+                    # previously the flatten was DROPPED here (log+notify only) —
+                    # a silent-exposure window with a position open + feed dead,
+                    # the worst moment to be invisible. Run the flatten
+                    # SYNCHRONOUSLY via asyncio.run() so the position is actually
+                    # closed. asyncio.run() is safe here precisely because we are
+                    # in the except branch — there is no running loop to conflict.
+                    try:
+                        asyncio.run(self._emergency_flatten())
+                    except Exception as flatten_exc:
+                        # Fail-closed fallback: the synchronous flatten itself
+                        # failed (broker dead, etc.). Alert the operator —
+                        # exposure persists until manual close.
+                        msg = (
+                            f"FEED DEAD: synchronous flatten failed for {self.instrument} "
+                            f"({flatten_exc}) — MANUAL CLOSE REQUIRED"
+                        )
+                        log.critical(msg)
+                        self._notify(msg)
         else:
             self._feed_status["status"] = "stale"
             self._feed_status["dead"] = False
@@ -2160,6 +2169,26 @@ class SessionOrchestrator:
             }
         )
 
+    @staticmethod
+    def _bracket_stop_distance(event, strategy) -> float | None:
+        event_risk = getattr(event, "risk_points", None)
+        if event_risk is not None:
+            # Risk field is PRESENT: trust it iff it is a valid positive distance.
+            # A present-but-<=0 value must FAIL CLOSED (return None -> caller flattens),
+            # NOT silently fall through to a guessed median bracket. Stage-1 audit
+            # finding on 9b3fc530: the old `if event_risk:` truthiness guard let a 0.0
+            # risk-points event take the median fallback, producing a positive guessed
+            # distance that passed the caller's `if not stop_dist` check.
+            if event_risk > 0:
+                return float(event_risk)
+            return None
+        # Risk field ABSENT: median fallback (median_risk * stop_multiplier) is legitimate.
+        median_risk = getattr(strategy, "median_risk_points", None)
+        if not median_risk:
+            return None
+        mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
+        return float(median_risk) * float(mult)
+
     async def _submit_bracket(self, event, strategy, entry_price: float) -> None:
         """Submit broker-side stop/target bracket after entry fill. Never raises.
 
@@ -2168,8 +2197,10 @@ class SessionOrchestrator:
         (entry filled, no bracket at broker) is the highest unattended-overnight risk:
         an adverse gap will run the full account without any automatic stop.
 
-        Three sub-paths that previously left a naked position:
-          1. No risk_points — bracket would be wrong; safer to flatten than guess.
+        Sub-paths that previously left a naked position:
+          1. No risk_points (absent, or present-but-<=0) — bracket would be wrong;
+             safer to flatten than guess. A present-but-zero risk_points must NOT
+             take the median fallback (Stage-1 audit finding on 9b3fc530).
           2. build_bracket_spec returns None — broker cannot represent this bracket.
           3. submit() raises — network/auth failure; bracket never reached broker.
 
@@ -2181,8 +2212,8 @@ class SessionOrchestrator:
             return
         try:
             execution_contract, execution_qty = self._resolve_execution_order(event.contracts)
-            risk_pts = event.risk_points or strategy.median_risk_points
-            if not risk_pts:
+            stop_dist = self._bracket_stop_distance(event, strategy)
+            if not stop_dist:
                 # F4-1: Cannot compute stop/target without risk_points.
                 # Bracket would be placed at wrong price; safer to flatten immediately.
                 msg = (
@@ -2195,8 +2226,6 @@ class SessionOrchestrator:
                 self._fire_kill_switch()
                 await self._emergency_flatten()
                 return
-            mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
-            stop_dist = risk_pts * mult
             sign = 1 if event.direction == "long" else -1
             stop_price = entry_price - sign * stop_dist
             target_price = entry_price + sign * stop_dist * strategy.rr_target
@@ -2623,10 +2652,8 @@ class SessionOrchestrator:
             # Merge bracket into entry for atomic submission (native brackets only)
             _bracket_merged = False
             if self.order_router.supports_native_brackets():
-                risk_pts = event.risk_points or strategy.median_risk_points
-                if risk_pts:
-                    mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
-                    stop_dist = risk_pts * mult
+                stop_dist = self._bracket_stop_distance(event, strategy)
+                if stop_dist:
                     sign = 1 if event.direction == "long" else -1
                     stop_price = event.price - sign * stop_dist
                     target_price = event.price + sign * stop_dist * strategy.rr_target
@@ -2745,6 +2772,7 @@ class SessionOrchestrator:
             # non-native brackets get submitted separately post-fill.
             if _bracket_merged:
                 record = self._positions.get(event.strategy_id)
+                naked_position = False
                 if record is not None and order_id and self.order_router.has_queryable_bracket_legs():
                     # Verify bracket legs were actually created at the broker.
                     # ProjectX creates bracket legs as separate orders with IDs entry_id+1 (SL)
@@ -2772,8 +2800,12 @@ class SessionOrchestrator:
                             )
                             log.critical(msg)
                             self._notify(msg)
-                            # Store what we have — partial protection is better than none
+                            # Store what we have so the surviving leg can be
+                            # cancelled during the emergency flatten below.
                             record.bracket_order_ids = [x for x in [sl_id, tp_id] if x]
+                            # A missing protective STOP means the live position
+                            # is genuinely unprotected. Do not just alert — act.
+                            naked_position = True
                     except Exception as e:
                         log.error("Bracket verification failed for %s: %s", event.strategy_id, e)
                         # The entry+1/entry+2 sequential-ID fallback is a ProjectX-specific
@@ -2800,7 +2832,28 @@ class SessionOrchestrator:
                                 f"{event.strategy_id} and broker does not support "
                                 f"sequential-ID fallback"
                             )
-                self._stats.brackets_submitted += 1
+                            # No usable protective legs and the entry is live.
+                            naked_position = True
+                if naked_position:
+                    # A live position with no verified protective stop can
+                    # run unbounded past the intended risk. Alerting is not
+                    # enough: fire the kill switch (block new entries) and
+                    # emergency-flatten the exposed position now.
+                    log.critical(
+                        "NAKED POSITION: %s is live without a verified "
+                        "protective stop — firing kill switch and "
+                        "emergency-flattening.",
+                        event.strategy_id,
+                    )
+                    self._notify(
+                        f"NAKED POSITION: emergency-flattening {event.strategy_id} "
+                        f"(no verified protective stop after entry fill)"
+                    )
+                    self._fire_kill_switch()
+                    await self._emergency_flatten()
+                    self._stats.brackets_failed += 1
+                else:
+                    self._stats.brackets_submitted += 1
             else:
                 actual_entry = fill_price if fill_price is not None else event.price
                 await self._submit_bracket(event, strategy, actual_entry)
@@ -3052,10 +3105,28 @@ class SessionOrchestrator:
                     )
                     result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
                     order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
+                    fill_price = (
+                        result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
+                    )
                     msg = f"KILL SWITCH FLATTEN: {record.strategy_id} {direction} → orderId={order_id} (attempt {attempt + 1})"
                     log.critical(msg)
                     self._notify(msg)
-                    self._positions.on_exit_filled(record.strategy_id)
+                    # Row 09 Gap 2: only mark FLAT when the broker confirmed a
+                    # fill. A bare order acknowledgement (order_id, no fill_price)
+                    # is acceptance, not execution — marking FLAT then is the
+                    # submit-before-fill lie. Leave PENDING_EXIT so the EOD
+                    # broker-truth re-query (_kill_switch_positions_confirmed_flat)
+                    # reconciles it against the broker rather than local state.
+                    if fill_price is not None:
+                        self._positions.on_exit_filled(record.strategy_id)
+                    else:
+                        self._positions.on_exit_sent(record.strategy_id)
+                        log.critical(
+                            "KILL SWITCH FLATTEN: %s submit accepted (orderId=%s) but NO fill "
+                            "confirmation — left PENDING_EXIT for EOD broker-truth reconcile.",
+                            record.strategy_id,
+                            order_id,
+                        )
                     # Persist kill switch exit to journal (fail-open)
                     if record.journal_trade_id:
                         self.journal.record_exit(
@@ -3166,6 +3237,101 @@ class SessionOrchestrator:
             )
             return False
         return True
+
+    async def _reconcile_positions_on_reconnect(self, reconnect_count: int) -> None:
+        """Re-sync local position state against broker truth after a reconnect.
+
+        Row 08 MED #2 (overnight capital audit, 2026-06-06): the mid-session
+        reconnect loop previously only bumped ``_fill_reconnect_gen`` — it never
+        re-queried the broker. If a fill arrived during the disconnect window, the
+        broker holds a position the local tracker is blind to; on resume the engine
+        could ``cancel_trade``/act as if flat while a REAL position is open at the
+        broker → naked exposure desynced from broker truth. Startup reconciles
+        (``query_open`` at session start), but reconnect did not. This re-couples
+        the local tracker to broker truth on every reconnect (the audit's
+        cross-cutting "decoupled safety check" defect class).
+
+        Danger signal: the broker reports an OPEN position that the local tracker
+        does not account for. Fail-closed response mirrors the F4-3 /
+        feed-dead path (``_on_feed_stale``): fire the kill switch + emergency
+        flatten so the untracked broker position is actually closed, not left
+        naked. We do NOT silently adopt the broker position into the local tracker
+        (we cannot reconstruct its strategy_id / bracket state) — closing it is the
+        capital-safe action.
+
+        Cases (mirrors ``_confirmed_flat_at_broker`` semantics):
+        - signal-only / no router / no positions adapter → no live position
+          possible → nothing to reconcile.
+        - ``query_open`` empty → broker flat → in-sync, resume.
+        - ``query_open`` shows open position(s) while local tracker is flat →
+          untracked broker position → KILL + FLATTEN + notify (fail-closed).
+        - ``query_open`` shows open position(s) and local tracker also active →
+          a position is genuinely open across the reconnect; log+notify for
+          operator visibility but resume (the live engine continues managing it).
+        - ``NotImplementedError`` → adapter cannot verify → warn, fall back to the
+          local tracker (cannot prove a desync, do not block resume).
+        - generic ``Exception`` → fail-closed: notify the operator that broker
+          state could NOT be verified on reconnect; do not silently resume clean.
+        """
+        if self.signal_only or self.order_router is None or self.positions is None:
+            return
+        try:
+            broker_open = self.positions.query_open(self.order_router.account_id)
+        except NotImplementedError:
+            log.warning(
+                "Reconnect resync (attempt %d): %s broker does not implement query_open() — "
+                "cannot verify broker positions; relying on local tracker.",
+                reconnect_count,
+                self._broker_name,
+            )
+            return
+        except Exception as e:  # noqa: BLE001 — fail-closed, never silent
+            msg = (
+                f"RECONNECT RESYNC FAILED (attempt {reconnect_count}): broker position query "
+                f"failed ({e}) — cannot verify broker state. Verify no untracked position is open."
+            )
+            log.critical(msg)
+            self._notify(msg)
+            return
+
+        if not broker_open:
+            return  # broker flat — in sync, nothing to do
+
+        local_active = self._positions.active_positions()
+        if not local_active:
+            # The dangerous desync: broker holds a position we never tracked
+            # (fill landed during the disconnect window). Close it — do not resume
+            # blind. Mirror the F4-3 / feed-dead fail-closed sequence.
+            msg = (
+                f"RECONNECT DESYNC (attempt {reconnect_count}): broker shows {len(broker_open)} "
+                f"OPEN position(s) but local tracker is flat — untracked fill during disconnect. "
+                f"Firing kill switch + emergency flatten. Positions: {broker_open}"
+            )
+            log.critical(msg)
+            self._notify(msg)
+            if not self._kill_switch_fired:
+                self._fire_kill_switch()
+                try:
+                    await self._emergency_flatten()
+                except Exception as flatten_exc:  # noqa: BLE001 — fail-closed alert
+                    fail_msg = (
+                        f"RECONNECT DESYNC: emergency flatten failed ({flatten_exc}) — "
+                        "MANUAL CLOSE REQUIRED; untracked broker position remains open."
+                    )
+                    log.critical(fail_msg)
+                    self._notify(fail_msg)
+            return
+
+        # Broker open AND local tracker active: a position is genuinely open across
+        # the reconnect. The live engine continues managing it; surface for operator
+        # visibility but do not halt (this is the expected hold-through-reconnect case).
+        log.warning(
+            "Reconnect resync (attempt %d): broker shows %d open position(s), local tracker "
+            "has %d active — position held across reconnect, resuming management.",
+            reconnect_count,
+            len(broker_open),
+            len(local_active),
+        )
 
     async def _watchdog(self) -> None:
         """Independent watchdog task — fires kill switch if feed goes silent
@@ -3746,12 +3912,36 @@ class SessionOrchestrator:
             # R3: use a mutable counter (not range()) so stable-run reset can lower it
             # back to 0 without re-entering the loop from scratch.
             reconnect_count = 0
+            # Row 08 MED #2: "have we connected before in THIS run()?" is a distinct
+            # question from reconnect_count (which the R3 stable-run reset zeroes).
+            # The resync must gate on this flag, NOT reconnect_count — after a long
+            # stable run drops, R3 resets reconnect_count to 0, but that IS a
+            # reconnect (a fill could have landed during the drop), so a
+            # reconnect_count-based guard would skip resync exactly when it matters.
+            has_connected_once = False
             while reconnect_count <= self.ORCHESTRATOR_MAX_RECONNECTS:
                 if self._kill_switch_fired:
                     msg = "Kill switch fired — not reconnecting"
                     log.critical(msg)
                     self._notify(msg)
                     return
+
+                # Row 08 MED #2: on a RECONNECT iteration (we have connected before
+                # in this run(); startup reconciles separately at session start via
+                # the orphan check), re-sync local position state against broker
+                # truth BEFORE re-subscribing and resuming. A fill that landed during
+                # the disconnect window leaves the broker holding a position the
+                # local tracker is blind to — this catches it and fails closed
+                # (kill + flatten) rather than resuming naked. Gated on
+                # has_connected_once (NOT reconnect_count, which R3 zeroes). If it
+                # fired the kill switch, exit cleanly.
+                if has_connected_once:
+                    await self._reconcile_positions_on_reconnect(reconnect_count)
+                    if self._kill_switch_fired:
+                        msg = "Kill switch fired during reconnect resync — not resuming"
+                        log.critical(msg)
+                        self._notify(msg)
+                        return
 
                 # Feedless brokers (e.g. Tradovate, webhook entry) must not reach
                 # the feed-based reconnect loop. Assertion fires only if invariant
@@ -3780,6 +3970,11 @@ class SessionOrchestrator:
                 feed_started_at = datetime.now(UTC)
                 try:
                     self._last_bar_at = None  # reset heartbeat to avoid false watchdog trigger
+                    # Row 08 MED #2: mark that a connection has been established in
+                    # this run() BEFORE the blocking run() — so even a mid-session
+                    # crash (feed.run raising) still arms the next iteration's
+                    # broker-truth resync. Independent of reconnect_count (R3-zeroed).
+                    has_connected_once = True
                     await feed.run(self.contract_symbol)
 
                     # Distinguish stop-file exit from feed exhaustion

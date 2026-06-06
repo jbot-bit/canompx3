@@ -177,7 +177,8 @@ def log_trade(args):
         stats = con_w.execute(
             """SELECT COUNT(*) as n, ROUND(SUM(pnl_r), 2) as cum_r,
                       ROUND(AVG(CASE WHEN pnl_r > 0 THEN 1.0 ELSE 0.0 END)*100, 1) as wr
-               FROM paper_trades WHERE orb_label = ?""",
+               FROM paper_trades WHERE orb_label = ?
+                 AND execution_source != 'shadow'""",
             [session],
         ).fetchone()
 

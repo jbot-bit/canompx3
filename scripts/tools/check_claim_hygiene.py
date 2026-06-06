@@ -71,6 +71,92 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+# --- Statistical-claim literature-anchor gate (repo-wide, staged-only) ---------
+#
+# Enforces the institutional-rigor canon (.claude/rules/institutional-rigor.md S7
+# and .claude/skills/code-review/SKILL.md Sections A/C) at COMMIT time: a doc that
+# makes a Sharpe / t-stat / significance / DSR / MinBTL / edge claim must either
+# cite a literature extract / criterion / executed result path OR explicitly tag
+# the claim's grounding state (MEASURED / UNSUPPORTED / INFERRED). This makes the
+# seven-sins doctrine ENFORCED, not advisory — future slop cannot enter main
+# without being grounded.
+#
+# Scope is the STAGED set only (the pre-commit passes changed files) — historical
+# docs are grandfathered, only new/edited claims must be grounded. No retroactive
+# landmine across the ~1044 existing result docs.
+
+# Folders whose staged .md files are subject to the stat-claim gate. Repo-wide
+# across the research/results/doctrine surfaces — not pigeonholed to results/.
+_STAT_CLAIM_DIRS = (
+    ("docs", "audit"),
+    ("docs", "institutional"),
+    ("docs", "plans"),
+    ("research",),
+)
+
+# A doc "makes a stat claim" if it asserts a Sharpe/significance/edge NUMBER, or
+# uses the multiple-testing-correction vocabulary (DSR/MinBTL/deflated) which is
+# itself a quantitative claim. Bare methodology prose ("we should compute the
+# Sharpe ratio") does NOT fire — a number must be adjacent — to avoid false
+# positives on design docs.
+_STAT_CLAIM_PATTERN = re.compile(
+    r"(?im)("
+    r"\bsharpe\s*(ratio)?\s*[=:]?\s*-?\d|"  # Sharpe = 1.2 / Sharpe 1.2
+    r"\bdeflated\s+sharpe\b|\bdsr\b|\bminbtl\b|"  # MHT-correction vocabulary = a claim
+    r"\bt[-_ ]?stat(istic)?\s*[=:]?\s*-?\d|"  # t-stat = 3.1
+    r"\bt\s*[=≥>]\s*-?\d(\.\d+)?|"  # t = 2.0 / t >= 3.79
+    r"\bp[-_ ]?value\s*[=<:]\s*-?0?\.\d|"  # p-value < 0.05
+    r"\bp\s*[=<]\s*0?\.\d|"  # p < 0.05
+    r"\bstatistically\s+significan|"  # "statistically significant"
+    r"\bedge\s*(of|=|:)?\s*\$?-?\d"  # edge = $27 / edge of 1.2
+    r")"
+)
+
+# A stat claim is GROUNDED if the doc anywhere cites a literature extract, a
+# criterion, an executed result path, a provenance annotation, a named canon
+# author, OR tags the grounding state. Any one satisfies the gate.
+_STAT_ANCHOR_PATTERN = re.compile(
+    r"(?im)("
+    r"docs/institutional/literature/|institutional/literature/|"  # literature extract
+    r"\bLIT_[A-Za-z0-9]|"  # LIT_* extract id
+    r"pre_registered_criteria|criterion\s*\d|"  # locked criterion
+    r"docs/audit/results/|\.json\b|\.csv\b|\.parquet\b|"  # executed result path
+    r"@research-source|@entry-models|@revalidated-for|"  # provenance annotation
+    r"\b(UNSUPPORTED|MEASURED|INFERRED)\b|FROM TRAINING MEMORY|"  # grounding tag
+    # named canon authors — the seven-sins anchors
+    r"\b(bailey|l[oó]pez[ -]?de[ -]?prado|prado|harvey|liu|chordia|aronson|"
+    r"carver|fitschen|pepelyshev|harris)\b"
+    r")"
+)
+
+
+def _in_stat_claim_scope(path: Path) -> bool:
+    try:
+        rel = path.resolve().relative_to(PROJECT_ROOT)
+    except ValueError:
+        return False
+    if path.suffix.lower() != ".md":
+        return False
+    return any(rel.parts[: len(prefix)] == prefix for prefix in _STAT_CLAIM_DIRS)
+
+
+def check_stat_claim_anchor(path: Path) -> list[str]:
+    """A staged doc making a Sharpe/significance/edge claim must cite a literature
+    anchor / criterion / result path or tag its grounding state. Staged-only."""
+    text = _read_text(path)
+    if not _STAT_CLAIM_PATTERN.search(text):
+        return []
+    if _STAT_ANCHOR_PATTERN.search(text):
+        return []
+    return [
+        f"{path}: makes a Sharpe/t-stat/significance/edge claim with no literature "
+        f"anchor and no grounding tag. Cite docs/institutional/literature/<extract> "
+        f"or a pre_registered_criteria criterion or an executed result path, OR tag "
+        f"the claim MEASURED / UNSUPPORTED / INFERRED. "
+        f"See .claude/rules/institutional-rigor.md S7."
+    ]
+
+
 def check_pr_body(body: str) -> list[str]:
     return [f"PR body missing required section: {section}" for section in PR_REQUIRED_SECTIONS if section not in body]
 
@@ -110,6 +196,8 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if _is_result_doc(path):
             issues.extend(check_result_doc(path))
+        if _in_stat_claim_scope(path):
+            issues.extend(check_stat_claim_anchor(path))
 
     if issues:
         print("CLAIM HYGIENE CHECK FAILED")

@@ -26,6 +26,18 @@ class TradovateContracts(BrokerContracts):
         accounts = self.resolve_all_account_ids()
         if not accounts:
             raise RuntimeError("No active Tradovate accounts found")
+        if len(accounts) > 1:
+            # Defense-in-depth (Capital review A, 2026-06-06): silently taking
+            # accounts[0] when several ACTIVE accounts exist could route LIVE
+            # orders to the wrong account. Fail loud; operator must bind
+            # explicitly via --account-id. The live-arm preflight gate
+            # (_check_account_binding) already blocks this. resolve_all_account_ids
+            # already filters to active accounts, so this counts active only.
+            names = ", ".join(f"{name}(id={aid})" for aid, name in accounts)
+            raise RuntimeError(
+                f"Tradovate: {len(accounts)} active accounts — ambiguous. "
+                f"Pass --account-id to bind explicitly. Accounts: {names}"
+            )
         return accounts[0][0]
 
     def resolve_all_account_ids(self) -> list[tuple[int, str]]:

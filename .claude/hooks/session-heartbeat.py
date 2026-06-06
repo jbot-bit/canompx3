@@ -38,6 +38,7 @@ Design constraints (grounded, not assumed)
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -52,6 +53,33 @@ _WRITE_THROTTLE_SECS = 20
 
 # Subdir under the git common dir holding one .beat file per live session.
 _BEAT_DIRNAME = ".claude-heartbeats"
+
+# Canonical lease module — single source of truth for the session-process
+# anchor walk-up (institutional-rigor §4: never re-encode canonical logic).
+_CANONICAL_MODULE = (
+    Path(__file__).resolve().parents[2] / "scripts" / "tools" / "worktree_guard.py"
+)
+
+
+def _find_session_anchor() -> tuple[int, int | None] | None:
+    """Resolve THIS session's long-lived Claude-process anchor (pid, create_time).
+
+    Delegates to the canonical `worktree_guard._find_session_anchor_pid`, walking
+    up from this hook subprocess's parent (the wrapper/claude.exe chain). Returns
+    None on any failure so the caller omits the anchor fields and the beat
+    degrades to mtime-only liveness — never a false anchor claim. Fail-open.
+    """
+    try:
+        spec = importlib.util.spec_from_file_location("worktree_guard", _CANONICAL_MODULE)
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        # Start from our PARENT: this hook subprocess is the short-lived python;
+        # its ancestors are the wrapper chain up to claude.exe.
+        return mod._find_session_anchor_pid(os.getppid())
+    except BaseException:
+        return None
 
 
 def _git_common_dir(cwd: str) -> Path | None:
@@ -153,15 +181,26 @@ def main() -> None:
     except OSError:
         pass  # stat failure -> fall through and attempt the write
 
-    payload = json.dumps(
-        {
-            "session_id": session_id,
-            "cwd": cwd,
-            "branch": _current_branch(cwd),
-            "pid": os.getpid(),
-            "ts": now,
-        }
-    ).encode("utf-8")
+    # Anchor liveness (2026-06-04): the beat's own `pid` is THIS short-lived hook
+    # subprocess — useless for liveness (it exits immediately after the write, so
+    # a reader always sees it as dead). Stamp the long-lived Claude session
+    # process (the `claude`/`claude.exe` ancestor) as the real liveness anchor so
+    # the worktree-guard reader can distinguish a live peer from an orphan beat
+    # left by a crashed session. On walk-up failure the fields are omitted and the
+    # reader falls back to mtime-only liveness (backward compatible).
+    beat = {
+        "session_id": session_id,
+        "cwd": cwd,
+        "branch": _current_branch(cwd),
+        "pid": os.getpid(),
+        "ts": now,
+    }
+    anchor = _find_session_anchor()  # fail-open: returns None on any error
+    if anchor is not None:
+        beat["anchor_pid"] = anchor[0]
+        if anchor[1] is not None:
+            beat["anchor_create_time"] = anchor[1]
+    payload = json.dumps(beat).encode("utf-8")
 
     try:
         beat_dir.mkdir(parents=True, exist_ok=True)

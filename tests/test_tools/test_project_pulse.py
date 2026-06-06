@@ -1655,7 +1655,8 @@ class TestDeploymentState:
                 CREATE TABLE paper_trades (
                     strategy_id VARCHAR,
                     trading_day DATE,
-                    pnl_r DOUBLE
+                    pnl_r DOUBLE,
+                    execution_source VARCHAR DEFAULT 'live'
                 )
                 """
             )
@@ -1690,8 +1691,13 @@ class TestDeploymentState:
         db_path = tmp_path / "gold.db"
         journal_path = tmp_path / "live_journal.db"
         with duckdb.connect(str(db_path)) as con:
-            con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
-            con.execute("INSERT INTO paper_trades VALUES ('MIXED', DATE '2026-05-23', 0.1)")
+            con.execute(
+                "CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE, "
+                "execution_source VARCHAR DEFAULT 'live')"
+            )
+            con.execute(
+                "INSERT INTO paper_trades (strategy_id, trading_day, pnl_r) VALUES ('MIXED', DATE '2026-05-23', 0.1)"
+            )
         with duckdb.connect(str(journal_path)) as con:
             con.execute("CREATE TABLE live_trades (strategy_id VARCHAR, trading_day DATE, actual_r DOUBLE)")
             con.execute("INSERT INTO live_trades VALUES ('MIXED', DATE '2026-05-01', -0.1)")

@@ -146,8 +146,8 @@ def test_score_replacement_scenario_continues_when_safe_better_but_research_hard
         scenario_id="S1",
         replaced_incumbent_lane="INCUMBENT",
         candidate_lane="CANDIDATE",
-        book_is=is_book,
-        trades_is=pd.DataFrame({"pnl_r": is_book["pnl_r"]}),
+        book=is_book,
+        trades=pd.DataFrame({"pnl_r": is_book["pnl_r"]}),
         incumbent_annual_per_max_dd=1.0,
         research_state=state,
         monte_carlo_paths=512,
@@ -174,8 +174,8 @@ def test_score_replacement_scenario_kills_account_unsafe_or_worse_than_incumbent
         scenario_id="S2",
         replaced_incumbent_lane="INCUMBENT",
         candidate_lane="CANDIDATE",
-        book_is=is_book,
-        trades_is=pd.DataFrame({"pnl_r": [-2.0, -1.5, 0.5]}),
+        book=is_book,
+        trades=pd.DataFrame({"pnl_r": [-2.0, -1.5, 0.5]}),
         incumbent_annual_per_max_dd=5.0,
         research_state=state,
         monte_carlo_paths=512,
@@ -201,8 +201,8 @@ def test_score_replacement_scenario_parks_underpowered_ambiguous_case() -> None:
         scenario_id="S3",
         replaced_incumbent_lane="INCUMBENT",
         candidate_lane="CANDIDATE",
-        book_is=is_book,
-        trades_is=pd.DataFrame({"pnl_r": [0.3, -0.05, 0.2]}),
+        book=is_book,
+        trades=pd.DataFrame({"pnl_r": [0.3, -0.05, 0.2]}),
         incumbent_annual_per_max_dd=0.1,
         research_state=state,
         monte_carlo_paths=256,
@@ -210,4 +210,37 @@ def test_score_replacement_scenario_parks_underpowered_ambiguous_case() -> None:
     )
 
     assert row["annual_dollars_per_max_drawdown"] > 0.1
+    assert row["verdict"] == "PARK"
+
+
+def test_score_replacement_scenario_reports_2026_monitoring_without_gating_on_it() -> None:
+    is_days = pd.bdate_range("2025-01-02", periods=120)
+    monitor_days = pd.bdate_range("2026-01-02", periods=5)
+    book = pd.DataFrame(
+        {
+            "trading_day": list(is_days.date) + list(monitor_days.date),
+            "pnl_r": ([0.30] * 11 + [-0.05]) * 10 + [-5.0] * len(monitor_days),
+            "pnl_dollars": ([30.0] * 11 + [-5.0]) * 10 + [-500.0] * len(monitor_days),
+            "active_trades": [1] * (len(is_days) + len(monitor_days)),
+        }
+    )
+    state = LaneResearchState(chordia_verdict="MISSING", sr_status="UNKNOWN", oos_status=None)
+
+    row = score_replacement_scenario(
+        scenario_id="S4",
+        replaced_incumbent_lane="INCUMBENT",
+        candidate_lane="CANDIDATE",
+        book=book,
+        trades=pd.DataFrame({"pnl_r": book["pnl_r"]}),
+        incumbent_annual_per_max_dd=0.1,
+        research_state=state,
+        monte_carlo_paths=256,
+        monte_carlo_seed=13,
+    )
+
+    assert row["mean_2026_dollars"] == -500.0
+    assert row["mean_2026_r"] == -5.0
+    # The sacred holdout is monitoring-only: it is reported, but it must not feed
+    # account-safety or verdict gates. The ambiguous research state still parks.
+    assert row["account_safe"] is True
     assert row["verdict"] == "PARK"

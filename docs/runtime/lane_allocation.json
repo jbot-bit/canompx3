@@ -22,7 +22,8 @@
       "chordia_audit_age_days": 28,
       "c8_oos_status": null,
       "avg_orb_pts": 29.1,
-      "p90_orb_pts": 49.8
+      "p90_orb_pts": 49.8,
+      "risk_cap_pts": 37.35
     },
     {
       "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15",
@@ -43,7 +44,8 @@
       "chordia_audit_age_days": 28,
       "c8_oos_status": null,
       "avg_orb_pts": 79.9,
-      "p90_orb_pts": 143.2
+      "p90_orb_pts": 143.2,
+      "risk_cap_pts": 107.4
     },
     {
       "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
@@ -64,7 +66,8 @@
       "chordia_audit_age_days": 7,
       "c8_oos_status": null,
       "avg_orb_pts": 25.7,
-      "p90_orb_pts": 44.2
+      "p90_orb_pts": 44.2,
+      "risk_cap_pts": 33.15
     }
   ],
   "paused": [

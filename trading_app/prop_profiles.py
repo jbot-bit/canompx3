@@ -127,6 +127,19 @@ class AccountProfile:
     # real capital. Drift check check_account_profiles_declare_is_express_funded
     # asserts every ACCOUNT_PROFILES entry declares this field explicitly.
     is_express_funded: bool = False
+    # Self-imposed strict-drawdown HALT for SELF-FUNDED (real-capital) profiles, in
+    # dollars. This is the canonical, risk-first DD budget SOURCE the strict-survival
+    # gate must read for self_funded accounts — NEVER a prop-firm tier number
+    # (tier.max_dd is a prop-shaped figure; using it to bound personal-capital risk
+    # is the exact leak forbidden by .claude/rules/self-funded-sizing-doctrine.md).
+    # None for express-funded/prop profiles (their budget is a fraction of the firm
+    # MLL, resolved separately). A self_funded profile that leaves this None
+    # fail-CLOSES to the STRICTER express belt in
+    # account_survival.effective_strict_dd_budget — never to the looser prop figure.
+    # @margin-guard-not-earnings-cap — this is a survival DD HALT, not an earnings
+    # ceiling; risk-first SIZING for self_funded is enforced via max_risk_per_trade.
+    # @canonical-source .claude/rules/self-funded-sizing-doctrine.md
+    self_imposed_dd_dollars: float | None = None
     notes: str = ""
     # Execution-layer symbol-substitution contract (Stage 1 of NQ-mini feature).
     # Both fields default None for identity behaviour. When populated, downstream
@@ -586,8 +599,10 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     # max_contracts_mini/_micro values below are a BROKER / MARGIN / SANITY guard,
     # NOT a prop-style earnings ceiling. Personal-capital sizing is risk-first
     # (drawdown tolerance -> vol-targeting/Kelly -> broker margin -> liquidity), and
-    # NO prop-firm contract cap may bound self_funded earning capacity. Enforced by
-    # check_prop_caps_do_not_leak_into_self_funded in pipeline/check_drift.py.
+    # NO prop-firm contract cap may bound self_funded earning capacity. This marker
+    # pins that intent; the invariant is structurally enforced by
+    # check_prop_caps_do_not_leak_into_self_funded in pipeline/check_drift.py (the
+    # select_for_profile firm branch and the strict-DD resolver de-coupling).
     ("self_funded", 2_500): PropFirmAccount("self_funded", 2_500, 375, 0, 1, 125),
     ("self_funded", 5_000): PropFirmAccount("self_funded", 5_000, 750, 0, 2, 250),
     ("self_funded", 10_000): PropFirmAccount("self_funded", 10_000, 1_500, 0, 4, 500),
@@ -1043,6 +1058,11 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         stop_multiplier=0.75,  # Same as prop — validated, don't change without re-testing
         max_slots=10,
         max_risk_per_trade=300.0,  # $300 cap = 1% of $30K per trade
+        # Operator self-imposed DD halt (-$3,000; see notes "DD halt -$3,000").
+        # Promoted from prose to typed data so account_survival reads a risk-first
+        # SOURCE, not the prop-shaped tier.max_dd ($6,000). Doctrine: prop numbers
+        # never bound personal-capital risk (.claude/rules/self-funded-sizing-doctrine.md).
+        self_imposed_dd_dollars=3_000.0,
         active=False,  # Activate after opening Tradovate personal account + API test
         allowed_sessions=frozenset(
             {
@@ -1498,8 +1518,17 @@ def load_allocation_lanes(
         if not all((sid, inst, orb)):
             continue
 
-        # Use per-session P90 from JSON if available, else fallback to flat _P90_ORB_PTS
-        max_orb = entry.get("p90_orb_pts")
+        # Cap resolution precedence (C11 cap remediation, 2026-06-05):
+        #   1. risk_cap_pts — honest risk-cap override (p90 × cap factor); the
+        #      live-tradeable DD-control lever. Preferred when present.
+        #   2. p90_orb_pts — empirical per-session P90 ORB size from JSON.
+        #   3. _P90_ORB_PTS  — flat per-instrument fallback.
+        # risk_cap_pts is kept SEPARATE from p90_orb_pts so the empirical p90
+        # truth is never overwritten (honesty invariant enforced in check_drift:
+        # 0 < risk_cap_pts <= p90_orb_pts).
+        max_orb = entry.get("risk_cap_pts")
+        if max_orb is None:
+            max_orb = entry.get("p90_orb_pts")
         if max_orb is None:
             max_orb = _P90_ORB_PTS.get(inst)
 

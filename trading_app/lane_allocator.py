@@ -1297,6 +1297,53 @@ def compute_orb_size_stats(
         con.close()
 
 
+def _read_existing_risk_caps(
+    profile_id: str,
+    path: Path,
+    explicit_path: bool,
+) -> dict[str, float]:
+    """Read prior `risk_cap_pts` overrides from an existing allocation file.
+
+    Returns {strategy_id: risk_cap_pts} for every lane that carried a positive
+    override. Prefers the per-profile file (canonical home of the override) and
+    falls back to the about-to-be-written `path` for explicit-path callers.
+
+    Fail-soft by design: a missing file, corrupt JSON, or unexpected shape
+    yields an EMPTY map (clean rebuild, no override to preserve). It must never
+    raise — preservation is best-effort and absence is a valid state.
+    """
+    candidates: list[Path] = []
+    if not explicit_path:
+        candidates.append(lane_allocation_profile_path(profile_id))
+    candidates.append(path)
+
+    for candidate in candidates:
+        try:
+            if not candidate.exists():
+                continue
+            data = json.loads(candidate.read_text())
+            lanes = data.get("lanes")
+            if not isinstance(lanes, list):
+                continue
+            caps: dict[str, float] = {}
+            for lane in lanes:
+                if not isinstance(lane, dict):
+                    continue
+                sid = lane.get("strategy_id")
+                cap = lane.get("risk_cap_pts")
+                # bool is an int subclass — exclude it explicitly (mirrors the
+                # check_lane_allocation_risk_cap_honesty drift gate). Only a
+                # positive real number is a valid cap to carry forward.
+                if sid and isinstance(cap, (int, float)) and not isinstance(cap, bool) and cap > 0:
+                    caps[sid] = cap
+            if caps:
+                return caps
+        except (OSError, ValueError):
+            # Corrupt/unreadable prior file → treat as no override to preserve.
+            continue
+    return {}
+
+
 def save_allocation(
     scores: list[LaneScore],
     allocation: list[LaneScore],
@@ -1315,6 +1362,15 @@ def save_allocation(
     explicit_path = output_path is not None
     path = Path(output_path) if explicit_path else DEFAULT_LANE_ALLOCATION_PATH
     path = normalize_writable_path(path)
+
+    # Durability: preserve any operator-set `risk_cap_pts` honest risk-cap
+    # override across regen (C11 cap remediation, 2026-06-05). The override is a
+    # manual policy field NOT derivable from scores/orb_size_stats, so a naive
+    # regen would silently strip it and C11 would silently re-fail. We read the
+    # PRIOR allocation file (per-profile preferred — its canonical home) and
+    # re-inject the cap keyed by strategy_id. Fail-soft: a missing/corrupt prior
+    # file just means no override to preserve (clean rebuild), never a crash.
+    preserved_risk_caps = _read_existing_risk_caps(profile_id, path, explicit_path)
 
     def _blocked_entry(s: LaneScore) -> dict[str, object]:
         return {
@@ -1365,6 +1421,11 @@ def save_allocation(
                 avg_pts, p90_pts = orb_size_stats[orb_key]
                 lane["avg_orb_pts"] = avg_pts
                 lane["p90_orb_pts"] = p90_pts
+        # Re-inject preserved honest risk-cap override (see header note). Only
+        # when a prior value existed for this strategy_id; never fabricate one.
+        prior_cap = preserved_risk_caps.get(s.strategy_id)
+        if prior_cap is not None:
+            lane["risk_cap_pts"] = prior_cap
         lanes_data.append(lane)
 
     data = {

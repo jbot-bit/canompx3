@@ -34,6 +34,7 @@ import sys
 import traceback
 import webbrowser
 from datetime import UTC, date, datetime
+from functools import lru_cache
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -98,9 +99,108 @@ def _drift_status() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def panel_deployed_lanes(profile_filter: str | None, instrument_filter: str | None) -> str:
+def _infer_instrument(strategy_id: str, entry: dict[str, Any] | None = None) -> str | None:
+    if entry and isinstance(entry.get("instrument"), str) and entry.get("instrument"):
+        return str(entry["instrument"])
+    if "_" not in strategy_id:
+        return None
+    return strategy_id.split("_", 1)[0]
+
+
+@lru_cache(maxsize=8)
+def _fitness_status_map_for_instrument(instrument: str) -> dict[str, str]:
+    from trading_app.strategy_fitness import compute_portfolio_fitness
+
+    status_map: dict[str, str] = {}
+    try:
+        report = compute_portfolio_fitness(instrument=instrument)
+    except Exception as exc:
+        status_map[f"__instrument_error__:{instrument}"] = f"ERR({type(exc).__name__})"
+        return status_map
+    for score in report.scores:
+        status_map[score.strategy_id] = score.fitness_status
+    return status_map
+
+
+def _fitness_status_map(instruments: set[str]) -> dict[str, str]:
+    status_map: dict[str, str] = {}
+    for instrument in sorted(inst for inst in instruments if inst):
+        status_map.update(_fitness_status_map_for_instrument(instrument))
+    return status_map
+
+
+def _selected_fitness_status_map(strategy_ids: set[str]) -> dict[str, str]:
+    import duckdb
+
+    from pipeline.paths import GOLD_DB_PATH
+    from trading_app.config import ALL_FILTERS, CrossAssetATRFilter, VolumeFilter
+    from trading_app.strategy_fitness import (
+        _bulk_load_all_features,
+        _bulk_load_all_outcomes,
+        _compute_fitness_from_cache,
+        _compute_fitness_with_con,
+    )
+    from trading_app.validated_shelf import deployable_validated_relation
+
+    if not strategy_ids:
+        return {}
+
+    status_map: dict[str, str] = {}
+    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+        shelf_relation = deployable_validated_relation(con, alias="vs")
+        rows = con.execute(
+            f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
+                       entry_model, rr_target, confirm_bars, filter_type,
+                       COALESCE(stop_multiplier, 1.0) AS stop_multiplier,
+                       sample_size, win_rate, expectancy_r, sharpe_ratio,
+                       max_drawdown_r
+                FROM {shelf_relation}
+                WHERE strategy_id IN (SELECT UNNEST(?::VARCHAR[]))
+                ORDER BY strategy_id""",
+            [sorted(strategy_ids)],
+        ).fetchall()
+        cols = [desc[0] for desc in con.description]
+        param_rows = [dict(zip(cols, row, strict=False)) for row in rows]
+
+        by_instrument: dict[str, list[dict[str, Any]]] = {}
+        for params in param_rows:
+            by_instrument.setdefault(str(params["instrument"]), []).append(params)
+
+        today = date.today()
+        for instrument, instrument_params in by_instrument.items():
+            outcome_cache = _bulk_load_all_outcomes(con, instrument, end_date=today)
+            feature_cache = _bulk_load_all_features(con, instrument)
+            for params in instrument_params:
+                sid = str(params["strategy_id"])
+                filt = ALL_FILTERS.get(params["filter_type"])
+                if isinstance(filt, VolumeFilter | CrossAssetATRFilter):
+                    score = _compute_fitness_with_con(con, sid, today)
+                else:
+                    score = _compute_fitness_from_cache(
+                        sid,
+                        params,
+                        outcome_cache,
+                        feature_cache,
+                        today,
+                    )
+                status_map[sid] = score.fitness_status
+    return status_map
+
+
+def _match_profile(entry: dict[str, Any], profile_filter: str | None) -> bool:
+    if not profile_filter:
+        return True
+    profiles = entry.get("profile_ids") or entry.get("profiles") or []
+    return profile_filter in profiles
+
+
+def panel_deployed_lanes(
+    profile_filter: str | None,
+    instrument_filter: str | None,
+    include_paused: bool = False,
+    fitness_map: dict[str, str] | None = None,
+) -> str:
     from scripts.tools.strategy_lab_mcp_server import _allocation_index, _load_allocation_doc
-    from trading_app.strategy_fitness import compute_fitness
 
     doc = _load_allocation_doc()
     if doc is None:
@@ -109,20 +209,30 @@ def panel_deployed_lanes(profile_filter: str | None, instrument_filter: str | No
     if not idx:
         return _empty("Allocation index is empty (no lanes or paused entries).")
 
-    rows: list[tuple[str, str, str, str, str]] = []
+    active_entries: list[tuple[str, dict[str, Any]]] = []
+    paused_entries: list[tuple[str, dict[str, Any]]] = []
     for sid, entry in sorted(idx.items()):
         if instrument_filter and not sid.startswith(instrument_filter + "_"):
             continue
-        if profile_filter:
-            profiles = entry.get("profile_ids") or entry.get("profiles") or []
-            if profile_filter not in profiles:
-                continue
+        if not _match_profile(entry, profile_filter):
+            continue
+        state = str(entry.get("_allocation_state", "")).lower()
+        if state == "paused":
+            paused_entries.append((sid, entry))
+        else:
+            active_entries.append((sid, entry))
+
+    visible_entries = active_entries + paused_entries if include_paused else active_entries
+    if not visible_entries:
+        return _empty("No deployed lanes match the current filters.")
+
+    fitness_map = fitness_map or _selected_fitness_status_map({sid for sid, _entry in visible_entries})
+
+    rows: list[tuple[str, str, str, str, str]] = []
+    for sid, entry in visible_entries:
         state = entry.get("_allocation_state", "?")
-        try:
-            score = compute_fitness(sid)
-            fitness = score.fitness_status
-        except Exception as exc:
-            fitness = f"ERR({type(exc).__name__})"
+        instrument = _infer_instrument(sid, entry) or ""
+        fitness = fitness_map.get(sid) or fitness_map.get(f"__instrument_error__:{instrument}") or "ERR(BulkMissing)"
         rows.append(
             (
                 sid,
@@ -133,36 +243,52 @@ def panel_deployed_lanes(profile_filter: str | None, instrument_filter: str | No
             )
         )
 
-    if not rows:
-        return _empty("No deployed lanes match the current filters.")
     header = ["strategy_id", "state", "fitness", "session", "entry_model"]
-    return _table(header, rows)
+    summary = ""
+    if include_paused:
+        summary = (
+            f"<p class='meta'>showing {len(active_entries)} active lane(s) and "
+            f"{len(paused_entries)} paused lane(s).</p>"
+        )
+    elif paused_entries:
+        summary = (
+            f"<p class='meta'>showing {len(active_entries)} active lane(s); "
+            f"{len(paused_entries)} paused hidden. Re-run with <code>--include-paused</code> to render them.</p>"
+        )
+    return summary + _table(header, rows)
 
 
-def panel_promotable(instrument_filter: str | None) -> str:
+def panel_promotable(
+    instrument_filter: str | None,
+    *,
+    validated_rows: list[dict[str, Any]] | None = None,
+    fitness_map: dict[str, str] | None = None,
+) -> str:
     from scripts.tools.strategy_lab_mcp_server import (
         _allocation_index,
         _list_validated_rows,
         _load_allocation_doc,
     )
-    from trading_app.strategy_fitness import compute_fitness
 
-    validated = _list_validated_rows(instrument_filter)
+    validated = validated_rows if validated_rows is not None else _list_validated_rows(instrument_filter)
     if not validated:
         return _empty("No validated rows for the active instrument filter.")
     doc = _load_allocation_doc()
     allocated_ids = set(_allocation_index(doc).keys()) if doc else set()
+    if fitness_map is None:
+        instruments = {
+            str(row.get("instrument"))
+            for row in validated
+            if isinstance(row.get("instrument"), str) and row.get("instrument")
+        }
+        fitness_map = _fitness_status_map(instruments)
 
     rows: list[tuple[str, ...]] = []
     for row in validated:
         sid = row.get("strategy_id")
         if not sid or sid in allocated_ids:
             continue
-        try:
-            score = compute_fitness(sid)
-            status = score.fitness_status
-        except Exception as exc:
-            status = f"ERR({type(exc).__name__})"
+        status = fitness_map.get(str(sid)) or "ERR(BulkMissing)"
         if status != "FIT":
             continue
         rows.append(
@@ -508,11 +634,21 @@ footer { margin-top: 2em; color: #777; font-size: 0.8em; }
 def render_portal(
     profile_filter: str | None = None,
     instrument_filter: str | None = None,
+    include_paused: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     """Render the portal. Returns (html_string, json_payload)."""
+    from scripts.tools.strategy_lab_mcp_server import _list_validated_rows
+
     freshness = _query_data_freshness()
     any_stale = any(info.get("is_stale") for info in freshness.values())
     drift = _drift_status()
+    validated_rows = _list_validated_rows(instrument_filter)
+    portal_instruments = {
+        str(row.get("instrument"))
+        for row in validated_rows
+        if isinstance(row.get("instrument"), str) and row.get("instrument")
+    }
+    shared_fitness_map = _fitness_status_map(portal_instruments)
 
     # Panel 3 also feeds panel 4 (rejection sub-view) so render it once.
     promote_html: str = ""
@@ -524,8 +660,25 @@ def render_portal(
         return promote_html
 
     panels_html = [
-        _render_panel(1, "Deployed lanes + fitness", lambda: panel_deployed_lanes(profile_filter, instrument_filter)),
-        _render_panel(2, "Promotable candidates (FIT, unallocated)", lambda: panel_promotable(instrument_filter)),
+        _render_panel(
+            1,
+            "Deployed lanes + fitness",
+            lambda: panel_deployed_lanes(
+                profile_filter,
+                instrument_filter,
+                include_paused=include_paused,
+                fitness_map=shared_fitness_map,
+            ),
+        ),
+        _render_panel(
+            2,
+            "Promotable candidates (FIT, unallocated)",
+            lambda: panel_promotable(
+                instrument_filter,
+                validated_rows=validated_rows,
+                fitness_map=shared_fitness_map,
+            ),
+        ),
         _render_panel(3, "PROMOTE queue (live state)", _panel3),
         _render_panel(4, "OOS-power rejections", lambda: panel_oos_rejections(promote_entries)),
         _render_panel(5, "Cherry-pick top-5 (latest ranking)", panel_cherry_pick_top5),
@@ -551,6 +704,8 @@ def render_portal(
         filter_note.append(f"profile={profile_filter}")
     if instrument_filter:
         filter_note.append(f"instrument={instrument_filter}")
+    if include_paused:
+        filter_note.append("include_paused=true")
     filter_html = f"<p class='subtitle'>Filters: {escape(', '.join(filter_note))}</p>" if filter_note else ""
 
     html = f"""<!DOCTYPE html>
@@ -575,7 +730,7 @@ def render_portal(
         "freshness": freshness,
         "drift": drift,
         "any_stale": any_stale,
-        "filters": {"profile": profile_filter, "instrument": instrument_filter},
+        "filters": {"profile": profile_filter, "instrument": instrument_filter, "include_paused": include_paused},
         "panels": {str(i): True for i in range(1, 11)},
     }
     return html, payload
@@ -587,10 +742,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="Emit machine-readable summary to stdout instead of HTML.")
     ap.add_argument("--instrument", default=None, help="Filter to one instrument (e.g. MNQ, MES, MGC).")
     ap.add_argument("--profile", default=None, help="Filter to one prop profile id.")
+    ap.add_argument(
+        "--include-paused", action="store_true", help="Render paused lanes in panel 1 as well as active lanes."
+    )
     ap.add_argument("--out", default=None, help="Override output HTML path.")
     args = ap.parse_args(argv)
 
-    html, payload = render_portal(profile_filter=args.profile, instrument_filter=args.instrument)
+    html, payload = render_portal(
+        profile_filter=args.profile,
+        instrument_filter=args.instrument,
+        include_paused=args.include_paused,
+    )
 
     if args.json:
         print(json.dumps(payload, indent=2, default=str))

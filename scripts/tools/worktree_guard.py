@@ -281,6 +281,148 @@ def _pid_is_alive_windows(pid: int, expected_create_time: int | None = None) -> 
             return True
 
 
+# Max parent-chain hops when walking from a hook subprocess up to its owning
+# Claude session process. The observed tree is claude.exe -> [node/python
+# wrappers] -> python hook, rarely more than 3 deep; 8 is a generous cap that
+# still guarantees termination (no infinite loop on a cyclic/garbage table).
+_ANCHOR_WALK_MAX_HOPS = 8
+
+# Process names that identify the long-lived Claude session process — the
+# liveness anchor a heartbeat must prove is still alive. Matched case-insensitively
+# against the basename (with and without a trailing ".exe").
+_ANCHOR_PROCESS_NAMES = ("claude", "claude.exe")
+
+
+def _parent_pid(pid: int) -> int | None:
+    """Best-effort parent PID of ``pid``. None on any failure (callers fail-safe).
+
+    Windows: ``CreateToolhelp32Snapshot`` walks the process table for the
+    parent (``th32ParentProcessID``). POSIX: read ``/proc/<pid>/stat`` field 4.
+    No psutil dependency (not in uv.lock) — pure stdlib/ctypes, matching the
+    rest of this module's liveness probes.
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            TH32CS_SNAPPROCESS = 0x00000002
+
+            class PROCESSENTRY32(ctypes.Structure):
+                _fields_ = [
+                    ("dwSize", wintypes.DWORD),
+                    ("cntUsage", wintypes.DWORD),
+                    ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+                    ("th32ModuleID", wintypes.DWORD),
+                    ("cntThreads", wintypes.DWORD),
+                    ("th32ParentProcessID", wintypes.DWORD),
+                    ("pcPriClassBase", ctypes.c_long),
+                    ("dwFlags", wintypes.DWORD),
+                    ("szExeFile", ctypes.c_char * 260),
+                ]
+
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            if snap == wintypes.HANDLE(-1).value or not snap:
+                return None
+            try:
+                entry = PROCESSENTRY32()
+                entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+                if not kernel32.Process32First(snap, ctypes.byref(entry)):
+                    return None
+                while True:
+                    if entry.th32ProcessID == pid:
+                        return int(entry.th32ParentProcessID)
+                    if not kernel32.Process32Next(snap, ctypes.byref(entry)):
+                        return None
+            finally:
+                kernel32.CloseHandle(snap)
+        except Exception:
+            return None
+    # POSIX: /proc/<pid>/stat — field 4 (after the possibly-space-containing
+    # comm in parens) is the ppid.
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
+            data = fh.read()
+        rparen = data.rfind(")")
+        if rparen == -1:
+            return None
+        fields = data[rparen + 2 :].split()
+        # fields[0] = state, fields[1] = ppid
+        return int(fields[1]) if len(fields) > 1 else None
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _process_name(pid: int) -> str | None:
+    """Best-effort lowercase basename of ``pid``'s image. None on failure.
+
+    Windows: ``QueryFullProcessImageNameW``. POSIX: ``/proc/<pid>/comm``.
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not handle:
+                return None
+            try:
+                buf_len = wintypes.DWORD(260)
+                buf = ctypes.create_unicode_buffer(buf_len.value)
+                ok = kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(buf_len))
+                if not ok:
+                    return None
+                return Path(buf.value).name.lower()
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:
+            return None
+    try:
+        with open(f"/proc/{pid}/comm", encoding="utf-8") as fh:
+            return fh.read().strip().lower() or None
+    except OSError:
+        return None
+
+
+def _find_session_anchor_pid(start_pid: int | None) -> tuple[int, int | None] | None:
+    """Walk the parent chain from ``start_pid`` to the owning Claude session
+    process and return ``(anchor_pid, anchor_create_time)``, or None.
+
+    The heartbeat hook runs in a SHORT-LIVED python subprocess whose own PID is
+    useless for liveness (dead by read time). Its long-lived ancestor — the
+    ``claude``/``claude.exe`` session process — is the real liveness anchor. We
+    walk up to ``_ANCHOR_WALK_MAX_HOPS`` parents, matching the process basename
+    against ``_ANCHOR_PROCESS_NAMES``. ``anchor_create_time`` (Windows FILETIME
+    low DWORD, else None) lets the reader detect PID reuse.
+
+    Fail-safe: any error, a dead/garbage ``start_pid``, or no Claude ancestor
+    within the cap → None. A None return makes the WRITER omit anchor fields
+    (beat degrades to mtime-only liveness) — never a false claim.
+    """
+    if not isinstance(start_pid, int) or start_pid <= 0:
+        return None
+    seen: set[int] = set()
+    pid: int | None = start_pid
+    for _ in range(_ANCHOR_WALK_MAX_HOPS + 1):
+        if pid is None or pid <= 0 or pid in seen:
+            return None
+        seen.add(pid)
+        name = _process_name(pid)
+        if name is not None and (name in _ANCHOR_PROCESS_NAMES or name.removesuffix(".exe") == "claude"):
+            ct = _get_process_create_time_windows(pid) if os.name == "nt" else None
+            return pid, ct
+        pid = _parent_pid(pid)
+    return None
+
+
 def _run_git(args: list[str], cwd: Path, timeout: float = 5.0) -> tuple[int, str]:
     try:
         r = subprocess.run(
@@ -477,6 +619,27 @@ def _fresh_peer_heartbeat(
                 beat_norm = beat_cwd.lower() if beat_cwd else None
             if beat_norm != current_norm:
                 continue
+        # Anchor-liveness cross-check (2026-06-04): a beat is a LIVE peer only
+        # if its session-process anchor is still alive. A crashed session leaves
+        # a beat whose mtime is briefly fresh but whose anchor (claude.exe) is
+        # dead — an orphan that must NOT block. The recorded `pid` is the
+        # short-lived hook subprocess (always dead by read time) and is NOT used.
+        # Backward compat: a beat WITHOUT `anchor_pid` (old format / walk-up
+        # failed at write time) falls back to mtime-only liveness — a pure
+        # superset that never NEWLY false-reclaims a pre-existing live beat.
+        anchor_pid = beat.get("anchor_pid")
+        if anchor_pid is not None:
+            anchor_ct = beat.get("anchor_create_time")
+            try:
+                anchor_ct_int = int(anchor_ct) if anchor_ct is not None else None
+            except (TypeError, ValueError):
+                anchor_ct_int = None
+            try:
+                alive = _pid_is_alive(int(anchor_pid), expected_create_time=anchor_ct_int)
+            except (TypeError, ValueError):
+                alive = True  # unparseable anchor → conservative: treat as live
+            if not alive:
+                continue  # orphan beat from a crashed session — not a live peer
         return True  # a different session is beating in this tree, right now
     return False
 
@@ -597,6 +760,15 @@ def acquire(
     ls = lease_path(cwd)
     if lk is None or ls is None:
         return "skipped", None, "not inside a git worktree"
+    # A cwd that lives INSIDE a `.git` dir (e.g. pytest `--basetemp` planted under
+    # `.git/pytest-tmp/`) resolves a real `lock_path` via `--git-common-dir` yet is
+    # NOT a working tree — `resolve_worktree_root` returns None for it. Leasing
+    # such a path would let a tmp dir contend the real repo's lease (the
+    # 2026-06-04 pre-commit false-block: an "outside-repo" test saw live peer
+    # beats and blocked). Treat a non-worktree cwd as skipped — strictly more
+    # conservative (never leases/blocks on a path that is not a checkout).
+    if resolve_worktree_root(cwd) is None:
+        return "skipped", None, "cwd is inside .git but not a working tree"
 
     lk.parent.mkdir(parents=True, exist_ok=True)
 

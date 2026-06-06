@@ -97,7 +97,16 @@ def build_db_identity(db_path: Path, con: duckdb.DuckDBPyConnection | None = Non
                 "SELECT COUNT(*) FROM validated_setups WHERE LOWER(status) = 'active'",
                 "missing",
             ),
-            "paper_trades_count": _fetch_one(con, "SELECT COUNT(*) FROM paper_trades", "missing"),
+            # Exclude execution_source='shadow' rows: forward-monitoring evidence,
+            # not live/backfill truth. Counting them would churn this DB-identity
+            # fingerprint on every shadow sync and needlessly invalidate C11/C12
+            # live-readiness state. COALESCE guards a pre-migration DB without the
+            # column (treats every row as non-shadow — the legacy behaviour).
+            "paper_trades_count": _fetch_one(
+                con,
+                "SELECT COUNT(*) FROM paper_trades WHERE COALESCE(execution_source, 'backfill') != 'shadow'",
+                "missing",
+            ),
             "orb_outcomes_max_day": _fetch_one(con, "SELECT MAX(trading_day) FROM orb_outcomes", "missing"),
             "daily_features_max_day": _fetch_one(con, "SELECT MAX(trading_day) FROM daily_features", "missing"),
         }

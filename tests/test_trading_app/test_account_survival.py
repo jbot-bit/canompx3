@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import asdict
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -8,16 +9,22 @@ from pathlib import Path
 import pytest
 
 from trading_app.account_survival import (
+    STRICT_DD_BUDGET_FRACTION_EXPRESS,
+    STRICT_DD_BUDGET_FRACTION_SELF_FUNDED,
     DailyScenario,
     SurvivalRules,
     TradePath,
     _build_profile_fingerprint,
+    _build_rules,
     _current_survival_canonical_inputs,
     _load_lane_daily_pnl,
+    _load_lane_trade_paths,
     _scenario_from_trade_paths,
     check_survival_report_gate,
+    effective_strict_dd_budget,
     evaluate_profile_survival,
     get_survival_report_path,
+    main,
     read_survival_report_state,
     simulate_survival,
 )
@@ -100,6 +107,11 @@ def _survival_envelope(
                 "path_model": "trade_path_conservative",
                 "min_operational_pass_probability": 0.7,
                 "gate_pass": gate_pass,
+                "strict_account_gate_pass": gate_pass,
+                "effective_dd_budget_dollars": 1600.0,
+                "historical_daily_loss_breach_days": [],
+                "historical_daily_loss_breach_count": 0,
+                "historical_max_observed_90d_dd_dollars": 450.0,
                 "p50_final_balance": 200.0,
                 "p05_final_balance": -300.0,
                 "p95_final_balance": 900.0,
@@ -223,6 +235,84 @@ def test_simulate_survival_scaling_breach_blocks_operational_pass():
     assert result["operational_pass_probability"] == 0.0
 
 
+def test_build_rules_uses_profile_daily_loss_and_reports_strict_dd_budget():
+    profile = get_profile("topstep_50k_mnq_auto")
+
+    rules = _build_rules(profile)
+
+    assert rules.daily_loss_limit == 450.0
+    assert rules.dd_limit_dollars == 2000.0
+    # Express-funded strict budget = 0.90 belt on the $2,000 MLL = $1,800
+    # (operator risk-knob 2026-06-04; raised from the prior arbitrary 0.80/$1,600).
+    assert STRICT_DD_BUDGET_FRACTION_EXPRESS == 0.90
+    assert effective_strict_dd_budget(profile, rules) == 1800.0
+
+
+def test_effective_strict_dd_budget_is_profile_aware_and_fails_closed():
+    """Resolver: express belt 0.90; self-funded relaxed 1.00; fail-closed to express."""
+    express = get_profile("topstep_50k_mnq_auto")
+    express_rules = _build_rules(express)
+    assert express.is_express_funded is True
+    assert effective_strict_dd_budget(express, express_rules) == round(
+        express_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2
+    )
+
+    self_funded = get_profile("self_funded_tradovate")
+    self_rules = _build_rules(self_funded)
+    assert self_funded.is_express_funded is False
+    # Stage 2: self-funded budget comes from the profile's OWN self-imposed DD
+    # halt (risk-first SOURCE), NOT the prop-firm tier figure.
+    assert self_funded.self_imposed_dd_dollars == 3_000.0
+    assert effective_strict_dd_budget(self_funded, self_rules) == round(
+        self_funded.self_imposed_dd_dollars * STRICT_DD_BUDGET_FRACTION_SELF_FUNDED, 2
+    )
+    # The LEAK guard: the self-funded budget must NOT equal the prop number
+    # (tier.max_dd at either fraction). tier.max_dd = $6,000 here, so the old
+    # `dd_limit_dollars * 1.00` path would have returned $6,000 — 2× the operator's
+    # actual -$3,000 halt. Prove we are de-coupled from the prop figure.
+    assert self_rules.dd_limit_dollars == 6_000.0  # the prop-shaped tier number
+    assert effective_strict_dd_budget(self_funded, self_rules) != round(
+        self_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_SELF_FUNDED, 2
+    )
+    assert effective_strict_dd_budget(self_funded, self_rules) != round(
+        self_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2
+    )
+    assert STRICT_DD_BUDGET_FRACTION_SELF_FUNDED >= STRICT_DD_BUDGET_FRACTION_EXPRESS
+
+    # Fail-closed (a): a profile whose express flag is missing/None resolves to the
+    # STRICTER express belt, never the relaxed self-funded one.
+    class _NoFlag:
+        pass
+
+    assert effective_strict_dd_budget(_NoFlag(), express_rules) == round(
+        express_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2
+    )
+
+    # Fail-closed (b): a SELF-FUNDED profile that omits the risk-first source
+    # (self_imposed_dd_dollars) must fall back to the STRICTER express belt on the
+    # firm number — never to the looser prop figure at full fraction.
+    class _SelfFundedNoSource:
+        is_express_funded = False
+        self_imposed_dd_dollars = None
+
+    express_belt_on_prop = round(self_rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2)
+    assert effective_strict_dd_budget(_SelfFundedNoSource(), self_rules) == express_belt_on_prop
+
+    # Fail-closed (c): malformed self_imposed_dd_dollars MUST resolve to the
+    # express belt, never to a garbage budget. `bool` is a subclass of `int`
+    # (True > 0 is True) — a stray True must NOT yield a $1.00 budget. NaN, 0,
+    # negatives, and non-numerics all fail-close too.
+    for bad in (True, False, float("nan"), 0, -100.0, "3000"):
+
+        class _Bad:
+            is_express_funded = False
+            self_imposed_dd_dollars = bad
+
+        assert effective_strict_dd_budget(_Bad(), self_rules) == express_belt_on_prop, (
+            f"malformed self_imposed_dd_dollars={bad!r} did not fail-close to the express belt"
+        )
+
+
 def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots():
     """Verify _scenario_from_trade_paths aggregates per-instrument contracts.
 
@@ -323,6 +413,30 @@ def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_p
     assert "61.0% < 70%" in msg
 
 
+def test_check_survival_report_gate_blocks_strict_historical_daily_loss_breaches(tmp_path, monkeypatch):
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
+    envelope = _survival_envelope(as_of_date="2026-04-09", operational_pass_probability=0.78, gate_pass=True)
+    envelope["payload"]["summary"]["strict_account_gate_pass"] = False
+    envelope["payload"]["summary"]["historical_daily_loss_breach_days"] = ["2025-03-03", "2025-08-14"]
+    envelope["payload"]["summary"]["historical_daily_loss_breach_count"] = 2
+    envelope["payload"]["summary"]["historical_max_observed_90d_dd_dollars"] = 1701.0
+    report_path = get_survival_report_path("topstep_50k_mnq_auto")
+    report_path.write_text(json.dumps(envelope))
+
+    ok, msg = check_survival_report_gate(
+        "topstep_50k_mnq_auto",
+        today=date(2026, 4, 10),
+    )
+
+    assert ok is False
+    assert "strict account diagnostics failed" in msg
+    assert "historical_daily_loss_days=2" in msg
+    assert "max_90d_dd=$1,701/$1,600" in msg
+
+
 def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
     monkeypatch.setattr(
@@ -340,6 +454,7 @@ def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
 
     assert ok is True
     assert "Criterion 11 pass" in msg
+    assert "strict_account=PASS" in msg
 
 
 def test_check_survival_report_gate_blocks_profile_mismatch(tmp_path, monkeypatch):
@@ -482,6 +597,116 @@ def test_load_lane_daily_pnl_uses_effective_profile_stop_multiplier(monkeypatch)
     assert daily == {date(2026, 1, 2): 50.0}
 
 
+def test_load_lane_trade_paths_applies_orb_cap_skip_boundary_like_live(monkeypatch):
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_snapshot",
+        lambda _con, _sid: {
+            "instrument": "MNQ",
+            "orb_label": "NYSE_OPEN",
+            "orb_minutes": 5,
+            "entry_model": "E2",
+            "rr_target": 1.5,
+            "confirm_bars": 1,
+            "filter_type": "COST_LT10",
+            "stop_multiplier": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_outcomes",
+        lambda *_args, **_kwargs: [
+            {
+                "trading_day": date(2026, 1, 2),
+                "outcome": "win",
+                "entry_price": 20000.0,
+                "stop_price": 19851.0,
+                "pnl_r": 1.0,
+            },
+            {
+                "trading_day": date(2026, 1, 3),
+                "outcome": "win",
+                "entry_price": 20000.0,
+                "stop_price": 19850.0,
+                "pnl_r": 1.0,
+            },
+            {
+                "trading_day": date(2026, 1, 4),
+                "outcome": "win",
+                "entry_price": 20000.0,
+                "stop_price": 19849.0,
+                "pnl_r": 1.0,
+            },
+        ],
+    )
+    monkeypatch.setattr("trading_app.account_survival.get_cost_spec", lambda _instrument: object())
+    monkeypatch.setattr("trading_app.account_survival.risk_in_dollars", lambda *_args, **_kwargs: 100.0)
+
+    capped = _load_lane_trade_paths(
+        con=None,
+        strategy_id="MNQ_TEST",
+        as_of_date=date(2026, 4, 9),
+        max_orb_size_pts=150.0,
+    )
+    uncapped = _load_lane_trade_paths(
+        con=None,
+        strategy_id="MNQ_TEST",
+        as_of_date=date(2026, 4, 9),
+        max_orb_size_pts=None,
+    )
+
+    assert [trade.trading_day for trade in capped] == [date(2026, 1, 2)]
+    assert [trade.trading_day for trade in uncapped] == [
+        date(2026, 1, 2),
+        date(2026, 1, 3),
+        date(2026, 1, 4),
+    ]
+
+
+def test_load_lane_trade_paths_applies_orb_cap_after_tight_stop(monkeypatch):
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_snapshot",
+        lambda _con, _sid: {
+            "instrument": "MNQ",
+            "orb_label": "NYSE_OPEN",
+            "orb_minutes": 5,
+            "entry_model": "E2",
+            "rr_target": 1.5,
+            "confirm_bars": 1,
+            "filter_type": "COST_LT10",
+            "stop_multiplier": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_outcomes",
+        lambda *_args, **_kwargs: [
+            {
+                "trading_day": date(2026, 1, 2),
+                "outcome": "win",
+                "entry_price": 20000.0,
+                "stop_price": 19700.0,
+                "pnl_r": 1.0,
+            }
+        ],
+    )
+    monkeypatch.setattr("trading_app.account_survival.get_cost_spec", lambda _instrument: object())
+    monkeypatch.setattr("trading_app.account_survival.risk_in_dollars", lambda *_args, **_kwargs: 100.0)
+
+    def fake_apply_tight_stop(outcomes, stop_multiplier, _cost_spec):
+        assert stop_multiplier == 0.5
+        return [{**outcomes[0], "stop_price": 19851.0}]
+
+    monkeypatch.setattr("trading_app.account_survival.apply_tight_stop", fake_apply_tight_stop)
+
+    trades = _load_lane_trade_paths(
+        con=None,
+        strategy_id="MNQ_TEST",
+        as_of_date=date(2026, 4, 9),
+        effective_stop_multiplier=0.5,
+        max_orb_size_pts=150.0,
+    )
+
+    assert [trade.trading_day for trade in trades] == [date(2026, 1, 2)]
+
+
 def test_evaluate_profile_survival_writes_report(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
     monkeypatch.setattr(
@@ -527,3 +752,251 @@ def test_evaluate_profile_survival_writes_report(tmp_path, monkeypatch):
     assert payload["payload"]["summary"]["gate_pass"] is True
     assert payload["payload"]["metadata"]["source_days"] == 1
     assert payload["canonical_inputs"]["profile_fingerprint"] == _canonical_inputs()["profile_fingerprint"]
+
+
+def test_evaluate_profile_survival_records_strict_historical_account_diagnostics(tmp_path, monkeypatch):
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
+
+    def fake_load(_profile_id, *, as_of_date, db_path=None):
+        scenarios = [
+            DailyScenario(
+                trading_day="2025-01-02",
+                total_pnl_dollars=100.0,
+                positive_pnl_dollars=100.0,
+                active_lane_count=1,
+            ),
+            DailyScenario(
+                trading_day="2025-01-03",
+                total_pnl_dollars=-1701.0,
+                positive_pnl_dollars=0.0,
+                active_lane_count=1,
+                min_balance_delta_dollars=-1701.0,
+            ),
+        ]
+        metadata = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "source_start": "2025-01-02",
+            "source_end": str(as_of_date),
+            "source_days": len(scenarios),
+            "lane_ids": ["MNQ_TEST"],
+            "instruments": ["MNQ"],
+        }
+        return scenarios, metadata
+
+    monkeypatch.setattr("trading_app.account_survival._load_profile_daily_scenarios", fake_load)
+
+    summary = evaluate_profile_survival(
+        "topstep_50k_mnq_auto",
+        as_of_date=date(2025, 12, 31),
+        horizon_days=90,
+        n_paths=16,
+        seed=0,
+        write_state=False,
+    )
+
+    assert summary.gate_pass is False
+    assert summary.strict_account_gate_pass is False
+    # Express belt now $1,800 (0.90 × $2,000). The synthetic DD here is $1,701,
+    # which is BELOW the new budget — so the strict gate fails purely on the
+    # daily-loss breach day, not on DD magnitude. (Under the old $1,600 belt it
+    # failed on both.) The breach alone keeps strict_account_gate_pass False.
+    assert summary.effective_dd_budget_dollars == 1800.0
+    assert summary.historical_max_observed_90d_dd_dollars == 1701.0
+    assert summary.historical_max_observed_90d_dd_dollars <= summary.effective_dd_budget_dollars
+    assert summary.historical_daily_loss_breach_days == ["2025-01-03"]
+    assert summary.historical_daily_loss_breach_count == 1
+    assert not get_survival_report_path("topstep_50k_mnq_auto").exists()
+
+
+def test_account_survival_no_write_state_cli_fails_operational_gate_and_reports_strict_diagnostics(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
+
+    def fake_load(_profile_id, *, as_of_date, db_path=None):
+        scenarios = [
+            DailyScenario(
+                trading_day="2025-01-03",
+                total_pnl_dollars=-1701.0,
+                positive_pnl_dollars=0.0,
+                active_lane_count=1,
+                min_balance_delta_dollars=-1701.0,
+            )
+        ]
+        metadata = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "source_start": "2025-01-03",
+            "source_end": str(as_of_date),
+            "source_days": len(scenarios),
+            "lane_ids": ["MNQ_TEST"],
+            "instruments": ["MNQ"],
+        }
+        return scenarios, metadata
+
+    monkeypatch.setattr("trading_app.account_survival._load_profile_daily_scenarios", fake_load)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "account_survival",
+            "--profile",
+            "topstep_50k_mnq_auto",
+            "--as-of",
+            "2025-12-31",
+            "--paths",
+            "8",
+            "--no-write-state",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main()
+
+    assert excinfo.value.code == 2
+    assert not get_survival_report_path("topstep_50k_mnq_auto").exists()
+    out = capsys.readouterr().out
+    assert "gate=FAIL" in out
+    assert "Expectancy edge: not evaluated by Criterion 11 account survival" in out
+    assert "Strict diagnostics: effective_dd_budget=$1,800" in out
+    assert "Prop-account path safety=FAIL" in out
+    assert "Final deployability gate=FAIL" in out
+    assert "Historical daily-loss breach days (1): 2025-01-03" in out
+
+
+# ── Capital fix D — Criterion 11 code fingerprint must cover live-risk paths ──
+# A cached C11 PASS must invalidate when the live ORB-cap / sizing / routing code
+# changes, not just account_survival.py + derived_state.py.
+
+
+def test_criterion11_fingerprint_covers_live_risk_execution_paths():
+    from trading_app.account_survival import _criterion11_code_paths
+
+    names = {p.name for p in _criterion11_code_paths()}
+    # Original two must remain.
+    assert "account_survival.py" in names
+    assert "derived_state.py" in names
+    # Live-risk execution dependencies that can drift the real DD/cap/sizing.
+    for required in (
+        "prop_profiles.py",
+        "portfolio.py",
+        "execution_engine.py",
+        "session_orchestrator.py",
+    ):
+        assert required in names, (
+            f"C11 code fingerprint must include {required} so a change to live "
+            f"risk behaviour invalidates a cached PASS; got {sorted(names)}"
+        )
+
+
+def test_criterion11_fingerprint_paths_all_exist():
+    from trading_app.account_survival import _criterion11_code_paths
+
+    for p in _criterion11_code_paths():
+        assert p.exists(), f"fingerprint path does not exist: {p}"
+
+
+# ── Capital fix C — D-3 sizing parity: C11 DD models 1 micro; live sizes from ──
+# equity clamped to max_contracts. C11 must FAIL CLOSED if the live portfolio
+# for the profile would size any lane above 1 micro (the 1-micro DD proof would
+# otherwise silently understate drawdown).
+
+
+def test_single_micro_sizing_ok_when_all_strategies_one_contract(monkeypatch):
+    from types import SimpleNamespace
+
+    from trading_app import account_survival as asv
+
+    fake_portfolio = SimpleNamespace(
+        strategies=[
+            SimpleNamespace(strategy_id="A", max_contracts=1),
+            SimpleNamespace(strategy_id="B", max_contracts=1),
+        ]
+    )
+    monkeypatch.setattr(asv, "build_profile_portfolio", lambda **_kw: fake_portfolio)
+    ok, msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
+    assert ok is True
+    assert "1" in msg
+
+
+def test_single_micro_sizing_fails_closed_when_a_lane_exceeds_one(monkeypatch):
+    from types import SimpleNamespace
+
+    from trading_app import account_survival as asv
+
+    fake_portfolio = SimpleNamespace(
+        strategies=[
+            SimpleNamespace(strategy_id="A", max_contracts=1),
+            SimpleNamespace(strategy_id="B", max_contracts=2),
+        ]
+    )
+    monkeypatch.setattr(asv, "build_profile_portfolio", lambda **_kw: fake_portfolio)
+    ok, msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
+    assert ok is False
+    assert "max_contracts" in msg
+    assert "B" in msg
+
+
+def test_single_micro_sizing_fails_closed_on_builder_error(monkeypatch):
+    from trading_app import account_survival as asv
+
+    def boom(**_kw):
+        raise RuntimeError("cannot build portfolio")
+
+    monkeypatch.setattr(asv, "build_profile_portfolio", boom)
+    ok, _msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
+    assert ok is False
+
+
+def test_evaluate_profile_survival_gate_fails_closed_on_sizing_parity_violation(monkeypatch):
+    """End-to-end: a clean-passing profile is forced FAIL by the D-3 parity guard.
+
+    Also guards against a regression where the gate branch referenced an
+    undefined ``log`` (NameError) — this exercises that exact code path.
+    """
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs",
+        lambda *_a, **_k: _canonical_inputs(),
+    )
+
+    def fake_load(_profile_id, *, as_of_date, db_path=None):
+        scenarios = [
+            DailyScenario(
+                trading_day="2025-01-02",
+                total_pnl_dollars=100.0,
+                positive_pnl_dollars=100.0,
+                active_lane_count=1,
+            ),
+        ]
+        metadata = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "source_start": "2025-01-02",
+            "source_end": str(as_of_date),
+            "source_days": len(scenarios),
+            "lane_ids": ["MNQ_TEST"],
+            "instruments": ["MNQ"],
+        }
+        return scenarios, metadata
+
+    monkeypatch.setattr("trading_app.account_survival._load_profile_daily_scenarios", fake_load)
+    # Force the parity guard to report a violation (a lane sizes >1 micro).
+    monkeypatch.setattr(
+        "trading_app.account_survival._assert_single_micro_sizing",
+        lambda _pid: (False, "D-3 sizing parity VIOLATED: test"),
+    )
+
+    summary = evaluate_profile_survival(
+        "topstep_50k_mnq_auto",
+        as_of_date=date(2025, 12, 31),
+        horizon_days=90,
+        n_paths=16,
+        seed=0,
+        write_state=False,
+    )
+
+    assert summary.gate_pass is False, "C11 gate must fail closed when D-3 sizing parity is violated"

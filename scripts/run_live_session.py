@@ -414,9 +414,19 @@ def _check_notifications(ctx: PreflightContext) -> CheckResult:
         status_suffix = " · ".join(f"{name}:{'PASS' if ok else 'FAIL'}" for name, ok in test_results.items())
         if ctx.components_all_pass:
             return CheckResult(True, f"OK ({status_suffix})")
-        # Probes are surfaced but non-blocking at preflight time; the live
-        # SessionOrchestrator re-runs `run_self_tests` at startup and that path
-        # is the authoritative gate.
+        # Order-routing launches (--demo / --live) FAIL-CLOSED on any probe
+        # failure: a degraded bracket builder or fill-poller means entries could
+        # land without crash protection or with untracked fills. The
+        # SessionOrchestrator records these probes as broker_status="degraded"
+        # but does NOT abort on bracket/fill-poller failure (only on broken
+        # notifications — run_self_tests sets _notifications_broken alone), so
+        # preflight is the authoritative launch gate for these. Now that the
+        # mandatory pre-launch gate makes _run_preflight binding for every
+        # order-routing launch (CLI + dashboard), a non-blocking WARNINGS here
+        # would let real orders route on a known-degraded broker path.
+        if not ctx.signal_only:
+            return CheckResult(False, f"FAILED ({status_suffix})")
+        # Signal-only places no orders; probes are advisory and surfaced only.
         return CheckResult(True, f"WARNINGS ({status_suffix})")
     except Exception as e:
         return CheckResult(False, f"FAILED: {e}")
@@ -546,9 +556,35 @@ def _check_repo_drift_for_live(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, f"FAILED: repo behind origin ({branch})")
     if "ahead" in branch.lower():
         return CheckResult(False, f"FAILED: repo ahead of origin ({branch}); push or isolate before live launch")
-    if changes:
-        return CheckResult(False, f"FAILED: repo dirty ({len(changes)} path(s)); clean or isolate live launch branch")
-    return CheckResult(True, f"OK ({branch})")
+
+    # Exclude files that are legitimately-always-dirty in the real multi-terminal
+    # + live-journal operating environment, so the gate fails ONLY on genuine
+    # code/config drift (the thing that actually risks capital):
+    #   - live_journal.db  : the running session writes it every tick — never clean
+    #   - HANDOFF.md       : a peer terminal's session-log surface, churns constantly
+    #   - untracked ('??')  : new docs/scratch are not committed code drift
+    # A change touching trading_app/, scripts/, pipeline/, trading config, or any
+    # tracked source file STILL fails closed — that is the capital-protecting intent.
+    _DRIFT_IGNORE_SUFFIXES = ("live_journal.db", "HANDOFF.md")
+    material_changes = []
+    for line in changes:
+        status_code = line[:2]
+        path = line[3:].strip().strip('"')
+        if status_code.strip() == "??":
+            continue  # untracked: not committed-code drift
+        if any(path.endswith(suffix) for suffix in _DRIFT_IGNORE_SUFFIXES):
+            continue  # always-dirty operational file
+        material_changes.append(line)
+
+    if material_changes:
+        return CheckResult(
+            False,
+            f"FAILED: repo has uncommitted CODE/config drift ({len(material_changes)} path(s): "
+            f"{', '.join(c[3:].strip() for c in material_changes[:5])}); commit or isolate before live launch",
+        )
+    ignored = len(changes) - len(material_changes)
+    note = f"; {ignored} always-dirty/untracked path(s) ignored" if ignored else ""
+    return CheckResult(True, f"OK ({branch}{note})")
 
 
 def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
@@ -745,6 +781,73 @@ def _check_project_pulse_for_live(ctx: PreflightContext) -> CheckResult:
     return CheckResult(True, "OK (project_pulse no live blockers)")
 
 
+def _check_account_binding(ctx: PreflightContext) -> CheckResult:
+    """Live order-routing must bind to an explicit broker account.
+
+    Capital review A (2026-06-06): ContractResolver.resolve_account_id() returns
+    ``accounts[0]`` from /api/Account/search. A profile-backed LIVE session with
+    multiple active broker accounts and no explicit ``--account-id`` would route
+    orders to whichever account the broker lists first — possibly a different
+    account (e.g. 100K XFA or an eval combine) than the one the Criterion 11
+    survival proof was computed for. That silently voids the profile-bound
+    capital guard.
+
+    Rule (fail-closed):
+      * signal-only / no-profile        → SKIPPED (no order routing).
+      * exactly one active account       → OK (accounts[0] is unambiguous).
+      * explicit --account-id present    → OK iff it exists at the broker
+                                           (delegated to the same selection
+                                           helper used at live-start).
+      * LIVE + >1 account + no binding   → FAILED (would default to accounts[0]).
+
+    Demo is lenient (paper account, no real capital): a missing binding is a
+    WARN-equivalent PASS so demo dry-runs are not blocked.
+    """
+    if ctx.signal_only:
+        return CheckResult(True, "SKIPPED (signal-only — no order routing)")
+    if ctx.profile_id is None:
+        return CheckResult(True, "SKIPPED (no profile — raw-baseline path)")
+    if ctx.components is None:
+        return CheckResult(False, "FAILED: auth failed (cannot verify account binding)")
+    try:
+        contracts_cls = ctx.components["contracts_class"]
+        contracts = contracts_cls(auth=ctx.components["auth"], demo=ctx.demo)
+        all_accounts = contracts.resolve_all_account_ids()
+        n = len(all_accounts)
+        if n == 0:
+            return CheckResult(False, "FAILED: no active broker accounts discovered")
+
+        requested = ctx.requested_account_id
+        if requested is not None and requested != 0:
+            # Reuse the exact live-start validation: hard-fails if unknown.
+            _select_primary_and_shadow_accounts(
+                all_accounts=all_accounts,
+                n_copies=1,
+                requested_account_id=requested,
+            )
+            return CheckResult(True, f"OK (bound to --account-id {requested})")
+
+        if n == 1:
+            only_id, only_name = all_accounts[0]
+            return CheckResult(True, f"OK (single broker account {only_name} id={only_id})")
+
+        # >1 account and no explicit binding.
+        if ctx.demo:
+            return CheckResult(
+                True,
+                f"WARN: {n} accounts and no --account-id; demo routes to first. Live requires --account-id.",
+            )
+        ids = [aid for aid, _ in all_accounts]
+        return CheckResult(
+            False,
+            f"FAILED: live profile-backed routing with {n} broker accounts {ids} "
+            "and no --account-id would default to accounts[0] (possibly the WRONG "
+            "account). Pass --account-id to bind the profile to its broker account.",
+        )
+    except Exception as e:
+        return CheckResult(False, f"FAILED: {e}")
+
+
 def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
     """Copy-trading account resolution (dry run).
 
@@ -838,6 +941,7 @@ PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_telemetry_maturity,
     _check_live_readiness_report,
     _check_project_pulse_for_live,
+    _check_account_binding,
     _check_copy_trading_accounts,
     _check_shadow_copy_loss_protection,
 ]
@@ -1232,6 +1336,62 @@ def main() -> None:
             log.warning("LIVE MODE — auto-confirmed (dashboard launch)")
         signal_only = False
         demo = False
+
+    # MANDATORY pre-launch capital gate (hard, no skip flag).
+    #
+    # Every order-routing launch (--demo / --live, CLI *or* dashboard) MUST pass
+    # the canonical preflight chain before any side effect. Previously this chain
+    # ran ONLY under `if args.preflight:` (an exit-after-report path), so a direct
+    # `--live --auto-confirm` — the exact form the dashboard launches
+    # (bot_dashboard.py builds `--live --auto-confirm` with NO --preflight; its
+    # own preflight subprocess is an advisory pre-click UI check, not a gate on
+    # the launch process) — reached SessionOrchestrator with no C11 survival,
+    # C12 SR, live-readiness, project-pulse, repo-drift, or telemetry gate. The
+    # orchestrator's startup lifecycle read is fail-open and never refuses launch.
+    #
+    # signal-only is exempt: it places no orders and the _check_* functions
+    # self-SKIP on signal_only (they accumulate evidence). Delegates to the same
+    # canonical _run_preflight used by the --preflight block — no re-encoding.
+    if not signal_only:
+        if _is_multi_profile:
+            from trading_app.portfolio import build_profile_portfolio
+
+            _gate_ok = True
+            for _inst in args._profile_instruments:
+                _inst_portfolio = build_profile_portfolio(profile_id=args.profile, instrument=_inst)
+                if not _run_preflight(
+                    _inst,
+                    args.broker,
+                    demo,
+                    portfolio=_inst_portfolio,
+                    profile_id=args.profile,
+                    requested_account_id=args.account_id,
+                    signal_only=signal_only,
+                    requested_copies=args.copies,
+                ):
+                    _gate_ok = False
+            if not _gate_ok:
+                print(
+                    "ERROR: pre-launch preflight FAILED — order-routing launch blocked. "
+                    "Fix the failing check(s) above, then relaunch. (No skip flag by design.)"
+                )
+                sys.exit(1)
+        else:
+            if not _run_preflight(
+                args.instrument,
+                args.broker,
+                demo,
+                portfolio=raw_portfolio,
+                profile_id=args.profile,
+                requested_account_id=args.account_id,
+                signal_only=signal_only,
+                requested_copies=args.copies,
+            ):
+                print(
+                    "ERROR: pre-launch preflight FAILED — order-routing launch blocked. "
+                    "Fix the failing check(s) above, then relaunch. (No skip flag by design.)"
+                )
+                sys.exit(1)
 
     # Publish the canonical planned-launch surface BEFORE orchestrator init so
     # the dashboard can render the unambiguous "Next launch: …" banner. The

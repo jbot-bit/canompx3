@@ -36,6 +36,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline import _drift_cache
+from pipeline._dsr_policy import (
+    ALLOWED_DSR_TRIALS_DERIVATION as _ALLOWED_DSR_TRIALS_DERIVATION,
+)
 from pipeline.db_connect import open_read_only_with_retry
 
 # Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
@@ -67,6 +70,75 @@ CHECK_DEPS: dict[str, list[str]] = {
         "research/comprehensive_deployed_lane_scan.py",
         "research/filter_utils.py",
     ],
+}
+
+# CHECK_TREE_DEPS maps a check label → its dep set when the check reads whole
+# globbed file *trees* (not just a fixed file list). Same honesty contract as
+# CHECK_DEPS: the set must be COMPLETE — every file (and every source file whose
+# logic affects the verdict) the check transitively reads. Keyed via
+# pipeline._drift_cache.tree_cache_key (path+content digest so add/remove/rename/
+# edit all invalidate). A label here is cache-eligible exactly like CHECK_DEPS;
+# under-declaration is caught by check_drift_cache_meta_recheck (cold re-run
+# parity). A label must appear in AT MOST ONE of CHECK_DEPS / CHECK_TREE_DEPS.
+# Expansion is gated by an adversarial audit (Stage 2, 2026-06-03).
+#
+# Each value is {"file_deps": [repo-rel paths], "tree_deps": [(glob_root, pattern)]}.
+CHECK_TREE_DEPS: dict[str, dict[str, list]] = {
+    # ──────────────────────────────────────────────────────────────────────────
+    # DELIBERATELY NOT CACHED — "FAST_LANE PROMOTE queue: no orphan PROMOTEs ..."
+    # (Check #171, the dominant 43.7s non-DB-FLAGGED cost). It was wired here, but
+    # an adversarial audit (evidence-auditor, 2026-06-03) proved a CRITICAL
+    # stale-PASS hazard: although the check's CHECKS tuple declares requires_db=False,
+    # scripts.research.fast_lane_promote_queue.scan() internally opens gold.db via
+    # _resolve_oos_window_days() (`SELECT MAX(trading_day) FROM orb_outcomes`,
+    # fast_lane_promote_queue.py:337). That value flows straight into the per-entry
+    # verdict: build_entry()'s OOS-power pre-flight returns REJECTED_OOS_UNPOWERED vs
+    # QUEUED based on oos_window_days (fast_lane_promote_queue.py:800-827). As new
+    # bar data lands, the DB advances and a near-threshold entry flips
+    # REJECTED→QUEUED — with NO change to any hashed file. A warmed cache would then
+    # serve a stale PASS on this BLOCKING capital gate (orphan-PROMOTE detection).
+    # gold.db content is not file-content-hashable, so this check is in the SAME
+    # non-cacheable class as the Phase4-SHA-manifest check (git-history verdict input)
+    # and the doc-hygiene check (data-dependent entrypoint-existence input). A
+    # DB-content-aware key (folding MAX(trading_day) into the digest) is a possible
+    # future recovery of the ~62s, but it is its own correctness surface and a
+    # separate audit-gated follow-up — NOT wired here. Do NOT re-add without that.
+    # ──────────────────────────────────────────────────────────────────────────
+    # Check #165 — AM3.3 theory_grant parity (25.4s). Reads the audit log + every
+    # active prereg's metadata.theory_grant, compares against has_theory. Verdict
+    # also depends on the t-threshold constants in trading_app/chordia.py (imported
+    # CHORDIA_T_WITH/WITHOUT_THEORY), so that source file is a dep (rigor § 4 —
+    # verdict tracks the code). Glob is non-recursive so drafts/ is excluded by
+    # construction (the check's own `"drafts" not in str(p)` is belt-and-suspenders).
+    "AM3.3 audit-log/prereg theory_grant parity: chordia_audit_log.yaml theory_grants must match active prereg metadata.theory_grant (Check #162)": {
+        "file_deps": [
+            "docs/runtime/chordia_audit_log.yaml",
+            "trading_app/chordia.py",
+        ],
+        "tree_deps": [
+            ("docs/audit/hypotheses", "*.yaml"),
+        ],
+    },
+    # DSR reference-universe lock (24.6s). Reads the active hypotheses tree
+    # (non-recursive glob, drafts excluded by construction). The verdict's allowed
+    # derivations come from ALLOWED_DSR_TRIALS_DERIVATION in pipeline/_dsr_policy.py
+    # (imported above as _ALLOWED_DSR_TRIALS_DERIVATION, enforced at the check body).
+    # That constant is verdict logic, so the policy module is a declared file_dep —
+    # the SAME pattern as the theory_grant check above deping on trading_app/chordia.py
+    # (rigor § 4 — the cache key must track the code that decides the verdict). Without
+    # this dep the key hashed only the YAML tree, so a commit that tightened the
+    # allowed-derivation set computed an identical key and served a STALE PASS on this
+    # blocking Bailey–López de Prado DSR/multiplicity gate (Codex high-risk finding
+    # 2026-06-04, proven by execution; anti-regression in test_drift_cache.py). The
+    # constant was extracted to its own tiny module — rather than deping on the whole
+    # of THIS file — so a policy tightening cold-runs DSR, but the ~1-in-8 commits that
+    # edit other parts of check_drift.py do NOT needlessly cold-run it.
+    "DSR reference-universe lock declared (Criterion 5 Amendment 3.5: criterion_5 block complete when claiming DSR-clearance)": {
+        "file_deps": ["pipeline/_dsr_policy.py"],
+        "tree_deps": [
+            ("docs/audit/hypotheses", "*.yaml"),
+        ],
+    },
 }
 
 # Records labels that returned a cached HIT during the current run, so the meta
@@ -3838,12 +3910,10 @@ def check_amendment_3_4_provisional_gate(
     return violations
 
 
-# Allowed derivation labels for criterion_5.effective_trials_derivation.
-# declared_K_conservative — N̂ = the prereg's declared K (Amendment 3.5 default,
-#   strict: larger K -> higher SR_0 -> stricter gate).
-# onc_clustered — N̂ from trading_app.dsr.estimate_n_eff_onc (López de Prado
-#   Optimal Number of Clusters). Permitted now that the canonical helper exists.
-_ALLOWED_DSR_TRIALS_DERIVATION = {"declared_K_conservative", "onc_clustered"}
+# Allowed derivation labels for criterion_5.effective_trials_derivation live in
+# the canonical pipeline._dsr_policy module (imported at top of file as
+# _ALLOWED_DSR_TRIALS_DERIVATION). The DSR cache entry deps on that module so a
+# policy tightening invalidates the cache key — see the CHECK_TREE_DEPS note.
 
 
 def check_dsr_universe_lock_declared(
@@ -5399,16 +5469,37 @@ def check_drift_shared_db_connection() -> list[str]:
 
 
 def check_drift_cache_meta_recheck() -> list[str]:
-    """Meta cold-recheck: every check that returned a CACHED HIT this run is
-    re-executed cold (bypassing the cache) and its verdict must match the cached
-    PASS. A mismatch means the cached PASS was stale — i.e. the check's declared
-    CHECK_DEPS are incomplete (an input changed that the key did not hash).
+    """Meta cold-recheck: the cache honesty backstop.
 
-    This is the honesty backstop for the cache. With one cached check it is a
-    deterministic full recheck; when many checks are cached later, this becomes a
-    random sample. Fail-closed: if a cached-hit label cannot be re-run (no entry
-    in CHECKS, or it requires_db), that is itself a violation — we never silently
-    trust a cached PASS we cannot reproduce.
+    Two layers, by cost:
+
+    1. STRUCTURAL (cheap, runs for EVERY cached-hit label, every run): a cached-hit
+       label must be a registered, non-``requires_db`` check. A label missing from
+       CHECKS, or one that is ``requires_db`` (DB content is not hashed, so its cache
+       key cannot be honest), is a violation — caught unconditionally.
+
+    2. COLD RE-RUN (expensive, SAMPLED — one label per run): the sampled check is
+       re-executed cold (bypassing the cache); its verdict must match the cached
+       PASS. A mismatch means the cached PASS was stale — the check's declared deps
+       are incomplete (an input changed that the key did not hash). The cold re-run
+       of the *dominant* cached checks costs ~tens of seconds each; running ALL of
+       them every drift would re-pay the entire cached cost and erase the speedup.
+       So we sample exactly one per run, rotating per-commit via
+       ``_meta_recheck_sample_index`` so every cached check is covered within a
+       bounded number of commits.
+
+       This sampling is defense-in-depth, NOT the sole anti-stale guard: the cache
+       key is a content hash of every declared dep, so a *complete* dep set can never
+       serve a stale PASS regardless of sampling — the cold re-run only catches dep
+       UNDER-declaration, which is also caught deterministically at config time by
+       the per-check ``*_covers_every_file_the_*_reads`` structural completeness
+       tests. Sampling trades a bounded worst-case detection latency (a missed dep
+       could survive a few commits) for the speedup; the static completeness tests
+       are the primary under-declaration guard.
+
+    Fail-closed throughout: an unverifiable cached-hit label is a violation; HEAD
+    unreadable still yields a deterministic in-range sample (a recheck always
+    happens — never zero rechecks).
 
     Runs LAST (registered at the tail of CHECKS) so all cache hits are recorded.
     """
@@ -5419,28 +5510,38 @@ def check_drift_cache_meta_recheck() -> list[str]:
     # label → (fn, requires_db) from the canonical CHECKS table.
     by_label = {label: (fn, requires_db) for label, fn, _adv, requires_db in CHECKS}
 
+    # Layer 1 — structural validation for ALL cached-hit labels (cheap). Collect the
+    # cold-recheckable labels (in CHECKS, non-db) for the sampled cold re-run.
+    recheckable: list[str] = []
     for label in _CACHE_HITS_THIS_RUN:
         entry = by_label.get(label)
         if entry is None:
             violations.append(f"  cached-hit label not found in CHECKS, cannot verify: {label!r}")
             continue
-        fn, requires_db = entry
+        _fn, requires_db = entry
         if requires_db:
             violations.append(
                 f"  cached requires_db check {label!r} cannot be cold-rechecked here "
                 f"(DB-content inputs are not hashed) — must not be cache-eligible"
             )
             continue
+        recheckable.append(label)
+
+    # Layer 2 — sampled cold re-run (expensive). Sort for a deterministic sample.
+    if recheckable:
+        sampled = sorted(set(recheckable))
+        label = sampled[_drift_cache.meta_recheck_sample_index(sampled)]
+        fn = by_label[label][0]
         try:
             cold = fn()
         except Exception as exc:  # noqa: BLE001 — record, never swallow
             violations.append(f"  cold recheck of {label!r} raised {type(exc).__name__}: {exc}")
-            continue
-        if cold:
-            violations.append(
-                f"  STALE CACHE: {label!r} returned cached PASS but cold re-run found "
-                f"{len(cold)} violation(s) — CHECK_DEPS for this label is incomplete"
-            )
+        else:
+            if cold:
+                violations.append(
+                    f"  STALE CACHE: {label!r} returned cached PASS but cold re-run found "
+                    f"{len(cold)} violation(s) — declared deps for this label are incomplete"
+                )
 
     return violations
 
@@ -7228,21 +7329,25 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
     with no firm branch -- a latent leak that would silently throttle real
     personal-capital earnings to a prop-firm-shaped ceiling.
 
-    This is the MARKER layer (the cheap, immediate floor -- not the structural
-    fix). It asserts:
+    This check asserts:
       (a) the doctrine rule file exists (cannot be silently deleted while this
-          check claims to enforce it), and
+          check claims to enforce it),
       (b) every ``self_funded`` entry in ``ACCOUNT_TIERS`` is covered by the
           ``@margin-guard-not-earnings-cap`` marker comment in
           ``trading_app/prop_profiles.py`` -- so a new ``self_funded`` tier added
-          without the marker fails loud at review.
-
-    The structural book-builder firm-branch (prop -> tier cap;
-    self_funded -> risk/margin-derived budget) is a separate
-    adversarial-audit-gated follow-up; this marker does NOT yet prove it.
+          without the marker fails loud at review, and
+      (c) STRUCTURAL (added 2026-05-31, audit finding F2-A): ``select_for_profile``
+          in ``trading_app/prop_portfolio.py`` carries a firm branch that does NOT
+          assign ``contract_budget = tier.max_contracts_micro`` for ``self_funded``.
+          This proves the book-builder firm-branch (prop -> tier cap; self_funded ->
+          prop cap disabled as a selection gate) exists, closing the doctrine's
+          previously-unbuilt "Tier-B follow-up". Static-source assertion (no
+          execution) -- if a future edit removes the firm branch and reverts to the
+          unconditional prop cap, the prop earnings cap silently re-leaks into
+          personal-capital book-building; this fails that loud.
 
     @canonical-source: .claude/rules/self-funded-sizing-doctrine.md,
-    trading_app/prop_profiles.py
+    trading_app/prop_profiles.py, trading_app/prop_portfolio.py
     """
     violations: list[str] = []
 
@@ -7262,7 +7367,7 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
         return violations + [f"  cannot read trading_app/prop_profiles.py: {e}"]
 
     marker = "@margin-guard-not-earnings-cap"
-    marker_line = next((i for i, ln in enumerate(lines) if marker in ln), None)
+    marker_lines = [i for i, ln in enumerate(lines) if marker in ln]
     self_funded_tier_lines = [i for i, ln in enumerate(lines) if '("self_funded",' in ln and "PropFirmAccount(" in ln]
 
     if not self_funded_tier_lines:
@@ -7274,25 +7379,255 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
         )
         return violations
 
-    if marker_line is None:
+    # Anchor the marker to the ACCOUNT_TIERS dict. Taking the FIRST marker
+    # anywhere in the file is a fail-open hole: an unrelated occurrence of the
+    # marker string elsewhere (e.g. the @margin-guard-not-earnings-cap in the
+    # AccountProfile.self_imposed_dd_dollars field comment) would satisfy the
+    # check even if the real tier-block marker were deleted. Require a marker
+    # occurrence INSIDE the dict span, BEFORE the first self_funded tier, so it
+    # genuinely introduces the block. (PR #343 review finding.)
+    dict_open = next(
+        (i for i, ln in enumerate(lines) if "ACCOUNT_TIERS" in ln and ln.rstrip().endswith("{")),
+        None,
+    )
+    if dict_open is None:
         violations.append(
-            f"  {marker!r} marker comment is ABSENT from prop_profiles.py but "
-            f"{len(self_funded_tier_lines)} ('self_funded', ...) tier(s) exist. Every "
-            "self_funded contract cap must be explicitly labelled a margin/sanity "
-            "guard (not an earnings ceiling) per the doctrine."
+            "  could not locate the ACCOUNT_TIERS dict opening ('ACCOUNT_TIERS ... = {') "
+            "in prop_profiles.py — layout changed; update "
+            "check_prop_caps_do_not_leak_into_self_funded to match."
         )
         return violations
 
-    # The marker must precede the FIRST self_funded tier and there must be no
-    # self_funded tier above it (the marker introduces the whole block).
     first_tier = min(self_funded_tier_lines)
-    if marker_line > first_tier:
+    # The marker must live within the dict (below its opening line) and introduce
+    # the self_funded block (above the first self_funded tier).
+    anchored = [m for m in marker_lines if dict_open < m < first_tier]
+    if not anchored:
+        if marker_lines:
+            violations.append(
+                f"  {marker!r} marker does NOT introduce the self_funded ACCOUNT_TIERS "
+                f"block: no marker occurs inside the dict (after line {dict_open + 1}) and "
+                f"before the first ('self_funded', ...) tier at line {first_tier + 1}. "
+                f"A marker present only elsewhere in the file (lines "
+                f"{', '.join(str(m + 1) for m in marker_lines)}) does not cover the tiers. "
+                "Every self_funded contract cap must be explicitly labelled a margin/sanity "
+                "guard (not an earnings ceiling) per the doctrine."
+            )
+        else:
+            violations.append(
+                f"  {marker!r} marker comment is ABSENT from prop_profiles.py but "
+                f"{len(self_funded_tier_lines)} ('self_funded', ...) tier(s) exist. Every "
+                "self_funded contract cap must be explicitly labelled a margin/sanity "
+                "guard (not an earnings ceiling) per the doctrine."
+            )
+
+    # (c) STRUCTURAL — the book-builder firm branch must exist (F2-A fix, 2026-05-31).
+    # Parse select_for_profile's source via AST and confirm: (1) it references a
+    # self_funded firm branch, and (2) it does NOT assign
+    # `contract_budget = tier.max_contracts_micro` UNCONDITIONALLY (i.e. that
+    # assignment, if present, lives under a non-self_funded branch). This fails loud
+    # if a future edit reverts to the pre-F2-A unconditional prop cap.
+    portfolio_src = PROJECT_ROOT / "trading_app" / "prop_portfolio.py"
+    try:
+        port_text = portfolio_src.read_text(encoding="utf-8")
+    except OSError as e:
+        return violations + [f"  cannot read trading_app/prop_portfolio.py: {e}"]
+
+    func_node = None
+    try:
+        tree = ast.parse(port_text)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "select_for_profile":
+                func_node = node
+                break
+    except SyntaxError as e:
+        return violations + [f"  cannot parse trading_app/prop_portfolio.py: {e}"]
+
+    if func_node is None:
         violations.append(
-            f"  {marker!r} marker appears at line {marker_line + 1}, AFTER the first "
-            f"('self_funded', ...) tier at line {first_tier + 1}. The marker must "
-            "introduce the self_funded tier block so every cap is covered."
+            "  could not locate select_for_profile in trading_app/prop_portfolio.py — "
+            "layout changed; update check_prop_caps_do_not_leak_into_self_funded to match."
         )
+        return violations
+
+    # An unconditional `contract_budget = tier.max_contracts_micro` is the pre-F2-A
+    # leak. It is a violation ONLY when it is a direct (module-level) statement of the
+    # function body — i.e. NOT nested inside an If/For/etc. Assignments nested inside a
+    # branch (the post-fix prop `else`) are fine.
+    def _is_tier_micro_assign(stmt: ast.stmt) -> bool:
+        if not isinstance(stmt, ast.Assign):
+            return False
+        if not (
+            len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name) and stmt.targets[0].id == "contract_budget"
+        ):
+            return False
+        val = stmt.value
+        return (
+            isinstance(val, ast.Attribute)
+            and val.attr == "max_contracts_micro"
+            and isinstance(val.value, ast.Name)
+            and val.value.id == "tier"
+        )
+
+    unconditional_leak = any(_is_tier_micro_assign(s) for s in func_node.body)
+    has_self_funded_branch = (
+        "self_funded" in port_text[port_text.find("def select_for_profile") :].split("\ndef ", 1)[0]
+    )
+
+    if unconditional_leak:
+        violations.append(
+            "  select_for_profile assigns `contract_budget = tier.max_contracts_micro` "
+            "UNCONDITIONALLY (not inside a firm branch). This is the pre-F2-A leak — the "
+            "prop contract cap would bound self_funded book-building. Restore the "
+            '`if firm_spec.name == "self_funded"` branch (self_funded -> no prop cap).'
+        )
+    if not has_self_funded_branch:
+        violations.append(
+            "  select_for_profile has NO self_funded firm branch on contract_budget. "
+            "Per self-funded-sizing-doctrine.md the prop contract cap must be disabled as "
+            "a selection gate for self_funded (F2-A). Add the firm branch."
+        )
+
+    # (d) STRUCTURAL — the strict-DD BUDGET for a self_funded profile must be
+    # de-coupled from the prop-firm tier number (Stage 2, 2026-06-04). The
+    # marker (b) pins INTENT; this proves the BEHAVIOUR by executing the canonical
+    # resolver and asserting the self_funded budget does not equal the prop figure
+    # (tier.max_dd * either fraction). This closes the "honest floor, not ceiling"
+    # gap named in self-funded-sizing-doctrine.md § "Current enforcement scope".
+    try:
+        from trading_app.account_survival import (
+            STRICT_DD_BUDGET_FRACTION_EXPRESS,
+            STRICT_DD_BUDGET_FRACTION_SELF_FUNDED,
+            _build_rules,
+            effective_strict_dd_budget,
+        )
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        self_funded_profiles = [p for p in ACCOUNT_PROFILES.values() if p.is_express_funded is False]
+        if not self_funded_profiles:
+            violations.append(
+                "  no self_funded (is_express_funded=False) profile found in "
+                "ACCOUNT_PROFILES — cannot structurally prove the strict-DD budget is "
+                "de-coupled from the prop tier number. Update "
+                "check_prop_caps_do_not_leak_into_self_funded if the profile set changed."
+            )
+        for profile in self_funded_profiles:
+            rules = _build_rules(profile)
+            budget = effective_strict_dd_budget(profile, rules)
+            # The prop-shaped figures a leak could produce: tier.max_dd at EITHER
+            # fraction. The old pre-Stage-2 bug returned `dd_limit_dollars * fraction`
+            # directly, so BOTH must be flagged (the self-funded fraction is the exact
+            # old-bug value; the express fraction is the fail-closed value).
+            express_on_prop = round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2)
+            self_on_prop = round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_SELF_FUNDED, 2)
+            # A profile that DECLARES a risk-first source must NOT resolve to either
+            # prop figure. The ONLY legitimate match is the documented fail-closed
+            # path (missing self_imposed_dd_dollars → stricter express belt).
+            declared = getattr(profile, "self_imposed_dd_dollars", None)
+            # Byte-identical to the resolver's source guard
+            # (account_survival.py effective_strict_dd_budget): `bool` subclasses
+            # `int` (True > 0 is True), so a stray True must be excluded here too —
+            # else this check and the resolver disagree on the one input where
+            # bool/int subclassing matters, firing a phantom leak.
+            has_source = isinstance(declared, (int, float)) and not isinstance(declared, bool) and declared > 0
+            if has_source and budget in (express_on_prop, self_on_prop):
+                violations.append(
+                    f"  self_funded profile {profile.profile_id!r} declares "
+                    f"self_imposed_dd_dollars={declared} but effective_strict_dd_budget "
+                    f"still resolves to a prop-derived figure ${budget} "
+                    f"(tier.max_dd=${rules.dd_limit_dollars} * a prop fraction). The "
+                    "strict-DD budget is LEAKING the prop number into personal-capital "
+                    "risk — self-funded-sizing-doctrine.md forbids this."
+                )
+            if not has_source and budget != express_on_prop:
+                violations.append(
+                    f"  self_funded profile {profile.profile_id!r} has no "
+                    f"self_imposed_dd_dollars source but effective_strict_dd_budget did "
+                    f"NOT fail-close to the stricter express belt (${express_on_prop}); "
+                    f"got ${budget}. Fail-closed contract broken."
+                )
+    except Exception as e:  # noqa: BLE001 — surface as a loud violation, never a silent pass
+        violations.append(
+            "  could not structurally verify the self_funded strict-DD budget "
+            f"de-coupling (effective_strict_dd_budget): {type(e).__name__}: {e}. "
+            "This check must execute the resolver; a failure here is a violation, "
+            "not a skip."
+        )
+
     return violations
+
+
+def check_active_profiles_survival_state_current(con=None) -> list[str]:  # noqa: ARG001
+    """Row 05 (overnight capital audit): every ACTIVE prop profile must carry a
+    CURRENT, PASSING Criterion-11 account-survival proof.
+
+    Re-couples the survival GATE to the active-profile REGISTRY — the audit's
+    cross-cutting defect class ("safety checks decoupled from live behavior").
+    A profile can be flipped ``active=True`` (deploy-readiness) while its survival
+    state file is stale (DB advanced) or regressed (op_pass dropped below floor /
+    strict DD breach). Without this, the stale/regressed state is invisible until
+    arm-time preflight.
+
+    PERFORMANCE — no average drift slowdown. This does NOT re-run the 10 000-path
+    Monte-Carlo survival sim. It calls the existing cheap validator
+    ``check_survival_report_gate`` (account_survival.py), which reads the persisted
+    state envelope + computes the cheap db_identity/code fingerprints (a few
+    COUNT/MAX queries). Re-encodes ZERO survival logic — it delegates to the
+    canonical gate the arm-time preflight already uses (rigor § "never re-encode
+    canonical logic"). The check is correctly NON-cacheable (its verdict tracks
+    gold.db content, which is not file-content-hashable — same class as the
+    deliberately-uncached FAST_LANE PROMOTE check), but cheap enough that running
+    it every pass does not move the average.
+
+    SEVERITY — ADVISORY (non-blocking). results/05.md classifies this as
+    "deploy-readiness only ... no blind path to live execution": the arm-time
+    ``check_survival_report_gate`` preflight is the real fail-closed CAPITAL gate;
+    this drift check is the VISIBILITY layer. Routine daily ingest advances the DB
+    and naturally staleness the state — blocking every commit on that would punish
+    data updates, not catch a real regression. So staleness/freshness misses are
+    surfaced as ADVISORY warnings; the operator re-runs the survival gate when
+    arming. (The hard fail-closed coupling lives at the arm path, not here.)
+
+    Fail-open on infrastructure error (missing DB, import error) — an
+    unverifiable check is an advisory, never a silent pass and never a hard block.
+    """
+    try:
+        # pipeline.paths.GOLD_DB_PATH is the canonical DB path (CLAUDE.md § Volatile
+        # Data Rule) — never hardcode, never use the deprecated scratch copy.
+        from pipeline.paths import GOLD_DB_PATH
+        from trading_app.account_survival import check_survival_report_gate
+        from trading_app.prop_profiles import get_active_profile_ids
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ADVISORY: could not import survival gate to verify active profiles: {exc}")
+        return []
+
+    try:
+        active_ids = get_active_profile_ids()
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ADVISORY: could not resolve active prop profiles for survival check: {exc}")
+        return []
+
+    if not active_ids:
+        # No active prop profile is a valid state (nothing armed) — nothing to verify.
+        return []
+
+    db_path = GOLD_DB_PATH_FOR_CHECKS or GOLD_DB_PATH
+    for profile_id in active_ids:
+        try:
+            ok, msg = check_survival_report_gate(profile_id, db_path=db_path)
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"  ADVISORY: active profile {profile_id!r} survival gate could not be "
+                f"evaluated ({type(exc).__name__}: {exc}) — re-run account survival."
+            )
+            continue
+        if not ok:
+            # Single distinct message per profile. The gate's own message already
+            # discriminates staleness ("db identity mismatch" / "is Nd old") from
+            # regression ("operational pass ... <" / "strict ... failed"); we surface
+            # it verbatim so the operator sees exactly which class fired.
+            print(f"  ADVISORY: active profile {profile_id!r} survival gate not current — {msg}")
+    return []
 
 
 def check_live_funded_firms_declare_max_live_accounts() -> list[str]:
@@ -7666,6 +8001,48 @@ def check_project_pulse_uses_authority_registry() -> list[str]:
     for ref in required_refs:
         if ref not in content:
             violations.append(f"  scripts/tools/project_pulse.py missing canonical identity reference {ref!r}")
+    return violations
+
+
+def check_stale_work_radar_wired_into_pulse() -> list[str]:
+    """The stale-work radar must stay wired into project_pulse (deep pulse).
+
+    A standalone radar nobody runs is itself stale work. This guard fails loud if
+    the auto-fire wiring is removed — the collector, its deep-only call site, and
+    its presence in the aggregated all_items list must all survive. Mirrors the
+    intent-router parity check: keeps an integration from silently rotting.
+    """
+    violations: list[str] = []
+    radar_path = SCRIPTS_DIR / "tools" / "stale_work_radar.py"
+    pulse_path = SCRIPTS_DIR / "tools" / "project_pulse.py"
+    if not radar_path.exists():
+        return ["  scripts/tools/stale_work_radar.py missing (stale-work radar library)"]
+    if not pulse_path.exists():
+        return ["  scripts/tools/project_pulse.py missing"]
+
+    radar_text = radar_path.read_text(encoding="utf-8")
+    for fn in ("def build_reports(", "def base_exists("):
+        if fn not in radar_text:
+            violations.append(f"  stale_work_radar.py missing public entrypoint {fn!r} (project_pulse depends on it)")
+    # The blob_trap breakdown key is the radar→pulse contract for the chordia
+    # `git add -A` artifact trap. If the scorer stops emitting it, the pulse
+    # filter below silently goes blind to the blob trap — guard both ends.
+    if '"blob_trap"' not in radar_text:
+        violations.append("  stale_work_radar.py missing the '\"blob_trap\"' breakdown key (blob-trap loss class)")
+
+    pulse_text = pulse_path.read_text(encoding="utf-8")
+    required = [
+        ("def collect_stale_work(", "collector definition"),
+        ("import stale_work_radar", "radar import"),
+        ("stale_work_items = [] if fast else collect_stale_work(", "deep-only call site"),
+        ("+ stale_work_items", "aggregation into all_items"),
+        # Without this needle, a future edit could drop blob_trap from the at_risk
+        # filter and re-introduce the blind spot the adversarial review caught.
+        ('"blob_trap" in r.risk_breakdown', "blob-trap branch surfaced in at_risk filter"),
+    ]
+    for needle, what in required:
+        if needle not in pulse_text:
+            violations.append(f"  project_pulse.py missing stale-work {what}: {needle!r}")
     return violations
 
 
@@ -10635,6 +11012,95 @@ def check_lane_allocation_per_profile_legacy_parity() -> list[str]:
     return violations
 
 
+def check_lane_allocation_risk_cap_honesty() -> list[str]:
+    """``risk_cap_pts`` honest-override invariant: when a lane carries a
+    ``risk_cap_pts`` field it MUST satisfy ``0 < risk_cap_pts <= p90_orb_pts``.
+
+    Origin: C11 cap remediation (2026-06-05,
+    ``docs/audit/results/2026-06-05-c11-cap-x080-remediation-v1.md``). The cap is
+    an *honest* risk-cap override stored SEPARATELY from the empirical
+    ``p90_orb_pts`` so the p90 truth is never overwritten. The loader
+    (``trading_app.prop_profiles.load_allocation_lanes``) prefers ``risk_cap_pts``
+    over ``p90_orb_pts`` when present and feeds it to BOTH the survival gate
+    (``account_survival``) and the live engine (``session_orchestrator`` ORB cap)
+    via ``get_profile_lane_definitions`` — so a malformed cap is a capital-class
+    error.
+
+    The honesty invariant has two halves:
+      - ``risk_cap_pts > 0`` — a zero/negative cap is nonsensical and (if the
+        loader ever used a falsy ``or``-chain) could silently disable capping.
+      - ``risk_cap_pts <= p90_orb_pts`` — a cap *above* the empirical p90 is not
+        a risk reduction; it would be a dishonest field claiming to cap while
+        loosening, and signals the cap was mis-derived or p90 drifted under it.
+
+    Fail conditions (blocking — capital-class):
+      - Any lane in any ``docs/runtime/lane_allocation/<profile>.json`` (or the
+        legacy single-profile file) whose ``risk_cap_pts`` is present but is not
+        a positive number, OR exceeds the lane's ``p90_orb_pts``, OR is present
+        while ``p90_orb_pts`` is absent (can't verify the invariant).
+
+    Pass / skip conditions:
+      - No allocation files, or no lane carries ``risk_cap_pts`` (the field is
+        optional; absence is the uncapped baseline).
+      - Unparseable JSON → skip (the chordia/c8/parity checks already guard file
+        integrity; this check is strictly about the cap invariant).
+
+    @canonical-source: trading_app/prop_profiles.load_allocation_lanes (cap precedence)
+    @canonical-source: trading_app/lane_allocator.save_allocation (risk_cap_pts preservation)
+    @canonical-source: docs/audit/results/2026-06-05-c11-cap-x080-remediation-v1.md
+    """
+    import json
+
+    files: list[Path] = []
+    new_dir = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation"
+    if new_dir.exists() and new_dir.is_dir():
+        files.extend(p for p in sorted(new_dir.iterdir()) if p.is_file() and p.suffix == ".json")
+    legacy_path = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+    if legacy_path.exists():
+        files.append(legacy_path)
+
+    violations: list[str] = []
+    for fpath in files:
+        try:
+            data = json.loads(fpath.read_text())
+        except (OSError, ValueError):
+            # File integrity is covered by sibling checks; skip here.
+            continue
+        if not isinstance(data, dict):
+            continue
+        lanes = data.get("lanes")
+        if not isinstance(lanes, list):
+            continue
+        rel = fpath.relative_to(PROJECT_ROOT).as_posix()
+        for lane in lanes:
+            if not isinstance(lane, dict):
+                continue
+            if "risk_cap_pts" not in lane:
+                continue  # optional field; absence == uncapped baseline
+            sid = lane.get("strategy_id", "<unknown>")
+            cap = lane.get("risk_cap_pts")
+            p90 = lane.get("p90_orb_pts")
+            if not isinstance(cap, (int, float)) or isinstance(cap, bool):
+                violations.append(f"  {rel}: {sid}: risk_cap_pts must be a number, got {cap!r}")
+                continue
+            if cap <= 0:
+                violations.append(f"  {rel}: {sid}: risk_cap_pts must be > 0, got {cap}")
+                continue
+            if not isinstance(p90, (int, float)) or isinstance(p90, bool):
+                violations.append(
+                    f"  {rel}: {sid}: risk_cap_pts={cap} present but p90_orb_pts "
+                    f"missing/invalid ({p90!r}) — cannot verify honesty invariant"
+                )
+                continue
+            if cap > p90:
+                violations.append(
+                    f"  {rel}: {sid}: risk_cap_pts={cap} exceeds p90_orb_pts={p90} "
+                    f"(a cap above empirical p90 is not a risk reduction — honesty invariant broken)"
+                )
+
+    return violations
+
+
 # Allowlists for check_no_direct_lane_allocation_json_literals.
 # Module-level so tests can introspect / mutate via monkeypatch.
 _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset(
@@ -11137,6 +11603,170 @@ def check_intent_router_routing_parity() -> list[str]:
     return violations
 
 
+def check_decision_governor_pointers_resolve() -> list[str]:
+    """Marker guard for the Research / Decision Governor.
+
+    The governor (``docs/governance/research_decision_governor.md`` + its fill-in
+    companion ``docs/audit/templates/decision_candidate_review.md``) is a
+    ``contract`` doc: a ROUTER and CHECKLIST that *composes* existing canonical
+    surfaces (C1-C13, the 14-gate live preflight, K-budget estimator, lane
+    allocator, account survival) and **re-encodes none of them**. The doc states
+    its own invariant: *"If this doc ever states a numeric threshold, that is a
+    bug — it must point to the surface that owns the number."*
+
+    This check is the fail-closed half of that invariant (the
+    ``scripts/tools/decision_governor.py`` composer is the advisory half). It
+    asserts, structurally:
+
+      (a) the governor doc, the template, and the composer script all EXIST —
+          none can be silently deleted while this check claims to enforce them;
+      (b) every canonical pointer the governor names RESOLVES on disk — a stale
+          pointer (e.g. the original ``lane_allocation.py`` typo for the real
+          ``lane_allocator.py``) means the router sends you to a file that
+          isn't there; and
+      (c) the ROUTING surface (doc secs. 3-4: the decision-class router table and
+          the question set) carries NO numeric-threshold LITERAL — a number
+          there is a re-encode of a canonical gate's floor. Criterion *names*
+          and criterion-by-number references ("Criteria 2,3,4,6,7,8,9",
+          "MinBTL", "Chordia t-floor") are EXPLICITLY allowed — they route to
+          the gate that owns the number. Sec. 5 (stale-assumption reconciliation)
+          is OUT OF SCOPE: it legitimately cites numbers *with* their canonical
+          source and a "re-run, never quote" caveat, which is correct usage.
+
+    @canonical-source: docs/governance/research_decision_governor.md,
+    docs/audit/templates/decision_candidate_review.md,
+    scripts/tools/decision_governor.py
+    """
+    violations: list[str] = []
+
+    doc = PROJECT_ROOT / "docs" / "governance" / "research_decision_governor.md"
+    template = PROJECT_ROOT / "docs" / "audit" / "templates" / "decision_candidate_review.md"
+    composer = PROJECT_ROOT / "scripts" / "tools" / "decision_governor.py"
+
+    # (a) existence — fail loud if any leg is gone.
+    for label, path in (
+        ("governor doc", doc),
+        ("template", template),
+        ("composer script", composer),
+    ):
+        if not path.exists():
+            violations.append(
+                f"  decision-governor {label} is MISSING ({path.relative_to(PROJECT_ROOT)}). "
+                "The governor is a 3-part contract (router doc + fill-in template + "
+                "read-only composer); none may be deleted while "
+                "check_decision_governor_pointers_resolve claims to enforce it."
+            )
+    if not doc.exists():
+        return violations  # can't validate pointers/thresholds without the doc
+
+    try:
+        doc_text = doc.read_text(encoding="utf-8")
+    except OSError as e:
+        return violations + [f"  cannot read research_decision_governor.md: {e}"]
+
+    # (b) every canonical pointer the doc names must resolve. Enumerate
+    # repo-relative paths the governor cites (code + docs + the runtime json).
+    cited_paths = set(
+        re.findall(
+            r"(?:trading_app|pipeline|scripts|docs)/[A-Za-z0-9_./-]+\.(?:py|md|json)",
+            doc_text,
+        )
+    )
+    for rel in sorted(cited_paths):
+        if not (PROJECT_ROOT / rel).exists():
+            violations.append(
+                f"  governor doc cites a canonical path that does NOT resolve: {rel!r}. "
+                "A router pointing at a missing file sends decisions to a dead surface. "
+                "Fix the pointer (or restore the file)."
+            )
+
+    # (c) the routing surface (secs. 3-4) must carry no numeric-threshold literal.
+    # Scope to the slice between '## 3.' and '## 5.' so sec. 5 reconciliation notes
+    # (which correctly cite numbers + source) are not flagged.
+    sec3 = doc_text.find("\n## 3.")
+    sec5 = doc_text.find("\n## 5.")
+    if sec3 != -1 and sec5 != -1 and sec5 > sec3:
+        routing = doc_text[sec3:sec5]
+        # Numeric-threshold literals a re-encode would introduce: comparator-vs-number
+        # (t >= 3.79, q < 0.05, N >= 100, WFE >= 0.50), dollar budgets, "x MLL"
+        # fractions. NOT criterion-by-number refs ("Criteria 2,3,4") — those carry
+        # no comparator/$/x and route to the owning gate.
+        threshold_patterns = [
+            r"[a-zA-Z]\s*[<>]=?\s*\d",  # t >= 3, q < 0.05, N >= 100
+            r"[<>]=?\s*\d+(?:\.\d+)?\s*(?:R\b|σ|%)",  # >= 0.40 R, > 5%
+            r"\$\s?\d",  # $1,800 budget
+            r"\d+(?:\.\d+)?\s*[×x]\s*MLL",  # 0.90 x MLL
+            r"\bq\s*<\s*0",  # q < 0.05 (BH-FDR floor)
+            # Comparator-less re-encode forms (evidence-auditor LOW blind-spot,
+            # 2026-06-05): a NAMED statistical floor written next to a number with
+            # no comparator ("t-stat 3.79", "threshold: 3.79", "DSR 0.95"). Keyed
+            # on the threshold KEYWORD + a digit so bare numbers ("R1-R8",
+            # "Criteria 2,3,4", "13-Q") never false-fire.
+            r"(?i:Sharpe|DSR|deflated sharpe)\s*[>=≥]*\s*\d",
+            r"(?i:t[- ]?stat|t[- ]?value|chordia t)\s*[>=≥]*\s*\d",
+            r"(?i:q[- ]?value|q[- ]?val|FDR)\s*[<≤=]*\s*\d",
+            r"(?i:WFE|walk[- ]forward)\s*[>=≥]*\s*\d",
+            r"(?i:threshold|floor|budget)\s*[:=]?\s*\d",
+        ]
+        for pat in threshold_patterns:
+            m = re.search(pat, routing)
+            if m:
+                # 1-based doc line number of the offending literal (sec3 is the
+                # offset of '\n## 3.' within doc_text, so its line = count to that
+                # offset; m.start() is relative to the routing slice).
+                line_no = doc_text[: sec3 + m.start()].count("\n") + 1
+                snippet = m.group(0)
+                violations.append(
+                    f"  governor doc secs. 3-4 (routing surface) contains a numeric-threshold "
+                    f"literal {snippet!r} at line {line_no} — the doc's own rule forbids this "
+                    "(a threshold must POINT to the gate that owns it, not be restated here). "
+                    "Replace with the criterion NAME or the canonical surface pointer. "
+                    "(Sec. 5 reconciliation notes are exempt; this guard scopes to secs. 3-4 only.)"
+                )
+                break  # one report is enough to action
+
+    # (d) DELEGATION INTEGRITY (added 2026-06-05 per evidence-auditor MEDIUM):
+    # the composer resolves Q13 live by delegating to a PRIVATE function,
+    # research_catalog_mcp_server._list_open_hypotheses. The composer's own
+    # except-clause fail-opens (correct for an advisory tool) — which means if
+    # that delegate is renamed/removed, Q13 silently goes dark with no runtime
+    # signal. This drift check is the fail-closed half: assert the composer's
+    # named delegate still resolves to a `def` in the MCP server (static source
+    # scan — no import, so the drift process never loads the FastMCP server).
+    if composer.exists():
+        try:
+            composer_text = composer.read_text(encoding="utf-8")
+        except OSError as e:
+            return violations + [f"  cannot read decision_governor.py: {e}"]
+        # The delegate name + its host module, as the composer actually writes them.
+        delegate = "_list_open_hypotheses"
+        host_module = "research_catalog_mcp_server"
+        if delegate in composer_text and host_module in composer_text:
+            host = PROJECT_ROOT / "scripts" / "tools" / f"{host_module}.py"
+            if not host.exists():
+                violations.append(
+                    f"  decision_governor.py delegates Q13 to {host_module}.{delegate} but "
+                    f"scripts/tools/{host_module}.py is MISSING. Q13's live open-hypothesis "
+                    "count would silently degrade to a NOTE (the composer fail-opens). "
+                    "Restore the module or update the composer's delegation target."
+                )
+            else:
+                try:
+                    host_text = host.read_text(encoding="utf-8")
+                except OSError as e:
+                    return violations + [f"  cannot read {host_module}.py: {e}"]
+                if f"def {delegate}(" not in host_text:
+                    violations.append(
+                        f"  decision_governor.py delegates Q13 to {host_module}.{delegate}, but "
+                        f"`def {delegate}(` no longer exists in scripts/tools/{host_module}.py. "
+                        "The delegate was renamed/removed; the composer would silently degrade "
+                        "Q13 to a NOTE (fail-open). Re-point the composer's delegation target "
+                        "(or restore the function name)."
+                    )
+
+    return violations
+
+
 def check_no_direct_requests_to_broker_endpoints(trading_app_dir: Path) -> list[str]:
     """Broker adapters MUST route HTTP through trading_app.live.http_client.BrokerHTTPClient.
 
@@ -11186,6 +11816,159 @@ def check_no_direct_requests_to_broker_endpoints(trading_app_dir: Path) -> list[
                     )
 
     return violations
+
+
+def check_paper_trades_reads_are_shadow_safe(scan_dirs: list[Path] | None = None) -> list[str]:
+    """Every `FROM paper_trades` READ must exclude forward-monitoring shadow rows.
+
+    ROOT-CAUSE guard (Stage-2 adversarial-audit fix). `paper_trades` is a shared
+    table discriminated by `execution_source`: real trades ('live'/'backfill')
+    plus REGIME `'shadow'` rows (would-have trades, NEVER taken). Shadow
+    invisibility used to be maintained by every reader REMEMBERING to add an
+    `execution_source` predicate — a vigilance contract that leaked by
+    construction (the Stage-1 review found 6 unguarded aggregate reads; a 7th
+    surfaced later). This STATIC check ends that bug class: a future unguarded
+    reader fails CI, not a later human reviewer.
+
+    A `FROM paper_trades` SQL string is COMPLIANT iff it does ANY of:
+      - reads the shadow-safe VIEW (`live_paper_trades`) instead of the raw table;
+      - carries an `execution_source` predicate in the same SQL string (the
+        canonical `!= 'shadow'` / `IN ('live','backfill')` / `= 'live'` guard, or
+        the `COALESCE(execution_source, 'backfill')` form used by derived_state);
+      - carries the implicit `pnl_dollar IS NOT NULL` guard — the runner never
+        writes pnl_dollar for shadow rows (NULL), so this structurally excludes
+        them (consistency_tracker's documented form).
+
+    ALLOW-LISTED files legitimately operate on raw `paper_trades` incl. shadow:
+      - the shadow writer/universe (`regime_shadow_runner.py`,
+        `regime_shadow_universe.py`) — its writes/deletes/reads ARE on shadow rows;
+      - `db_manager.py` — DEFINES the VIEW and the table DDL;
+      - `paper_trade_logger.py`'s idempotent DELETE keyed on strategy_id (it must
+        NOT add an execution_source predicate — that would risk deleting shadow
+        rows; CORE/REGIME tier-disjointness keeps it from ever touching them).
+        Only its READS (MAX/summary) are guarded; the DELETE is exempt by being a
+        write, not a read (this check scans READS only).
+
+    Pure static AST scan — `requires_db=False` is HONEST (reads .py source only,
+    never opens gold.db). Multi-line SQL is handled natively: an f-string /
+    triple-quoted SQL literal is ONE AST node, so the FROM and its WHERE predicate
+    are examined together regardless of line breaks.
+    """
+    violations: list[str] = []
+    seen: set[tuple[str, int]] = set()  # dedup (rel, lineno) — f-strings walk twice.
+
+    # Files that legitimately read/write raw paper_trades including shadow rows.
+    allowlist = {
+        "scripts/tools/regime_shadow_runner.py",
+        "scripts/tools/regime_shadow_universe.py",
+        "trading_app/db_manager.py",
+    }
+
+    from_re = re.compile(r"\bFROM\s+paper_trades\b", re.IGNORECASE)
+    # A string is treated as SQL only if it SELECT-reads — this both kills prose
+    # false-positives ("Reads from paper_trades table" in a docstring) and scopes
+    # the check to READS. DELETE/UPDATE writes are intentionally NOT flagged: the
+    # idempotent shadow/backfill rewrites delete by strategy_id, and adding an
+    # execution_source predicate to paper_trade_logger's DELETE is the wrong move
+    # (it deletes CORE rows; shadow rows are tier-disjoint and never touched).
+    select_re = re.compile(r"\bSELECT\b", re.IGNORECASE)
+    view_re = re.compile(r"\bFROM\s+live_paper_trades\b", re.IGNORECASE)
+    # Any execution_source predicate (positive allowlist, negative exclusion, or
+    # the COALESCE form) OR the implicit pnl_dollar-NOT-NULL shadow exclusion
+    # (the runner never writes pnl_dollar for shadow rows → NULL → excluded).
+    guard_re = re.compile(r"execution_source|pnl_dollar\s+IS\s+NOT\s+NULL", re.IGNORECASE)
+
+    # Default to the real production dirs; tests may pass temp dirs to inject a
+    # known violation (integrity-guardian §7 mutation-proofing).
+    if scan_dirs is None:
+        scan_dirs = [TRADING_APP_DIR, SCRIPTS_DIR]
+    for base in scan_dirs:
+        for fpath in sorted(base.rglob("*.py")):
+            try:
+                rel = fpath.relative_to(PROJECT_ROOT).as_posix()
+            except ValueError:
+                # Temp dir outside the repo (test injection) — use the bare name.
+                rel = fpath.name
+            if rel in allowlist:
+                continue
+            try:
+                source = fpath.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if "paper_trades" not in source:
+                continue
+            try:
+                tree = ast.parse(source, filename=str(fpath))
+            except SyntaxError:
+                # A file that doesn't parse is caught by check_all_imports_resolve;
+                # don't double-report here. Fail-open for THIS check only.
+                continue
+
+            # A `JoinedStr` (f-string) contains child `Constant` nodes holding the
+            # literal chunks BETWEEN interpolations. ast.walk yields both the
+            # parent f-string AND those inner chunks; an inner chunk truncated
+            # before the `execution_source` predicate (which sits after a
+            # `{placeholders}` interpolation) would false-positive. Skip any
+            # Constant that belongs to an f-string — the parent JoinedStr is
+            # evaluated as a whole, predicate included.
+            fstring_child_constants: set[int] = set()
+            for parent in ast.walk(tree):
+                if isinstance(parent, ast.JoinedStr):
+                    for child in ast.walk(parent):
+                        if child is not parent:
+                            fstring_child_constants.add(id(child))
+
+            for node in ast.walk(tree):
+                if id(node) in fstring_child_constants:
+                    continue
+                sql = _string_literal_value(node)
+                if sql is None:
+                    continue
+                # Must be a SELECT read FROM the raw table (not prose, not a write).
+                if not (select_re.search(sql) and from_re.search(sql)):
+                    continue
+                # COMPLIANT if it reads the VIEW or carries a shadow-excluding
+                # predicate IN THE SAME SQL STRING.
+                if view_re.search(sql) or guard_re.search(sql):
+                    continue
+                line_no = getattr(node, "lineno", 0)
+                key = (rel, line_no)
+                if key in seen:
+                    continue
+                seen.add(key)
+                snippet = " ".join(sql.split())[:90]
+                violations.append(
+                    f"  {rel}:{line_no}: `FROM paper_trades` SELECT without a shadow"
+                    f"-exclusion guard. Read the `live_paper_trades` VIEW, or add an"
+                    f" `execution_source` predicate (IN ('live','backfill') / != "
+                    f"'shadow'). SQL: {snippet}"
+                )
+
+    return violations
+
+
+def _string_literal_value(node: ast.AST) -> str | None:
+    """Return a string literal's value, joining adjacent/f-string parts.
+
+    Handles plain `ast.Constant` strings, implicitly-concatenated string literals
+    (a single `ast.Constant` post-parse), and f-strings (`ast.JoinedStr` — we
+    concatenate the literal `FormattedValue`-adjacent text parts so an
+    interpolated table/view name like `{LIVE_PAPER_TRADES_VIEW}` does not blind
+    the scan to the surrounding `FROM paper_trades ... WHERE execution_source`).
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        parts: list[str] = []
+        for value in node.values:
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                parts.append(value.value)
+            else:
+                # Interpolated expression — emit a space placeholder so adjacent
+                # literal text (and any execution_source predicate) is preserved.
+                parts.append(" ")
+        return "".join(parts)
+    return None
 
 
 # Each entry: (description, callable, is_advisory).
@@ -14934,6 +15717,12 @@ CHECKS = [
         True,
     ),  # ADVISORY, requires_db
     (
+        "Active prop profiles carry a current+passing survival proof (Row 05)",
+        check_active_profiles_survival_state_current,
+        True,
+        True,
+    ),  # ADVISORY, requires_db
+    (
         "Variant selection ORDER BY must use expectancy_r (not sharpe_ratio)",
         check_variant_selection_metric,
         False,
@@ -15271,6 +16060,12 @@ CHECKS = [
         False,
     ),
     (
+        "Stale-work radar stays wired into project pulse (deep)",
+        check_stale_work_radar_wired_into_pulse,
+        False,
+        False,
+    ),
+    (
         "DEPLOYABLE_ORB_INSTRUMENTS is a strict subset of ACTIVE_ORB_INSTRUMENTS",
         check_deployable_subset_of_active,
         False,
@@ -15440,6 +16235,12 @@ CHECKS = [
         False,
     ),
     (
+        "lane_allocation risk_cap_pts honesty invariant (0 < risk_cap_pts <= p90_orb_pts)",
+        check_lane_allocation_risk_cap_honesty,
+        False,  # blocking — capital-class: malformed cap mis-sizes live risk
+        False,
+    ),
+    (
         "No direct lane_allocation.json literals in allocation-consuming source roots outside resolver allowlist (Stage 1b/1c authority inversion)",
         check_no_direct_lane_allocation_json_literals,
         False,  # blocking — forcing function for Stage 1b reader migration + Stage 1d delete-only
@@ -15461,6 +16262,12 @@ CHECKS = [
         "intent-router.py routing table matches auto-skill-routing.md documented skills",
         check_intent_router_routing_parity,
         False,  # blocking — silent drift between hook + rule = unreachable routes
+        False,
+    ),
+    (
+        "decision-governor doc/template/composer exist, pointers resolve, routing surface threshold-free",
+        check_decision_governor_pointers_resolve,
+        False,  # blocking — a router with a dead pointer or a re-encoded threshold lies about its gates
         False,
     ),
     (
@@ -15626,6 +16433,12 @@ CHECKS = [
         False,
     ),
     (
+        "paper_trades reads exclude shadow rows (VIEW or execution_source guard)",
+        check_paper_trades_reads_are_shadow_safe,
+        False,  # blocking — an unguarded read leaks REGIME shadow rows into live/monitoring aggregates
+        False,  # pure static AST scan of .py source — never opens gold.db
+    ),
+    (
         "Canary contamination suite green (every guard catches its trap)",
         check_canary_suite_green,
         False,  # blocking — a guard that stops detecting fake edge is an integrity regression
@@ -15656,12 +16469,24 @@ SLOW_CHECK_LABELS = frozenset(
     {
         "Validated_setups C4 claims reproduce from canonical orb_outcomes (MES/MGC)",
         "All imports resolve",
+        "MCP servers answer initialize (sidecar dep-rot guard)",
+        "GARCH dependency importable (`arch` package present)",
         "Generated task views preserve strict truth-class boundaries",
         "ENTRY_MODELS sync",
+        "Doc hygiene contracts (stamps, design-only, generated markers)",
+        "Active research code uses pipeline.paths for DB selection",
+        "Active micro-only filters first trade on/after micro launch",
+        "Active native trade-window provenance matches canonical recomputation",
+        "Pre-reg hypothesis files pass Bailey 2013 MinBTL K-budget gate",
+        "Chordia result MD threshold matches prereg chordia_threshold_basis (theory_citation field-presence trap)",
+        "DSR reference-universe lock declared (Criterion 5 Amendment 3.5: criterion_5 block complete when claiming DSR-clearance)",
+        "Amendment 3.4 PROVISIONAL gate (no new mechanism-class-transfer theory_grant until re-audit closes)",
         "Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)",
+        "Phase 4 SHA migration manifest integrity (every check_107_sha_migrations.yaml entry is evidence-grounded)",
         "Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)",
         "SQL column convention: pipeline tables use 'symbol', trading app tables use 'instrument'",
         "Timezone hygiene",
+        "HTF fields consistent across apertures for each trading_day x symbol",
         "Canonical orb_utc_window source (only pipeline/dst.py may define it)",
         "validated_setups writes stay on canonical allowlist",
         "No hardcoded scratch DB defaults in active code",
@@ -15675,6 +16500,12 @@ SLOW_CHECK_LABELS = frozenset(
         "No old fixed-clock session names in Python source",
         "Trading app schema-query consistency",
         "No CRLF in tracked text blobs (defense-in-depth for pre-commit [0b] auto-renormalize)",
+        "lane_allocation.json lanes[] must pass Chordia gate (verdict + audit freshness)",
+        "FAST_LANE PROMOTE queue: no orphan PROMOTEs, no ERROR entries, cache up to date",
+        "AM3.3 audit-log/prereg theory_grant parity: chordia_audit_log.yaml theory_grants must match active prereg metadata.theory_grant (Check #162)",
+        "Fast-lane status roll-up reconstruction parity: docs/runtime/fast_lane_status.yaml must match a fresh scripts/tools/fast_lane_status.py build (Stage 2A.2 connective-tissue)",
+        "Tests forbid canonical production runtime-path literals (ALERT-CONTAM-N2, ralph iter 203)",
+        "Canary contamination suite green (every guard catches its trap)",
         # CRG D1/D2/D3/D5 exceed 0.3s — measured 2026-04-29: D1=0.98s, D2=1.20s,
         # D3=0.49s, D5=9.76s. D2/D3 are AST-only (no graph DB traversal) but the
         # tree-walks over research/ and tests/ still cross the threshold. D4
@@ -15760,6 +16591,49 @@ def _assert_crg_advisory_labels_valid() -> None:
 _assert_crg_advisory_labels_valid()
 
 
+def _assert_check_dep_dicts_valid() -> None:
+    """Fail closed if CHECK_DEPS / CHECK_TREE_DEPS drift from the dispatch contract.
+
+    Three invariants the main-loop cache dispatch and the cold-recheck rely on:
+      1. Mutual exclusivity — a label in BOTH dicts would race on the same on-disk
+         cache file (``_safe_name`` hashes only the label), so the two key formats
+         could cross-serve a PASS. The dispatch fails such a label closed, but it is
+         a config error that must surface at import, not silently disable a cache.
+      2. Every label exists in CHECKS (rename/typo catch — same class as
+         ``_assert_slow_labels_valid``). A dep set keyed on a dead label caches
+         nothing and silently rots.
+      3. Every cache-eligible label is NON-db. The cache never hashes DB content, so
+         a ``requires_db`` check must never be cache-eligible (the cold-recheck
+         already refuses to verify such a hit; this stops it one layer earlier).
+    """
+    overlap = set(CHECK_DEPS) & set(CHECK_TREE_DEPS)
+    if overlap:
+        raise RuntimeError(
+            f"label(s) declared in BOTH CHECK_DEPS and CHECK_TREE_DEPS: {sorted(overlap)}. "
+            "A label may be cache-eligible via at most one dep dict (they share the "
+            "on-disk cache file keyed by label)."
+        )
+    by_label = {label: requires_db for label, _fn, _adv, requires_db in CHECKS}
+    for dict_name, dep_dict in (("CHECK_DEPS", CHECK_DEPS), ("CHECK_TREE_DEPS", CHECK_TREE_DEPS)):
+        stale = dep_dict.keys() - by_label.keys()
+        if stale:
+            raise RuntimeError(
+                f"{dict_name} references label(s) not present in CHECKS: {sorted(stale)}. "
+                "A check was renamed/removed without updating its dep declaration, or "
+                "the label string has a typo (the cache would silently never fire)."
+            )
+        db_backed = sorted(lbl for lbl in dep_dict if by_label[lbl])
+        if db_backed:
+            raise RuntimeError(
+                f"{dict_name} includes requires_db check(s): {db_backed}. DB content is "
+                "not hashed by the content-hash cache, so a DB check must never be "
+                "cache-eligible (a stale PASS would not be caught by the dep digest)."
+            )
+
+
+_assert_check_dep_dicts_valid()
+
+
 def main():
     import argparse
 
@@ -15793,10 +16667,21 @@ def main():
             "semantics unchanged."
         ),
     )
+    parser.add_argument(
+        "--skip-advisory",
+        action="store_true",
+        help=(
+            "Skip every advisory drift check. Used by pre-commit to keep the commit "
+            "path focused on blocking integrity gates. Full drift remains the default "
+            "manual/CI path, and this flag never skips a blocking check because it is "
+            "keyed only on each CHECKS entry's is_advisory flag."
+        ),
+    )
     args = parser.parse_args()
     fast_mode = args.fast
     quiet_mode = args.quiet
     skip_crg_advisory = args.skip_crg_advisory
+    skip_advisory = args.skip_advisory
 
     if not quiet_mode:
         print("=" * 60)
@@ -15826,6 +16711,7 @@ def main():
 
     fast_skipped = 0  # tracks --fast skips separately from DB-unavailable skips
     crg_skipped = 0  # tracks --skip-crg-advisory skips (commit drift gate)
+    advisory_skipped = 0  # tracks --skip-advisory skips (commit drift gate)
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         if fast_mode and label in SLOW_CHECK_LABELS:
             fast_skipped += 1
@@ -15835,6 +16721,13 @@ def main():
             if not quiet_mode:
                 print(f"Check {i}: {label}...")
                 print("  SKIPPED (--skip-crg-advisory; advisory, runs in CI)")
+                print()
+            continue
+        if skip_advisory and is_advisory:
+            advisory_skipped += 1
+            if not quiet_mode:
+                print(f"Check {i}: {label}...")
+                print("  SKIPPED (--skip-advisory; advisory, runs in full drift/CI)")
                 print()
             continue
         if not quiet_mode:
@@ -15866,19 +16759,37 @@ def main():
                 v = [f"  EXCEPTION: {type(e).__name__}: {e}"]
         else:
             # Content-hash cache: only labels with a declared dep set in
-            # CHECK_DEPS are eligible. A cache hit returns a PASS (empty
-            # violations) without re-running. Any miss / disabled cache / error
-            # falls through to the real check (fail-closed). Never used for
-            # requires_db checks — DB-content inputs are not hashed here.
+            # CHECK_DEPS (fixed file list) or CHECK_TREE_DEPS (whole globbed
+            # trees) are eligible. A cache hit returns a PASS (empty violations)
+            # without re-running. Any miss / disabled cache / error falls through
+            # to the real check (fail-closed). Never used for requires_db checks —
+            # DB-content inputs are not hashed here.
             deps = CHECK_DEPS.get(label)
-            cache_key = _drift_cache.cache_key(label, deps) if deps else None
-            if deps is not None and _drift_cache.read_pass(label, cache_key):
+            tree_spec = CHECK_TREE_DEPS.get(label)
+            if deps is not None and tree_spec is not None:
+                # A label in both dicts is a configuration error — the two keys
+                # would race on the same on-disk cache file. Fail closed (no
+                # cache) rather than trust an ambiguous declaration.
+                cache_key = None
+                cacheable = False
+            elif tree_spec is not None:
+                cache_key = _drift_cache.tree_cache_key(
+                    label, tree_spec.get("file_deps", []), tree_spec.get("tree_deps", [])
+                )
+                cacheable = True
+            elif deps is not None:
+                cache_key = _drift_cache.cache_key(label, deps)
+                cacheable = True
+            else:
+                cache_key = None
+                cacheable = False
+            if cacheable and _drift_cache.read_pass(label, cache_key):
                 _CACHE_HITS_THIS_RUN.append(label)
                 v = []
             else:
                 with suppress_ctx:
                     v = check_fn()
-                if deps is not None:
+                if cacheable:
                     # Only PASS is persisted; write_pass no-ops on FAIL.
                     _drift_cache.write_pass(label, cache_key, v)
 
@@ -15914,9 +16825,10 @@ def main():
     # Summary — blocking_count tracks actual passes (not computed from total)
     fast_part = f", {fast_skipped} skipped (--fast)" if fast_skipped else ""
     crg_part = f", {crg_skipped} skipped (--skip-crg-advisory)" if crg_skipped else ""
+    advisory_part = f", {advisory_skipped} skipped (--skip-advisory)" if advisory_skipped else ""
     summary_line = (
         f"{blocking_count} checks passed [OK], "
-        f"{skip_count} skipped (DB unavailable){fast_part}{crg_part}, "
+        f"{skip_count} skipped (DB unavailable){fast_part}{crg_part}{advisory_part}, "
         f"{advisory_count} advisory"
     )
     if all_violations:

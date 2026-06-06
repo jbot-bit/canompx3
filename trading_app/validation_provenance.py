@@ -60,6 +60,7 @@ class StrategyTradeWindowResolver:
         self._features_cache: dict[tuple[str, int], list[dict]] = {}
         self._filter_day_cache: dict[tuple[str, int, str, str], set[date]] = {}
         self._outcomes_cache: dict[tuple[str, int, str, str, date | None], dict] = {}
+        self._relative_volume_cache: set[tuple[str, int, str, int]] = set()
 
     def _get_features(self, instrument: str, orb_minutes: int) -> list[dict]:
         key = (instrument, orb_minutes)
@@ -88,13 +89,17 @@ class StrategyTradeWindowResolver:
         features = self._get_features(instrument, orb_minutes)
 
         if _contains_filter_type(filter_obj, VolumeFilter):
-            _compute_relative_volumes(
-                self.con,
-                features,
-                instrument,
-                [orb_label],
-                {filter_type: filter_obj},
-            )
+            lookback_days = getattr(filter_obj, "lookback_days", 0)
+            volume_key = (instrument, orb_minutes, orb_label, lookback_days)
+            if volume_key not in self._relative_volume_cache:
+                _compute_relative_volumes(
+                    self.con,
+                    features,
+                    instrument,
+                    [orb_label],
+                    {filter_type: filter_obj},
+                )
+                self._relative_volume_cache.add(volume_key)
 
         if _contains_filter_type(filter_obj, CrossAssetATRFilter):
             _inject_cross_asset_atrs(

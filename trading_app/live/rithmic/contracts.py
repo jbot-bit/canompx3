@@ -51,6 +51,17 @@ class RithmicContracts(BrokerContracts):
         accounts = self.auth.client.accounts
         if not accounts:
             raise RuntimeError("No Rithmic accounts found after login")
+        if len(accounts) > 1:
+            # Defense-in-depth (Capital review A, 2026-06-06): silently taking
+            # accounts[0] when several accounts are logged in (Bulenox allows up
+            # to 3 Master accounts) could route LIVE orders to the wrong account.
+            # Fail loud; operator must bind explicitly via --account-id. The
+            # live-arm preflight gate (_check_account_binding) already blocks this.
+            names = ", ".join(str(getattr(a, "account_id", "?")) for a in accounts)
+            raise RuntimeError(
+                f"Rithmic: {len(accounts)} accounts logged in — ambiguous. "
+                f"Pass --account-id to bind explicitly. Accounts: {names}"
+            )
 
         acct = accounts[0]
         acct_id = acct.account_id

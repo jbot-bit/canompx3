@@ -1,0 +1,155 @@
+metadata:
+  name: c11-cap-x080-remediation-v1
+  created_by: Claude Code
+  date_locked: "2026-06-05T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  # C11 analysis commit (canonical loader baseline), NOT the Stage-1 audit commit.
+  base_commit_sha: "9429c540"
+  research_question_type: conditional_role
+  theory_grant: false
+  testing_mode: family
+  total_expected_trials: 2
+  # Self-describing instrument/aperture binding (front-door + Bailey instrument bound).
+  instruments: ["MNQ"]
+  orb_minutes: [5, 15]              # COMEX_SETTLE/TOKYO_OPEN=5, US_DATA_1000=15
+  bailey_compliance: >
+    K=2 (cap_x0.80 primary + cap_x0.75 robustness sibling). MinBTL gate PASS:
+    scripts/tools/estimate_k_budget.py --instrument MNQ --n-trials 2 -> N_max=27
+    strict Bailey @ E=1.0, operational cap N<=300; K=2 requires 1.39yr of a
+    6.65yr clean horizon (5.26yr headroom). Far below the binding MinBTL bound;
+    two deterministic configurations, no brute-force search (>300-trial ban
+    n/a). research-catalog MCP was disconnected this session; K computed via the
+    local estimator (authority: pre_registered_criteria.md Criterion 2).
+  notes: >
+    C11 remediation for topstep_50k_mnq_auto. The uncapped strict 90-day
+    max-drawdown is $2,038.84 (canonical loader @ 9429c540) against the $1,800
+    Express budget (0.90 x $2,000 MLL express fraction). This pre-registers a
+    per-lane ORB-size cap at 0.80x the current per-lane cap as a TAIL-RISK
+    TRUNCATION (NOT an earnings cap — honors
+    .claude/rules/self-funded-sizing-doctrine.md; this is a prop/funded account,
+    cap binds risk not earnings). It is a remediation of an existing book shape,
+    not a new alpha search. Throttle forms were previously KILLed; the cap is the
+    surviving fix (see decision-ledger / project memory). The cap-enforcement
+    path already exists in session_orchestrator.py (self._orb_caps); Stage 3 only
+    populates the cap VALUE — out of scope for this prereg.
+
+# Deferred-authoring contract (Drift Check 46 § 2357-2364): this prereg LOCKS the
+# cap value + acceptance gates BEFORE the B2 runner is written (RULE 10 anti-tune-to-pass).
+# allowed_now=false marks execution.entrypoint as a forward reference, not yet
+# load-bearing; path-existence enforcement resumes when this flips to true (Stage 3+).
+execution_gate:
+  allowed_now: false
+  reason: >
+    B1 prereg lock only. The B2 runner research/c11_cap_x080_remediation_v1.py is
+    intentionally pending — it must not exist before the gates are locked, or the
+    cap could be tuned to pass. Flip allowed_now=true when authoring the runner.
+
+execution:
+  # Read-only canonical-loader harness (parity by construction); no production
+  # mutation. The lane caps below are SOURCE-TRACED from the canonical loader
+  # get_profile_lane_definitions('topstep_50k_mnq_auto'), NOT from
+  # lane_allocation.json (source-trace rule).
+  entrypoint: research/c11_cap_x080_remediation_v1.py
+  canonical_inputs:
+    - orb_outcomes
+    - daily_features
+    - trading_app.prop_profiles.get_profile_lane_definitions
+    - trading_app.account_survival
+  output_paths:
+    - docs/audit/results/2026-06-05-c11-cap-x080-remediation-v1.md
+    - docs/audit/results/2026-06-05-c11-cap-x080-remediation-v1-candidates.csv
+
+baseline:
+  # Uncapped strict 90-day max-drawdown from the canonical loader. NOT from memory.
+  uncapped_max_90d_dd_dollars: 2038.84
+  baseline_commit_sha: "9429c540"
+  express_budget_dollars: 1800.0          # 0.90 x $2,000 MLL express fraction
+  source: trading_app.account_survival (evaluate_profile_survival, write_state=False)
+
+hypotheses:
+  - id: H1
+    role:
+      kind: execution
+      parent: topstep_50k_mnq_auto
+      comparator: UNCAPPED_THREE_LANE_BOOK_AT_ONE_MICRO_PER_LANE
+      primary_metric: strict_90d_max_drawdown_dollars
+      promotion_target: NONE_RESEARCH_ONLY
+    statement: >
+      A per-lane ORB-size cap at 0.80x each lane's CURRENT cap reduces the strict
+      90-day max-drawdown below the $1,800 Express budget while retaining >= 85%
+      of the uncapped $2,038.84 edge. Tail-risk truncation, not an earnings cap.
+    scope:
+      # Front-door instrument/aperture binding (prereg_front_door _collect_scope_values).
+      # Multi-aperture book: cap is applied per-lane across both apertures in one
+      # canonical-loader run — the front-door 'execute once per slice' note is
+      # expected and benign (this is a single book-level survival re-run, not a
+      # per-slice search).
+      instruments: ["MNQ"]
+      orb_minutes: [5, 15]
+    # Per-lane caps SOURCE-TRACED from get_profile_lane_definitions @ 9429c540.
+    # EACH lane verified independently (do not assume one ratio).
+    per_lane_caps:
+      - lane_name: COMEX_SETTLE_OVNRNG_100
+        strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
+        orb_label: COMEX_SETTLE
+        orb_minutes: 5
+        current_cap_pts: 49.8
+        cap_x0_80_pts: 39.84
+        cap_x0_75_pts: 37.35
+      - lane_name: US_DATA_1000_VWAP_MID_ALI
+        strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15
+        orb_label: US_DATA_1000
+        orb_minutes: 15
+        current_cap_pts: 143.2
+        cap_x0_80_pts: 114.56
+        cap_x0_75_pts: 107.40
+      - lane_name: TOKYO_OPEN_COST_LT08
+        strategy_id: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08
+        orb_label: TOKYO_OPEN
+        orb_minutes: 5
+        current_cap_pts: 44.2
+        cap_x0_80_pts: 35.36
+        cap_x0_75_pts: 33.15
+    overlays:
+      - CAP_X0_80          # primary remediation
+      - CAP_X0_75          # robustness sibling (K=2)
+    expected_trial_count: 2
+    theory_grounding: >
+      docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+      — risk-first sizing; capping the per-lane ORB size truncates the negative-EV
+      fat tail (the 2022 regime-grind binding year) without throttling earnings.
+    selection_rule: >
+      Apply each cap to every lane via the canonical loader (parity by
+      construction), recompute strict 90-day max-drawdown and op-survival, and
+      report PER CAP. The cap is accepted only if ALL acceptance_gates below pass.
+    verdict_policy:
+      continue: forbidden_from_this_stage
+      narrow: cap clears the budget and retains the edge floor -> research-only remediation candidate; live wiring is a SEPARATE Tier-B stage
+      kill: cap fails the budget, breaches the belt, or drops edge below 85%
+
+# LOCKED BEFORE ANY SURVIVAL RE-RUN (anti-tune-to-pass). Do not edit after lock.
+acceptance_gates:
+  op_survival_min_pct: 70.0
+  strict_90d_max_dd_max_dollars: 1800.0
+  breach_days_max: 0
+  edge_retained_min_frac_of_uncapped: 0.85    # of the $2,038.84 uncapped edge
+  robustness:
+    walk_forward_eras: required           # cap must clear across WF eras, not one fit
+    deflated_sharpe_check: required       # Bailey-Lopez de Prado DSR on the capped book
+
+controls:
+  frozen_monitoring_window: "2026-01-01+"
+  no_2026_tuning: true
+  no_live_deployment: true
+  # Data sources: canonical loader + canonical layers ONLY. Never lane_allocation.json
+  # for truth (source-trace rule).
+  data_sources:
+    - trading_app.prop_profiles.get_profile_lane_definitions
+    - orb_outcomes
+    - daily_features
+  scratch_policy: coalesce pnl_r, ts_pnl_r, then zero; never drop pnl NULL rows silently
+  doctrine:
+    earnings_cap_disclaimer: >
+      This cap is a margin/tail-risk guard, NOT a prop-style earnings ceiling.
+      Honors .claude/rules/self-funded-sizing-doctrine.md (binding for any future
+      self_funded profile; this is a funded/prop account where the cap binds risk).

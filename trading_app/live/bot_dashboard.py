@@ -1761,6 +1761,10 @@ async def api_trade_book():
                 # returned > N → truncated). Only when truncated do we run
                 # the second COUNT(*) for the exact total. Untruncated path
                 # stays single-query.
+                # execution_source='shadow' rows are forward-monitoring evidence
+                # (REGIME-tier would-have trades), not taken trades — exclude them
+                # from the live trade list and its total so the dashboard reflects
+                # only live/backfill execution.
                 rows = con.execute(
                     f"""
                     SELECT trading_day, instrument, strategy_id, lane_name, direction,
@@ -1769,6 +1773,7 @@ async def api_trade_book():
                            pnl_r, pnl_dollar, slippage_ticks, exit_reason,
                            execution_source
                     FROM paper_trades
+                    WHERE execution_source != 'shadow'
                     ORDER BY trading_day DESC, entry_time DESC
                     LIMIT {PAPER_TRADES_LIMIT + 1}
                     """
@@ -1776,7 +1781,9 @@ async def api_trade_book():
                 if len(rows) > PAPER_TRADES_LIMIT:
                     paper_truncated = True
                     rows = rows[:PAPER_TRADES_LIMIT]
-                    count_row = con.execute("SELECT COUNT(*) FROM paper_trades").fetchone()
+                    count_row = con.execute(
+                        "SELECT COUNT(*) FROM paper_trades WHERE execution_source != 'shadow'"
+                    ).fetchone()
                     paper_total_count = int(count_row[0]) if count_row else len(rows)
                 else:
                     paper_total_count = len(rows)

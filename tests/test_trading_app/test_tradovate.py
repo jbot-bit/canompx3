@@ -382,19 +382,35 @@ class TestTradovateContracts:
             TradovateContracts(auth=auth)
 
     @patch("trading_app.live.tradovate.contracts.request_with_retry")
-    def test_resolve_account_id(self, mock_req, mock_auth):
+    def test_resolve_account_id_single_active_returns_it(self, mock_req, mock_auth):
+        # Exactly one ACTIVE account (an inactive one is filtered out) → unambiguous.
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
         mock_resp.json.return_value = [
             {"id": 100, "name": "ACCT1", "active": True},
             {"id": 200, "name": "ACCT2", "active": False},
-            {"id": 300, "name": "ACCT3", "active": True},
         ]
         mock_req.return_value = mock_resp
 
         contracts = TradovateContracts(auth=mock_auth)
         account_id = contracts.resolve_account_id()
         assert account_id == 100
+
+    @patch("trading_app.live.tradovate.contracts.request_with_retry")
+    def test_resolve_account_id_multiple_active_raises_ambiguous(self, mock_req, mock_auth):
+        # Capital review A defense-in-depth: >1 ACTIVE account must fail closed,
+        # never silently take accounts[0].
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [
+            {"id": 100, "name": "ACCT1", "active": True},
+            {"id": 300, "name": "ACCT3", "active": True},
+        ]
+        mock_req.return_value = mock_resp
+
+        contracts = TradovateContracts(auth=mock_auth)
+        with pytest.raises(RuntimeError, match="ambiguous"):
+            contracts.resolve_account_id()
 
     @patch("trading_app.live.tradovate.contracts.request_with_retry")
     def test_resolve_all_accounts(self, mock_req, mock_auth):

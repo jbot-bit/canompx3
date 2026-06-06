@@ -49,6 +49,19 @@ class ProjectXContracts(BrokerContracts):
         accounts = data if isinstance(data, list) else data.get("accounts", [])
         if not accounts:
             raise RuntimeError("No active ProjectX accounts found")
+        if len(accounts) > 1:
+            # Defense-in-depth (Capital review A, 2026-06-06): silently taking
+            # accounts[0] when the broker exposes several active accounts could
+            # route LIVE orders to a different account than the one the
+            # Criterion-11 survival proof was computed for. Fail loud instead;
+            # the operator must bind explicitly via --account-id. The live-arm
+            # preflight gate (_check_account_binding) already blocks this, so this
+            # is a redundant inner guard for any caller that bypasses preflight.
+            names = ", ".join(f"{a.get('name', '?')}(id={a.get('id', a.get('accountId', '?'))})" for a in accounts)
+            raise RuntimeError(
+                f"ProjectX: {len(accounts)} active accounts — ambiguous. "
+                f"Pass --account-id to bind explicitly. Accounts: {names}"
+            )
         acct = accounts[0]
         acct_id = acct.get("id")
         if acct_id is None:

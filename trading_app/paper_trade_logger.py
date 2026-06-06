@@ -240,7 +240,7 @@ def backfill(
             since = None
             if sync:
                 row = con.execute(
-                    "SELECT MAX(trading_day) FROM paper_trades WHERE strategy_id = ?",
+                    "SELECT MAX(trading_day) FROM paper_trades WHERE strategy_id = ? AND execution_source != 'shadow'",
                     [lane.strategy_id],
                 ).fetchone()
                 if row and row[0] is not None:
@@ -255,14 +255,20 @@ def backfill(
 
             # Idempotent DELETE before filter check (ensures stale rows are cleared
             # even if the filter_type becomes unknown — audit finding #11)
+            # execution_source != 'shadow' guards REGIME shadow rows: this logger
+            # owns CORE (deploy-lane) rows only. Without it, a strategy promoted
+            # REGIME->CORE while still in the shadow universe YAML would have its
+            # shadow rows deleted on resync (shared strategy_id). Matches the read
+            # predicates at _query_outcomes MAX() and the post-sync summary.
             if sync and since is not None:
                 con.execute(
-                    "DELETE FROM paper_trades WHERE strategy_id = ? AND trading_day >= ?",
+                    "DELETE FROM paper_trades WHERE strategy_id = ? AND trading_day >= ? "
+                    "AND execution_source != 'shadow'",
                     [lane.strategy_id, since],
                 )
             elif not sync:
                 con.execute(
-                    "DELETE FROM paper_trades WHERE strategy_id = ?",
+                    "DELETE FROM paper_trades WHERE strategy_id = ? AND execution_source != 'shadow'",
                     [lane.strategy_id],
                 )
 
@@ -365,6 +371,7 @@ def backfill(
                 SELECT COUNT(*), COALESCE(SUM(pnl_r), 0),
                        MIN(trading_day), MAX(trading_day)
                 FROM paper_trades WHERE strategy_id = ?
+                  AND execution_source != 'shadow'
                 """,
                 [lane.strategy_id],
             ).fetchone()

@@ -3,9 +3,11 @@
 Pipeline health check — quick CLI that checks everything at once.
 
 Usage:
-    python pipeline/health_check.py
+    python -m pipeline.health_check
+    python -m pipeline.health_check --quick
 """
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -271,29 +273,39 @@ def check_m25_audit() -> tuple[bool, str]:
 def main():
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    parser = argparse.ArgumentParser(description="Run canompx3 pipeline health checks")
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Run only bounded local health checks; default still runs drift, integrity, and tests.",
+    )
+    args = parser.parse_args()
+
     print("=" * 50)
     print("PIPELINE HEALTH CHECK")
     print("=" * 50)
+    if args.quick:
+        print("Mode: QUICK (local health checks only; full health remains the default)")
     print()
 
     # Phase 1: Fast local checks (sequential, <1s total)
-    fast_checks = [
-        check_python_deps,
-        check_database,
-        check_dbn_files,
-        check_staleness,
-        check_git_hooks,
-    ]
+    if args.quick:
+        fast_checks = [check_python_deps, check_database, check_git_hooks]
+    else:
+        fast_checks = [
+            check_python_deps,
+            check_database,
+            check_dbn_files,
+            check_staleness,
+            check_git_hooks,
+        ]
 
     # Phase 2: Slow subprocess checks that can safely run in parallel.
     # The full pytest leg is intentionally excluded here: running the entire
     # suite alongside drift / integrity / M2.5 subprocesses creates enough
     # shared-resource contention to manufacture false failures.
-    parallel_slow_checks = [
-        check_drift,
-        check_m25_audit,
-    ]
-    serial_slow_checks = [check_integrity, check_tests]
+    parallel_slow_checks = [] if args.quick else [check_drift, check_m25_audit]
+    serial_slow_checks = [] if args.quick else [check_integrity, check_tests]
 
     all_ok = True
 
@@ -305,38 +317,40 @@ def main():
         if not ok:
             all_ok = False
 
-    # Run slow checks in parallel (ThreadPoolExecutor — correct for subprocess waits)
-    # Per Python docs: ThreadPoolExecutor for I/O-bound/subprocess waiting
-    # Per DuckDB docs: multiple read-only processes can access same DB file
-    print()
-    print("  Running slow checks in parallel...")
-    results = {}
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(check): check.__name__ for check in parallel_slow_checks}
-        for future in as_completed(futures):
-            name = futures[future]
-            try:
-                ok, msg = future.result()
-            except Exception as e:
-                ok, msg = False, f"{name}: {type(e).__name__}: {e}"
-            results[name] = (ok, msg)
+    if parallel_slow_checks:
+        # Run slow checks in parallel (ThreadPoolExecutor — correct for subprocess waits)
+        # Per Python docs: ThreadPoolExecutor for I/O-bound/subprocess waiting
+        # Per DuckDB docs: multiple read-only processes can access same DB file
+        print()
+        print("  Running slow checks in parallel...")
+        results = {}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {pool.submit(check): check.__name__ for check in parallel_slow_checks}
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    ok, msg = future.result()
+                except Exception as e:
+                    ok, msg = False, f"{name}: {type(e).__name__}: {e}"
+                results[name] = (ok, msg)
 
-    # Print slow check results (deterministic order, not completion order)
-    for check in parallel_slow_checks:
-        ok, msg = results[check.__name__]
-        status = "[OK]" if ok else "[FAIL]"
-        print(f"  {status} {msg}")
-        if not ok:
-            all_ok = False
+        # Print slow check results (deterministic order, not completion order)
+        for check in parallel_slow_checks:
+            ok, msg = results[check.__name__]
+            status = "[OK]" if ok else "[FAIL]"
+            print(f"  {status} {msg}")
+            if not ok:
+                all_ok = False
 
-    print()
-    print("  Running serial slow checks...")
-    for check in serial_slow_checks:
-        ok, msg = check()
-        status = "[OK]" if ok else "[FAIL]"
-        print(f"  {status} {msg}")
-        if not ok:
-            all_ok = False
+    if serial_slow_checks:
+        print()
+        print("  Running serial slow checks...")
+        for check in serial_slow_checks:
+            ok, msg = check()
+            status = "[OK]" if ok else "[FAIL]"
+            print(f"  {status} {msg}")
+            if not ok:
+                all_ok = False
 
     print()
     if all_ok:

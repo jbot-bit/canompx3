@@ -1156,29 +1156,157 @@ class TestKillSwitch:
         # Position still active (couldn't flatten)
         assert len(orch._positions.active_positions()) == 1
 
-    async def test_feed_dead_no_event_loop_alerts_operator(self):
-        """Feed dead + open position + no event loop → _notify fires (not log-only).
+    async def test_emergency_flatten_no_fill_stays_pending_exit(self):
+        """Row 09 Gap 2 guard: kill-switch flatten whose submit is ACCEPTED but
+        returns no fill_price must NOT be marked FLAT — it stays PENDING_EXIT so
+        the EOD broker-truth re-query reconciles it. Marking FLAT on a bare ack
+        is the submit-before-fill lie.
+        """
+        # Broker accepts the order (returns order_id) but reports no fill.
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=None))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
 
-        The one flatten path that fails silently: _on_feed_stale runs from a
-        sync/post_session context (no running loop), so create_task raises
-        RuntimeError and the flatten cannot be scheduled. The operator MUST be
-        alerted via _notify, not just the log, because this fires with a position
-        open + feed dead — the worst moment to be invisible.
+        await orch._emergency_flatten()
+
+        # Submit was accepted, but with no fill confirmation the position must
+        # remain non-FLAT (PENDING_EXIT), still visible to active_positions().
+        active = orch._positions.active_positions()
+        assert len(active) == 1, f"no-fill flatten must stay active (PENDING_EXIT), got {active}"
+        assert active[0].state == PositionState.PENDING_EXIT
+
+    async def test_feed_dead_no_event_loop_executes_flatten(self):
+        """Feed dead + open position + no event loop → flatten EXECUTES (not dropped).
+
+        Row 09 Gap 3 fix: _on_feed_stale may run from a sync/post_session context
+        (no running loop), so loop.create_task() raises RuntimeError. Previously
+        the flatten was SKIPPED entirely (log+notify only) — a silent-exposure
+        window with a position open + feed dead. The fix runs the flatten
+        synchronously via asyncio.run() so the position is actually closed.
         """
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
         orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
         orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
         orch._notify = MagicMock()
 
-        # Force the no-running-loop branch: get_running_loop raises RuntimeError,
-        # exactly as it would when _on_feed_stale is reached outside the loop.
-        with patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")):
+        # Faithfully model the post_session no-loop context. In production there
+        # is no running loop, so: get_running_loop() raises (→ except branch),
+        # and asyncio.run() succeeds. pytest-asyncio runs THIS test inside a loop,
+        # so we must simulate both: patch get_running_loop to raise, and route
+        # asyncio.run() through a real fresh loop (what it does for real off-loop).
+        def _run_in_fresh_loop(coro):
+            # Run in a worker THREAD with its own loop. pytest-asyncio holds a
+            # running loop in the test thread, so asyncio.run()/run_until_complete
+            # would reject here; a separate thread faithfully models the real
+            # post_session no-loop context where asyncio.run() simply works.
+            import threading
+
+            box: dict = {}
+
+            def _worker():
+                new_loop = asyncio.new_event_loop()
+                try:
+                    box["result"] = new_loop.run_until_complete(coro)
+                except BaseException as exc:  # noqa: BLE001 — propagate to caller
+                    box["error"] = exc
+                finally:
+                    new_loop.close()
+
+            t = threading.Thread(target=_worker)
+            t.start()
+            t.join()
+            if "error" in box:
+                raise box["error"]
+            return box.get("result")
+
+        # Raise ONLY for the _on_feed_stale decision check (first call), then
+        # delegate to the real get_running_loop so _emergency_flatten's own
+        # internal get_running_loop() (inside the worker thread's real loop)
+        # still works. A blanket raise would poison the flatten itself.
+        _real_get_running_loop = asyncio.get_running_loop
+
+        def _raise_once_then_real():
+            if not getattr(_raise_once_then_real, "_fired", False):
+                _raise_once_then_real._fired = True
+                raise RuntimeError("no loop")
+            return _real_get_running_loop()
+
+        with (
+            patch("asyncio.get_running_loop", side_effect=_raise_once_then_real),
+            patch("trading_app.live.session_orchestrator.asyncio.run", side_effect=_run_in_fresh_loop),
+        ):
             orch._on_feed_stale(gap_seconds=600.0, stale_count=-1)
 
-        # Kill switch fired and operator was alerted on the silent path.
+        # Kill switch fired AND the flatten actually executed (position closed),
+        # rather than being silently dropped with only an alert.
         assert orch._kill_switch_fired is True
+        assert orch._positions.active_positions() == [], (
+            "no-loop path must EXECUTE the flatten, not drop it; "
+            f"positions still open={orch._positions.active_positions()}"
+        )
+
+    async def test_feed_dead_no_loop_flatten_failure_alerts_operator(self):
+        """Row 09 Gap 3 fallback: if the synchronous flatten itself fails, the
+        operator MUST still be alerted (MANUAL CLOSE REQUIRED) — fail-closed."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        orch._notify = MagicMock()
+        # Broker dead → the synchronous flatten exhausts retries, position stays open.
+        orch.order_router.submit = MagicMock(side_effect=ConnectionError("broker dead"))
+
+        def _run_in_fresh_loop(coro):
+            # Run in a worker THREAD with its own loop. pytest-asyncio holds a
+            # running loop in the test thread, so asyncio.run()/run_until_complete
+            # would reject here; a separate thread faithfully models the real
+            # post_session no-loop context where asyncio.run() simply works.
+            import threading
+
+            box: dict = {}
+
+            def _worker():
+                new_loop = asyncio.new_event_loop()
+                try:
+                    box["result"] = new_loop.run_until_complete(coro)
+                except BaseException as exc:  # noqa: BLE001 — propagate to caller
+                    box["error"] = exc
+                finally:
+                    new_loop.close()
+
+            t = threading.Thread(target=_worker)
+            t.start()
+            t.join()
+            if "error" in box:
+                raise box["error"]
+            return box.get("result")
+
+        # Raise ONLY for the _on_feed_stale decision check (first call), then
+        # delegate to the real get_running_loop so _emergency_flatten's own
+        # internal get_running_loop() (inside the worker thread's real loop)
+        # still works. A blanket raise would poison the flatten itself.
+        _real_get_running_loop = asyncio.get_running_loop
+
+        def _raise_once_then_real():
+            if not getattr(_raise_once_then_real, "_fired", False):
+                _raise_once_then_real._fired = True
+                raise RuntimeError("no loop")
+            return _real_get_running_loop()
+
+        with (
+            patch("asyncio.get_running_loop", side_effect=_raise_once_then_real),
+            patch("trading_app.live.session_orchestrator.asyncio.run", side_effect=_run_in_fresh_loop),
+        ):
+            orch._on_feed_stale(gap_seconds=600.0, stale_count=-1)
+
+        assert orch._kill_switch_fired is True
+        # Position still open (broker dead) AND operator was alerted. _emergency_flatten
+        # exhausts its 3 retries and logs its own MANUAL CLOSE REQUIRED (it does not
+        # re-raise), so the alert comes from the flatten's retry-exhaustion path.
+        assert len(orch._positions.active_positions()) == 1
         manual_close_alerts = [str(c) for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
-        assert manual_close_alerts, f"operator not alerted on no-loop flatten path; calls={orch._notify.call_args_list}"
+        assert manual_close_alerts, (
+            f"operator not alerted when no-loop flatten failed; calls={orch._notify.call_args_list}"
+        )
 
     async def test_watchdog_survives_internal_errors(self):
         """Watchdog doesn't die from its own errors (crash-resistant)."""
@@ -3825,6 +3953,22 @@ class FakeNonSequentialIdBracketRouter(FakeBracketRouter):
         raise RuntimeError("simulated transient verify failure (non-sequential broker)")
 
 
+class FakeMissingLegBracketRouter(FakeBracketRouter):
+    """Router whose entry fills but whose SL leg never materialises.
+
+    ``verify_bracket_legs`` returns ``(None, tp_id)`` — the broker accepted
+    the entry and created a take-profit, but the protective stop is absent.
+    This drives the missing-leg ``else`` branch (NOT the exception branch):
+    the position is live and genuinely unprotected, so the orchestrator MUST
+    treat it as a naked position (kill switch + emergency flatten), not merely
+    store the partial TP id and continue.
+    """
+
+    def verify_bracket_legs(self, order_id: int, contract_symbol: str):
+        self.verify_bracket_legs_call_count += 1
+        return (None, order_id + 2)
+
+
 class FakeAtomicBracketRouter(FakeBracketRouter):
     """Router that simulates Rithmic/Tradovate-style native atomic brackets.
 
@@ -3862,6 +4006,170 @@ class TestBracketOrders:
         record = orch._positions.get(STRATEGY_ID)
         assert record is not None
         assert record.bracket_order_ids == [100, 101]
+
+    async def test_native_bracket_merge_uses_event_risk_without_reapplying_stop_multiplier(self):
+        """event.risk_points is already the effective stop distance from execution_engine."""
+        router = FakeBracketRouter(fill_price=100.0)
+        router.build_bracket_spec = MagicMock(wraps=router.build_bracket_spec)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        strategy = replace(list(orch._strategy_map.values())[0], stop_multiplier=0.75, rr_target=2.0)
+        orch._strategy_map[strategy.strategy_id] = strategy
+        event = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=6.0,
+        )
+
+        await orch._handle_event(event)
+
+        assert len(router.submitted) == 1
+        kwargs = router.build_bracket_spec.call_args.kwargs
+        assert kwargs["stop_price"] == pytest.approx(94.0)
+        assert kwargs["target_price"] == pytest.approx(112.0)
+
+    async def test_post_fill_bracket_submit_uses_event_risk_without_reapplying_stop_multiplier(self):
+        """Separate bracket submit path must share the same risk-distance convention."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=100.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value={"type": "OCO"})
+        orch.order_router.submit = MagicMock(return_value={"order_ids": [100, 101]})
+        strategy = replace(list(orch._strategy_map.values())[0], stop_multiplier=0.75, rr_target=2.0)
+        event = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=6.0,
+        )
+
+        await orch._submit_bracket(event, strategy, 100.0)
+
+        kwargs = orch.order_router.build_bracket_spec.call_args.kwargs
+        assert kwargs["stop_price"] == pytest.approx(94.0)
+        assert kwargs["target_price"] == pytest.approx(112.0)
+
+    async def test_native_bracket_merge_applies_stop_multiplier_to_median_fallback(self):
+        """Fallback median_risk_points must become the same effective stop distance."""
+        router = FakeBracketRouter(fill_price=100.0)
+        router.build_bracket_spec = MagicMock(wraps=router.build_bracket_spec)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        strategy = replace(
+            list(orch._strategy_map.values())[0],
+            median_risk_points=8.0,
+            stop_multiplier=0.75,
+            rr_target=2.0,
+        )
+        orch._strategy_map[strategy.strategy_id] = strategy
+        event = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=None,
+        )
+
+        await orch._handle_event(event)
+
+        kwargs = router.build_bracket_spec.call_args.kwargs
+        assert kwargs["stop_price"] == pytest.approx(94.0)
+        assert kwargs["target_price"] == pytest.approx(112.0)
+
+    async def test_post_fill_bracket_submit_applies_stop_multiplier_to_median_fallback(self):
+        """Post-fill fallback path must match native merged bracket math."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=100.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value={"type": "OCO"})
+        orch.order_router.submit = MagicMock(return_value={"order_ids": [100, 101]})
+        strategy = replace(
+            list(orch._strategy_map.values())[0],
+            median_risk_points=8.0,
+            stop_multiplier=0.75,
+            rr_target=2.0,
+        )
+        event = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=None,
+        )
+
+        await orch._submit_bracket(event, strategy, 100.0)
+
+        kwargs = orch.order_router.build_bracket_spec.call_args.kwargs
+        assert kwargs["stop_price"] == pytest.approx(94.0)
+        assert kwargs["target_price"] == pytest.approx(112.0)
+
+    async def test_bracket_stop_distance_zero_event_risk_does_not_guess_median(self):
+        """A present-but-zero event.risk_points must FAIL CLOSED (return None),
+        NOT silently substitute the median fallback as a guessed bracket distance.
+
+        Stage-1 audit finding (9b3fc530): the old `if event_risk:` truthiness guard
+        let a 0.0 risk-points event fall through to `median * stop_multiplier`,
+        producing a positive guessed distance that passed the caller's `if not
+        stop_dist` fail-closed check — so a zero-risk event got a bracket at a
+        guessed price instead of an emergency flatten. The helper must distinguish
+        'risk field absent' (median fallback OK) from 'risk field present but <= 0'
+        (return None -> caller flattens).
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=100.0))
+        strategy = replace(
+            list(orch._strategy_map.values())[0],
+            median_risk_points=8.0,
+            stop_multiplier=0.75,
+        )
+
+        # Field ABSENT -> median fallback is legitimate (8.0 * 0.75 = 6.0).
+        event_absent = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=None,
+        )
+        assert orch._bracket_stop_distance(event_absent, strategy) == pytest.approx(6.0)
+
+        # Field PRESENT but zero -> must return None, NOT the 6.0 median guess.
+        event_zero = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=0.0,
+        )
+        assert orch._bracket_stop_distance(event_zero, strategy) is None
+
+        # Field PRESENT but negative -> same fail-closed behavior.
+        event_neg = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strategy.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=100.0,
+            direction="long",
+            contracts=1,
+            risk_points=-2.0,
+        )
+        assert orch._bracket_stop_distance(event_neg, strategy) is None
 
     async def test_bracket_cancelled_before_exit(self):
         """Exit signal -> bracket parent order cancelled -> exit submitted."""
@@ -3969,7 +4277,8 @@ class TestBracketOrders:
         assert naked_alarms == [], f"Sequential-ID broker must not raise NAKED POSITION RISK; got: {naked_alarms}"
 
     async def test_bracket_fallback_blocked_for_non_sequential_id_broker(self):
-        """Verify exception + non-sequential broker -> NO fallback, CRITICAL alert.
+        """Verify exception + non-sequential broker -> NO fallback, CRITICAL alert,
+        and (capital fix B) emergency flatten of the now-naked position.
 
         Per the adversarial-audit fix on commit 58abc30a: when
         ``verify_bracket_legs`` raises and the broker is NOT a sequential-ID
@@ -3977,29 +4286,109 @@ class TestBracketOrders:
         guessed IDs (they cannot cancel real orders on exit) and MUST emit
         a NAKED POSITION RISK notification.
 
-        Before the fix, the orchestrator silently stored ``[entry+1, entry+2]``
-        on every broker — including Tradovate, whose IDs are API-assigned
-        and not derivable from the entry.
+        Capital fix B then requires the orchestrator to ACT on that naked
+        position: fire the kill switch and emergency-flatten it. After the
+        flatten the position is closed, so it no longer appears in
+        ``_positions`` and ``brackets_submitted`` is NOT incremented.
         """
         router = FakeNonSequentialIdBracketRouter(fill_price=2351.0)
         c = FakeBrokerComponents()
         c.router = router
         orch = build_orchestrator(c)
         orch.order_router = router
+        orch.signal_only = False
 
         notifications: list[str] = []
         orch._notify = notifications.append
 
         await orch._handle_event(_entry_event(2350.5))
 
-        record = orch._positions.get(STRATEGY_ID)
-        assert record is not None
-        assert record.bracket_order_ids == [], (
-            f"Non-sequential broker MUST NOT receive guessed bracket IDs; got {record.bracket_order_ids}"
-        )
         assert router.verify_bracket_legs_call_count == 1
         naked_alarms = [n for n in notifications if "NAKED POSITION RISK" in n]
         assert len(naked_alarms) == 1, f"Exactly one NAKED POSITION RISK notification expected; got: {naked_alarms}"
+        # Capital fix B: the naked position is acted on, not left running.
+        assert orch._kill_switch_fired is True
+        assert orch._stats.brackets_submitted == 0, (
+            "A naked (un-fallback-able) bracket must NOT be counted as submitted"
+        )
+
+    async def test_naked_position_fires_kill_switch_and_flatten_on_failed_verify(self):
+        """Capital fix B: a confirmed-naked position must be ACTED ON, not just alerted.
+
+        Exception branch + non-sequential broker = the orchestrator cannot
+        derive the protective leg IDs and the entry is live. Before the fix it
+        logged/notified NAKED POSITION RISK and then incremented
+        ``brackets_submitted`` as if a bracket were placed, leaving a real
+        unprotected position running. The fix must:
+          1. fire the kill switch (no further entries), and
+          2. emergency-flatten the just-opened position, and
+          3. NOT count it as a submitted bracket.
+        """
+        router = FakeNonSequentialIdBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        orch.signal_only = False
+
+        notifications: list[str] = []
+        orch._notify = notifications.append
+        flatten_calls: list[int] = []
+        orig_flatten = orch._emergency_flatten
+
+        async def spy_flatten():
+            flatten_calls.append(1)
+            return await orig_flatten()
+
+        orch._emergency_flatten = spy_flatten
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        assert orch._kill_switch_fired is True, "Confirmed-naked position must fire the kill switch"
+        assert flatten_calls, "Confirmed-naked position must trigger emergency flatten"
+        assert orch._stats.brackets_submitted == 0, (
+            "A failed/naked bracket must NOT be counted as submitted; "
+            f"got brackets_submitted={orch._stats.brackets_submitted}"
+        )
+        assert orch._stats.brackets_failed == 1, (
+            "A naked bracket must be counted as failed for honest telemetry; "
+            f"got brackets_failed={orch._stats.brackets_failed}"
+        )
+
+    async def test_naked_position_fires_kill_switch_and_flatten_on_missing_sl(self):
+        """Capital fix B: a verified-missing STOP leg is a naked position too.
+
+        ``verify_bracket_legs`` returns ``(None, tp_id)`` — entry filled, TP
+        exists, protective STOP absent. Before the fix the orchestrator stored
+        the partial TP id and continued. The fix must treat the missing-stop
+        case as naked: fire kill switch + emergency flatten.
+        """
+        router = FakeMissingLegBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        orch.signal_only = False
+
+        notifications: list[str] = []
+        orch._notify = notifications.append
+        flatten_calls: list[int] = []
+        orig_flatten = orch._emergency_flatten
+
+        async def spy_flatten():
+            flatten_calls.append(1)
+            return await orig_flatten()
+
+        orch._emergency_flatten = spy_flatten
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        assert orch._kill_switch_fired is True, "Missing-stop position must fire the kill switch"
+        assert flatten_calls, "Missing-stop position must trigger emergency flatten"
+        assert orch._stats.brackets_submitted == 0, (
+            "A missing-stop bracket must NOT be counted as submitted; "
+            f"got brackets_submitted={orch._stats.brackets_submitted}"
+        )
 
     async def test_bracket_verify_skipped_for_atomic_native_broker(self):
         """REGRESSION GUARD for the has_queryable_bracket_legs() skip path.
@@ -4716,6 +5105,10 @@ class TestObservability:
         event.strategy_id = strategy.strategy_id
         event.direction = "long"
         event.contracts = 1
+        # A real event always carries a concrete positive risk_points; an unset
+        # MagicMock attr is a (truthy) mock that the fail-closed `risk_points > 0`
+        # guard cannot compare. Set a realistic value so the bracket path is exercised.
+        event.risk_points = 6.0
 
         await orch._submit_bracket(event, strategy, 2350.0)
         assert orch._stats.brackets_submitted == 1
@@ -4859,6 +5252,54 @@ class TestF4BracketNakedPosition:
         assert orch._notify.called, "F4-3: operator must be notified via _notify"
         notify_msg = str(orch._notify.call_args_list[0])
         assert "F4" in notify_msg, "F4-3: notify message must contain 'F4' source marker"
+
+    # F4-4 (integration) — present-but-zero risk_points BLOCKS entry end-to-end
+    async def test_f4_zero_risk_points_blocks_entry_via_safety_gate(self):
+        """Integration gap closed per independent audit (2026-06-05, Stage 1c).
+
+        The unit test ``test_bracket_stop_distance_zero_event_risk_does_not_guess_median``
+        proves the helper returns None for present-but-zero risk_points. This test
+        proves the END-TO-END consequence through the pre-entry merge path
+        (session_orchestrator.py ~:2646): stop_dist None -> bracket NOT merged ->
+        _bracket_merged=False -> the SAFETY GATE (~:2683) BLOCKS the entry and pops
+        the position in live/demo mode, so no NAKED position reaches the broker.
+
+        Mutation probe (proves it guards the fix, not just the code path): revert
+        ``_bracket_stop_distance`` to the old ``if event_risk:`` truthiness guard and
+        a present-but-zero risk_points falls through to ``median_risk_points`` (3.0,
+        truthy) -> a GUESSED bracket merges -> entry is NOT blocked -> this test
+        fails (position is not None, spec WAS submitted). The non-zero strategy
+        median is load-bearing: it is what the old guess-path would have used.
+        """
+        router = FakeBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+        assert orch.signal_only is False, "live/demo mode required for the safety gate"
+        # Strategy median is non-zero (3.0 per _test_strategy) — the value the OLD
+        # truthiness guard would have guessed a bracket from. The fix must NOT use it
+        # when risk_points is present-but-zero.
+
+        notifications: list[str] = []
+        orch._notify = notifications.append
+
+        event = _entry_event(2350.5)
+        event.risk_points = 0.0  # present-but-zero: a degenerate live value
+
+        await orch._handle_event(event)
+
+        # Safety gate fired: position rolled back, nothing submitted to the broker.
+        assert orch._positions.get(STRATEGY_ID) is None, (
+            "F4-4: present-but-zero risk_points must BLOCK the entry (position popped); "
+            "a guessed-median bracket must NOT be submitted"
+        )
+        assert router.submitted == [], (
+            "F4-4: no order spec may reach the broker when the bracket cannot be built "
+            "from a present-but-zero risk_points"
+        )
+        blocked = [n for n in notifications if "ENTRY BLOCKED" in n]
+        assert blocked, f"F4-4: operator must be notified of ENTRY BLOCKED; got: {notifications}"
 
     # Source-text probe — confirms all three F4 markers survive in production code
     def test_f4_source_markers_present(self):

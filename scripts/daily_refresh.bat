@@ -23,5 +23,11 @@ REM per-lane MAX(trading_day)+1 cursor self-heals any missed days).
 echo [%date% %time%] Paper-trade sync >> logs\daily_refresh.log
 python -m trading_app.paper_trade_logger --sync 2>&1 >> logs\daily_refresh.log
 
+REM REGIME shadow accrual — record-ALL forward accumulation for sub-100 (REGIME)
+REM strategies into paper_trades.execution_source='shadow'. Runs AFTER CORE sync
+REM so deploy lanes accrue first; idempotent per-lane MAX(trading_day)+1 cursor.
+echo [%date% %time%] REGIME shadow accrual >> logs\daily_refresh.log
+python -m scripts.tools.regime_shadow_runner 2>&1 >> logs\daily_refresh.log
+
 REM Log completion
 echo [%date% %time%] Daily refresh completed >> logs\daily_refresh.log

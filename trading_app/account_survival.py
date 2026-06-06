@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import random
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
@@ -36,6 +37,7 @@ from trading_app.derived_state import (
     get_git_head,
     validate_state_envelope,
 )
+from trading_app.portfolio import build_profile_portfolio
 from trading_app.prop_firm_policies import get_payout_policy
 from trading_app.prop_profiles import (
     AccountProfile,
@@ -48,12 +50,68 @@ from trading_app.prop_profiles import (
 from trading_app.strategy_fitness import _load_strategy_outcomes
 from trading_app.topstep_scaling_plan import lots_for_position, max_lots_for_xfa
 
+log = logging.getLogger(__name__)
+
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 MIN_SURVIVAL_PROBABILITY = 0.70
 DEFAULT_REPORT_MAX_AGE_DAYS = 30
 CRITERION11_STATE_TYPE = "account_survival"
 CRITERION11_STATE_SCHEMA_VERSION = 1
+# Strict-DD budget fraction is PROFILE-AWARE — resolved by
+# `effective_strict_dd_budget()`, NOT applied as a flat constant. Express-funded
+# (prop wrappers) carry an operator-chosen safety belt below the firm's MLL;
+# self-funded (real capital) is risk-first and NEVER prop-fraction-capped
+# (see .claude/rules/self-funded-sizing-doctrine.md).
+#   @margin-guard-not-earnings-cap — the express fraction is a survival safety
+#   belt on the prop MLL, not an earnings ceiling; it must never reach a
+#   self-funded sizing path.
+# Express belt: 0.90 of the $2,000 Topstep MLL = $1,800 (operator risk-knob,
+# 2026-06-04; raised from the prior arbitrary 0.80/$1,600 — see
+# docs/audit/results/2026-06-03-c11-clearance-audit.md). Self-funded: 1.00 (full
+# self-imposed firm DD; its risk-first sizing is enforced elsewhere via
+# max_risk_per_trade, not by haircutting this budget like a prop account).
+STRICT_DD_BUDGET_FRACTION_EXPRESS = 0.90
+STRICT_DD_BUDGET_FRACTION_SELF_FUNDED = 1.00
+STRICT_DD_HORIZON_DAYS = 90
+
+
+def effective_strict_dd_budget(profile: AccountProfile, rules: SurvivalRules) -> float:
+    """Resolve the strict 90-day DD budget in dollars for one profile.
+
+    Single source of truth for BOTH the survival gate verdict and any
+    budget-aware lane selection (Stage 2+). Fail-CLOSED: an unresolved or
+    falsy `is_express_funded` resolves to the STRICTER express belt, never the
+    relaxed self-funded one — a budget can only ever be too conservative by
+    default, never too loose.
+
+    EXPRESS-FUNDED (prop wrappers): a fraction of the firm MLL
+    (``rules.dd_limit_dollars`` = ``tier.max_dd``). The fraction is an operator
+    safety belt on the firm number, which is the correct binding guard for a
+    funded wrapper.
+
+    SELF-FUNDED (real capital): the budget is the profile's OWN self-imposed DD
+    HALT (``self_imposed_dd_dollars``), NOT a prop-firm tier figure. Sourcing it
+    from ``rules.dd_limit_dollars`` (= ``tier.max_dd``) would bound
+    personal-capital risk by a prop-shaped number — the exact leak forbidden by
+    .claude/rules/self-funded-sizing-doctrine.md. A self_funded profile that
+    omits ``self_imposed_dd_dollars`` fail-CLOSES to the stricter express belt
+    on the firm number, never to the looser prop figure at full fraction.
+    """
+    # Self-funded relaxation requires an explicit, truthy non-express flag.
+    # Anything else (None, missing, True) falls through to the express belt.
+    if getattr(profile, "is_express_funded", True) is False:
+        # Risk-first SOURCE: the profile's own self-imposed DD halt, never the
+        # prop tier number. Fail-CLOSED if the source is missing/non-positive/
+        # non-finite. `bool` is a subclass of `int` in Python (True > 0 is True),
+        # so it is excluded explicitly — a stray True must never resolve to a $1
+        # budget. NaN is rejected by `> 0` being False.
+        self_imposed = getattr(profile, "self_imposed_dd_dollars", None)
+        if isinstance(self_imposed, (int, float)) and not isinstance(self_imposed, bool) and self_imposed > 0:
+            return round(float(self_imposed) * STRICT_DD_BUDGET_FRACTION_SELF_FUNDED, 2)
+        # Missing risk-first source → stricter express belt on the firm number.
+        return round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2)
+    return round(rules.dd_limit_dollars * STRICT_DD_BUDGET_FRACTION_EXPRESS, 2)
 
 
 @dataclass(frozen=True)
@@ -98,6 +156,11 @@ class SurvivalSummary:
     path_model: str
     min_operational_pass_probability: float
     gate_pass: bool
+    strict_account_gate_pass: bool
+    effective_dd_budget_dollars: float
+    historical_daily_loss_breach_days: list[str]
+    historical_daily_loss_breach_count: int
+    historical_max_observed_90d_dd_dollars: float
     p50_final_balance: float
     p05_final_balance: float
     p95_final_balance: float
@@ -159,10 +222,23 @@ def _build_profile_fingerprint(profile) -> str:
 
 
 def _criterion11_code_paths() -> list[Path]:
+    """Files whose content the cached Criterion 11 PASS depends on.
+
+    Capital review D (2026-06-06): the fingerprint previously covered only
+    account_survival.py + derived_state.py, so a change to live ORB-cap
+    enforcement, position sizing, lane registry, or routing could leave an
+    existing C11 PASS valid even though the real live risk math had drifted.
+    Include every live-risk execution dependency so a change to any of them
+    invalidates the cached PASS (fail-closed staleness detection).
+    """
     root = Path(__file__).resolve().parents[1]
     return [
         Path(__file__).resolve(),
         root / "trading_app" / "derived_state.py",
+        root / "trading_app" / "prop_profiles.py",
+        root / "trading_app" / "portfolio.py",
+        root / "trading_app" / "execution_engine.py",
+        root / "trading_app" / "live" / "session_orchestrator.py",
     ]
 
 
@@ -295,6 +371,7 @@ def _load_lane_daily_pnl(
     *,
     as_of_date: date,
     effective_stop_multiplier: float | None = None,
+    max_orb_size_pts: float | None = None,
 ) -> dict[date, float]:
     """Load one lane's historical daily PnL in dollars from canonical outcomes."""
     daily: dict[date, float] = {}
@@ -303,6 +380,7 @@ def _load_lane_daily_pnl(
         strategy_id,
         as_of_date=as_of_date,
         effective_stop_multiplier=effective_stop_multiplier,
+        max_orb_size_pts=max_orb_size_pts,
     ):
         daily[trade.trading_day] = daily.get(trade.trading_day, 0.0) + trade.pnl_dollars
     return daily
@@ -314,6 +392,7 @@ def _load_lane_trade_paths(
     *,
     as_of_date: date,
     effective_stop_multiplier: float | None = None,
+    max_orb_size_pts: float | None = None,
 ) -> list[TradePath]:
     """Load one lane's trade history in dollars from canonical outcomes."""
     params = _load_strategy_snapshot(con, strategy_id)
@@ -354,7 +433,12 @@ def _load_lane_trade_paths(
         pnl_r = outcome.get("pnl_r")
         if entry_price is None or stop_price is None or pnl_r is None:
             continue
-        risk_dollars = risk_in_dollars(cost_spec, float(entry_price), float(stop_price))
+        entry_price_f = float(entry_price)
+        stop_price_f = float(stop_price)
+        risk_points = abs(entry_price_f - stop_price_f)
+        if max_orb_size_pts is not None and risk_points >= float(max_orb_size_pts):
+            continue
+        risk_dollars = risk_in_dollars(cost_spec, entry_price_f, stop_price_f)
         pnl_dollars = float(pnl_r) * risk_dollars
         mae_r = max(0.0, float(outcome.get("mae_r") or 0.0))
         mfe_r = max(0.0, float(outcome.get("mfe_r") or 0.0))
@@ -486,6 +570,7 @@ def _load_profile_daily_scenarios(
                 lane["strategy_id"],
                 as_of_date=as_of_date,
                 effective_stop_multiplier=effective_stop_by_strategy.get(lane["strategy_id"]),
+                max_orb_size_pts=lane.get("max_orb_size_pts"),
             )
             daily: dict[date, float] = {}
             for trade in trade_paths:
@@ -550,6 +635,10 @@ def _build_rules(profile: AccountProfile) -> SurvivalRules:
     if profile.firm == "topstep" and profile.is_express_funded:
         topstep_day1_max_lots = max_lots_for_xfa(profile.account_size, starting_balance)
 
+    daily_loss_limit = profile.daily_loss_dollars
+    if daily_loss_limit is None:
+        daily_loss_limit = float(tier.daily_loss_limit) if tier.daily_loss_limit is not None else None
+
     return SurvivalRules(
         profile_id=profile.profile_id,
         firm=profile.firm,
@@ -557,7 +646,7 @@ def _build_rules(profile: AccountProfile) -> SurvivalRules:
         dd_type=firm_spec.dd_type,
         starting_balance=starting_balance,
         dd_limit_dollars=float(tier.max_dd),
-        daily_loss_limit=float(tier.daily_loss_limit) if tier.daily_loss_limit is not None else None,
+        daily_loss_limit=float(daily_loss_limit) if daily_loss_limit is not None else None,
         consistency_rule=None,
         freeze_at_balance=freeze_at,
         # Current project daily lanes are 1-contract micro lanes per account.
@@ -714,6 +803,72 @@ def simulate_survival(
     }
 
 
+def _historical_daily_loss_breach_days(scenarios: list[DailyScenario], rules: SurvivalRules) -> list[str]:
+    """Return historical days that would trip the effective daily-loss belt."""
+    if rules.daily_loss_limit is None:
+        return []
+    breach_days: list[str] = []
+    for scenario in scenarios:
+        day_min_delta = min(scenario.min_balance_delta_dollars, scenario.total_pnl_dollars)
+        if day_min_delta <= -rules.daily_loss_limit:
+            breach_days.append(scenario.trading_day)
+    return breach_days
+
+
+def _max_observed_rolling_drawdown(scenarios: list[DailyScenario], *, horizon_days: int) -> float:
+    """Return max observed close-to-close drawdown over rolling horizon windows."""
+    if horizon_days <= 0:
+        raise ValueError("horizon_days must be positive")
+    max_dd = 0.0
+    for start_idx in range(len(scenarios)):
+        balance = 0.0
+        peak = 0.0
+        for scenario in scenarios[start_idx : start_idx + horizon_days]:
+            balance += scenario.total_pnl_dollars
+            if balance > peak:
+                peak = balance
+            dd_used = peak - balance
+            if dd_used > max_dd:
+                max_dd = dd_used
+    return round(max_dd, 2)
+
+
+def _assert_single_micro_sizing(profile_id: str) -> tuple[bool, str]:
+    """D-3 sizing-parity guard for Criterion 11 (capital review C, 2026-06-06).
+
+    The C11 survival model hardcodes 1 micro contract per lane
+    (``_build_rules`` -> ``contracts_per_trade_micro=1``; ``_load_lane_trade_paths``
+    -> ``contracts_per_trade = 1``). The LIVE execution engine sizes contracts
+    from equity/risk/volatility and clamps to ``PortfolioStrategy.max_contracts``.
+    Today every lane is built with ``max_contracts == 1`` so the two agree, but
+    the instant the clamp is lifted the survival proof silently understates
+    drawdown (a 2-contract lane ~doubles realised DD against an unchanged budget).
+
+    This guard binds the gate to the live sizing intent: build the same profile
+    portfolio the live path uses and require every strategy to size exactly one
+    micro. Returns ``(ok, message)``; ``ok=False`` must fail the C11 gate closed.
+    Any builder error also fails closed (we cannot prove parity).
+    """
+    try:
+        portfolio = build_profile_portfolio(profile_id=profile_id)
+    except Exception as e:  # fail closed — cannot prove sizing parity
+        return (False, f"sizing-parity unprovable: build_profile_portfolio failed: {e}")
+
+    offenders = [
+        f"{s.strategy_id}(max_contracts={s.max_contracts})"
+        for s in portfolio.strategies
+        if getattr(s, "max_contracts", 1) != 1
+    ]
+    if offenders:
+        return (
+            False,
+            "D-3 sizing parity VIOLATED: C11 models 1 micro/lane but live "
+            f"max_contracts > 1 for {', '.join(offenders)}. Scale the survival DD "
+            "math or keep max_contracts == 1 before passing C11.",
+        )
+    return (True, f"sizing parity OK ({len(portfolio.strategies)} lanes @ 1 micro)")
+
+
 def evaluate_profile_survival(
     profile_id: str | None = None,
     *,
@@ -734,7 +889,24 @@ def evaluate_profile_survival(
     rules = _with_consistency_rule(_build_rules(profile), profile)
     result = simulate_survival(scenarios, rules, horizon_days=horizon_days, n_paths=n_paths, seed=seed)
     operational_pass_probability = round(result["operational_pass_probability"], 4)
-    gate_pass = operational_pass_probability >= float(min_survival_probability)
+    effective_dd_budget_dollars = effective_strict_dd_budget(profile, rules)
+    historical_daily_loss_breach_days = _historical_daily_loss_breach_days(scenarios, rules)
+    historical_max_observed_90d_dd_dollars = _max_observed_rolling_drawdown(
+        scenarios,
+        horizon_days=STRICT_DD_HORIZON_DAYS,
+    )
+    operational_gate_pass = operational_pass_probability >= float(min_survival_probability)
+    strict_account_gate_pass = (
+        len(historical_daily_loss_breach_days) == 0
+        and historical_max_observed_90d_dd_dollars <= effective_dd_budget_dollars
+    )
+    # D-3 sizing-parity guard (capital review C): the survival DD math models
+    # 1 micro/lane; if the live portfolio would size any lane above 1 micro the
+    # proof is invalid. Fail the gate closed rather than pass a stale DD figure.
+    sizing_parity_ok, sizing_parity_msg = _assert_single_micro_sizing(resolved_profile_id)
+    if not sizing_parity_ok:
+        log.warning("Criterion 11 sizing-parity guard: %s", sizing_parity_msg)
+    gate_pass = operational_gate_pass and strict_account_gate_pass and sizing_parity_ok
 
     summary = SurvivalSummary(
         profile_id=resolved_profile_id,
@@ -762,6 +934,11 @@ def evaluate_profile_survival(
         path_model=result["path_model"],
         min_operational_pass_probability=float(min_survival_probability),
         gate_pass=gate_pass,
+        strict_account_gate_pass=strict_account_gate_pass,
+        effective_dd_budget_dollars=effective_dd_budget_dollars,
+        historical_daily_loss_breach_days=historical_daily_loss_breach_days,
+        historical_daily_loss_breach_count=len(historical_daily_loss_breach_days),
+        historical_max_observed_90d_dd_dollars=historical_max_observed_90d_dd_dollars,
         p50_final_balance=result["p50_final_balance"],
         p05_final_balance=result["p05_final_balance"],
         p95_final_balance=result["p95_final_balance"],
@@ -838,6 +1015,11 @@ def check_survival_report_gate(
         scaling_feasible = bool(summary.get("scaling_feasible", False))
         intraday_approximated = bool(summary.get("intraday_approximated", False))
         path_model = str(summary.get("path_model", "daily_close"))
+        gate_pass = bool(summary["gate_pass"])
+        strict_account_gate_pass = bool(summary["strict_account_gate_pass"])
+        historical_daily_loss_breach_count = int(summary["historical_daily_loss_breach_count"])
+        effective_dd_budget_dollars = float(summary["effective_dd_budget_dollars"])
+        historical_max_observed_90d_dd_dollars = float(summary["historical_max_observed_90d_dd_dollars"])
     except (KeyError, TypeError, ValueError) as exc:
         return False, f"BLOCKED: unreadable Criterion 11 survival summary ({exc})"
 
@@ -861,11 +1043,22 @@ def check_survival_report_gate(
             False,
             f"BLOCKED: Criterion 11 operational pass {operational_pass:.1%} < {min_survival_probability:.0%}",
         )
-
+    strict_failures: list[str] = []
+    if historical_daily_loss_breach_count > 0:
+        strict_failures.append(f"historical_daily_loss_days={historical_daily_loss_breach_count}")
+    if historical_max_observed_90d_dd_dollars > effective_dd_budget_dollars:
+        strict_failures.append(
+            f"max_90d_dd=${historical_max_observed_90d_dd_dollars:,.0f}/${effective_dd_budget_dollars:,.0f}"
+        )
+    if not strict_account_gate_pass or strict_failures:
+        detail = ", ".join(strict_failures) if strict_failures else "strict_account_gate_pass=false"
+        return False, f"BLOCKED: Criterion 11 strict account diagnostics failed ({detail}). Re-run account survival."
+    if not gate_pass:
+        return False, "BLOCKED: Criterion 11 account-survival gate failed. Re-run account survival."
     return (
         True,
         f"Criterion 11 pass: operational {operational_pass:.1%}, as_of={as_of_date}, "
-        f"age={report_age_days}d, paths={n_paths}",
+        f"age={report_age_days}d, paths={n_paths}, strict_account=PASS",
     )
 
 
@@ -893,6 +1086,19 @@ def _print_summary(summary: SurvivalSummary) -> None:
         f"scaling={summary.scaling_breach_probability:.1%} | "
         f"consistency={summary.consistency_breach_probability:.1%}"
     )
+    print("Expectancy edge: not evaluated by Criterion 11 account survival")
+    print(
+        f"Strict diagnostics: effective_dd_budget=${summary.effective_dd_budget_dollars:,.0f} | "
+        f"historical_daily_loss_breaches={summary.historical_daily_loss_breach_count} | "
+        f"historical_max_observed_90d_dd=${summary.historical_max_observed_90d_dd_dollars:,.0f}"
+    )
+    print(f"Prop-account path safety={'PASS' if summary.strict_account_gate_pass else 'FAIL'}")
+    print(f"Final deployability gate={'PASS' if summary.gate_pass else 'FAIL'}")
+    if summary.historical_daily_loss_breach_days:
+        print(
+            f"Historical daily-loss breach days ({summary.historical_daily_loss_breach_count}): "
+            + ", ".join(summary.historical_daily_loss_breach_days)
+        )
     print(
         f"Final balance p05/p50/p95 = ${summary.p05_final_balance:,.0f} / "
         f"${summary.p50_final_balance:,.0f} / ${summary.p95_final_balance:,.0f}"
@@ -932,7 +1138,7 @@ def main() -> None:
         min_survival_probability=args.fail_under,
     )
     _print_summary(summary)
-    if summary.operational_pass_probability < args.fail_under:
+    if not summary.gate_pass:
         raise SystemExit(2)
 
 

@@ -1,12 +1,11 @@
 ---
-task: Ralph Loop iter 225 — projectx auth silent exception in _validate_or_login
+task: Ralph Loop iter 225 — db_manager schema parity + hardcoded instrument DEFAULT (DM-225-01, DM-225-02)
 mode: IMPLEMENTATION
 scope_lock:
-  - trading_app/live/projectx/auth.py
-updated: 2026-05-31T00:00:00
+  - trading_app/db_manager.py
+updated: 2026-06-04T00:00:00
 agent: ralph
 ---
 
 ## Blast Radius
-- trading_app/live/projectx/auth.py — bind exception in except clause at line 123, add %s to log.warning; zero logic change
-- No test file changes needed (existing 3 tests cover the path; diagnostic-only change)
+- trading_app/db_manager.py — remove instrument DEFAULT 'MNQ' from paper_trades DDL; add 7 EHR columns to verify_trading_app_schema expected_cols sets for validated_setups and experimental_strategies; zero logic change

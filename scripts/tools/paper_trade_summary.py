@@ -38,7 +38,10 @@ def summary(*, today_only: bool = False) -> None:
             print("paper_trades table does not exist. Run: python -m trading_app.paper_trade_logger")
             return
 
-        total = con.execute("SELECT COUNT(*) FROM paper_trades").fetchone()[0]
+        # This tool summarises LIVE/backfill paper trades. execution_source=
+        # 'shadow' rows are forward-monitoring evidence (REGIME-tier would-have
+        # trades) and must never be counted here as taken trades.
+        total = con.execute("SELECT COUNT(*) FROM paper_trades WHERE execution_source != 'shadow'").fetchone()[0]
         if total == 0:
             print("No paper trades. Run: python -m trading_app.paper_trade_logger")
             return
@@ -57,6 +60,7 @@ def summary(*, today_only: bool = False) -> None:
                 MIN(trading_day) AS first_day,
                 MAX(trading_day) AS last_day
             FROM paper_trades
+            WHERE execution_source != 'shadow'
             GROUP BY lane_name
             ORDER BY cum_r DESC
         """).fetchall()
@@ -65,7 +69,8 @@ def summary(*, today_only: bool = False) -> None:
         today = datetime.date.today()
         today_trades = con.execute(
             "SELECT lane_name, direction, exit_reason, ROUND(pnl_r, 2) "
-            "FROM paper_trades WHERE trading_day = ? ORDER BY lane_name",
+            "FROM paper_trades WHERE trading_day = ? AND execution_source != 'shadow' "
+            "ORDER BY lane_name",
             [today],
         ).fetchall()
 
@@ -74,6 +79,7 @@ def summary(*, today_only: bool = False) -> None:
             SELECT lane_name, MAX(trading_day) AS last_trade,
                    DATE_DIFF('day', MAX(trading_day), CURRENT_DATE) AS days_ago
             FROM paper_trades
+            WHERE execution_source != 'shadow'
             GROUP BY lane_name
             HAVING DATE_DIFF('day', MAX(trading_day), CURRENT_DATE) >= 5
         """).fetchall()
@@ -87,6 +93,7 @@ def summary(*, today_only: bool = False) -> None:
                        END) * 100, 1
                    )
             FROM paper_trades
+            WHERE execution_source != 'shadow'
         """).fetchone()
 
     # ── Print ─────────────────────────────────────────────────────────

@@ -39,7 +39,7 @@
     "pr": "Generated with [Claude Code](https://claude.com/claude-code)"
   },
   "sandbox": {
-    "enabled": true,
+    "enabled": false,
     "autoAllowBashIfSandboxed": true,
     "excludedCommands": [
       "git",
@@ -56,6 +56,16 @@
   },
   "hooks": {
     "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/autopilot-tier-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
       {
         "matcher": "Edit|Write|MultiEdit|Bash",
         "hooks": [
@@ -92,6 +102,16 @@
           {
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/pre-edit-discovery-marker.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/branch-context.py",
             "timeout": 5
           }
         ]

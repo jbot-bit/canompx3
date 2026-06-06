@@ -11,14 +11,19 @@ These tests prove the guard:
   1. passes clean against the real repo state,
   2. has teeth (fails on an injected marker-stripped source),
   3. fails loud if the doctrine file is missing,
-  4. fails loud if the marker sits AFTER the first self_funded tier (scope hole).
+  4. fails loud if the marker sits AFTER the first self_funded tier (scope hole),
+  5. STRUCTURAL (F2-A, 2026-05-31): has teeth on the select_for_profile firm branch —
+     catches a reintroduced unconditional `contract_budget = tier.max_contracts_micro`
+     and a removed self_funded branch; passes the well-formed branched source.
 
-The guard reads source files directly, so the injection tests point it at a
-temp copy via PROJECT_ROOT monkeypatch — no mutation of the real source.
+The guard reads source files directly (both prop_profiles.py AND prop_portfolio.py),
+so the injection tests point it at a temp copy via PROJECT_ROOT monkeypatch — no
+mutation of the real source.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pipeline.check_drift as cd
@@ -52,11 +57,64 @@ ACCOUNT_TIERS = {
 }
 """
 
+# DECOY scenario — the real fail-open bug on main in miniature. The marker exists
+# ONLY in an unrelated comment ABOVE the ACCOUNT_TIERS dict (mirroring the
+# @margin-guard-not-earnings-cap that was later added at prop_profiles.py:139 in
+# the AccountProfile.self_imposed_dd_dollars field comment). The ACCOUNT_TIERS
+# self_funded block itself carries NO marker. A first-match-anywhere guard finds
+# the decoy, sees it precedes the first tier, and PASSES — fail-open. The anchored
+# guard must require a marker INSIDE the dict and FAIL here.
+_DECOY_OUTSIDE_DICT_SRC = """\
+class AccountProfile:
+    # @margin-guard-not-earnings-cap — survival DD HALT, unrelated to ACCOUNT_TIERS.
+    self_imposed_dd_dollars = None
 
-def _fake_root(tmp_path: Path, src: str, *, write_doctrine: bool = True) -> Path:
-    """Build a temp PROJECT_ROOT with a prop_profiles.py and (optionally) the doctrine file."""
+ACCOUNT_TIERS = {
+    ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50),
+    ("self_funded", 2_500): PropFirmAccount("self_funded", 2_500, 375, 0, 1, 125),
+    ("self_funded", 50_000): PropFirmAccount("self_funded", 50_000, 10_000, 2, 20, 2_500),
+}
+"""
+
+# A minimal prop_portfolio.py-shaped source. structural-assertion (c) parses
+# select_for_profile and requires a self_funded firm branch where the prop cap is
+# NOT assigned unconditionally. This is the WELL-FORMED (post-F2-A) shape.
+_GOOD_PORTFOLIO_SRC = """\
+def select_for_profile(profile, strategies):
+    tier = get_account_tier(profile.firm, profile.account_size)
+    slot_budget = profile.max_slots
+    if firm_spec.name == "self_funded":
+        contract_budget = None
+    else:
+        contract_budget = tier.max_contracts_micro
+    return None
+"""
+
+# PRE-F2-A leak: contract_budget = tier.max_contracts_micro assigned UNCONDITIONALLY
+# at the function body level (no firm branch). structural-assertion (c) must catch this.
+_LEAKY_PORTFOLIO_SRC = """\
+def select_for_profile(profile, strategies):
+    tier = get_account_tier(profile.firm, profile.account_size)
+    contract_budget = tier.max_contracts_micro
+    slot_budget = profile.max_slots
+    return None
+"""
+
+
+def _fake_root(
+    tmp_path: Path,
+    src: str,
+    *,
+    write_doctrine: bool = True,
+    portfolio_src: str = _GOOD_PORTFOLIO_SRC,
+) -> Path:
+    """Build a temp PROJECT_ROOT with prop_profiles.py, prop_portfolio.py, and
+    (optionally) the doctrine file. The guard reads all three, so a well-formed
+    prop_portfolio.py is written by default; tests override portfolio_src to probe
+    the structural assertion (c)."""
     (tmp_path / "trading_app").mkdir(parents=True, exist_ok=True)
     (tmp_path / "trading_app" / "prop_profiles.py").write_text(src, encoding="utf-8")
+    (tmp_path / "trading_app" / "prop_portfolio.py").write_text(portfolio_src, encoding="utf-8")
     if write_doctrine:
         rules = tmp_path / ".claude" / "rules"
         rules.mkdir(parents=True, exist_ok=True)
@@ -93,7 +151,7 @@ def test_guard_fails_when_marker_after_first_tier(tmp_path, monkeypatch):
     """Scope hole: marker must INTRODUCE the block; a marker below the first tier leaves it uncovered."""
     monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _MARKER_TOO_LATE_SRC))
     violations = check_prop_caps_do_not_leak_into_self_funded()
-    assert any("AFTER the first" in v for v in violations)
+    assert any("does NOT introduce" in v for v in violations)
 
 
 def test_guard_fails_loud_when_no_self_funded_tiers(tmp_path, monkeypatch):
@@ -102,3 +160,103 @@ def test_guard_fails_loud_when_no_self_funded_tiers(tmp_path, monkeypatch):
     monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, src))
     violations = check_prop_caps_do_not_leak_into_self_funded()
     assert any("could not locate any" in v for v in violations)
+
+
+def test_guard_fails_when_marker_only_outside_dict(tmp_path, monkeypatch):
+    """Fail-open regression (PR #343 finding): a marker that exists ONLY in an
+    unrelated comment ABOVE the ACCOUNT_TIERS dict must NOT satisfy the guard.
+
+    This is the real-world bug: a second @margin-guard-not-earnings-cap was added
+    at prop_profiles.py:139 (the self_imposed_dd_dollars field comment), so a
+    first-match-anywhere check passed even with the real tier-block marker gone.
+    The anchored guard must require the marker INSIDE the dict and flag this."""
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _DECOY_OUTSIDE_DICT_SRC))
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+    assert any("margin-guard-not-earnings-cap" in v for v in violations), (
+        "a marker only OUTSIDE the ACCOUNT_TIERS dict must not satisfy the guard "
+        "(the line-139 decoy must not mask a missing tier-block marker); got: " + "; ".join(violations)
+    )
+
+
+# --- Structural assertion (c) — the select_for_profile firm branch (F2-A) ---
+
+
+def test_structural_guard_catches_unconditional_prop_cap(tmp_path, monkeypatch):
+    """Teeth (RULE 13): a select_for_profile that reasserts the pre-F2-A
+    unconditional `contract_budget = tier.max_contracts_micro` must be caught."""
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _GOOD_SRC, portfolio_src=_LEAKY_PORTFOLIO_SRC))
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+    assert any("UNCONDITIONALLY" in v for v in violations), (
+        "structural check must catch a reintroduced unconditional prop cap; got: " + "; ".join(violations)
+    )
+
+
+def test_structural_guard_passes_on_branched_source(tmp_path, monkeypatch):
+    """The well-formed (post-F2-A) branched select_for_profile must pass cleanly —
+    no false positive on the legitimate prop `else` assignment."""
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _GOOD_SRC, portfolio_src=_GOOD_PORTFOLIO_SRC))
+    assert check_prop_caps_do_not_leak_into_self_funded() == []
+
+
+def test_structural_guard_catches_missing_self_funded_branch(tmp_path, monkeypatch):
+    """A select_for_profile with NO self_funded branch at all (and no unconditional
+    leak either) must still be flagged — the firm branch is required."""
+    no_branch_src = (
+        "def select_for_profile(profile, strategies):\n"
+        "    tier = get_account_tier(profile.firm, profile.account_size)\n"
+        "    contract_budget = some_other_value\n"
+        "    return None\n"
+    )
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _GOOD_SRC, portfolio_src=no_branch_src))
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+    assert any("NO self_funded firm branch" in v for v in violations), (
+        "structural check must require a self_funded firm branch; got: " + "; ".join(violations)
+    )
+
+
+def test_structural_guard_fails_loud_when_function_missing(tmp_path, monkeypatch):
+    """If select_for_profile vanished from prop_portfolio.py, fail loud."""
+    monkeypatch.setattr(cd, "PROJECT_ROOT", _fake_root(tmp_path, _GOOD_SRC, portfolio_src="x = 1\n"))
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+    assert any("could not locate select_for_profile" in v for v in violations)
+
+
+# --- Runtime-resolver layer (d) — bool-guard parity with the resolver (Stage 3) ---
+
+
+def test_runtime_resolver_no_phantom_leak_on_bool_declaration(monkeypatch):
+    """Layer (d) must agree with effective_strict_dd_budget on `bool`.
+
+    `bool` subclasses `int` (`True > 0` is `True`), so a stray
+    `self_imposed_dd_dollars=True` is the ONE input where the drift check's
+    has_source guard (check_drift.py) and the resolver's source guard
+    (account_survival.py:106) diverge. The resolver excludes bool and correctly
+    resolves `True` to the express belt; the drift check must do the same and NOT
+    fire a phantom leak violation.
+
+    This test drives ONLY layer (d) — it monkeypatches the live ACCOUNT_PROFILES
+    dict (read by the lazy import inside the function) and leaves PROJECT_ROOT on
+    the REAL repo so layers (a)/(b)/(c) stay green.
+
+    Asserts the ABSENCE of the (d) leak message specifically — NOT
+    `violations == []`. The resolver's correct express-belt output ($5400)
+    collides with express_on_prop ($5400), so the `not_has` express branch is
+    silent in BOTH old and new code; a bare emptiness check could pass for the
+    wrong reason. The LEAKING string is the precise red→green signal.
+    """
+    from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+    real = next(p for p in ACCOUNT_PROFILES.values() if p.is_express_funded is False)
+    true_profile = dataclasses.replace(real, self_imposed_dd_dollars=True)
+    monkeypatch.setattr(
+        "trading_app.prop_profiles.ACCOUNT_PROFILES",
+        {real.profile_id: true_profile},
+    )
+
+    violations = check_prop_caps_do_not_leak_into_self_funded()
+
+    phantom = [v for v in violations if "self_imposed_dd_dollars=True" in v and ("LEAKING" in v or "prop-derived" in v)]
+    assert not phantom, (
+        "bool self_imposed_dd_dollars must NOT fire a (d) leak violation — the "
+        "drift check must agree with the resolver's express-belt resolution; got: " + "; ".join(phantom)
+    )

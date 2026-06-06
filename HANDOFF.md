@@ -6,6 +6,23 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Claude Session — canompx3_autopilot_v1 reviewed, fixed, MERGED to origin/main (2026-06-05)
+- **Tool:** Claude Code
+- **What landed:** `origin/main` advanced `6dadde5b → 60edcb1b` (clean fast-forward). The full `canompx3_autopilot_v1` feature is now on main: headless self-driving task runner (`scripts/autopilot/{run_autopilot.sh,tier_guard.py,review_diff.py}`), the `completion-notify.py` autopilot Stop-block extension, docs, and `tests/test_autopilot/` (67 tests).
+- **The fix (HIGH finding):** `.claude/hooks/autopilot-tier-guard.py` was DEAD safety code — the PreToolUse Tier-B guard existed but was registered in NO settings.json. Commit `60edcb1b` registers it (first PreToolUse entry, `Edit|Write|MultiEdit|Bash` matcher). It only activates under `AUTOPILOT_RUN=1`; fail-OPEN on its own errors; delegates to `tier_guard.classify_action` (fail-CLOSED: unknown `pipeline/`·`trading_app/` paths → Tier B).
+- **Verified by EXECUTION (not just reading):** 67/67 autopilot tests pass; 18 classifier probes; hook fires/blocks/allows/journals `BLOCKED_TIER_B`; pre-push full drift PASSED 176/0.
+- **Wired-not-dead note:** the hook `command` points at the MAIN checkout path (repo convention) — now that the file is on main's tree via this merge, it fires for real `AUTOPILOT_RUN=1` sessions.
+- **No capital/schema touched.** Tier A throughout; direct integration to main per no-PR doctrine. Push went through GCM auth (operator ran it).
+
+## Claude Session — C11 Secure & Hold (2026-06-04)
+- **Tool:** Claude Code
+- **Verdict:** `topstep_50k_mnq_auto` C11 is a **measured capital NO-GO. Live NOT armed.**
+- **What landed (`572499d6`, rebased onto peer `5dab3861`; pushed in `b0d43c0f`):** committed the stranded C11 analysis (4 audit-result docs + corrected `c11-80pt-cap-wiring.md` stage + `.gitignore` for the dry-run scratch json). Docs/config only; no production logic, no schema, no capital lever moved.
+- **The decisive math:** the ~80pt ORB cap clears C11's operational-survival (≥70%) and zero-breach-day gates, but **NOT** the drawdown-magnitude gate — strict observed 90d DD at the current 0.75 stop = **$2,038**, exceeding both the $1,600 strict budget AND the full $2,000 Topstep MLL. A *wider* stop (1.0) makes DD worse; only a **tighter** stop (≤0.50) closes the gap (cap+0.50 → $1,142). Cap is necessary, not sufficient.
+- **Path to GO (research, not "go live ASAP"):** pre-registered cap+stop≤0.50 remediation (RULE 10) → re-run `account_survival` proving BOTH C11 gates → DSR/era checks → **independent live-path audit** (incl. the bracket-risk-parity fix `9b3fc530`, whose adversarial-audit gate is still OPEN — no independent reviewer yet) → only then live arming (separate operator GO).
+- **Already safe:** parity plumbing `9b3fc530` and preserve branch `c11-orb-cap-preserve-2026-06-04` (`48071955`) both on origin.
+- **Deferred (not done this session):** REGIME design docs (owned by `canompx3-regime-shadow` worktree — committed from there, not here); cap value selection; the cap+stop remediation research.
+
 ## This Session
 - **Tool:** Codex
 - **Date:** 2026-06-03
@@ -13,12 +30,25 @@
 - **Result truth:** All 15 replacement scenarios are `KILL`. Best ranked scenario was `R02_C05`, replacing `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15` with `MNQ_CME_PRECLOSE_O15_E2_RR2_COST_LT10`; it improved annual dollars/maxDD but failed account-safety gates due daily-loss breach evidence. No scenario is live-valid, validated, deployable, or an allocation change from this artifact.
 - **Verification:** YAML parse passed; `prereg_front_door.py --format text` passed; `python -m py_compile research\mnq_single_leg_account_fit_replacement_v1.py` passed; focused pytest passed 8 tests; runner execution wrote 15 scenarios; scoped ruff passed; `git diff --check` passed; `project_pulse.py --fast` reported broken=0; `pipeline\check_drift.py --fast --quiet` passed with advisories only.
 
+## Current Codex Follow-up - Workflow Reliability And Stage Ownership
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Actioned the workflow-control-plane cleanup as a reliability job, not a stage-count cleanup. Verified the main-worktree lease holder PID/PPID were absent and `peer_live=false`, then released the stale lease. Archived only the approved Batch A stage `2026-05-29-drift-cache-proof-of-honesty.md`; no contested/live/drift/capital/unverifiable stages were moved. Added durable phased plan `docs/plans/active/2026-06/2026-06-03-workflow-reliability-stage-ownership.md` grounding the remaining work in worktree/branch/DB/port/dashboard/drift/lease ownership.
+- **Current blockers:** main remains dirty until this workflow-tooling diff is committed; dashboard port 8080 is open from `C:\Users\joshd\canompx3-live-launch-tokyo` with stale heartbeat; `gold.db` read-only probe is OK but hardlink count is 2; drift/precommit work remains owned by dirty peer `codex/precommit-drift-speed`.
+- **Verification:** `python -m pytest tests\test_tools\test_workflow_doctor.py tests\test_tools\test_stage_reaper_audit.py -q` passed 34 tests; scoped `ruff check` passed; `git diff --check` passed; `workflow_doctor.py status` showed no live peer lease block but did show dirty tree/dashboard stale/stage bloat; `stage_reaper_audit.py` reported `DONE_SAFE=0 LIVE_OR_CONTESTED=24 UNVERIFIABLE=8 CLOSED=23 total=55`.
+
 ## Previous Session
 - **Tool:** Codex
 - **Date:** 2026-05-30
 - **Summary:** Cleared the `topstep_50k_mnq_auto` live-validity blocker in both this Codex worktree and canonical `C:\Users\joshd\canompx3`. Root cause was strict live allocation using SR state for the current book as if it covered all candidates, allowing `UNKNOWN` SR candidates and old SR-alarm lanes to rotate back in. `rebalance_lanes.py --strict-live-clean` now requires current SR `CONTINUE` evidence, computes correlation only after hard gates, and the allocator caches feature rows so rebalance stays bounded. Canonical allocation is now 3 lanes: `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`, `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`, `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08`. Canonical C11/C12 refreshed green, `live_readiness_report --strict-zero-warn` green with only telemetry maturity advisory, and canonical signal-only preflight passed 13/13.
 - **⚠ Truth note (Claude, 2026-05-30, verified):** the `--strict-live-clean` flag and the lane_allocator `feature_cache` opt described above are **NOT committed on any branch** (`git log --all -S` = 0 hits). They live only in `stash@{0}` + `docs/runtime/rescued/2026-05-30-*` (see RESCUE-MANIFEST). Capital-path, Codex-owned — must be committed by its owner, not dropped. The regenerated `lane_allocation*.json` is the OUTPUT of that un-landed code, so canonical `docs/runtime/lane_allocation.json` on HEAD does NOT reflect it.
 - **✅ Drift CLEAN — RETRACTION of an earlier false claim (Claude, 2026-05-30, execution-verified):** an earlier version of this note (commit `82721bcc`) claimed `check_active_native_trade_windows_match_provenance` was FAILING on lane `MNQ_COMEX_SETTLE_...OVNRNG_100`. **That was wrong** — I wrote it from a stale memory note without executing, violating Rule 11 (never trust metadata). Direct call returns `VIOLATIONS: 0`; full `check_drift.py --skip-crg-advisory` = **NO DRIFT DETECTED, 170 passed, 0 failed** (incl. Check 191 cold-recheck PASSED). The COMEX_SETTLE lane IS present in canonical `lane_allocation.json` (one of the 3 active lanes). `backfill_validated_trade_windows.py` (live write) = `inspected=848 drifted=0 updated=0`. Trade-window provenance is canonical. No action owed.
+
+## Current Codex Follow-up - Rescue Cleanup
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Continued rescue review from clean branch `review/rescue-2026-06-03` after `origin/main` advanced to `f505b69a`. Landed only connected low-risk documentation: `docs/plans/active/2026-05/2026-05-23-slack-control-room-design.md`, an observer-only Slack control-room plan with active-plan lifecycle frontmatter. Excluded stale rescue `HANDOFF.md` changes; no Slack install/posting, no live trading, no DB writes, and no allocator/profile/broker/journal/webhook changes.
+- **Remaining:** Rescue refs remain undeleted. Live-capital, DB/MCP, allocator, webhook, journal/profile, broad hook/drift, and research/OOS branches stay parked for separate focused review.
 
 ## Current Codex Follow-up - ORB Execution Research
 - **Tool:** Codex
@@ -86,12 +116,37 @@
 
 ## Last Session
 - **Tool:** Claude Code
+- **Date:** 2026-06-06
+- **Commit:** d755385b — fix(capital): Row 05 survival-state drift check + Row 08 reconnect resync + MED#1 finding
+- **Files changed:** 5 files
+  - `docs/audit/overnight_dispatch/results/08.md`
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift_survival_state_current.py`
+  - `tests/test_trading_app/test_reconnect_position_resync.py`
+  - `trading_app/live/session_orchestrator.py`
+
+## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
+- **Tool:** Codex
 - **Date:** 2026-06-03
-- **Commit:** a90873a6 — chore(plugins): firecrawl default OFF + on-demand toggle
-- **Files changed:** 3 files
-  - `.claude/settings.json`
-  - `HANDOFF.md`
-  - `scripts/tools/firecrawl_mode.ps1`
+- **Summary:** Completed the remaining high-EV live-readiness/dashboard/drift closeout from the operator prompt. Fresh `account_survival` for `topstep_50k_mnq_auto` passed Criterion 11 at 95.2% operational pass. Fresh `live_readiness_report --strict-zero-warn --proof-pack-only` showed C11 pass age 0d, C12 valid age 1d, three active lanes, zero stale lanes, no missing evidence, and only telemetry maturity advisory (9/30 days). Dashboard test smoke passed 42 tests. Phase 7 live audit passed 11 checks.
+- **Drift fix:** Root-caused the fast drift timeout to stale fast-skip coverage plus repeated relative-volume enrichment in `StrategyTradeWindowResolver`. Added resolver caching for same `(instrument, orb_minutes, orb_label, lookback_days)` relative-volume enrichment and added a focused regression test. Updated `SLOW_CHECK_LABELS` with slow labels measured in this session so `--fast` skips slow checks while full pre-commit/CI still retain coverage.
+- **Verification:** `python -m pytest tests\test_pipeline\test_check_drift_slow_labels.py tests\test_trading_app\test_validation_provenance.py tests\test_pipeline\test_check_drift_db.py::TestActiveMicroOnlyFiltersAfterMicroLaunch -q` passed 8 tests; `python -m pytest tests\test_trading_app\test_bot_dashboard.py -q` passed 42 tests; scoped `ruff check` and `py_compile` passed; `python -u pipeline\check_drift.py --fast --quiet --skip-crg-advisory` completed with `SUMMARY: clean passed=137 advisory=15`; `python scripts\audits\run_all.py --phase 7` passed. Known residual: pytest emitted ignored Windows temp cleanup `PermissionError` after successful runs.
+
+## Worktree-Guard Self-DOS Message Fix (Claude, 2026-06-03)
+- **Tool:** Claude Code
+- **Commit (pre-rebase):** 5e3d6dc3 / 71056eb2 — fix(hooks): name START_WORKTREE.bat in guard BLOCK messages (self-DOS fix)
+- **Files changed:** 4 files
+  - `.claude/hooks/branch-flip-guard.py`
+  - `.claude/hooks/mcp-git-guard.py`
+  - `.claude/hooks/worktree_guard.py`
+  - `docs/runtime/stages/worktree-guard-selfdos-message-fix.md`
+- **Summary:** Guard BLOCK messages told the operator to run `scripts/tools/new_session.sh` through the very Bash tool the guard blocks (self-DOS). Messages now lead with `START_WORKTREE.bat` (the Windows launcher outside the blocked Bash surface). Message-string-only edits — no logic/exit-code/matcher changes. Rebased onto `origin/main` `c7a6ac05`; worktree_guard.py resolution KEEPS main's `2e8f3b59` cwd-scoping/mutation-detection logic AND this branch's START_WORKTREE.bat message.
+
+## F2-A Landing — self_funded contract-cap leak fix (Claude, 2026-06-03)
+- **Tool:** Claude Code
+- **Summary:** Landed the F2-A capital-path fix in isolated worktree `canompx3-f2a-land` (branch `session/joshd-f2a-land` off `origin/main` `fa98bf86`). Merged `origin/session/joshd-f2a-self-funded-sizing` (was 43 behind / 4 ahead). `prop_portfolio.select_for_profile` now makes `contract_budget` firm-aware: `None` for `self_funded` (prop micro-cap no longer gates a personal-capital book — risk/DD/slot budgets still bind), `tier.max_contracts_micro` for prop firms (unchanged). Honors `.claude/rules/self-funded-sizing-doctrine.md`. No schema/trading-logic change beyond the scoped cap-leak fix; gold.db read-only.
+- **Conflicts resolved:** HANDOFF.md (kept current main baton, appended this note); `tests/test_scripts/test_start_topstep_live_pilot.py` (accepted main's delete — dead START_LIVE_PILOT path, not resurrected).
+- **Status:** NOT merged to main — awaiting operator approval.
 
 ## Current Codex Follow-up - Dashboard Live CTA Visibility
 - **Tool:** Codex
@@ -107,8 +162,43 @@
 - **Verification:** `python -m pytest tests/test_hooks/test_branch_state.py tests/test_hooks/test_branch_flip_guard.py tests/test_hooks/test_mcp_git_guard.py tests/test_hooks/test_head_flip_guard.py -q` passed 50 tests. Scoped `ruff check` on the changed hook/test files passed after mechanical import/f-string cleanup. `git diff --check` passed. `python scripts/tools/audit_behavioral.py` and `python scripts/tools/audit_integrity.py` passed. `python scripts/tools/project_pulse.py --fast --format json` reported `broken=0`.
 - **Residual gap:** `python pipeline/check_drift.py`, `python pipeline/check_drift.py --skip-crg-advisory --quiet`, and `python pipeline/check_drift.py --fast --quiet` all timed out locally before a summary. A 60s unbuffered probe showed fast drift progressing through `Active micro-only filters run only on real-micro instruments` before stalling on the next drift check; this appears unrelated to the F4-A hook merge but remains unclosed.
 
+## Current Codex Follow-up - Highest-Risk Commit Review
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Summary:** Reviewed the recent highest-risk work surfaces (self-funded contract-cap fix, live journal-lock diagnostics, MNQ single-leg replacement research, and Slack control-room design). Fixed the research-monitoring bug in `research/mnq_single_leg_account_fit_replacement_v1.py`: replacement verdict gates now remain strictly pre-2026 in-sample while the full locked calendar is still passed through scoring so `mean_2026_*` monitoring fields are populated instead of silently NaN. Added a regression test proving 2026 holdout losses are reported but do not affect account-safe/verdict gates. Follow-up cleanup renamed the scoring inputs from misleading `book_is`/`trades_is` to `book`/`trades` so the API matches the full-calendar monitoring split. Second review pass fixed the report surface so Markdown rankings also expose `mean_2026_dollars` and `mean_2026_r`, removed transient `HANDOFF.md` conflict markers, and regenerated the MNQ result doc/CSV against `C:\Users\joshd\canompx3\gold.db`.
+- **Verification:** `python -m pytest tests/test_research/test_mnq_single_leg_account_fit_replacement_v1.py -q` passed 10 tests with known pytest config warnings and an ignored Windows temp cleanup `PermissionError` after the pass. `python research\mnq_single_leg_account_fit_replacement_v1.py` wrote 15 scenarios and the report against canonical `gold.db`; result CSV has 15 `KILL` rows, zero `mean_2026_*` nulls, and zero account-safe rows. `ruff check`, `ruff format --check`, `python -m py_compile`, prereg front-door text route, `project_pulse.py --fast --format json` (`broken=0`), and `git diff --check` passed. `python pipeline\check_drift.py --fast --quiet` timed out after 184s before a summary, so full fast-drift remains unclosed in this local run.
+
 ## Durable References
 - `docs/runtime/action-queue.yaml`
 - `docs/runtime/decision-ledger.md`
 - `docs/runtime/debt-ledger.md`
 - `docs/plans/2026-04-22-handoff-baton-compaction.md`
+
+## Current Codex Follow-up - Maximise No-Tunnel-Vision Sprint
+- **Tool:** Codex
+- **Date:** 2026-06-03
+- **Branch:** `session/joshd-maximise-no-tunnel-vision`
+- **Summary:** Built the opportunity map across allocation/live-readiness, ASX-open research, worktree/hook friction, dashboard readiness, drift speed, and stale-doc risk. Fresh DB-backed allocation verification is blocked because canonical `/workspace/canompx3/gold.db` is absent in this WSL checkout. Chosen action was the smallest high-EV operational fix: `workflow_doctor` now recommends opening an isolated worktree (`START_WORKTREE.bat <descriptor>` or `scripts/tools/new_session.sh <descriptor>`) for a live `peer_lease` instead of only inspecting the holder. This keeps live peer leases intact and removes the ambiguous force-release temptation.
+- **Verification:** `python -m pytest tests/test_tools/test_workflow_doctor.py -q` passed 22 tests with known pytest config warnings. `python -m pytest tests/test_tools/test_worktree_guard.py tests/test_tools/test_worktree_launch_preflight.py tests/test_tools/test_workflow_doctor.py -q` passed 73 tests / 1 skipped with the same config warnings. `ruff check`, `ruff format --check`, `python -m py_compile scripts/tools/workflow_doctor.py`, and `git diff --check` passed on the changed code paths. A mistaken probe for nonexistent `tests/test_hooks/test_worktree_guard_hook.py` failed with pytest exit 4 before collecting tests; reran the correct guard/launcher/workflow-doctor set successfully.
+
+## 2026-06-04 Codex plan update — live app operability/readiness
+
+- Created `docs/plans/2026-06-04-live-app-operability-readiness-plan.md`.
+- Plan separates dashboard-open, signal/read-only usability, and live-execution gates.
+- Key direction: dashboard should fail open/degraded; live launch must remain fail-closed.
+- Workstreams: dashboard startup, clean runtime worktree/git lease, DB-safe snapshot refresh, preflight split, C11/C12 clarity, lane/account frontier, recent-commit integration audit, operator runbook boundaries.
+- No database, broker, or live runtime state was inspected. Current decision remains NO-GO until measured gates pass.
+- 2026-06-04 follow-up revision: plan now explicitly prioritizes smallest useful diffs first: doc clarification, report metadata, dashboard render-only blocker cards, worktree diagnostics, then one atomic snapshot before any runtime-worktree/scheduler/lane changes.
+
+## 2026-06-04 Codex update — drift/precommit speed audit
+
+- Created `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md` after auditing the current hook/drift setup and fetching official/unofficial hook best practices.
+- Measured local state: `session_preflight.py` reports `core.hooksPath` unset; `profile_check_drift.py` took 191.79s across 198 checks; `check_drift.py --fast --quiet --skip-crg-advisory` took 18.51s and failed 10 DB-backed checks in this WSL checkout.
+- Recommendation: do not merely remove checks. Move to a tiered model: sub-5s always-on commit hygiene, path-scoped commit checks, pre-push integration gate, and full CI/readiness/deploy drift. First safe implementation should make hook activation loud, add a pre-push tier, then introduce typed drift metadata/path scopes before moving heavyweight checks out of commit time.
+
+
+## 2026-06-04 Codex update — drift/precommit speed audit v2
+
+- Expanded `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md` from a conservative tiering memo into a supersonic implementation blueprint with explicit latency targets: docs-only p50 <1s/p95 <3s, small Python p50 <3s/p95 <8s, pipeline/trading p50 <8s/p95 <20s, push p50 <90s/p95 <4min.
+- Added concrete architecture: hot-path hook classifier, typed drift registry, staged drift modes, timing ledgers, staged-only Ruff/compile, test impact map, DB truth lanes, and parallel pre-push runner.
+- Added staged roadmap and first patch set that should produce immediate UX wins before any heavyweight drift check is moved: hook activation repair, staged Ruff/compile, docs-only hot path, serial pre-push gate, drift metadata substrate, then scoped whale checks.
