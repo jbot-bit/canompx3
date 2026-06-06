@@ -117,11 +117,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** ab50ae7d — docs(audit): clear PENDING inbox — finding [1] applied as 99caaa4e
-- **Files changed:** 3 files
+- **Commit:** 40a55071 — @ feat(hooks): fleet-state Stage 2 — point destructive-op guards at the brain
+- **Files changed:** 5 files
+  - `.claude/hooks/tests/test_worktree_destroy_guard.py`
+  - `.claude/hooks/worktree-destroy-guard.py`
+  - `.claude/settings.json`
   - `HANDOFF.md`
-  - `docs/audit/results/2026-06-06-overnight-capital-review.md`
-  - `docs/audit/results/PENDING-OPERATOR-APPROVAL.md`
+  - `pipeline/check_drift.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
