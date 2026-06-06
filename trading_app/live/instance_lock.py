@@ -46,7 +46,7 @@ def _unlink_with_retry(lock_path: Path) -> None:
     contention (which itself retries).
     """
     last_exc: OSError | None = None
-    for attempt in range(_ORPHAN_RETRY_ATTEMPTS):
+    for _attempt in range(_ORPHAN_RETRY_ATTEMPTS):
         try:
             lock_path.unlink(missing_ok=True)
             return
@@ -147,8 +147,7 @@ def acquire_instance_lock(instrument: str) -> None:
                 lock_fd = None
             if attempt < _ORPHAN_RETRY_ATTEMPTS - 1:
                 log.info(
-                    "Lock acquire for %s blocked by a stale handle (attempt %d/%d: %s) — "
-                    "retrying after %.1fs",
+                    "Lock acquire for %s blocked by a stale handle (attempt %d/%d: %s) — retrying after %.1fs",
                     instrument,
                     attempt + 1,
                     _ORPHAN_RETRY_ATTEMPTS,
