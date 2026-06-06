@@ -54,6 +54,19 @@ def test_projectx_market_buy():
         assert len(call_body["customTag"]) > 0
 
 
+def test_projectx_order_router_uses_current_base_url_after_import(monkeypatch):
+    """New router instances must observe PROJECTX_BASE_URL changed after auth import."""
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    monkeypatch.setenv("PROJECTX_BASE_URL", "https://api.dynamic-orders.test")
+    mock_auth = MagicMock()
+
+    router = ProjectXOrderRouter(account_id=123, auth=mock_auth)
+
+    assert router._http is not None
+    assert router._http.base_url == "https://api.dynamic-orders.test"
+
+
 def test_projectx_stop_sell():
     mock_auth = MagicMock()
     mock_auth.headers.return_value = {"Authorization": "Bearer test"}

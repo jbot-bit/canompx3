@@ -12,9 +12,9 @@ import time
 import uuid
 from pathlib import Path
 
-from dotenv import load_dotenv
+from trading_app.live.env_bootstrap import load_runtime_env
 
-load_dotenv()
+load_runtime_env()
 
 log = logging.getLogger(__name__)
 

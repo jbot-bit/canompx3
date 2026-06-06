@@ -320,6 +320,7 @@ class SessionOrchestrator:
 
         # Create broker components via factory
         self._broker_name = broker or get_broker_name()
+        self._runtime_session_id = generate_trade_id()
         components = create_broker_components(self._broker_name, demo=demo)
         self.auth = components["auth"]
         self._feed_class = components["feed_class"]
@@ -2069,6 +2070,7 @@ class SessionOrchestrator:
         entry_slippage: float | None = None,
         journal_trade_id: str | None = None,
         order_id_exit: str | int | None = None,
+        client_order_id_exit: str | None = None,
     ) -> None:
         """Record a completed trade (EXIT or SCRATCH) in the performance monitor.
 
@@ -2130,6 +2132,7 @@ class SessionOrchestrator:
                 pnl_dollars=pnl_dollars,
                 exit_reason=event.event_type.lower(),
                 order_id_exit=order_id_exit,
+                client_order_id_exit=client_order_id_exit,
                 cusum_alarm=alert is not None,
             )
 
@@ -2563,6 +2566,13 @@ class SessionOrchestrator:
                     entry_model=strategy.entry_model,
                     engine_entry=event.price,
                     contracts=signal_execution_qty,
+                    profile_id=getattr(self, "_profile_id", None),
+                    account_id=None,
+                    copy_id="signal",
+                    runtime_session_id=getattr(self, "_runtime_session_id", None),
+                    contract_id=signal_execution_contract,
+                    session_id=strategy.orb_label,
+                    orb_minutes=strategy.orb_minutes,
                 )
 
                 self._write_signal_record(
@@ -2685,6 +2695,9 @@ class SessionOrchestrator:
                 self._positions.pop(event.strategy_id)
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
+            client_order_id = (
+                result.get("client_order_id") if isinstance(result, dict) else getattr(result, "client_order_id", None)
+            )
             raw_fill = result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
             fill_price = self._validate_fill_price(raw_fill, f"ENTRY {event.strategy_id}")
 
@@ -2725,7 +2738,15 @@ class SessionOrchestrator:
                 fill_entry=fill_price,
                 broker=self._broker_name,
                 order_id_entry=order_id,
+                client_order_id=client_order_id,
                 contracts=execution_qty,
+                profile_id=getattr(self, "_profile_id", None),
+                account_id=self.order_router.account_id,
+                copy_id="primary",
+                runtime_session_id=getattr(self, "_runtime_session_id", None),
+                contract_id=execution_contract,
+                session_id=strategy.orb_label,
+                orb_minutes=strategy.orb_minutes,
             )
 
             self._write_signal_record(
@@ -2738,6 +2759,7 @@ class SessionOrchestrator:
                     "fill_price": fill_price,
                     "contracts": execution_qty,
                     "order_id": order_id,
+                    "client_order_id": client_order_id,
                 }
             )
 
@@ -2909,6 +2931,9 @@ class SessionOrchestrator:
                 self._write_signal_record({"type": "EXIT_FAILED", "strategy_id": event.strategy_id, "error": str(e)})
                 return
             order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
+            client_order_id_exit = (
+                result.get("client_order_id") if isinstance(result, dict) else getattr(result, "client_order_id", None)
+            )
             raw_exit_fill = (
                 result.get("fill_price") if isinstance(result, dict) else getattr(result, "fill_price", None)
             )
@@ -2943,6 +2968,7 @@ class SessionOrchestrator:
                 entry_slippage=closed_rec.entry_slippage if closed_rec else None,
                 journal_trade_id=exit_jtid,
                 order_id_exit=order_id,
+                client_order_id_exit=client_order_id_exit,
             )
             self._write_signal_record(
                 {
@@ -2952,6 +2978,8 @@ class SessionOrchestrator:
                     "direction": event.direction.upper(),
                     "price": event.price,
                     "fill_price": exit_fill,
+                    "order_id": order_id,
+                    "client_order_id": client_order_id_exit,
                 }
             )
 
@@ -3052,6 +3080,11 @@ class SessionOrchestrator:
                     )
                     result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
                     order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
+                    client_order_id_exit = (
+                        result.get("client_order_id")
+                        if isinstance(result, dict)
+                        else getattr(result, "client_order_id", None)
+                    )
                     msg = f"KILL SWITCH FLATTEN: {record.strategy_id} {direction} → orderId={order_id} (attempt {attempt + 1})"
                     log.critical(msg)
                     self._notify(msg)
@@ -3062,6 +3095,7 @@ class SessionOrchestrator:
                             trade_id=record.journal_trade_id,
                             exit_reason="kill_switch",
                             order_id_exit=order_id,
+                            client_order_id_exit=client_order_id_exit,
                         )
                     break
                 except Exception as e:

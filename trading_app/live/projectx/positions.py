@@ -19,7 +19,7 @@ from ..http_client import (
     BrokerHTTPError,
     EquityReading,
 )
-from .auth import BASE_URL
+from .auth import projectx_base_url
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class ProjectXPositions(BrokerPositions):
         # and pass through. None outside an orchestrator → _NoopFailureHook fallback.
         failure_hook = getattr(auth, "failure_hook", None)
         kwargs_for_client: dict = {
-            "base_url": BASE_URL,
+            "base_url": projectx_base_url(),
             "refresh_token": auth.refresh_if_needed,
             "name": "projectx-positions",
         }

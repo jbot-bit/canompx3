@@ -29,13 +29,13 @@ from collections import deque
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from trading_app.live.env_bootstrap import load_runtime_env
 
-load_dotenv()
+load_runtime_env()
 
 log = logging.getLogger(__name__)
 

@@ -69,9 +69,19 @@ CREATE TABLE IF NOT EXISTS live_trades (
     exit_reason     TEXT,
     cusum_alarm     BOOLEAN DEFAULT FALSE,
     broker          TEXT,
+    profile_id      TEXT,
+    account_id      TEXT,
+    copy_id         TEXT,
+    runtime_session_id TEXT,
+    contract_id     TEXT,
+    session_id      TEXT,
+    orb_minutes     INTEGER,
     order_id_entry  TEXT,
     order_id_exit   TEXT,
     client_order_id TEXT,
+    client_order_id_exit TEXT,
+    broker_fill_id_entry TEXT,
+    broker_fill_id_exit  TEXT,
     contracts       INTEGER DEFAULT 1,
     session_mode    TEXT NOT NULL,
     created_at      TIMESTAMPTZ DEFAULT now(),
@@ -81,7 +91,19 @@ CREATE TABLE IF NOT EXISTS live_trades (
 
 # Idempotent column-add migration — DuckDB ALTER TABLE ADD COLUMN IF NOT EXISTS.
 # Survives crash-resumes of existing journals (column added in 2026-05-18 baseline).
-_MIGRATION_ADD_CLIENT_ORDER_ID = "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS client_order_id TEXT;"
+_LIVE_TRADES_MIGRATIONS = [
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS client_order_id TEXT;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS profile_id TEXT;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS account_id TEXT;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS copy_id TEXT;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS runtime_session_id TEXT;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS contract_id TEXT;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS session_id TEXT;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS orb_minutes INTEGER;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS client_order_id_exit TEXT;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS broker_fill_id_entry TEXT;",
+    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS broker_fill_id_exit TEXT;",
+]
 
 
 def generate_trade_id() -> str:
@@ -104,8 +126,8 @@ class TradeJournal:
             self._con = duckdb.connect(str(self._db_path))
             configure_connection(self._con, writing=True)
             self._con.execute(LIVE_TRADES_SCHEMA)
-            # Idempotent migration for journals created before 2026-05-18 baseline.
-            self._con.execute(_MIGRATION_ADD_CLIENT_ORDER_ID)
+            for migration in _LIVE_TRADES_MIGRATIONS:
+                self._con.execute(migration)
             log.info("TradeJournal opened: %s (mode=%s)", self._db_path, mode)
         except duckdb.IOException as e:
             holder_pid = _extract_lock_holder_pid(str(e))
@@ -142,6 +164,14 @@ class TradeJournal:
         order_id_entry: str | int | None = None,
         client_order_id: str | None = None,
         contracts: int = 1,
+        profile_id: str | None = None,
+        account_id: str | int | None = None,
+        copy_id: str | None = None,
+        runtime_session_id: str | None = None,
+        contract_id: str | None = None,
+        session_id: str | None = None,
+        orb_minutes: int | None = None,
+        broker_fill_id_entry: str | None = None,
     ) -> None:
         """Insert a partial row when an entry order is submitted/filled.
 
@@ -158,8 +188,10 @@ class TradeJournal:
                 INSERT INTO live_trades (
                     trade_id, trading_day, instrument, strategy_id, direction,
                     entry_model, engine_entry, fill_entry, broker,
-                    order_id_entry, client_order_id, contracts, session_mode
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    profile_id, account_id, copy_id, runtime_session_id,
+                    contract_id, session_id, orb_minutes, order_id_entry,
+                    client_order_id, broker_fill_id_entry, contracts, session_mode
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     trade_id,
@@ -171,8 +203,16 @@ class TradeJournal:
                     engine_entry,
                     fill_entry,
                     broker,
+                    profile_id,
+                    str(account_id) if account_id is not None else None,
+                    copy_id,
+                    runtime_session_id,
+                    contract_id,
+                    session_id,
+                    orb_minutes,
                     str(order_id_entry) if order_id_entry is not None else None,
                     client_order_id,
+                    broker_fill_id_entry,
                     contracts,
                     self._mode,
                 ],
@@ -180,15 +220,27 @@ class TradeJournal:
         except Exception:
             log.critical("TradeJournal.record_entry FAILED for %s", trade_id, exc_info=True)
 
-    def update_entry_fill(self, *, trade_id: str, fill_entry: float) -> None:
+    def update_entry_fill(
+        self,
+        *,
+        trade_id: str,
+        fill_entry: float,
+        broker_fill_id_entry: str | None = None,
+    ) -> None:
         """Update fill price when E2 stop-market order fills via poller."""
         if self._con is None:
             return
         try:
-            self._con.execute(
-                "UPDATE live_trades SET fill_entry = ? WHERE trade_id = ?",
-                [fill_entry, trade_id],
-            )
+            if broker_fill_id_entry is None:
+                self._con.execute(
+                    "UPDATE live_trades SET fill_entry = ? WHERE trade_id = ?",
+                    [fill_entry, trade_id],
+                )
+            else:
+                self._con.execute(
+                    "UPDATE live_trades SET fill_entry = ?, broker_fill_id_entry = ? WHERE trade_id = ?",
+                    [fill_entry, broker_fill_id_entry, trade_id],
+                )
         except Exception:
             log.critical("TradeJournal.update_entry_fill FAILED for %s", trade_id, exc_info=True)
 
@@ -204,6 +256,8 @@ class TradeJournal:
         pnl_dollars: float | None = None,
         exit_reason: str | None = None,
         order_id_exit: str | int | None = None,
+        client_order_id_exit: str | None = None,
+        broker_fill_id_exit: str | None = None,
         cusum_alarm: bool = False,
     ) -> None:
         """Update an existing row when a trade exits."""
@@ -230,6 +284,8 @@ class TradeJournal:
                     pnl_dollars = ?,
                     exit_reason = ?,
                     order_id_exit = ?,
+                    client_order_id_exit = ?,
+                    broker_fill_id_exit = ?,
                     cusum_alarm = ?,
                     exited_at = ?
                 WHERE trade_id = ?
@@ -243,6 +299,8 @@ class TradeJournal:
                     pnl_dollars,
                     exit_reason,
                     str(order_id_exit) if order_id_exit is not None else None,
+                    client_order_id_exit,
+                    broker_fill_id_exit,
                     cusum_alarm,
                     datetime.now(UTC),
                     trade_id,

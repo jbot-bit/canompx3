@@ -7,6 +7,8 @@ call without bypassing the classifier in http_client.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def _ok_resp(body):
     r = MagicMock()
@@ -78,3 +80,42 @@ def test_projectx_auth_is_broker_auth():
 
             auth = ProjectXAuth()
             assert isinstance(auth, BrokerAuth)
+
+
+def test_projectx_credentials_accept_projectx_username_without_legacy_user(monkeypatch):
+    monkeypatch.setenv("PROJECTX_USERNAME", "canonical_user")
+    monkeypatch.delenv("PROJECTX_USER", raising=False)
+    monkeypatch.setenv("PROJECTX_API_KEY", "canonical_key")
+
+    from trading_app.live.projectx import auth as auth_module
+
+    assert auth_module._projectx_login_credentials() == ("canonical_user", "canonical_key")
+
+
+def test_projectx_credentials_report_missing_username_without_keyerror(monkeypatch):
+    monkeypatch.delenv("PROJECTX_USERNAME", raising=False)
+    monkeypatch.delenv("PROJECTX_USER", raising=False)
+    monkeypatch.setenv("PROJECTX_API_KEY", "canonical_secret_key_value")
+
+    from trading_app.live.projectx import auth as auth_module
+
+    with pytest.raises(RuntimeError, match="PROJECTX_USERNAME or PROJECTX_USER") as excinfo:
+        auth_module._projectx_login_credentials()
+
+    message = str(excinfo.value)
+    assert "checked shell environment" in message
+    assert ".env" in message
+    assert "canonical_secret_key_value" not in message
+
+
+def test_projectx_base_url_resolves_after_module_import(monkeypatch):
+    from trading_app.live.projectx import auth as auth_module
+
+    monkeypatch.setenv("PROJECTX_BASE_URL", "https://api.dynamic-projectx.test/")
+
+    assert auth_module.projectx_base_url() == "https://api.dynamic-projectx.test"
+    assert auth_module.projectx_market_hub_url() == "https://rtc.dynamic-projectx.test/hubs/market"
+    assert auth_module.projectx_user_hub_url() == "https://rtc.dynamic-projectx.test/hubs/user"
+
+    auth = auth_module.ProjectXAuth()
+    assert auth._http.base_url == "https://api.dynamic-projectx.test"

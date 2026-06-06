@@ -19,12 +19,12 @@ import os
 import time
 import uuid
 
-from dotenv import load_dotenv
+from trading_app.live.env_bootstrap import load_runtime_env
 
 from ..broker_base import BrokerAuth
 from ..http_client import AUTH_POLICY, BrokerHTTPClient, BrokerHTTPError
 
-load_dotenv()
+load_runtime_env()
 log = logging.getLogger(__name__)
 
 LIVE_URL = "https://live.tradovateapi.com/v1"
