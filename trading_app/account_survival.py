@@ -186,6 +186,27 @@ class DailyScenario:
 
 
 @dataclass(frozen=True)
+class SizingContext:
+    """Transports the LIVE engine's sizing inputs into the survival sim so the
+    gate projects DD at the contract count the engine WOULD trade.
+
+    Transport only — it does NOT re-encode any lot ladder. ``account_equity`` is
+    the Portfolio NOTIONAL (the value execution_engine.py:267 sizes from), NEVER
+    SurvivalRules.starting_balance (which is 0.0 for express-funded XFA accounts
+    and would zero the sizer -> a false PASS).
+    """
+
+    account_equity: float
+    risk_per_trade_pct: float
+    account_size: int
+    max_contracts_by_strategy: dict[str, int]
+
+    def max_contracts_for(self, strategy_id: str) -> int:
+        # Fail closed to 1 for an unknown lane - never size an unrecognised lane up.
+        return int(self.max_contracts_by_strategy.get(strategy_id, 1))
+
+
+@dataclass(frozen=True)
 class TradePath:
     """Canonical per-trade path summary used for conservative intraday replay.
 
