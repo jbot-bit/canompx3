@@ -117,14 +117,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-07
-- **Commit:** 0bbe9b5d — fix(capital): close Fork #2 - profile fingerprint omitted survival-verdict fields
-- **Files changed:** 6 files
+- **Commit:** 0dc7f2c2 — chore: remove completed profile-fingerprint-coverage stage file (work landed 0bbe9b5d)
+- **Files changed:** 2 files
   - `HANDOFF.md`
   - `docs/runtime/stages/profile-fingerprint-field-coverage.md`
-  - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift_profile_fingerprint_coverage.py`
-  - `tests/test_trading_app/test_account_survival.py`
-  - `trading_app/derived_state.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
