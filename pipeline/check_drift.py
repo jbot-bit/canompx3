@@ -13845,6 +13845,114 @@ def check_brain_consuming_hooks_registered() -> list[str]:
     return violations
 
 
+# Class-of-four code-fingerprint registries (capital review blast scan,
+# 2026-06-07). Each ``_*_code_paths`` function returns the list of source files
+# whose SHA-256 content-fingerprint invalidates a cached state PASS. If a new
+# live-risk file is added OUTSIDE the relevant list, the cached PASS survives
+# stale — a SILENT staleness-coverage gap. The most capital-critical instance is
+# ``_criterion11_code_paths`` (the survival gate). This check pins the FLOOR
+# count of each registry: shrinking a list (removing a fingerprinted dependency)
+# below its floor without a reviewed bump fails closed. Static AST — does NOT
+# call the functions (``_overlay_code_paths`` takes a spec arg and lists a
+# runtime data artifact), so no import/DB side-effects.
+_CODE_FINGERPRINT_REGISTRIES: tuple[tuple[str, str, int], ...] = (
+    # (module-relative path, function name, floor entry count)
+    ("trading_app/account_survival.py", "_criterion11_code_paths", 6),
+    ("trading_app/opportunity_awareness.py", "_lane_code_paths", 3),
+    ("trading_app/sr_monitor.py", "_sr_code_paths", 3),
+    ("trading_app/conditional_overlays.py", "_overlay_code_paths", 3),
+)
+
+
+def _count_returned_list_entries(func_node: "ast.FunctionDef") -> int | None:
+    """Largest list-literal element count among the function's `return` stmts.
+
+    Returns None if the function has no `return` whose value is a list literal
+    (the registries all `return [ ... ]`, so None means the shape changed and
+    the check must fail closed).
+    """
+    best: int | None = None
+    for node in ast.walk(func_node):
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.List):
+            n = len(node.value.elts)
+            best = n if best is None else max(best, n)
+    return best
+
+
+def check_code_fingerprint_registries_pinned(
+    project_root: Path | None = None,
+) -> list[str]:
+    """Pin the class-of-four code-fingerprint staleness registries (2026-06-07).
+
+    For each ``(_*_code_paths)`` registry: parse the module, find the function,
+    and assert it returns a list literal with at least the recorded FLOOR number
+    of entries. A shrink (or a removed/renamed function, or a changed return
+    shape) fails closed — that is exactly the silent-coverage-gap the capital
+    review surfaced for the C11 survival fingerprint.
+
+    Fail-closed on: missing module, parse error, missing function, non-list
+    return, or entry count below floor. Floors are bumped deliberately when a
+    registry legitimately grows; they never shrink silently.
+
+    Parameters
+    ----------
+    project_root:
+        Injectable root for mutation tests. Defaults to the real PROJECT_ROOT.
+    """
+    root = project_root or PROJECT_ROOT
+    violations: list[str] = []
+
+    for rel_path, fn_name, floor in _CODE_FINGERPRINT_REGISTRIES:
+        module_path = root / rel_path
+        if not module_path.exists():
+            violations.append(
+                f"check_code_fingerprint_registries_pinned: missing module {rel_path} (expected to define {fn_name})."
+            )
+            continue
+        try:
+            tree = ast.parse(module_path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError) as e:
+            violations.append(
+                f"check_code_fingerprint_registries_pinned: parse error in {rel_path}: {type(e).__name__}: {e}"
+            )
+            continue
+
+        func_node = next(
+            (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == fn_name),
+            None,
+        )
+        if func_node is None:
+            violations.append(
+                f"check_code_fingerprint_registries_pinned: {rel_path} no longer "
+                f"defines {fn_name}() — the cached-state fingerprint registry was "
+                "removed or renamed. A renamed registry silently stops detecting "
+                "staleness. Restore the function or update this check deliberately."
+            )
+            continue
+
+        count = _count_returned_list_entries(func_node)
+        if count is None:
+            violations.append(
+                f"check_code_fingerprint_registries_pinned: {fn_name}() in "
+                f"{rel_path} no longer returns a list literal — cannot verify the "
+                "fingerprint covers its dependencies. Fail-closed."
+            )
+            continue
+        if count < floor:
+            violations.append(
+                f"check_code_fingerprint_registries_pinned: {fn_name}() in "
+                f"{rel_path} returns {count} fingerprinted file(s), below the "
+                f"recorded floor of {floor}. Removing a file from a code-"
+                "fingerprint registry lets a stale cached PASS survive after the "
+                "removed dependency drifts (silent staleness gap — the capital-"
+                "critical case is the C11 survival gate). If the shrink is "
+                "intentional, lower the floor in _CODE_FINGERPRINT_REGISTRIES "
+                "with review."
+            )
+
+    return violations
+
+
 def check_triage_provenance_completeness(
     drafts_dir: Path | None = None,
 ) -> list[str]:
@@ -16591,6 +16699,12 @@ CHECKS = [
         "Brain-consuming hooks registered in settings.json (no silent dead-hook)",
         check_brain_consuming_hooks_registered,
         False,  # blocking -- an unwired destructive-safety hook re-opens a data-loss path
+        False,
+    ),
+    (
+        "Code-fingerprint staleness registries pinned (class-of-four floor counts; C11 survival is capital-critical)",
+        check_code_fingerprint_registries_pinned,
+        False,  # blocking -- a shrunk fingerprint list lets a stale cached PASS survive (silent staleness gap)
         False,
     ),
     (

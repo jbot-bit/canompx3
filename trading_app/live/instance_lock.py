@@ -101,12 +101,27 @@ def acquire_instance_lock(instrument: str) -> None:
                 )
                 sys.exit(1)
             log.info("Stale lock file from dead/invalid PID %r — removing", content)
+            # Remove the dead-PID orphan, retrying briefly in case Windows has
+            # not yet released a leaked handle from the hard-killed process.
+            _unlink_with_retry(lock_path)
         else:
-            # Empty orphan from an X-closed (non-graceful) prior session.
-            log.info("Empty orphan lock file (likely X-closed prior session) — removing")
-        # Remove the orphan, retrying briefly in case Windows has not yet
-        # released a leaked handle from the hard-killed process.
-        _unlink_with_retry(lock_path)
+            # Empty lock file: AMBIGUOUS — could be an X-closed dead orphan OR a
+            # LIVE process that created the file but has NOT yet written its PID.
+            # We must NOT unlink it: deleting a file a live peer still holds the
+            # OS lock on detaches the inode, so this process would create a NEW
+            # inode at the same path and both would "hold" the lock — exactly the
+            # double-instance bug. Instead, fall straight through to the acquire
+            # loop below. `os.open(O_CREAT)` opens the existing empty file in
+            # place and the msvcrt/flock acquire is the real mutex: a live holder
+            # makes it fail (→ retry → sys.exit(1)); a dead orphan re-locks in
+            # place (the OS released the dead process's byte-lock on termination).
+            # No unlink, no probe, no release-then-reacquire window. (Audit
+            # 2026-06-07 caught a probe-and-release TOCTOU in the first attempt.)
+            log.info(
+                "Empty lock file for %s (PID not yet written) — acquiring in place; "
+                "a live holder will block and refuse start.",
+                instrument,
+            )
 
     # Acquire exclusive lock, then write PID.
     #

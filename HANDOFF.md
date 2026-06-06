@@ -116,14 +116,11 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-06
-- **Commit:** 40a55071 — @ feat(hooks): fleet-state Stage 2 — point destructive-op guards at the brain
-- **Files changed:** 5 files
-  - `.claude/hooks/tests/test_worktree_destroy_guard.py`
-  - `.claude/hooks/worktree-destroy-guard.py`
-  - `.claude/settings.json`
+- **Date:** 2026-06-07
+- **Commit:** 59c39c7d — docs(plans): record completed worktree-cleanup handoff (DONE 2026-06-06)
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `pipeline/check_drift.py`
+  - `docs/plans/2026-06-06-worktree-cleanup-handoff.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
