@@ -117,11 +117,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** 84f1ba3f — feat(START_BOT): add live/demo mode arg so operator arms live from the front-end launcher
-- **Files changed:** 3 files
-  - `START_BOT.bat`
-  - `docs/plans/2026-06-05-c11-stage1-stage2-design.md`
-  - `docs/research-input/topstep/topstep_payout_economics_2026-06-06.md`
+- **Commit:** d755385b — fix(capital): Row 05 survival-state drift check + Row 08 reconnect resync + MED#1 finding
+- **Files changed:** 5 files
+  - `docs/audit/overnight_dispatch/results/08.md`
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift_survival_state_current.py`
+  - `tests/test_trading_app/test_reconnect_position_resync.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

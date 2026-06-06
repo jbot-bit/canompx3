@@ -782,6 +782,23 @@ class TestRithmicContractResolveMocked:
         with pytest.raises(RuntimeError, match="No Rithmic accounts"):
             contracts.resolve_account_id()
 
+    def test_resolve_account_id_multiple_raises_ambiguous(self):
+        # Capital review A defense-in-depth: >1 logged-in account must fail
+        # closed on the SINGULAR resolver, never silently take accounts[0].
+        from trading_app.live.rithmic.contracts import RithmicContracts
+
+        auth = _make_mock_auth()
+        auth.client.accounts = [
+            SimpleNamespace(account_id="11111"),
+            SimpleNamespace(account_id="22222"),
+        ]
+        auth.client.fcm_id = "FCM01"
+        auth.client.ib_id = "IB01"
+
+        contracts = RithmicContracts(auth=auth)
+        with pytest.raises(RuntimeError, match="ambiguous"):
+            contracts.resolve_account_id()
+
     def test_resolve_all_account_ids(self):
         from trading_app.live.rithmic.contracts import RithmicContracts
 
