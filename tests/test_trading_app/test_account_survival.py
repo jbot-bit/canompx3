@@ -913,8 +913,10 @@ def test_single_micro_sizing_ok_when_all_strategies_one_contract(monkeypatch):
     from trading_app import account_survival as asv
 
     fake_portfolio = SimpleNamespace(
-        strategies=[SimpleNamespace(strategy_id="A", max_contracts=1),
-                    SimpleNamespace(strategy_id="B", max_contracts=1)]
+        strategies=[
+            SimpleNamespace(strategy_id="A", max_contracts=1),
+            SimpleNamespace(strategy_id="B", max_contracts=1),
+        ]
     )
     monkeypatch.setattr(asv, "build_profile_portfolio", lambda **_kw: fake_portfolio)
     ok, msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
@@ -928,8 +930,10 @@ def test_single_micro_sizing_fails_closed_when_a_lane_exceeds_one(monkeypatch):
     from trading_app import account_survival as asv
 
     fake_portfolio = SimpleNamespace(
-        strategies=[SimpleNamespace(strategy_id="A", max_contracts=1),
-                    SimpleNamespace(strategy_id="B", max_contracts=2)]
+        strategies=[
+            SimpleNamespace(strategy_id="A", max_contracts=1),
+            SimpleNamespace(strategy_id="B", max_contracts=2),
+        ]
     )
     monkeypatch.setattr(asv, "build_profile_portfolio", lambda **_kw: fake_portfolio)
     ok, msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
@@ -995,6 +999,4 @@ def test_evaluate_profile_survival_gate_fails_closed_on_sizing_parity_violation(
         write_state=False,
     )
 
-    assert summary.gate_pass is False, (
-        "C11 gate must fail closed when D-3 sizing parity is violated"
-    )
+    assert summary.gate_pass is False, "C11 gate must fail closed when D-3 sizing parity is violated"

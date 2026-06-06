@@ -835,8 +835,7 @@ def _check_account_binding(ctx: PreflightContext) -> CheckResult:
         if ctx.demo:
             return CheckResult(
                 True,
-                f"WARN: {n} accounts and no --account-id; demo routes to first. "
-                "Live requires --account-id.",
+                f"WARN: {n} accounts and no --account-id; demo routes to first. Live requires --account-id.",
             )
         ids = [aid for aid, _ in all_accounts]
         return CheckResult(

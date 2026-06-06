@@ -1304,7 +1304,9 @@ class TestKillSwitch:
         # re-raise), so the alert comes from the flatten's retry-exhaustion path.
         assert len(orch._positions.active_positions()) == 1
         manual_close_alerts = [str(c) for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
-        assert manual_close_alerts, f"operator not alerted when no-loop flatten failed; calls={orch._notify.call_args_list}"
+        assert manual_close_alerts, (
+            f"operator not alerted when no-loop flatten failed; calls={orch._notify.call_args_list}"
+        )
 
     async def test_watchdog_survives_internal_errors(self):
         """Watchdog doesn't die from its own errors (crash-resistant)."""
@@ -4342,12 +4344,8 @@ class TestBracketOrders:
 
         await orch._handle_event(_entry_event(2350.5))
 
-        assert orch._kill_switch_fired is True, (
-            "Confirmed-naked position must fire the kill switch"
-        )
-        assert flatten_calls, (
-            "Confirmed-naked position must trigger emergency flatten"
-        )
+        assert orch._kill_switch_fired is True, "Confirmed-naked position must fire the kill switch"
+        assert flatten_calls, "Confirmed-naked position must trigger emergency flatten"
         assert orch._stats.brackets_submitted == 0, (
             "A failed/naked bracket must NOT be counted as submitted; "
             f"got brackets_submitted={orch._stats.brackets_submitted}"
@@ -4385,12 +4383,8 @@ class TestBracketOrders:
 
         await orch._handle_event(_entry_event(2350.5))
 
-        assert orch._kill_switch_fired is True, (
-            "Missing-stop position must fire the kill switch"
-        )
-        assert flatten_calls, (
-            "Missing-stop position must trigger emergency flatten"
-        )
+        assert orch._kill_switch_fired is True, "Missing-stop position must fire the kill switch"
+        assert flatten_calls, "Missing-stop position must trigger emergency flatten"
         assert orch._stats.brackets_submitted == 0, (
             "A missing-stop bracket must NOT be counted as submitted; "
             f"got brackets_submitted={orch._stats.brackets_submitted}"
