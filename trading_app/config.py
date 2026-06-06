@@ -4220,6 +4220,7 @@ ORB_DURATION_MINUTES: dict[str, int] = {
     "LONDON_METALS": 5,  # London metals AM session 8:00 AM London
     "EUROPE_FLOW": 5,  # European flow adjacent to London metals (7AM London winter / 9AM summer)
     "US_DATA_830": 5,  # US economic data release 8:30 AM ET
+    "NYSE_PREOPEN": 5,  # NYSE order imbalance publication 9:00 AM ET
     "NYSE_OPEN": 5,  # NYSE cash open 9:30 AM ET
     "US_DATA_1000": 5,  # US 10:00 AM data (ISM/CC) + post-equity-open flow
     "COMEX_SETTLE": 5,  # COMEX gold settlement 1:30 PM ET
