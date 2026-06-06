@@ -148,13 +148,23 @@ def test_load_daily_pnl_series_keeps_missing_whole_book_days_as_explicit_zero_sl
     db_path = tmp_path / "lane_corr_monitor.db"
     con = duckdb.connect(str(db_path))
     try:
-        con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
-        con.execute("INSERT INTO paper_trades VALUES ('A', DATE '2026-01-01', 1.0)")
-        con.execute("INSERT INTO paper_trades VALUES ('B', DATE '2026-01-03', -1.0)")
+        # paper_trades is a shared table discriminated by execution_source
+        # (live/backfill = real; shadow = excluded). The fixture must carry the
+        # column so load_daily_pnl_series's `execution_source != 'shadow'` guard
+        # binds, and must include a shadow row to prove it is excluded.
+        con.execute(
+            "CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE, execution_source VARCHAR)"
+        )
+        con.execute("INSERT INTO paper_trades VALUES ('A', DATE '2026-01-01', 1.0, 'live')")
+        con.execute("INSERT INTO paper_trades VALUES ('B', DATE '2026-01-03', -1.0, 'live')")
+        # Shadow row on the gap day — must NOT create a 2026-01-02 data point.
+        con.execute("INSERT INTO paper_trades VALUES ('A', DATE '2026-01-02', 5.0, 'shadow')")
 
         wide = load_daily_pnl_series(con, ["A", "B"], days_back=5000)
 
         assert [str(day.date()) for day in wide.index] == ["2026-01-01", "2026-01-02", "2026-01-03"]
+        # 2026-01-02 stays an explicit NaN slot: the only row there is shadow,
+        # which the execution_source guard excludes.
         assert pd.isna(wide.loc[pd.Timestamp("2026-01-02"), "A"])
         assert pd.isna(wide.loc[pd.Timestamp("2026-01-02"), "B"])
     finally:
