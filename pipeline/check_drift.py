@@ -4816,6 +4816,105 @@ def check_daily_features_row_integrity(con=None) -> list[str]:
     return violations
 
 
+def check_active_instrument_bars_without_daily_features(con=None, now=None) -> list[str]:
+    """Detect active-instrument trading days with bars present but daily_features ABSENT.
+
+    This is the 0-of-3-aperture UNBUILT coverage gap (audit 2026-06-06, Finding 4):
+    a day with full ``bars_1m`` coverage that has ZERO ``daily_features`` rows
+    because it was never inside the build run's ``trading_days`` set (a narrow /
+    interrupted ``--start``/``--end`` range, or a run whose range ended before the
+    day's bars landed). ``build_daily_features`` iterates unconditionally with no
+    per-day skip, so absence = never covered — and the gap recurs silently because
+    no existing check catches it. ``check_daily_features_row_integrity`` (Check 77)
+    only catches the 1-of-3 PARTIAL state (rows != expected); it never fires when
+    the count is 0, because a day with 0 daily_features rows produces no GROUP BY
+    group at all.
+
+    Flags any ``(symbol, trading_day)`` with >= 200 ``bars_1m`` rows but 0
+    ``daily_features`` rows, for symbols in ``ACTIVE_ORB_INSTRUMENTS``. The
+    in-progress trading day is EXCLUDED via the canonical Option W wall-clock guard
+    (``compute_trading_day_utc_range(td)[1]`` vs now) so it never fires on today's
+    legitimately-unbuilt live day. The >= 200 floor mirrors the audit verification
+    SQL — well below a full session (~1300+ bars) but above a thin live partial.
+
+    KNOWN LIMITATION (audit gate 2026-06-06): the >= 200 floor leaves a deliberate
+    blind spot — a day with 1..199 bars and 0 daily_features is NOT flagged. This
+    is unavoidable by bar count alone: bar count cannot distinguish a thin live
+    partial (~60 bars) from a legitimately short/quiet session, and built days are
+    observed as low as the 1st-percentile ~59 bars (early-close / sparse days), so
+    a lower floor would false-positive on real short sessions while a higher floor
+    would miss real full-day gaps. Option W reached the same conclusion (5
+    bar-derived signals falsified). This check therefore targets ONLY the
+    unambiguous full-bars-but-no-features class; the sub-200 class is left to the
+    Option W wall-clock guards upstream in the bridge/build path, not re-litigated
+    here by an inherently-ambiguous bar threshold.
+
+    Fail-closed: any qualifying day is a blocking violation.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from datetime import UTC, datetime
+
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.dst import compute_trading_day_utc_range
+
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
+        current = now or datetime.now(UTC)
+
+        if con is None:
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = open_read_only_with_retry(db_path)
+            _own_con = True
+
+        # Trading day = bars assigned to the Brisbane 09:00->09:00 window.
+        # Converting ts to Brisbane then subtracting 9h shifts the 09:00 boundary
+        # to midnight, so CAST(... AS DATE) yields the canonical trading_day.
+        # (Calendar boundary only — the in-progress exclusion below defers to the
+        # canonical compute_trading_day_utc_range, never a re-encoded formula.)
+        candidates = con.execute(f"""
+            WITH bars AS (
+                SELECT symbol,
+                       CAST((ts_utc AT TIME ZONE 'Australia/Brisbane'
+                             - INTERVAL '9 hours') AS DATE) AS td,
+                       COUNT(*) AS n
+                FROM bars_1m
+                WHERE symbol IN ({active_syms})
+                GROUP BY 1, 2
+            ),
+            feat AS (
+                SELECT symbol, trading_day AS td
+                FROM daily_features
+                WHERE symbol IN ({active_syms})
+                GROUP BY 1, 2
+            )
+            SELECT b.symbol, b.td, b.n
+            FROM bars b
+            LEFT JOIN feat f ON b.symbol = f.symbol AND b.td = f.td
+            WHERE f.td IS NULL AND b.n >= 200
+            ORDER BY b.symbol, b.td
+        """).fetchall()
+
+        for symbol, td, n in candidates:
+            _, td_window_end = compute_trading_day_utc_range(td)
+            if current < td_window_end:
+                # In-progress day — its trading window has not fully elapsed, so
+                # daily_features is legitimately not built yet. Not a violation.
+                continue
+            violations.append(
+                f"  {symbol} {td}: {n} bars_1m rows but 0 daily_features rows "
+                f"(0-of-3 UNBUILT gap — re-run build_daily_features for this day)"
+            )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_instrument_bars_without_daily_features: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_htf_levels_integrity(con=None) -> list[str]:
     """Verify all 12 prev_week_* / prev_month_* fields agree with canonical SQL.
 
@@ -15867,6 +15966,12 @@ CHECKS = [
         False,
         True,
     ),  # requires_db
+    (
+        "Active-instrument bars present but daily_features absent (0-of-3 UNBUILT gap)",
+        check_active_instrument_bars_without_daily_features,
+        False,
+        True,
+    ),  # requires_db (Finding 4, audit 2026-06-06)
     (
         "HTF level fields match canonical week/month SQL aggregation",
         check_htf_levels_integrity,

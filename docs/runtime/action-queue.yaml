@@ -1052,7 +1052,26 @@ items:
   - id: daily_features_bars_present_features_absent_gap_2026_06_06
     title: Finding 4 — active-instrument days with bars_1m present but daily_features absent (UNBUILT coverage gap)
     class: debt
-    status: open
+    status: closed
+    override_note: |
+      DONE 2026-06-06 (Claude, operator GO for check + backfill). Both steps complete:
+      (1) Added fail-closed drift check `check_active_instrument_bars_without_daily_features`
+          to pipeline/check_drift.py (blocking, requires_db), registered right after
+          check_daily_features_row_integrity. Flags active-instrument days with >=200
+          bars_1m rows but 0 daily_features rows; excludes the in-progress day via the
+          canonical Option W wall-clock guard (compute_trading_day_utc_range vs now);
+          instruments from ACTIVE_ORB_INSTRUMENTS. 8 tests incl. known-violation
+          injection, in-progress exclusion, and a PINNED sub-200-bar blind-spot test
+          (tests/test_pipeline/test_check_drift_bars_without_daily_features.py).
+      (2) Backfilled all 6 enumerated gap dates, all 3 apertures each (integrity PASSED
+          per build): MGC 2026-04-20/04-21/04-22/05-26, MES 2026-05-14/05-26. Each day
+          now has exactly 3 daily_features rows.
+      VERIFIED: new check returns 0 violations; verification SQL returns 0 rows;
+      `python pipeline/check_drift.py` exits 0 (179 checks pass; 12 pre-existing
+      advisory, none blocking). Adversarial-audit gate (evidence-auditor) = CONDITIONAL
+      → the one finding (undocumented sub-200-bar blind spot) was CLOSED by docstring
+      + 2 pinning tests. Blind spot is unavoidable by bar count alone (built days
+      observed as low as ~59 bars; Option W reached the same conclusion).
     priority: P2
     close_before_new_work: false
     owner_hint: claude-or-codex
