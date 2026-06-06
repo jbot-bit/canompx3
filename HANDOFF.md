@@ -117,7 +117,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-06
-- **Commit:** 258774c4 — @ fix(live): harden repo-drift gate — exact-match ignore + parse renames
+- **Commit:** 99caaa4e — fix(live): harden repo-drift gate — exact-match ignore + parse renames
 - **Files changed:** 3 files
   - `HANDOFF.md`
   - `scripts/run_live_session.py`
