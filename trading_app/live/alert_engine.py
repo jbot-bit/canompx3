@@ -58,6 +58,7 @@ _ALERT_RULES: list[tuple[str, AlertLevel, tuple[str, ...]]] = [
     ("close_time_flatten", "warning", ("CLOSE TIME FLATTEN",)),
     ("entry_blocked", "warning", ("ENTRY BLOCKED",)),
     ("orphan", "warning", ("ORPHAN",)),
+    ("news_event", "warning", ("NEWS HEADS-UP",)),
     ("heartbeat", "info", ("HEARTBEAT:",)),
 ]
 

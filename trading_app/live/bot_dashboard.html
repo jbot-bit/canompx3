@@ -2940,6 +2940,23 @@
       flex: 1 1 calc(50% - 6px);
     }
   }
+
+  /* ===== News-awareness panel (display + heads-up only) ===== */
+  .news-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg,12px);padding:12px 14px}
+  .news-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .news-title{font-weight:700;font-size:13px;color:var(--text)}
+  .news-tag{font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:2px 7px}
+  .news-src{margin-left:auto;font-size:10px;color:var(--muted)}
+  .news-next{font-size:11px;color:var(--red);margin-bottom:6px;font-weight:600}
+  .news-row{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--surface-2)}
+  .news-row:last-child{border-bottom:none}
+  .news-time{font-family:var(--mono);font-size:12px;color:var(--cyan);width:46px;flex:none;padding-top:1px}
+  .news-sign{font-size:9px;font-weight:700;border-radius:4px;padding:2px 6px;flex:none;white-space:nowrap}
+  .news-sign.red{color:var(--red);background:rgba(255,92,92,.14)}
+  .news-sign.amber{color:var(--yellow);background:rgba(255,193,7,.14)}
+  .news-sign.cyan{color:var(--cyan);background:rgba(0,212,255,.12)}
+  .news-text{font-size:12px;color:var(--text);line-height:1.45}
+  .news-foot{font-size:10px;color:var(--dim,#455568);margin-top:8px}
 </style>
 </head>
 <body>
@@ -3282,6 +3299,18 @@
         <div class="alerts-empty">Loading alerts...</div>
       </div>
     </div>
+  </section>
+
+  <!-- HIGH-IMPACT NEWS (awareness-only: display + heads-up alert) -->
+  <section class="news-panel" id="news-panel" aria-label="High-impact news">
+    <div class="news-hd">
+      <span class="news-title">High-impact news</span>
+      <span class="news-tag">USD · High only</span>
+      <span class="news-src" id="news-src"></span>
+    </div>
+    <div id="news-next" class="news-next"></div>
+    <div id="news-rows"></div>
+    <div class="news-foot" id="news-foot">Loading high-impact news…</div>
   </section>
 
   <!-- LIVE SESSION (shows when running) -->
@@ -4726,6 +4755,59 @@ async function fetchAlerts() {
     renderAlerts({alerts: [], summary: {total: 0, counts: {}, recent_counts: {}, latest: null}});
     $("alerts-shell-sub").textContent = e.message || "Failed to load runtime alerts";
   }
+}
+
+// ===== News-awareness panel (display + heads-up only) =====
+// Consumes GET /api/news; each event carries a server-side signal
+// {sign:'HOT'|'HEADS-UP'|'WATCH', tone:'red'|'amber'|'cyan', text:'...'}
+// (news_calendar.signal()). Fail-open: a feed error just shows an empty state.
+let lastNews = {events: []};
+function _newsEsc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+async function renderNews(){
+  try {
+    lastNews = await (await fetch('/api/news')).json();
+  } catch (e) {
+    if ($("news-src")) $("news-src").textContent = 'feed unavailable';
+    return;
+  }
+  const ev = lastNews.events || [];
+  // In-panel next-session line (replaces the dropped per-session DOM badge):
+  // surface the nearest in/near-session HOT/HEADS-UP event for the operator.
+  const hot = ev.filter(e => e.session && (e.session_status === 'in' || e.session_status === 'near'));
+  const nextEl = $("news-next");
+  if (nextEl) {
+    if (hot.length) {
+      const h = hot[0];
+      nextEl.textContent = `⚠ Next session ${h.session}: ${(h.signal && h.signal.sign) || 'WATCH'} — ${h.title}`;
+      nextEl.style.display = '';
+    } else {
+      nextEl.textContent = '';
+      nextEl.style.display = 'none';
+    }
+  }
+  if ($("news-rows")) {
+    $("news-rows").innerHTML = ev.map(e => {
+      const t = new Date(e.when_bris || e.when_utc);
+      const hm = String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0');
+      const sig = e.signal || {sign:'WATCH', tone:'cyan', text:e.title};
+      return `<div class="news-row"><span class="news-time">${hm}</span>` +
+             `<span class="news-sign ${_newsEsc(sig.tone)}">${_newsEsc(sig.sign)}</span>` +
+             `<span class="news-text">${_newsEsc(sig.text)}</span></div>`;
+    }).join('');
+  }
+  // Honest provenance: show the TRUE source the backend reported. 'live' is the
+  // real faireconomy feed; 'cache'/'stale-cache'/'fallback' must NOT imply live.
+  if ($("news-src")) {
+    const srcMap = {live: 'faireconomy', cache: 'faireconomy (cached)',
+                    'stale-cache': '⚠ offline · last-good cache',
+                    fallback: '⚠ offline · recurring majors only'};
+    const label = srcMap[lastNews.source] || (lastNews.source || '');
+    $("news-src").textContent = (label && lastNews.fetched_at)
+      ? `${label} · ${lastNews.fetched_at}` : label;
+  }
+  if ($("news-foot")) $("news-foot").textContent = ev.length
+    ? `Showing ${ev.length} · low/medium + non-USD filtered out`
+    : 'No high-impact USD events in range.';
 }
 async function fetchAccounts() {
   try {
@@ -6198,7 +6280,7 @@ initCockpit();
 // drawer tab is opened (Stage 4.2). fetchStatus/fetchAlerts/fetchLaneStatus
 // also bootstrapped once so the no-SSE path has a baseline; SSE events take
 // over on first connect.
-fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus(); fetchLaneControl(); fetchPlannedLaunch();
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus(); fetchLaneControl(); fetchPlannedLaunch(); renderNews();
 
 /* Stage 4.2 poller taxonomy:
    _COCKPIT_POLLERS      = always-on (SSE-paused on OPEN, resumed on CLOSED>10s).
@@ -6220,6 +6302,9 @@ const _COCKPIT_POLLERS = [
   // Planned-launch surface — 10s suffices since it only changes when the
   // operator re-runs START_BOT.bat or shells the CLI. Cheap stat-then-read.
   setInterval(fetchPlannedLaunch, 10000),
+  // News awareness — the /api/news endpoint TTL-caches the feed for 1h, and
+  // economic events change at most hourly, so a 5-min poll is generous + cheap.
+  setInterval(renderNews, 300000),
   // Auto-refresh broker list when on Connections tab (the standalone tab, NOT the drawer)
   setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000),
 ];
