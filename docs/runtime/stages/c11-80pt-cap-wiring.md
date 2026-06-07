@@ -10,6 +10,11 @@ session_origin: session "committing" (edf38a72)
 corrected: 2026-06-04 — original "wire 80pt → C11 passes → live" premise is FALSE
   (see CORRECTED NEXT STEPS); cap-emulated 0.75 strict 90d DD = $2,038 > $1,600
   budget AND > full $2,000 Topstep MLL.
+scope_clarification: 2026-06-07 (audit) — the $2,038 figure here is the 80pt-CAP
+  EMULATION only. It is NOT the deployed 3-lane book. The DEPLOYED book
+  (topstep_50k_mnq_auto, no 80pt cap) PASSES C11 live: strict 90d DD = $1,535
+  <= $1,800 Express belt (verified `account_survival --no-write-state`). This
+  PARKED research path is independent of deployed-book live-readiness.
 
 ## Context / why
 

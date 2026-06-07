@@ -6,6 +6,54 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Claude Session — Monday live-readiness: C11 disambiguated + gates refreshed → PREFLIGHT 15/15 (2026-06-07)
+- **Tool:** Claude Code. Audit (read-only) + ONE operator-approved Tier-B refresh.
+- **OUTCOME: demo preflight = 15/15 PASS** after refreshing C11/C12 control state
+  (`refresh_control_state.py --profile topstep_50k_mnq_auto --force`, operator GO):
+  C11 `valid=True gate_ok=True` (operational 100%, strict_account=PASS), C12
+  `valid=True` (3 lanes CONTINUE). The two prior FAILs were pure cache fingerprint
+  staleness from `0bbe9b5d`; refresh cleared them. NOT armed live (no `--live`).
+- **Broker has 2 accounts** (fail-closed binding requires `--account-id`):
+  `21944866` = EXPRESS-V2 (Express Funded), `23055112` = 50KTC-V2 (50K Combine).
+  Single-account live: `--profile topstep_50k_mnq_auto --live --account-id 21944866`.
+  2-account (copies): `--copies 2 --account-id <primary>` — primary + 1 shadow.
+- **⚠ COMPLIANCE GATE before any 2-account live:** official Topstep wording is
+  ambiguous — Express-Funded params sanction a copier ("$750K buying power"), but
+  Prohibited-Conduct bans "trade the same strategy simultaneously" (case-by-case).
+  Operator decision: CONFIRM with Topstep compliance BEFORE enabling `--copies 2`.
+  Single-account (`--copies 1`) is unaffected. Draft question prepared this session.
+- **Dashboard account-selection UI** (pick which accounts fire): deferred to a
+  separate `/design` session (Tier-B capital-path build; backend before frontend).
+  CLI `--copies`/`--account-id` is the mechanism until then.
+- **Sizing parity verified live:** all 3 lanes `max_contracts=1`; survival sim
+  models 1 micro/lane (`account_survival.py:426,848`) → C11 PASS not inflated.
+- **Why this block:** the "C11 NO-GO" framing below (§ C11 Secure & Hold, 2026-06-04) was
+  misleading because it never separated TWO different configurations. Resolved
+  with live computation (truth over baton title).
+- **Deployed 3-lane book `topstep_50k_mnq_auto` (COMEX_SETTLE + US_DATA_1000 +
+  TOKYO_OPEN) = C11 PASS.** Live `account_survival --no-write-state`:
+  `gate=PASS @70%`, strict observed max 90d DD = **$1,535** ≤ effective Express
+  belt **$1,800** (0.90×$2,000 MLL), `daily_loss breaches=0`,
+  `Final deployability gate=PASS`. Sizing parity verified: all 3 lanes
+  `max_contracts=1`, matching the survival sim's hardcoded 1 micro/lane
+  (`account_survival.py:426,848`). This was already true on 2026-05-30
+  (§ Previous Session line: "Canonical C11/C12 refreshed green", 95.2% op-pass).
+- **The "$2,038 NO-GO" (§ 2026-06-04) is the 80pt-ORB-cap EXPERIMENT, NOT the
+  deployed book.** Per `c11-80pt-cap-wiring.md:34,39`: the 80pt cap is "NOT in
+  the deployed lane registry… lives in analysis/memory only." Deployed US_DATA
+  lane's real `max_orb_size_pts=143.2`, not 80. Different inputs → $1,535 vs
+  $2,038. The cap-remediation research path remains separately parked/open.
+- **Live blocker today is CACHE STALENESS, not economics:** preflight `[3]` C11
+  and `[4]` C12 FAIL on "profile fingerprint mismatch" — the fingerprint-
+  completeness commit `0bbe9b5d` added `daily_loss_dollars`/`self_imposed_dd_dollars`
+  to the fingerprint, fail-closing the cached reports. Fix = refresh
+  (`scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto --force`),
+  a Tier-B capital-state write — NOT done in this audit; gated on operator GO.
+- **Demo preflight = 13/15** (only `[3]`/`[4]` fail; `[10]` telemetry WAIVED for
+  Express-Funded, `[13]` account-id WARN resolves at live via `--account-id`).
+  Live launch requires explicit `--account-id` (broker shows 2 accounts; gate
+  fail-closes on ambiguity).
+
 ## Claude Session — canompx3_autopilot_v1 reviewed, fixed, MERGED to origin/main (2026-06-05)
 - **Tool:** Claude Code
 - **What landed:** `origin/main` advanced `6dadde5b → 60edcb1b` (clean fast-forward). The full `canompx3_autopilot_v1` feature is now on main: headless self-driving task runner (`scripts/autopilot/{run_autopilot.sh,tier_guard.py,review_diff.py}`), the `completion-notify.py` autopilot Stop-block extension, docs, and `tests/test_autopilot/` (67 tests).
@@ -16,7 +64,7 @@
 
 ## Claude Session — C11 Secure & Hold (2026-06-04)
 - **Tool:** Claude Code
-- **Verdict:** `topstep_50k_mnq_auto` C11 is a **measured capital NO-GO. Live NOT armed.**
+- **Verdict:** `topstep_50k_mnq_auto` C11 is a **measured capital NO-GO. Live NOT armed.** ⚠ **SCOPE CORRECTION (2026-06-07, see top block):** this NO-GO is the **80pt-ORB-cap experiment**, NOT the deployed 3-lane book. The deployed book PASSES C11 ($1,535 ≤ $1,800). Do not read this line as the deployed-book verdict.
 - **What landed (`572499d6`, rebased onto peer `5dab3861`; pushed in `b0d43c0f`):** committed the stranded C11 analysis (4 audit-result docs + corrected `c11-80pt-cap-wiring.md` stage + `.gitignore` for the dry-run scratch json). Docs/config only; no production logic, no schema, no capital lever moved.
 - **The decisive math:** the ~80pt ORB cap clears C11's operational-survival (≥70%) and zero-breach-day gates, but **NOT** the drawdown-magnitude gate — strict observed 90d DD at the current 0.75 stop = **$2,038**, exceeding both the $1,600 strict budget AND the full $2,000 Topstep MLL. A *wider* stop (1.0) makes DD worse; only a **tighter** stop (≤0.50) closes the gap (cap+0.50 → $1,142). Cap is necessary, not sufficient.
 - **Path to GO (research, not "go live ASAP"):** pre-registered cap+stop≤0.50 remediation (RULE 10) → re-run `account_survival` proving BOTH C11 gates → DSR/era checks → **independent live-path audit** (incl. the bracket-risk-parity fix `9b3fc530`, whose adversarial-audit gate is still OPEN — no independent reviewer yet) → only then live arming (separate operator GO).
@@ -117,10 +165,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-07
-- **Commit:** 0dc7f2c2 — chore: remove completed profile-fingerprint-coverage stage file (work landed 0bbe9b5d)
-- **Files changed:** 2 files
+- **Commit:** 22c6dd68 — docs(d3-seam): Stage-1 spec + TDD plan (4x audited, measured oracle)
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/profile-fingerprint-field-coverage.md`
+  - `docs/superpowers/plans/2026-06-07-d3-sizing-seam-stage1.md`
+  - `docs/superpowers/specs/2026-06-07-d3-sizing-seam-stage1-design.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
