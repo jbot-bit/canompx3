@@ -6,6 +6,14 @@
 # in-place, so there is no `mutants/` source-copy tree to ignore.
 .mutation/
 .hypothesis/
+# Durable mutation artifacts written by run_mutation.sh BEFORE the .mutation/
+# trap-cleanup (survivor reports + preserved session sqlite + the legacy run
+# log). Regenerable from a re-run; never a committed source of truth.
+.mutation_run.log
+.mutation_dump_*.json
+.mutation_survivors_*.txt
+.mutation_survivors_*.tsv
+.mutation_session_*.sqlite
 
 # Scratch per-chapter text extracts from OCR'd PDFs (regenerable; canonical is the PDF)
 .tmp_chapters/

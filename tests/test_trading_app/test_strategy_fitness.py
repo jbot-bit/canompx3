@@ -15,6 +15,9 @@ import pytest
 
 from trading_app.strategy_discovery import compute_metrics
 from trading_app.strategy_fitness import (
+    MIN_ROLLING_FIT,
+    MIN_ROLLING_WATCH,
+    SHARPE_DECAY_THRESHOLD,
     DecayDiagnosis,
     FitnessReport,
     FitnessScore,
@@ -317,6 +320,88 @@ class TestClassifyFitness:
         status, notes = classify_fitness(rolling_exp_r=0.25, rolling_sample=20, recent_sharpe_30=None)
         assert status == "FIT"
 
+    # --- Boundary tests (mutation-hardening) ---------------------------------
+    # The fitness verdict (FIT/WATCH/DECAY/STALE) decides what is deployable, so
+    # every threshold comparison must be pinned ON its boundary, not just at
+    # interior values. Mutation testing (2026-06-07) showed the `<`/`<=` operators
+    # on lines 119/125/129/132 of strategy_fitness.py survived because no test sat
+    # exactly on the boundary each mutant moves. These tests kill those mutants by
+    # asserting behavior at the exact threshold AND one step below it. Constants
+    # are imported (not inlined) so a future threshold change updates intent here.
+
+    def test_classify_fitness_stale_watch_boundary(self):
+        """rolling_sample exactly at MIN_ROLLING_WATCH -> NOT STALE (kills L119 < -> <=).
+
+        At sample == MIN_ROLLING_WATCH the `<` makes it past the STALE gate; a
+        `<=` mutant would wrongly return STALE. One below must still be STALE.
+        """
+        at_watch, _ = classify_fitness(
+            rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_WATCH, recent_sharpe_30=0.10
+        )
+        assert at_watch != "STALE", "sample==MIN_ROLLING_WATCH must clear the STALE gate"
+
+        below, _ = classify_fitness(
+            rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_WATCH - 1, recent_sharpe_30=0.10
+        )
+        assert below == "STALE", "sample below MIN_ROLLING_WATCH must be STALE"
+
+    def test_classify_fitness_decay_zero_expectancy_boundary(self):
+        """rolling_exp_r exactly 0.0 -> DECAY (kills L125 <= -> <).
+
+        `rolling_exp_r <= 0` flags zero-expectancy as DECAY. A `<` mutant would let
+        exactly-zero ExpR pass through to WATCH/FIT — a strategy earning nothing
+        would not be flagged. Pin the zero boundary; a tiny positive must NOT decay.
+        """
+        at_zero, notes = classify_fitness(
+            rolling_exp_r=0.0, rolling_sample=MIN_ROLLING_FIT + 5, recent_sharpe_30=0.10
+        )
+        assert at_zero == "DECAY", "exactly-zero rolling ExpR must be DECAY"
+        assert "Negative" in notes
+
+        just_positive, _ = classify_fitness(
+            rolling_exp_r=0.0001, rolling_sample=MIN_ROLLING_FIT + 5, recent_sharpe_30=0.10
+        )
+        assert just_positive != "DECAY", "tiny positive ExpR must not be DECAY"
+
+    def test_classify_fitness_watch_fit_sample_boundary(self):
+        """rolling_sample exactly at MIN_ROLLING_FIT -> FIT, one below -> WATCH (kills L129 < -> <=).
+
+        The FIT gate requires sample >= MIN_ROLLING_FIT. At exactly the threshold
+        the trade is FIT-eligible; a `<=` mutant would push it to WATCH (thin data).
+        """
+        at_fit, _ = classify_fitness(
+            rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_FIT, recent_sharpe_30=0.10
+        )
+        assert at_fit == "FIT", "sample==MIN_ROLLING_FIT with stable Sharpe must be FIT"
+
+        below_fit, notes = classify_fitness(
+            rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_FIT - 1, recent_sharpe_30=0.10
+        )
+        assert below_fit == "WATCH", "sample one below MIN_ROLLING_FIT must be WATCH (thin)"
+        assert "Thin data" in notes
+
+    def test_classify_fitness_sharpe_decay_threshold_boundary(self):
+        """recent_sharpe exactly at SHARPE_DECAY_THRESHOLD -> WATCH (kills L132 <= -> <).
+
+        `recent_sharpe_30 <= SHARPE_DECAY_THRESHOLD` flags a declining Sharpe as
+        WATCH. At exactly the threshold (-0.1) the strategy is declining -> WATCH;
+        a `<` mutant would let exactly -0.1 stay FIT. Just above the threshold = FIT.
+        """
+        at_threshold, notes = classify_fitness(
+            rolling_exp_r=0.20,
+            rolling_sample=MIN_ROLLING_FIT + 5,
+            recent_sharpe_30=SHARPE_DECAY_THRESHOLD,
+        )
+        assert at_threshold == "WATCH", "Sharpe exactly at decay threshold must be WATCH"
+        assert "Declining" in notes
+
+        just_above, _ = classify_fitness(
+            rolling_exp_r=0.20,
+            rolling_sample=MIN_ROLLING_FIT + 5,
+            recent_sharpe_30=SHARPE_DECAY_THRESHOLD + 0.01,
+        )
+        assert just_above == "FIT", "Sharpe just above decay threshold must be FIT"
+
 
 # =========================================================================
 # Rolling metrics tests
@@ -372,6 +457,76 @@ class TestRecentTradeSharpe:
         # Last 20 trades = all losses -> negative Sharpe
         sharpe_20 = _recent_trade_sharpe(all_outcomes, 20)
         assert sharpe_20 is None  # all same pnl -> std=0 -> None
+
+    # --- Value tests (mutation-hardening) ------------------------------------
+    # The existing tests above assert only is-None / is-not-None / isinstance —
+    # they verify the function RETURNS something, never that the number is RIGHT.
+    # Mutation testing (2026-06-07) showed 27 arithmetic mutants on the Sharpe
+    # formula (lines 157-164: mean div, variance (r-mean)**2/(n-1), sqrt, final
+    # mean/std) all SURVIVED for exactly this reason. These tests pin the EXACT
+    # Sharpe value of a hand-computed series, so any operator/constant mutation in
+    # the formula changes the number and fails the assert.
+
+    def test_recent_trade_sharpe_exact_value(self):
+        """Hand-computed Sharpe for a known series kills the arithmetic mutants.
+
+        Series pnl_r = [2.0, -1.0, 2.0, -1.0] (4 trades):
+          mean      = 0.5
+          variance  = sum((r-0.5)^2)/(4-1) = (2.25+2.25+2.25+2.25)/3 = 3.0   [sample, n-1]
+          std       = sqrt(3.0) = 1.7320508...
+          sharpe    = mean/std = 0.5/1.7320508 = 0.2886751...
+        Mutating n-1->n, (r-mean)->(r+mean), **2->**0, /->*, sqrt power, or the
+        final mean/std all shift this number away from 0.2886751.
+        """
+        outcomes = [
+            {"trading_day": date(2025, 1, 1), "outcome": "win", "pnl_r": 2.0},
+            {"trading_day": date(2025, 1, 2), "outcome": "loss", "pnl_r": -1.0},
+            {"trading_day": date(2025, 1, 3), "outcome": "win", "pnl_r": 2.0},
+            {"trading_day": date(2025, 1, 4), "outcome": "loss", "pnl_r": -1.0},
+        ]
+        result = _recent_trade_sharpe(outcomes, 4)
+        assert result == pytest.approx(0.2886751, abs=1e-6)
+
+    def test_recent_trade_sharpe_negative_value(self):
+        """A losing-skewed series yields a specific NEGATIVE Sharpe (sign + magnitude).
+
+        Series pnl_r = [-2.0, 1.0, -2.0, 1.0]:
+          mean = -0.5, variance = 3.0, std = sqrt(3), sharpe = -0.2886751.
+        Pins the sign so a mutant flipping a subtraction or the final division
+        (which could flip sign or magnitude) is caught.
+        """
+        outcomes = [
+            {"trading_day": date(2025, 2, 1), "outcome": "loss", "pnl_r": -2.0},
+            {"trading_day": date(2025, 2, 2), "outcome": "win", "pnl_r": 1.0},
+            {"trading_day": date(2025, 2, 3), "outcome": "loss", "pnl_r": -2.0},
+            {"trading_day": date(2025, 2, 4), "outcome": "win", "pnl_r": 1.0},
+        ]
+        result = _recent_trade_sharpe(outcomes, 4)
+        assert result == pytest.approx(-0.2886751, abs=1e-6)
+
+    def test_recent_trade_sharpe_exact_n_boundary(self):
+        """len(traded) exactly == n_trades returns a value (kills L148 < -> <=).
+
+        `if len(traded) < n_trades: return None` — at exactly n_trades the function
+        must proceed and return a number. A `<=` mutant would wrongly return None.
+        """
+        outcomes = [
+            {"trading_day": date(2025, 3, d), "outcome": "win" if d % 2 else "loss",
+             "pnl_r": 1.5 if d % 2 else -1.0}
+            for d in range(1, 4)  # exactly 3 trades
+        ]
+        result = _recent_trade_sharpe(outcomes, 3)
+        assert result is not None, "exactly n_trades must produce a Sharpe, not None"
+
+    def test_recent_trade_sharpe_min_two_boundary(self):
+        """Exactly 1 trade after filter -> None (kills L154 < 2 boundary mutants).
+
+        `if len(r_values) < 2: return None` guards variance (needs >=2 points). With
+        a single trade, variance is undefined -> None. NumberReplacer on the `2` or
+        `<`->`<=`/`==` mutants change this boundary; one trade must return None.
+        """
+        outcomes = [{"trading_day": date(2025, 4, 1), "outcome": "win", "pnl_r": 1.0}]
+        assert _recent_trade_sharpe(outcomes, 1) is None
 
 
 # =========================================================================

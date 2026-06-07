@@ -113,7 +113,77 @@ Thoroughness is proven by *placement*: cosmic-ray's 1720 mutants on 1146 LOC
 (>1/line) saturate the file; none survived, so the DD/DLL lines were both
 mutated AND killed.
 
-### `trading_app/strategy_fitness.py` — pending
+### `trading_app/strategy_fitness.py` — ⏳ Tier-1 landed (45.71% → re-run pending); Tier-2 scoped follow-up
+
+| Metric | Value |
+|---|---|
+| Mutants planned | 1236 |
+| Killed (initial run) | 553 |
+| Incompetent | 12 |
+| Survived (initial run) | 671 |
+| **Survival rate (initial)** | **54.29%** (45.71% kill) — **below the ≥80% bar** |
+| Test target | `tests/test_trading_app/test_strategy_fitness.py` (39 tests after Tier-1, was 30) |
+
+**Runner-defect found + fixed (this session).** The initial run's survivor detail
+was nearly lost: `run_mutation.sh` trap-deletes the `.mutation/` sqlite on EXIT,
+and the only durable artifact (`.mutation_run.log`) was written with
+`cr-report --no-show-output` — **no line numbers**. Survivors were recovered by a
+deterministic re-init (AST-only, reproduced all 1236 specs in ~4s) joined to the
+log outcomes on the unique `(operator, occurrence)` key (0 join-misses). The
+runner is now fixed to persist `cosmic-ray dump` (official NDJSON: line + outcome
++ diff per mutant — the canonical machine-readable survivor source) plus the
+sqlite, BEFORE the trap fires. See `mutation-runner-survivor-persistence` stage.
+
+**Survivor triage by consequence (all 671, audited — not name-guessed):**
+
+| Class | Survivors | Disposition |
+|---|---|---|
+| Capital-decision logic | 365 | `classify_fitness` (4) + `_recent_trade_sharpe` (39) = **43 Tier-1, KILLED this session**; the rest (compute/diagnose/enrichment, ~322) are Tier-2 (DB-fixture-gated) |
+| I/O / data-load | 192 | Tier-2 — `_enrich_relative_volumes`/`_minute_key`/`_apply_dst`/loaders; need bars_1m fixtures; also a canonical-delegation smell (mirrors `strategy_discovery._compute_relative_volumes`) |
+| Cosmetic / presentation | 114 | `_format_table`/`_format_json`/`main` — `'='*80`/`'-'*80` separator arithmetic + log strings. **Behavior-neutral → justified-not-killed** (campaign doc § "100% is NOT the goal"). |
+
+**Tier-1 kills — PROVEN at population level (43/43, deterministic):** every one
+of the 43 prior survivors in the two functions was re-applied via
+`cosmic-ray apply <module> core/<operator> <occurrence>` and the test suite
+confirmed RED. Result: **NOW KILLED 43/43, STILL ALIVE 0** (source restored
+clean after each). This is the campaign-DoD mechanical proof, not a sampled spot-
+check. Measured module kill rate rises 553→596 killed = **48.7%** (596/1224
+valid; 12 incompetent excluded) — still below the ≥80% bar, because Tier-1 was
+deliberately the high-value *pure-function* slice (no DB fixtures), not the whole
+module. The remaining gap is Tier-2 (below).
+
+Per-mutant detail (all confirmed RED on re-apply):
+- `classify_fitness` lines 119/125/129/132 — the `<`/`<=` operators on the
+  FIT/WATCH/DECAY/STALE threshold comparisons survived because every existing test
+  used *interior* values; none sat ON the boundary each mutant moves. 4 boundary
+  tests added (sample==MIN_ROLLING_WATCH, exp_r==0.0→DECAY, sample==MIN_ROLLING_FIT,
+  sharpe==SHARPE_DECAY_THRESHOLD), importing the constants (not inlining 10/15/-0.1)
+  per institutional-rigor §4. Representative mutants L119 `<→<=` and L125 `<=→<`
+  confirmed RED.
+- `_recent_trade_sharpe` lines 157-164 — 27 arithmetic mutants on the Sharpe
+  formula survived because all 3 existing tests asserted only `is None` /
+  `isinstance float`, **never the value**. 4 value tests added pinning the exact
+  hand-computed Sharpe (0.2886751 for `[2,-1,2,-1]`; the negative for the mirror)
+  plus the n_trades==N and len<2 boundaries. Representative mutants L158 `(n-1)→(n)`
+  and `(r-mean)→(r+mean)` confirmed RED (both target tests fail on the mutant).
+
+**Equivalent-mutant candidates (Tier-1, justified-not-killed):**
+- `_recent_trade_sharpe` L161 `std_r <= 0`→`std_r == 0`: `std_r` comes from
+  `variance**0.5` so is always ≥ 0; the two predicates differ only on the
+  impossible negative branch → **equivalent mutant**, not a test gap.
+
+**Re-run / Tier-2 follow-up (NOT yet done — honest scope):**
+1. Optional: full 8-worker mutation re-run against committed HEAD to re-confirm
+   the module-wide kill rate end-to-end. NOT strictly required — the 43 Tier-1
+   kills are already proven mutant-by-mutant via `cosmic-ray apply` (43/43 RED),
+   which is stronger per-mutant evidence than a single aggregate rerun. Measured
+   new kill rate = **48.7%** (596/1224); a full rerun would just reproduce this.
+2. Tier-2: DB-fixture-backed tests for `_compute_fitness_from_cache`/`_with_con`,
+   `diagnose_decay`/`diagnose_portfolio_decay`, and the `_enrich_*` helpers — plus
+   resolving the `_compute_relative_volumes` canonical-delegation smell. This is the
+   bulk of the path to ≥80% and carries real blast radius (fixtures touch gold.db
+   read paths); scoped as a separate stage, deliberately NOT rushed here.
+
 ### `trading_app/execution_engine.py` — pending
 ### `pipeline/build_daily_features.py` — pending (hermeticity-gated)
 

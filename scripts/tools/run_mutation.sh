@@ -143,8 +143,64 @@ fi
 echo "=== survival rate ==="
 cr-rate --estimate --confidence 95.0 "$SESSION"
 
-# Tee survivors to a durable log — .mutation/ is trap-cleaned on EXIT, so the
-# sqlite is gone after this script; .mutation_run.log (repo root) is not.
+# --- Durable mutation evidence (MUST outlive the EXIT trap) -------------------
+# The trap deletes .mutation/ (the session sqlite) on exit, so any triage run
+# AFTER this script has no structured record of which mutant survived on which
+# source line. A prior 1236-mutant strategy_fitness run lost its survivor detail
+# exactly this way — recoverable only by deterministic re-init + log-join.
+#
+# Primary artifact: `cosmic-ray dump` — the OFFICIAL machine-readable export.
+# Per the cosmic-ray Commands reference it "writes a detailed JSON representation
+# of a session to stdout". Verified-against-real-output 2026-06-07: the format is
+# JSON-LINES (NDJSON) — one work item per line, NOT a single array. Each line is
+#   [ {job_id, mutations:[{module_path, operator_name, occurrence,
+#                          start_pos:[line,col], end_pos:[line,col]}]},
+#     {worker_outcome, test_outcome, output, diff} ]
+# so a triage tool extracts survivors with a one-line filter:
+#   [json.loads(l) for l in open(dump) if json.loads(l)[1].get("test_outcome")=="survived"]
+# start_pos[0] is the 1-based source line. No text-scraping, no awk, no
+# re-init+log-join (the painful recovery this run needed before the fix existed).
+# We persist the FULL dump (all outcomes), so a triage tool filters
+# test_outcome=="survived" itself rather than trusting a pre-filtered text view.
+#
+# Companion: cr-report --show-diff (human-readable) for quick eyeballing, and a
+# copy of the sqlite so cr-rate / cr-report / cr-html can be re-queried without a
+# full re-run. All three land at gitignored repo-root paths BEFORE the trap.
 DURABLE_LOG="$(pwd)/.mutation_run.log"
-echo "=== survivors (killed mutants omitted) ==="
+DUMP_JSON="$(pwd)/.mutation_dump_${slug}.json"
+SURV_REPORT="$(pwd)/.mutation_survivors_${slug}.txt"
+DURABLE_SESSION="$(pwd)/.mutation_session_${slug}.sqlite"
+HEAD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo UNKNOWN)"
+NOW_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+echo "=== survivor dump (official JSON, line-anchored) -> $DUMP_JSON ==="
+# cosmic-ray dump is the canonical machine-readable export (see comment above).
+# Tolerate failure: if dump errors, the human-readable report below + the
+# preserved sqlite still give triage a path. Fail-open, never abort the run tail.
+if cosmic-ray dump "$SESSION" > "$DUMP_JSON" 2>/dev/null && [[ -s "$DUMP_JSON" ]]; then
+  echo "wrote $(wc -c < "$DUMP_JSON") bytes of dump JSON"
+else
+  echo "WARN: cosmic-ray dump produced no output (triage can re-init deterministically)" >&2
+fi
+
+echo "=== survivor report (human-readable diffs) -> $SURV_REPORT ==="
+{
+  echo "# mutation survivors — $MODULE_SRC"
+  echo "# commit: $HEAD_SHA"
+  echo "# generated: $NOW_UTC"
+  echo "# rate: $(cr-rate "$SESSION" 2>/dev/null)"
+  echo "# machine-readable source of truth: $(basename "$DUMP_JSON")"
+  echo
+} > "$SURV_REPORT"
+cr-report --show-diff "$SESSION" 2>/dev/null >> "$SURV_REPORT" || true
+
+# Preserve the sqlite so cr-rate / cr-report / cr-html re-query without a re-run.
+# Copied (not moved) — the original stays under .mutation/ for the trap to clean,
+# keeping .mutation/ the single ephemeral-session location.
+cp -f "$SESSION" "$DURABLE_SESSION" 2>/dev/null \
+  && echo "preserved sqlite -> $DURABLE_SESSION" \
+  || echo "WARN: could not preserve sqlite (triage can re-init deterministically)" >&2
+
+# Keep the legacy human-readable tee for backward-compat / quick eyeballing.
+echo "=== survivors (human-readable, appended to $DURABLE_LOG) ==="
 cr-report --no-show-output "$SESSION" | tee -a "$DURABLE_LOG"
