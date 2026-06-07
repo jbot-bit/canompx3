@@ -1099,6 +1099,38 @@ def test_load_lane_trade_paths_scales_all_fields_when_size_model_given(monkeypat
     assert t.mfe_dollars == 120.0
 
 
+def test_load_lane_trade_paths_cap1_floors_wide_stop_trade_to_one_not_zero(monkeypatch):
+    """Regression for the D-3 cap=1 byte-identity defect: a real historical trade
+    whose stop is wide enough that the engine sizer returns n=0 must be floored to
+    1 contract at cap=1 (not zeroed), so cap=1 is byte-identical to today's
+    1-micro behavior. Without the floor the trade's pnl_dollars*0 silently drops
+    its drawdown contribution (measured: 1091/2048 day mismatches, dd 1535->2032)."""
+    import trading_app.account_survival as asv
+    from trading_app.account_survival import SizingContext, _load_lane_trade_paths
+    # mae_dollars=400 on MNQ (point_value=2) => risk_points=200; with 2% of $50k
+    # = $1000 risk budget / (200pts * $2) = 2.5 -> engine sizer floors to 2... so to
+    # force the n=0 case use a very wide stop: mae=20000 => risk_points=10000 =>
+    # $1000 / (10000*2) = 0.05 -> sizer returns 0.
+    base = [asv.TradePath(trading_day=date(2026, 1, 2), strategy_id="L1",
+                          entry_ts=None, exit_ts=None, pnl_dollars=40.0, mae_dollars=20000.0,
+                          mfe_dollars=60.0, lots=1, contracts=1, instrument="MNQ")]
+    monkeypatch.setattr(asv, "_load_strategy_snapshot",
+        lambda con, sid: {"instrument": "MNQ", "orb_label": "X", "orb_minutes": 5,
+                          "entry_model": "m", "rr_target": 2.0, "confirm_bars": 1,
+                          "filter_type": "NO_FILTER", "stop_multiplier": 1.0})
+    monkeypatch.setattr(asv, "_build_trade_paths_from_outcomes", lambda *a, **k: list(base))
+    monkeypatch.setattr(asv, "_lane_atr_by_day", lambda *a, **k: {})
+    monkeypatch.setattr(asv, "_lane_median_atr", lambda *a, **k: {})
+    ctx = SizingContext(account_equity=50_000.0, risk_per_trade_pct=2.0,
+                        account_size=50_000, max_contracts_by_strategy={"L1": 1})
+    out = _load_lane_trade_paths(None, "L1", as_of_date=date(2026, 1, 3), size_model=ctx)
+    # cap=1 => floored to exactly 1; fields byte-identical to the unscaled trade.
+    assert out[0].contracts == 1, "wide-stop trade was zeroed instead of floored to 1"
+    assert out[0].pnl_dollars == 40.0
+    assert out[0].mae_dollars == 20000.0
+    assert out[0].mfe_dollars == 60.0
+
+
 def test_load_lane_trade_paths_unchanged_when_size_model_none(monkeypatch):
     import trading_app.account_survival as asv
     from trading_app.account_survival import _load_lane_trade_paths

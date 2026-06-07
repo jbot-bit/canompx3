@@ -585,7 +585,15 @@ def _load_lane_trade_paths(
             cost_spec,
             vol_scalar,
         )
-        n = max(0, min(n, cap, xfa_cap))
+        # Floor a REAL historical trade at 1 contract: the engine sizer returns 0
+        # whenever the stop is wide enough that the per-trade risk budget buys zero
+        # contracts (NOT only for zero-risk trades — measured). A historical trade
+        # DID occur, so the survival sim must carry its DD contribution; zeroing it
+        # would silently understate drawdown. At cap=1 this makes every field x1 =
+        # byte-identical to today (spec § "contracts_per_trade = 1"), and at a lifted
+        # cap it scales up only as far as both the lane cap and the XFA cap allow.
+        hard_cap = min(cap, xfa_cap)
+        n = max(1, min(n, hard_cap)) if hard_cap >= 1 else 0
         base_contracts = t.contracts or 1
         scaled.append(
             replace(
