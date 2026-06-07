@@ -115,13 +115,16 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
-- **Date:** 2026-06-06
-- **Commit:** 258774c4 — @ fix(live): harden repo-drift gate — exact-match ignore + parse renames
-- **Files changed:** 3 files
+- **Tool:** Unknown
+- **Date:** 2026-06-07
+- **Commit:** ec39073 — fix(workflow): guard staged pre-commit fast path
+- **Files changed:** 6 files
+  - `.githooks/pre-commit`
   - `HANDOFF.md`
-  - `scripts/run_live_session.py`
-  - `tests/test_scripts/test_run_live_session_preflight.py`
+  - `docs/audits/2026-06-06-codex-process-debt-local-only.md`
+  - `docs/audits/2026-06-07-precommit-hotpath-current-state-audit.md`
+  - `docs/plans/active/2026-06/2026-06-06-workflow-speed-audit.md`
+  - `tests/test_tools/test_git_hooks_env.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
@@ -200,3 +203,29 @@
 - Expanded `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md` from a conservative tiering memo into a supersonic implementation blueprint with explicit latency targets: docs-only p50 <1s/p95 <3s, small Python p50 <3s/p95 <8s, pipeline/trading p50 <8s/p95 <20s, push p50 <90s/p95 <4min.
 - Added concrete architecture: hot-path hook classifier, typed drift registry, staged drift modes, timing ledgers, staged-only Ruff/compile, test impact map, DB truth lanes, and parallel pre-push runner.
 - Added staged roadmap and first patch set that should produce immediate UX wins before any heavyweight drift check is moved: hook activation repair, staged Ruff/compile, docs-only hot path, serial pre-push gate, drift metadata substrate, then scoped whale checks.
+
+## 2026-06-06 Codex update — workflow speed audit + pre-commit hot-path trim
+
+- Audited repo workflow/process overhead for create/design/implement/fix speed.
+- Created `docs/plans/active/2026-06/2026-06-06-workflow-speed-audit.md` with findings and a fast-path/escalation policy.
+- Trimmed `.githooks/pre-commit` hot path:
+  - computes staged path sets once;
+  - Ruff lint/format now runs only staged Python under `pipeline/`, `trading_app/`, `scripts/`, and `tests/`;
+  - validated-setups trade-window sync skips docs-only/design commits and runs only for code/runtime-data surfaces;
+  - CRG update skips when no Python is staged.
+- Safety posture preserved: drift, targeted tests, checkpoint guard, behavioral audit, claim hygiene, syntax checks, pre-push full drift, and CI remain the escalation/backstop paths.
+- Environment note: local WSL venv setup is still blocked by PyPI tunnel failure for `propcache`; `project_pulse.py` and `system_context.py` fail under ambient Python because `yaml` is unavailable.
+
+## 2026-06-06 Codex update — local-only process-debt audit pass 1
+
+- Created `docs/audits/2026-06-06-codex-process-debt-local-only.md` as a local-only pass-1 process-debt audit.
+- No code edits were made in this pass.
+- Audit follows the constraint: no remote/cloud-only artifacts, live DBs, `gold.db`, MCP outputs, secrets, dashboards, or unpushed branches assumed.
+- Key direction: Codex defaults should be repo-local and fail-closed, with DB-required evidence explicitly marked as `NEED_REMOTE_EVIDENCE` instead of inferred from local absence.
+
+## 2026-06-07 Codex update — current-state audit of pre-commit speed patch
+
+- Re-audited the prior pre-commit/process-speed patch against current HEAD `9539661`.
+- Local issue found and fixed outside tracked files: `core.hooksPath` was unset, so `.githooks/pre-commit` was not active; ran `git config core.hooksPath .githooks` and verified `system_context.py` no longer reports the hook-inactive warning.
+- Code follow-up: `.githooks/pre-commit` now blocks staged Python files with unstaged working-tree hunks before Ruff/format/syntax checks, preventing auto-format from verifying or re-staging unintended local edits.
+- Added `docs/audits/2026-06-07-precommit-hotpath-current-state-audit.md` and updated the prior process-debt/speed docs with the current-state correction.
