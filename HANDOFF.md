@@ -6,6 +6,15 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Codex Session — Claude parity layer made executable (2026-06-07)
+- **Tool:** Codex.
+- **What changed:** Filled the Codex-vs-Claude capability gap without mutating Claude-owned files. Added Codex-owned parity routing for Claude commands/rules/agents/hooks/skills via `.codex/AGENTS.md`, `.codex/HOOKS.md`, and `canompx3-claude-parity` skill/wrapper. Updated `.codex/COMMANDS.md`, `.codex/RULES.md`, `.codex/WORKFLOWS.md`, and skill READMEs.
+- **Executable guard:** Added `scripts/infra/codex_parity.py` plus tests. It fails if a Claude command, rule, agent, skill, or hook source is not indexed by the Codex layer. Wired parity status into `.codex/hooks/session_start.py` and `codex_local_env.py doctor`.
+- **Prompt routing:** Codex prompt grounding now explicitly catches `edge`/discovery and `blast radius`/impact-analysis intents and points to the canonical Claude recipes.
+- **MCP truth:** Current Codex session has callable repo MCPs: `repo-state`, `gold-db`, `research-catalog`, `strategy-lab`. `repo-state.list_context_views` works; one `repo-state.get_project_pulse` smoke call returned a server-side TypeError, so use CLI `project_pulse.py` or another repo-state endpoint until that endpoint is checked. Shared `.mcp.json` also declares `code-review-graph`; user-level `codex mcp list` shows remote registrations (`openaiDeveloperDocs`, Google Workspace MCPs) but not the repo-local injected tools.
+- **Verification:** `python3 scripts/infra/codex_parity.py --format text` PASS: 15 commands, 9 agents, 35 rules, 28 skills, 38 hook/support files indexed. Focused pytest PASS: `tests/test_tools/test_codex_parity.py`, `tests/test_hooks/test_targeted_grounding_router.py`, `tests/test_tools/test_codex_local_env.py` = 58 passed. `git diff --check` PASS. Final escalated `python3 scripts/infra/codex_local_env.py doctor --platform wsl` PASS, including `Codex Claude parity`.
+- **Residual state:** Worktree intentionally dirty with Codex-owned changes. Repo remains `main...origin/main [ahead 1]` from pre-existing local state. Doctor still reports active stage bloat and a concurrent mutating claim warning; do not treat this as a clean live-readiness state.
+
 ## Claude Session — Monday live-readiness: C11 disambiguated + gates refreshed → PREFLIGHT 15/15 (2026-06-07)
 - **Tool:** Claude Code. Audit (read-only) + ONE operator-approved Tier-B refresh.
 - **OUTCOME: demo preflight = 15/15 PASS** after refreshing C11/C12 control state
@@ -163,24 +172,26 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Codex (WSL)
 - **Date:** 2026-06-07
-- **Commit:** 22c6dd68 — docs(d3-seam): Stage-1 spec + TDD plan (4x audited, measured oracle)
-- **Files changed:** 3 files
+- **Commit:** current commit — fix(codex): enforce Claude parity routing
+- **Files changed:** 16 files
+  - `.agents/skills/README.md`
+  - `.agents/skills/canompx3-claude-parity/SKILL.md`
+  - `.codex/AGENTS.md`
+  - `.codex/COMMANDS.md`
+  - `.codex/HOOKS.md`
+  - `.codex/RULES.md`
+  - `.codex/WORKFLOWS.md`
+  - `.codex/hooks/session_start.py`
+  - `.codex/hooks/user_prompt_submit_grounding.py`
+  - `.codex/skills/README.md`
+  - `.codex/skills/canompx3-claude-parity/SKILL.md`
+  - `.codex/skills/canompx3-claude-parity/agents/openai.yaml`
   - `HANDOFF.md`
-  - `docs/superpowers/plans/2026-06-07-d3-sizing-seam-stage1.md`
-  - `docs/superpowers/specs/2026-06-07-d3-sizing-seam-stage1-design.md`
-
-- **Tool:** Codex
-- **Date:** 2026-06-07
-- **Commit:** ec39073 — fix(workflow): guard staged pre-commit fast path
-- **Files changed:** 6 files
-  - `.githooks/pre-commit`
-  - `HANDOFF.md`
-  - `docs/audits/2026-06-06-codex-process-debt-local-only.md`
-  - `docs/audits/2026-06-07-precommit-hotpath-current-state-audit.md`
-  - `docs/plans/active/2026-06/2026-06-06-workflow-speed-audit.md`
-  - `tests/test_tools/test_git_hooks_env.py`
+  - `scripts/infra/codex_local_env.py`
+  - `scripts/infra/codex_parity.py`
+  - ... and 1 more
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

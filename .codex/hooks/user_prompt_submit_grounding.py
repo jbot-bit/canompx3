@@ -17,6 +17,8 @@ PROMPT_PATTERNS = {
     "research_method": re.compile(
         r"\b(research|backtest|strategy|validation|validate|oos|holdout|fdr|dsr|minbtl|edge|significant)\b"
     ),
+    "edge_discovery": re.compile(r"\b(edge|discover[- ]edge|find.*strategy|new strategy|hypothesis|alpha)\b"),
+    "blast_radius": re.compile(r"\b(blast|blast radius|impact|impact analysis|touches|affected files?)\b"),
     "test_gap": re.compile(r"\b(test gap|coverage|pytest|missing tests|stale test|verify|verification)\b"),
     "implementation": re.compile(r"\b(implement|fix|build|change|edit|patch|do it|go)\b"),
     "debugging": re.compile(r"\b(debug|bug|error|failure|failing|broken|regression|flake|flaky)\b"),
@@ -85,6 +87,16 @@ def _build_context(prompt: str) -> list[str]:
                 "For research or strategy-validation claims, route through `research-methodologist` / `canompx3_reviewer` and require local-literature grounding.",
                 "Do not call a result edge/significant/validated/deployable without RESEARCH_RULES.md evidence plus `docs/institutional/literature/` support.",
             ]
+        )
+
+    if PROMPT_PATTERNS["edge_discovery"].search(text):
+        hints.append(
+            "For edge discovery, route through `.claude/commands/discover-edge.md` or `.claude/skills/discover/SKILL.md`; keep research claims separate from deployment claims."
+        )
+
+    if PROMPT_PATTERNS["blast_radius"].search(text):
+        hints.append(
+            "For blast-radius requests, use `.claude/agents/blast-radius.md` or `.claude/skills/blast-radius/SKILL.md` as the source recipe before edits."
         )
 
     if PROMPT_PATTERNS["live_risk"].search(text):

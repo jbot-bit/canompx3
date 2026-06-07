@@ -1,0 +1,4 @@
+interface:
+  display_name: "Canompx3 Claude Parity"
+  short_description: "Routes missing Claude workflows through Codex-owned adapters"
+  default_prompt: "Use $canompx3-claude-parity to adapt a Claude command, rule, agent, hook, or skill into the Codex workflow without editing Claude-owned files."

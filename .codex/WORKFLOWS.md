@@ -30,6 +30,8 @@ When the task matches, prefer these repo-local skills:
   across code, live, deploy, research, evidence, security, threat-model, and
   supply-chain surfaces
 - shared `.claude/agents/evidence-auditor.md` when the task is really claim scrutiny or anti-bias review
+- `canompx3-claude-parity` when Claude has the command, hook, rule, agent, or
+  skill but Codex does not yet have a dedicated wrapper
 
 ## Intent-To-Workflow Routing
 
@@ -55,9 +57,10 @@ Codex should route from intent, not from exact wording.
   - `research-methodologist.md` / `canompx3_reviewer` for research, OOS, holdout, FDR, DSR, MinBTL, edge, significance, or methodology claims
   - `live-risk-auditor.md` / `canompx3_reviewer` for live, broker, webhook, prop-profile, order execution, kill/flatten, account-routing, or runtime-control work
   - `test-coverage-scout.md` / `canompx3_reviewer` for missing tests, stale tests, coverage, or exact pytest-target selection
-  - `canompx3_worker` for one scope-locked implementation task after planning and ownership are clear
-  - shared `.claude/skills/` recipes when the task is really a shared command
+- `canompx3_worker` for one scope-locked implementation task after planning and ownership are clear
+- shared `.claude/skills/` recipes when the task is really a shared command
     flow
+- `.codex/AGENTS.md` for the full Claude-agent-to-Codex route map
 - If multiple routes fit, prefer the path with the strongest verification and
   the lowest blast radius, then state the mapping briefly.
 - Only ask for clarification when the ambiguity is load-bearing.

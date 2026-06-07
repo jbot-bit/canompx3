@@ -15,3 +15,5 @@ instructions.
 - `canompx3-deploy-readiness/` - promotion and deployment readiness wrapper
 - `canompx3-capital-review/` - capital-at-risk review orchestrator that routes
   code, live, deploy, research, evidence, security, threat-model, and supply-chain checks
+- `canompx3-claude-parity/` - Codex-owned router for Claude commands, hooks,
+  agents, rules, and skills that do not yet have dedicated Codex wrappers
