@@ -7,6 +7,7 @@ helpers (orb_utc_window, compute_trading_day_from_timestamp) — never re-encode
 
 Requires Python 3.11+ (repo runs 3.13): uses datetime.UTC.
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,8 +25,12 @@ log = logging.getLogger(__name__)
 
 CCY_INSTRUMENTS = {"USD": ("MNQ", "MES", "MGC")}
 US_SESSION_LABELS = (
-    "US_DATA_830", "NYSE_PREOPEN", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "NYSE_CLOSE",
+    "US_DATA_830",
+    "NYSE_PREOPEN",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "NYSE_CLOSE",
 )
 FEED_THISWEEK = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 # Rationale: an event is flagged "near" a session if it lands within 60 min
@@ -149,9 +154,11 @@ def due_alerts(events, now_utc=None, fired=None):
 
 # ===== Fetch / cache / fallback / fired-ledger (network-isolated for testing) =====
 
+
 def _read_cache(path):
     import json
     import os
+
     if not os.path.exists(path):
         return None
     try:
@@ -165,6 +172,7 @@ def _read_cache(path):
 def _write_cache(path, events, now):
     import json
     import os
+
     d = os.path.dirname(path)
     if d:
         os.makedirs(d, exist_ok=True)
@@ -177,6 +185,7 @@ def _write_cache(path, events, now):
 def _http_get_json(url, timeout=5):
     import json
     import urllib.request
+
     req = urllib.request.Request(url, headers={"User-Agent": "orb-dashboard/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (trusted host)
         return json.loads(r.read().decode("utf-8"))
@@ -187,16 +196,24 @@ def fallback_majors(now=None, months=2):
     NFP = first Friday 08:30 America/New_York. Returns feed-shaped rows."""
     import calendar as _cal
     from datetime import datetime as _dt
+
     now = now or datetime.now(UTC)
     ny = ZoneInfo("America/New_York")
     out, y, m = [], now.year, now.month
     for _ in range(months):
-        fridays = [d for d in _cal.Calendar().itermonthdates(y, m)
-                   if d.month == m and d.weekday() == 4]
+        fridays = [d for d in _cal.Calendar().itermonthdates(y, m) if d.month == m and d.weekday() == 4]
         f = fridays[0]
         dt = _dt(f.year, f.month, f.day, 8, 30, tzinfo=ny)
-        out.append({"title": "Non-Farm Employment Change", "country": "USD",
-                    "date": dt.isoformat(), "impact": "High", "forecast": "", "previous": ""})
+        out.append(
+            {
+                "title": "Non-Farm Employment Change",
+                "country": "USD",
+                "date": dt.isoformat(),
+                "impact": "High",
+                "forecast": "",
+                "previous": "",
+            }
+        )
         m += 1
         if m > 12:
             m, y = 1, y + 1
@@ -221,8 +238,11 @@ def fetch_calendar(*, cache_path, ttl_s=3600, loader=None, now=None, with_source
         _write_cache(cache_path, events, now)
         return (events, "live") if with_source else events
     except Exception:
-        log.warning("news feed fetch failed; falling back to %s",
-                    "stale cache" if cached else "deterministic majors", exc_info=True)
+        log.warning(
+            "news feed fetch failed; falling back to %s",
+            "stale cache" if cached else "deterministic majors",
+            exc_info=True,
+        )
         if cached:
             # fail-open to last-good — but mark it stale so the UI says so.
             return (cached["events"], "stale-cache") if with_source else cached["events"]
@@ -235,6 +255,7 @@ def fetch_calendar(*, cache_path, ttl_s=3600, loader=None, now=None, with_source
 def load_fired(path):
     import json
     import os
+
     if not os.path.exists(path):
         return set()
     try:
@@ -248,6 +269,7 @@ def save_fired(path, fired, now=None, max_age_days=2):
     """Persist the fire-once ledger, pruning keys whose event time is >2 days old."""
     import json
     import os
+
     now = now or datetime.now(UTC)
     keep = set()
     for k in fired:
@@ -270,6 +292,7 @@ def save_fired(path, fired, now=None, max_age_days=2):
 
 # ===== Plain-English "action sign" (awareness only — no size/skip instructions) =====
 
+
 def signal(e):
     """Turn a relevant_events row into an easy-ingest sign + statement.
     sign: HOT | HEADS-UP | WATCH ; tone: red | amber | cyan.
@@ -283,17 +306,25 @@ def signal(e):
         sp = eff["surprise_pct"]
         big = abs(sp) >= 10
         magnitude = "outsized" if big else "modest"
-        return {"sign": "HOT" if big else "WATCH", "tone": "red" if big else "cyan",
-                "text": f"{name} came in {sp:+.0f}% vs forecast — {magnitude} {ins} move likely."}
+        return {
+            "sign": "HOT" if big else "WATCH",
+            "tone": "red" if big else "cyan",
+            "text": f"{name} came in {sp:+.0f}% vs forecast — {magnitude} {ins} move likely.",
+        }
     if st == "in":
-        return {"sign": "HOT", "tone": "red",
-                "text": f"{name} lands inside {sess} ({hm} Bris) — expect a volatile, choppy {ins} open."}
+        return {
+            "sign": "HOT",
+            "tone": "red",
+            "text": f"{name} lands inside {sess} ({hm} Bris) — expect a volatile, choppy {ins} open.",
+        }
     if st == "near":
         gap = e.get("session_gap_min") or 0
-        return {"sign": "HEADS-UP", "tone": "amber",
-                "text": f"{name} ~{gap}m before {sess} ({hm} Bris) — early {ins} volatility possible."}
-    return {"sign": "WATCH", "tone": "cyan",
-            "text": f"{name} at {hm} Bris — high-impact but outside your sessions."}
+        return {
+            "sign": "HEADS-UP",
+            "tone": "amber",
+            "text": f"{name} ~{gap}m before {sess} ({hm} Bris) — early {ins} volatility possible.",
+        }
+    return {"sign": "WATCH", "tone": "cyan", "text": f"{name} at {hm} Bris — high-impact but outside your sessions."}
 
 
 def news_payload(raw_events, now_utc=None, source="faireconomy", **kw):
@@ -312,6 +343,4 @@ def news_payload(raw_events, now_utc=None, source="faireconomy", **kw):
         d["when_utc"] = e["when_utc"].isoformat()
         d["when_bris"] = e["when_bris"].isoformat()
         out.append(d)
-    return {"events": out,
-            "fetched_at": now_utc.astimezone(BRISBANE).strftime("%H:%M"),
-            "source": source}
+    return {"events": out, "fetched_at": now_utc.astimezone(BRISBANE).strftime("%H:%M"), "source": source}
