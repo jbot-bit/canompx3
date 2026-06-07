@@ -935,56 +935,55 @@ def test_profile_fingerprint_changes_on_daily_loss_dollars():
     )
 
 
-# ── Capital fix C — D-3 sizing parity: C11 DD models 1 micro; live sizes from ──
-# equity clamped to max_contracts. C11 must FAIL CLOSED if the live portfolio
-# for the profile would size any lane above 1 micro (the 1-micro DD proof would
-# otherwise silently understate drawdown).
+# ── D-3 sizing parity (Stage 1): the survival sim now sizes like the live engine ──
+# (vol-scaled, capped). The guard no longer FORBIDS max_contracts > 1 — the honest
+# sim fails the operational gate at unsafe size on its own. The guard's narrower job
+# is to PROVE the sim CAN size like the engine: the portfolio builds and the equity
+# that feeds the sizer is positive. It fails CLOSED only when parity is unprovable.
 
 
-def test_single_micro_sizing_ok_when_all_strategies_one_contract(monkeypatch):
+def test_sizing_parity_ok_when_portfolio_builds_with_positive_equity(monkeypatch):
     from types import SimpleNamespace
 
     from trading_app import account_survival as asv
 
     fake_portfolio = SimpleNamespace(
+        account_equity=25000.0,
         strategies=[
             SimpleNamespace(strategy_id="A", max_contracts=1),
-            SimpleNamespace(strategy_id="B", max_contracts=1),
-        ]
+            SimpleNamespace(strategy_id="B", max_contracts=3),  # cap > 1 is NO LONGER a violation
+        ],
     )
     monkeypatch.setattr(asv, "build_profile_portfolio", lambda **_kw: fake_portfolio)
-    ok, msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
+    ok, msg = asv._assert_sizing_parity("topstep_50k_mnq_auto")
     assert ok is True
-    assert "1" in msg
+    assert "OK" in msg
 
 
-def test_single_micro_sizing_fails_closed_when_a_lane_exceeds_one(monkeypatch):
-    from types import SimpleNamespace
-
-    from trading_app import account_survival as asv
-
-    fake_portfolio = SimpleNamespace(
-        strategies=[
-            SimpleNamespace(strategy_id="A", max_contracts=1),
-            SimpleNamespace(strategy_id="B", max_contracts=2),
-        ]
-    )
-    monkeypatch.setattr(asv, "build_profile_portfolio", lambda **_kw: fake_portfolio)
-    ok, msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
-    assert ok is False
-    assert "max_contracts" in msg
-    assert "B" in msg
-
-
-def test_single_micro_sizing_fails_closed_on_builder_error(monkeypatch):
+def test_sizing_parity_fails_closed_on_builder_error(monkeypatch):
     from trading_app import account_survival as asv
 
     def boom(**_kw):
         raise RuntimeError("cannot build portfolio")
 
     monkeypatch.setattr(asv, "build_profile_portfolio", boom)
-    ok, _msg = asv._assert_single_micro_sizing("topstep_50k_mnq_auto")
+    ok, msg = asv._assert_sizing_parity("topstep_50k_mnq_auto")
     assert ok is False
+    assert "parity" in msg.lower()
+
+
+def test_sizing_parity_fails_closed_on_nonpositive_equity(monkeypatch):
+    from types import SimpleNamespace
+
+    from trading_app import account_survival as asv
+
+    # express-funded XFA accounts can present account_equity 0.0 → would zero the
+    # sizer → DD=$0 → a FALSE survival PASS. Must fail closed.
+    fake_portfolio = SimpleNamespace(account_equity=0.0, strategies=[])
+    monkeypatch.setattr(asv, "build_profile_portfolio", lambda **_kw: fake_portfolio)
+    ok, msg = asv._assert_sizing_parity("topstep_50k_mnq_auto")
+    assert ok is False
+    assert "equity" in msg.lower()
 
 
 def test_evaluate_profile_survival_gate_fails_closed_on_sizing_parity_violation(monkeypatch):
@@ -1018,10 +1017,10 @@ def test_evaluate_profile_survival_gate_fails_closed_on_sizing_parity_violation(
         return scenarios, metadata
 
     monkeypatch.setattr("trading_app.account_survival._load_profile_daily_scenarios", fake_load)
-    # Force the parity guard to report a violation (a lane sizes >1 micro).
+    # Force the parity guard to report a violation (parity unprovable).
     monkeypatch.setattr(
-        "trading_app.account_survival._assert_single_micro_sizing",
-        lambda _pid: (False, "D-3 sizing parity VIOLATED: test"),
+        "trading_app.account_survival._assert_sizing_parity",
+        lambda _pid: (False, "D-3 sizing parity unprovable: test"),
     )
 
     summary = evaluate_profile_survival(
