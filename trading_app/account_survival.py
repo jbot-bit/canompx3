@@ -578,9 +578,7 @@ def _load_lane_trade_paths(
     xfa_cap = max_lots_for_xfa(size_model.account_size, size_model.account_equity)
     scaled: list[TradePath] = []
     for t in trades:
-        risk_points = (
-            abs(t.mae_dollars) / cost_spec.point_value if cost_spec.point_value else 0.0
-        )
+        risk_points = abs(t.mae_dollars) / cost_spec.point_value if cost_spec.point_value else 0.0
         atr = atr_by_day.get(t.trading_day)
         med = median_by_day.get(t.trading_day)
         if atr and med and atr > 0 and med > 0:
@@ -1071,8 +1069,7 @@ def _assert_sizing_parity(profile_id: str) -> tuple[bool, str]:
         )
     return (
         True,
-        f"sizing parity OK ({len(portfolio.strategies)} lanes; "
-        f"equity={portfolio.account_equity})",
+        f"sizing parity OK ({len(portfolio.strategies)} lanes; equity={portfolio.account_equity})",
     )
 
 

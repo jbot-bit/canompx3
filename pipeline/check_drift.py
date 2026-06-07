@@ -14128,9 +14128,7 @@ def check_survival_engine_sizer_parity(
     for label, path in (("account_survival", survival_path), ("execution_engine", engine_path)):
         result = _imports_canonical_sizer(path)
         if result is None:
-            violations.append(
-                f"{label}: cannot read/parse {path} — sizer parity UNPROVABLE (fail closed)"
-            )
+            violations.append(f"{label}: cannot read/parse {path} — sizer parity UNPROVABLE (fail closed)")
         elif result is False:
             violations.append(
                 f"{label}: does not import {_CANONICAL_SIZER_NAME} from "

@@ -43,9 +43,7 @@ def test_check_survival_engine_sizer_parity_detects_reencoded_sizer(tmp_path: Pa
         ),
         encoding="utf-8",
     )
-    violations = check_survival_engine_sizer_parity(
-        survival_path=survival, engine_path=engine
-    )
+    violations = check_survival_engine_sizer_parity(survival_path=survival, engine_path=engine)
     assert violations, "must detect the engine re-encoding the sizer"
     assert any("execution_engine" in v for v in violations)
 
