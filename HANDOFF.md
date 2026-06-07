@@ -179,6 +179,17 @@
   - `docs/superpowers/plans/2026-06-07-d3-sizing-seam-stage1.md`
   - `docs/superpowers/specs/2026-06-07-d3-sizing-seam-stage1-design.md`
 
+- **Tool:** Codex
+- **Date:** 2026-06-07
+- **Commit:** ec39073 — fix(workflow): guard staged pre-commit fast path
+- **Files changed:** 6 files
+  - `.githooks/pre-commit`
+  - `HANDOFF.md`
+  - `docs/audits/2026-06-06-codex-process-debt-local-only.md`
+  - `docs/audits/2026-06-07-precommit-hotpath-current-state-audit.md`
+  - `docs/plans/active/2026-06/2026-06-06-workflow-speed-audit.md`
+  - `tests/test_tools/test_git_hooks_env.py`
+
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
 - **Date:** 2026-06-03
@@ -270,3 +281,29 @@
 - Updated `is_lock_file_active_or_ambiguous()` to briefly probe the platform lock and report busy locks as active/ambiguous (`reason="os-locked"`) even when PID text is stale. It still releases immediately when it can acquire the observer probe lock.
 - Removed dashboard startup deletion of stale bot lock files; dashboard now leaves lock-file cleanup to the live acquire path, avoiding a delete-after-classify race.
 - Added regressions for OS-locked stale/dead-PID locks across the canonical helper, shadow writer, and dashboard status surfaces. Targeted tests (78 passed, 4 skipped), ruff, `git diff --check`, Phase 7 live audit, behavioral audit, integrity audit, `py_compile`, and `session_preflight.py` passed. `project_pulse.py --fast --format json` remained nonzero on existing Criterion 11/live-readiness fingerprint staleness and telemetry/action-queue items, not on this diff.
+
+## 2026-06-06 Codex update — workflow speed audit + pre-commit hot-path trim
+
+- Audited repo workflow/process overhead for create/design/implement/fix speed.
+- Created `docs/plans/active/2026-06/2026-06-06-workflow-speed-audit.md` with findings and a fast-path/escalation policy.
+- Trimmed `.githooks/pre-commit` hot path:
+  - computes staged path sets once;
+  - Ruff lint/format now runs only staged Python under `pipeline/`, `trading_app/`, `scripts/`, and `tests/`;
+  - validated-setups trade-window sync skips docs-only/design commits and runs only for code/runtime-data surfaces;
+  - CRG update skips when no Python is staged.
+- Safety posture preserved: drift, targeted tests, checkpoint guard, behavioral audit, claim hygiene, syntax checks, pre-push full drift, and CI remain the escalation/backstop paths.
+- Environment note: local WSL venv setup is still blocked by PyPI tunnel failure for `propcache`; `project_pulse.py` and `system_context.py` fail under ambient Python because `yaml` is unavailable.
+
+## 2026-06-06 Codex update — local-only process-debt audit pass 1
+
+- Created `docs/audits/2026-06-06-codex-process-debt-local-only.md` as a local-only pass-1 process-debt audit.
+- No code edits were made in this pass.
+- Audit follows the constraint: no remote/cloud-only artifacts, live DBs, `gold.db`, MCP outputs, secrets, dashboards, or unpushed branches assumed.
+- Key direction: Codex defaults should be repo-local and fail-closed, with DB-required evidence explicitly marked as `NEED_REMOTE_EVIDENCE` instead of inferred from local absence.
+
+## 2026-06-07 Codex update — current-state audit of pre-commit speed patch
+
+- Re-audited the prior pre-commit/process-speed patch against current HEAD `9539661`.
+- Local issue found and fixed outside tracked files: `core.hooksPath` was unset, so `.githooks/pre-commit` was not active; ran `git config core.hooksPath .githooks` and verified `system_context.py` no longer reports the hook-inactive warning.
+- Code follow-up: `.githooks/pre-commit` now blocks staged Python files with unstaged working-tree hunks before Ruff/format/syntax checks, preventing auto-format from verifying or re-staging unintended local edits.
+- Added `docs/audits/2026-06-07-precommit-hotpath-current-state-audit.md` and updated the prior process-debt/speed docs with the current-state correction.
