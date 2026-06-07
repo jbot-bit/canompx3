@@ -714,6 +714,8 @@ def test_action_start_pins_single_copy_live_pilot_command(monkeypatch, tmp_path)
     assert "MNQ" in captured["cmd"]
     assert "--copies" in captured["cmd"]
     assert "1" in captured["cmd"]
+    assert "--account-id" in captured["cmd"]
+    assert "21944866" in captured["cmd"]
     assert "--signal-only" not in captured["cmd"]
 
     log_file = bot_dashboard._bg_processes.pop("_session_logfile", None)

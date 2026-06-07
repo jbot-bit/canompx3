@@ -67,6 +67,8 @@ HANDOFF_STALE_AFTER_S = 1800
 LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto"
 LIVE_PILOT_INSTRUMENT = "MNQ"
 LIVE_PILOT_COPIES = 1
+# Dashboard live launches must match the explicit-account CLI preflight.
+LIVE_PILOT_ACCOUNT_ID = 21944866
 
 
 def _as_mapping(value: object) -> dict[str, object]:
@@ -726,7 +728,14 @@ def _live_pilot_cli_args(profile: str) -> list[str]:
     """Return server-side live pilot routing args for the funded MNQ pilot."""
     if profile != LIVE_PILOT_PROFILE:
         return []
-    return ["--instrument", LIVE_PILOT_INSTRUMENT, "--copies", str(LIVE_PILOT_COPIES)]
+    return [
+        "--instrument",
+        LIVE_PILOT_INSTRUMENT,
+        "--copies",
+        str(LIVE_PILOT_COPIES),
+        "--account-id",
+        str(LIVE_PILOT_ACCOUNT_ID),
+    ]
 
 
 def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, object]:
