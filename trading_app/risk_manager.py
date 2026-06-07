@@ -27,7 +27,7 @@ class RiskLimits:
     # realized daily P&L <= -max_daily_loss_dollars, independent of R. Per-account
     # semantic: the engine accrues ONE account's realized dollars; CopyOrderRouter
     # mirrors to shadows, so each account protects its own broker MLL.
-    # @canonical-source docs/runtime/stages/2026-05-26-daily-loss-dollar-cap-wiring.md
+    # @canonical-source docs/specs/daily_loss_dollar_cap.md
     # Sized from real-2026 risk distribution + Carver Table 20 (≤25% of MLL).
     max_daily_loss_dollars: float | None = None
     max_concurrent_positions: int = 3  # Max open positions at once

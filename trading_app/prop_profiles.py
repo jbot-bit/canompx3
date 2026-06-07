@@ -113,7 +113,7 @@ class AccountProfile:
     # binding capital guard; this is a tighter discipline belt that halts the
     # account for the rest of the trading day at -daily_loss_dollars realized.
     # Per-account semantic (copies each protect their own MLL).
-    # @canonical-source docs/runtime/stages/2026-05-26-daily-loss-dollar-cap-wiring.md
+    # @canonical-source docs/specs/daily_loss_dollar_cap.md
     # Must be < tier.max_dd (enforced by drift check).
     daily_loss_dollars: float | None = None
     # @canonical-source docs/research-input/topstep/topstep_mll_article.md
