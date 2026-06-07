@@ -6,6 +6,14 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+
+## Codex Session — OpenAI agent-ops roadmap persisted (2026-06-07)
+- **Tool:** Codex
+- **Scope:** Docs/planning only. No live trading, broker, DB, allocator, research-result, or runtime behavior changes.
+- **Plan written:** `docs/plans/2026-06-07-openai-agent-ops-upgrade-plan.md` captures the official OpenAI docs/Cookbook crawl, the user's Codex-as-architect prompt patterns, and a ranked ROI roadmap.
+- **Top next implementation:** WSL-portable Codex MCP config + audit (`.codex/config.toml` using existing `scripts/infra/run-*-mcp.sh` wrappers), then agent-ops eval cases/graders.
+- **Persistence:** `MEMORY.md` now has a compact long-term note that Codex should be treated as an architecture/review/eval partner, not just autocomplete.
+
 ## Claude Session — Monday live-readiness: C11 disambiguated + gates refreshed → PREFLIGHT 15/15 (2026-06-07)
 - **Tool:** Claude Code. Audit (read-only) + ONE operator-approved Tier-B refresh.
 - **OUTCOME: demo preflight = 15/15 PASS** after refreshing C11/C12 control state

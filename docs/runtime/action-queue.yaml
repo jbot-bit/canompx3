@@ -1,6 +1,53 @@
 schema_version: 1
-updated_at: 2026-06-06T00:00:00+10:00
+updated_at: 2026-06-07T00:00:00+00:00
 items:
+  - id: openai_agent_ops_stage1_2026_06_07
+    title: Implement Stage 1 of OpenAI agent-ops roadmap (WSL Codex MCP portability + eval scaffold)
+    class: ops
+    status: open
+    priority: P1
+    close_before_new_work: false
+    owner_hint: codex
+    last_verified_at: 2026-06-07
+    freshness_sla_days: 7
+    next_action: |
+      ACTION SOON. Start from `docs/plans/2026-06-07-openai-agent-ops-upgrade-plan.md`
+      Sprint 1, not from memory: implement the WSL-portable Codex MCP config
+      and audit first. Keep scope to Codex/project-operating surfaces only.
+
+      Stage-1 slice:
+      1. Add Codex-scoped MCP entries in `.codex/config.toml` using existing
+         WSL-safe runners (`scripts/infra/run-repo-state-mcp.sh`,
+         `run-research-catalog-mcp.sh`, `run-strategy-lab-mcp.sh`,
+         `run-gold-db-mcp.sh`).
+      2. Add a report-only `scripts/tools/codex_mcp_config_audit.py` and
+         focused tests so Windows-only paths or missing runner scripts fail.
+      3. Refresh `.codex/OPENAI_CODEX_STANDARDS.md` with the 2026-06-07
+         official OpenAI docs/Cookbook crawl.
+      4. Park, but do not skip, the next stage: agent-ops eval cases/graders
+         and the architecture-prompt playbook.
+
+      Do NOT touch live trading, broker credentials, `gold.db` contents,
+      allocator/profile runtime state, research-result promotion, or Claude-owned
+      settings/hooks unless explicitly approved in a separate task.
+    exit_criteria: |
+      Stage 1 is committed with tests/checks proving Codex MCP config is
+      WSL-portable, `.codex/OPENAI_CODEX_STANDARDS.md` references the new
+      OpenAI/Cookbook crawl, and the next eval/playbook stage remains queued or
+      has its own stage doc.
+    blocked_by: []
+    decision_refs:
+      - docs/plans/2026-06-07-openai-agent-ops-upgrade-plan.md
+      - CODEX.md
+      - AGENTS.md
+    evidence_refs:
+      - .codex/config.toml
+      - scripts/infra/run-repo-state-mcp.sh
+      - scripts/infra/run-research-catalog-mcp.sh
+      - scripts/infra/run-strategy-lab-mcp.sh
+      - scripts/infra/run-gold-db-mcp.sh
+    notes_ref: docs/plans/2026-06-07-openai-agent-ops-upgrade-plan.md
+
   - id: remote_control_task_reregister_2026_05_30
     title: Re-register ClaudeRemoteControl_canompx3 scheduled task (host auto-start gone)
     class: ops

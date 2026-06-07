@@ -33,3 +33,8 @@
 
 - `CLAUDE.md` and `.claude/` remain the canonical shared agent/rule/command layer.
 - A separate `CODEX.md` and `.codex/` layer is acceptable for Codex-specific routing as long as it stays parallel, minimal, and links directly to the Claude files instead of mirroring them.
+
+## AI operating preferences (2026-06-07)
+
+- Treat Codex as an architecture/review/eval partner, not just a code generator: ask it to design architecture, break modules, define API/data contracts, review bottlenecks/security, plan CI/docs, and then reduce to smallest-diff implementation slices.
+- OpenAI docs/Cookbook alignment plan lives at `docs/plans/2026-06-07-openai-agent-ops-upgrade-plan.md`; highest-ROI next steps are WSL-portable Codex MCP config, agent-ops evals/graders, structured artifacts, architecture prompt playbooks, and read-only PR review.
