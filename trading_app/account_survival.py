@@ -19,7 +19,7 @@ import argparse
 import json
 import logging
 import random
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -37,7 +37,11 @@ from trading_app.derived_state import (
     get_git_head,
     validate_state_envelope,
 )
-from trading_app.portfolio import build_profile_portfolio
+from trading_app.portfolio import (
+    build_profile_portfolio,
+    compute_position_size_vol_scaled,
+    compute_vol_scalar,
+)
 from trading_app.prop_firm_policies import get_payout_policy
 from trading_app.prop_profiles import (
     AccountProfile,
@@ -428,16 +432,29 @@ def _lane_atr_by_day(con, instrument: str, orb_minutes: int, days: set) -> dict:
     return {r[0]: float(r[1]) for r in rows if r[0] in wanted}
 
 
-def _load_lane_trade_paths(
+def _lane_median_atr(con, instrument: str, days: set) -> dict:
+    """Per-day median_atr_20 for an instrument over the given trade days.
+
+    Stub — returns empty dict until a later task hardens it with a real query.
+    When empty, the caller falls back to vol_scalar=1.0 (engine parity).
+    """
+    return {}
+
+
+def _build_trade_paths_from_outcomes(
     con: duckdb.DuckDBPyConnection,
-    strategy_id: str,
+    params: dict,
     *,
     as_of_date: date,
-    effective_stop_multiplier: float | None = None,
-    max_orb_size_pts: float | None = None,
+    effective_stop_multiplier: float | None,
+    max_orb_size_pts: float | None,
+    strategy_id: str,
 ) -> list[TradePath]:
-    """Load one lane's trade history in dollars from canonical outcomes."""
-    params = _load_strategy_snapshot(con, strategy_id)
+    """Load raw (unscaled, 1-contract) TradePaths from canonical outcomes.
+
+    Pure extraction of the original _load_lane_trade_paths body — behaviour
+    is byte-identical to the pre-refactor code.
+    """
     outcomes = _load_strategy_outcomes(
         con,
         instrument=params["instrument"],
@@ -499,6 +516,88 @@ def _load_lane_trade_paths(
             )
         )
     return trades
+
+
+def _load_lane_trade_paths(
+    con: duckdb.DuckDBPyConnection,
+    strategy_id: str,
+    *,
+    as_of_date: date,
+    effective_stop_multiplier: float | None = None,
+    max_orb_size_pts: float | None = None,
+    size_model: SizingContext | None = None,
+) -> list[TradePath]:
+    """Load one lane's trade history in dollars from canonical outcomes.
+
+    When ``size_model`` is None (all current callers) behaviour is byte-identical
+    to the pre-refactor code: 1-contract, unscaled TradePaths returned as-is.
+
+    When a ``SizingContext`` is supplied the trades are vol-scaled via the
+    canonical sizer (``compute_vol_scalar`` / ``compute_position_size_vol_scaled``
+    from ``trading_app.portfolio``) and ALL contract-derived TradePath fields
+    (contracts, pnl_dollars, mae_dollars, mfe_dollars, lots) scale together.
+    """
+    params = _load_strategy_snapshot(con, strategy_id)
+    trades = _build_trade_paths_from_outcomes(
+        con,
+        params,
+        as_of_date=as_of_date,
+        effective_stop_multiplier=effective_stop_multiplier,
+        max_orb_size_pts=max_orb_size_pts,
+        strategy_id=strategy_id,
+    )
+    if size_model is None:
+        return trades
+    if size_model.account_equity <= 0:
+        raise ValueError(
+            f"SizingContext.account_equity must be > 0 (got {size_model.account_equity}); "
+            "a zero-equity drawdown projection is never a valid survival PASS"
+        )
+    instrument = params["instrument"]
+    cost_spec = get_cost_spec(instrument)
+    cap = size_model.max_contracts_for(strategy_id)
+    days = {t.trading_day for t in trades}
+    atr_by_day = _lane_atr_by_day(con, instrument, params["orb_minutes"], days)
+    median_by_day = _lane_median_atr(con, instrument, days)
+    xfa_cap = max_lots_for_xfa(size_model.account_size, size_model.account_equity)
+    scaled: list[TradePath] = []
+    for t in trades:
+        risk_points = (
+            abs(t.mae_dollars) / cost_spec.point_value if cost_spec.point_value else 0.0
+        )
+        atr = atr_by_day.get(t.trading_day)
+        med = median_by_day.get(t.trading_day)
+        if atr and med and atr > 0 and med > 0:
+            vol_scalar = compute_vol_scalar(atr, med)
+        else:
+            vol_scalar = 1.0
+            log.warning(
+                "survival sizing: vol_scalar=1.0 fallback for %s %s (atr=%s med=%s)",
+                instrument,
+                t.trading_day,
+                atr,
+                med,
+            )
+        n = compute_position_size_vol_scaled(
+            size_model.account_equity,
+            size_model.risk_per_trade_pct,
+            risk_points,
+            cost_spec,
+            vol_scalar,
+        )
+        n = max(0, min(n, cap, xfa_cap))
+        base_contracts = t.contracts or 1
+        scaled.append(
+            replace(
+                t,
+                contracts=base_contracts * n,
+                pnl_dollars=t.pnl_dollars * n,
+                mae_dollars=t.mae_dollars * n,
+                mfe_dollars=t.mfe_dollars * n,
+                lots=lots_for_position(instrument, base_contracts * n),
+            )
+        )
+    return scaled
 
 
 def _scenario_from_trade_paths(trading_day: date, trades: list[TradePath]) -> DailyScenario:

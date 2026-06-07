@@ -1068,3 +1068,62 @@ def test_lane_atr_by_day_returns_per_day_atr_map():
     m = _lane_atr_by_day(con, "MNQ", 5, {date(2026, 1, 2), date(2026, 1, 5)})
     assert m[date(2026, 1, 2)] == 12.5
     assert date(2026, 1, 5) not in m   # NULL not mapped; caller falls back to vol_scalar=1.0
+
+
+# ---------------------------------------------------------------------------
+# Task 3: opt-in size_model gate in _load_lane_trade_paths
+# ---------------------------------------------------------------------------
+
+def test_load_lane_trade_paths_scales_all_fields_when_size_model_given(monkeypatch):
+    import trading_app.account_survival as asv
+    from trading_app.account_survival import SizingContext, _load_lane_trade_paths
+    base = [asv.TradePath(trading_day=date(2026, 1, 2), strategy_id="L1",
+                          entry_ts=None, exit_ts=None, pnl_dollars=40.0, mae_dollars=20.0,
+                          mfe_dollars=60.0, lots=1, contracts=1, instrument="MNQ")]
+    monkeypatch.setattr(asv, "_load_strategy_snapshot",
+        lambda con, sid: {"instrument": "MNQ", "orb_label": "X", "orb_minutes": 5,
+                          "entry_model": "m", "rr_target": 2.0, "confirm_bars": 1,
+                          "filter_type": "NO_FILTER", "stop_multiplier": 1.0})
+    monkeypatch.setattr(asv, "_build_trade_paths_from_outcomes", lambda *a, **k: list(base))
+    monkeypatch.setattr(asv, "_lane_atr_by_day", lambda *a, **k: {})   # no ATR -> vol_scalar 1.0
+    monkeypatch.setattr(asv, "_lane_median_atr", lambda *a, **k: {})
+    # Use high equity so sizer returns >= cap=2; cap is the binding constraint.
+    ctx = SizingContext(account_equity=500_000.0, risk_per_trade_pct=2.0,
+                        account_size=50_000, max_contracts_by_strategy={"L1": 2})
+    scaled = _load_lane_trade_paths(None, "L1", as_of_date=date(2026, 1, 3), size_model=ctx)
+    t = scaled[0]
+    assert t.contracts == 2
+    assert t.pnl_dollars == 80.0
+    assert t.mae_dollars == 40.0
+    assert t.mfe_dollars == 120.0
+
+
+def test_load_lane_trade_paths_unchanged_when_size_model_none(monkeypatch):
+    import trading_app.account_survival as asv
+    from trading_app.account_survival import _load_lane_trade_paths
+    base = [asv.TradePath(trading_day=date(2026, 1, 2), strategy_id="L1",
+                          entry_ts=None, exit_ts=None, pnl_dollars=40.0, mae_dollars=20.0,
+                          mfe_dollars=60.0, lots=1, contracts=1, instrument="MNQ")]
+    monkeypatch.setattr(asv, "_load_strategy_snapshot",
+        lambda con, sid: {"instrument": "MNQ", "orb_label": "X", "orb_minutes": 5,
+                          "entry_model": "m", "rr_target": 2.0, "confirm_bars": 1,
+                          "filter_type": "NO_FILTER", "stop_multiplier": 1.0})
+    monkeypatch.setattr(asv, "_build_trade_paths_from_outcomes", lambda *a, **k: list(base))
+    out = _load_lane_trade_paths(None, "L1", as_of_date=date(2026, 1, 3))
+    assert out[0].contracts == 1
+    assert out[0].pnl_dollars == 40.0
+
+
+def test_load_lane_trade_paths_fails_closed_on_nonpositive_equity(monkeypatch):
+    import pytest
+    import trading_app.account_survival as asv
+    from trading_app.account_survival import SizingContext, _load_lane_trade_paths
+    monkeypatch.setattr(asv, "_load_strategy_snapshot",
+        lambda con, sid: {"instrument": "MNQ", "orb_label": "X", "orb_minutes": 5,
+                          "entry_model": "m", "rr_target": 2.0, "confirm_bars": 1,
+                          "filter_type": "NO_FILTER", "stop_multiplier": 1.0})
+    monkeypatch.setattr(asv, "_build_trade_paths_from_outcomes", lambda *a, **k: [])
+    ctx = SizingContext(account_equity=0.0, risk_per_trade_pct=2.0,
+                        account_size=50_000, max_contracts_by_strategy={})
+    with pytest.raises(ValueError, match="account_equity"):
+        _load_lane_trade_paths(None, "L1", as_of_date=date(2026, 1, 3), size_model=ctx)
