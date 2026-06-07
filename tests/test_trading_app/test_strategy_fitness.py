@@ -10,6 +10,7 @@ from datetime import date
 from pathlib import Path
 
 import duckdb
+import pandas as pd
 import pytest
 
 from trading_app.strategy_discovery import compute_metrics
@@ -125,66 +126,107 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
                 ],
             )
 
-    # Insert daily_features FIRST (FK parent for orb_outcomes)
-    if features:
-        for f in features:
-            con.execute(
-                """INSERT OR IGNORE INTO daily_features
-                   (trading_day, symbol, orb_minutes, bar_count_1m,
-                    orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size,
-                    orb_CME_REOPEN_break_dir)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                [
-                    f["trading_day"],
-                    f.get("symbol", "MGC"),
-                    f.get("orb_minutes", 5),
-                    f.get("bar_count_1m", 1400),
-                    f.get("orb_CME_REOPEN_high", 2355.0),
-                    f.get("orb_CME_REOPEN_low", 2345.0),
-                    f.get("orb_CME_REOPEN_size", 10.0),
-                    f.get("orb_CME_REOPEN_break_dir", "long"),
-                ],
-            )
+    # Insert daily_features FIRST (FK parent for orb_outcomes).
+    # daily_features rows come from BOTH the `features` arg AND every outcome's
+    # day (the FK parent each outcome needs). Build one combined frame, dedup on
+    # the PK (trading_day, symbol, orb_minutes) to honour INSERT OR IGNORE
+    # semantics, then bulk-load via a single registered-frame INSERT...SELECT.
+    # Per-row con.execute against a file-backed DuckDB costs ~0.4s/row (PK
+    # conflict probe + fsync); the bulk path is ~340x faster (54s -> 0.16s).
+    feature_cols = [
+        "trading_day",
+        "symbol",
+        "orb_minutes",
+        "bar_count_1m",
+        "orb_CME_REOPEN_high",
+        "orb_CME_REOPEN_low",
+        "orb_CME_REOPEN_size",
+        "orb_CME_REOPEN_break_dir",
+    ]
+    feature_rows = []
+    for f in features or []:
+        feature_rows.append(
+            [
+                f["trading_day"],
+                f.get("symbol", "MGC"),
+                f.get("orb_minutes", 5),
+                f.get("bar_count_1m", 1400),
+                f.get("orb_CME_REOPEN_high", 2355.0),
+                f.get("orb_CME_REOPEN_low", 2345.0),
+                f.get("orb_CME_REOPEN_size", 10.0),
+                f.get("orb_CME_REOPEN_break_dir", "long"),
+            ]
+        )
+    for o in outcomes or []:
+        # Each outcome needs a daily_features FK parent (was the per-outcome
+        # INSERT OR IGNORE). Same defaults as the original inline insert.
+        feature_rows.append(
+            [
+                o["trading_day"],
+                o.get("symbol", "MGC"),
+                o.get("orb_minutes", 5),
+                1400,
+                2355.0,
+                2345.0,
+                10.0,
+                "long",
+            ]
+        )
+    if feature_rows:
+        feat_df = pd.DataFrame(feature_rows, columns=feature_cols).drop_duplicates(
+            subset=["trading_day", "symbol", "orb_minutes"], keep="first"
+        )
+        con.register("_seed_features", feat_df)
+        con.execute(
+            f"INSERT INTO daily_features ({', '.join(feature_cols)}) "
+            f"SELECT {', '.join(feature_cols)} FROM _seed_features"
+        )
+        con.unregister("_seed_features")
 
-    # Insert orb_outcomes (after daily_features due to FK)
+    # Insert orb_outcomes (after daily_features due to FK) via the same bulk path.
     if outcomes:
-        for o in outcomes:
-            td = o["trading_day"]
-            sym = o.get("symbol", "MGC")
-            om = o.get("orb_minutes", 5)
-            # Ensure daily_features row exists for this outcome (FK requirement)
-            con.execute(
-                """INSERT OR IGNORE INTO daily_features
-                   (trading_day, symbol, orb_minutes, bar_count_1m,
-                    orb_CME_REOPEN_high, orb_CME_REOPEN_low, orb_CME_REOPEN_size,
-                    orb_CME_REOPEN_break_dir)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                [td, sym, om, 1400, 2355.0, 2345.0, 10.0, "long"],
-            )
-            con.execute(
-                """INSERT INTO orb_outcomes
-                   (trading_day, symbol, orb_label, orb_minutes,
-                    rr_target, confirm_bars, entry_model,
-                    entry_price, stop_price, target_price,
-                    outcome, pnl_r, mae_r, mfe_r)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                [
-                    td,
-                    sym,
-                    o.get("orb_label", "CME_REOPEN"),
-                    om,
-                    o.get("rr_target", 2.0),
-                    o.get("confirm_bars", 2),
-                    o.get("entry_model", "E1"),
-                    o.get("entry_price", 2350.0),
-                    o.get("stop_price", 2340.0),
-                    o.get("target_price", 2370.0),
-                    o["outcome"],
-                    o["pnl_r"],
-                    o.get("mae_r", -0.5),
-                    o.get("mfe_r", 1.5),
-                ],
-            )
+        outcome_cols = [
+            "trading_day",
+            "symbol",
+            "orb_label",
+            "orb_minutes",
+            "rr_target",
+            "confirm_bars",
+            "entry_model",
+            "entry_price",
+            "stop_price",
+            "target_price",
+            "outcome",
+            "pnl_r",
+            "mae_r",
+            "mfe_r",
+        ]
+        outcome_rows = [
+            [
+                o["trading_day"],
+                o.get("symbol", "MGC"),
+                o.get("orb_label", "CME_REOPEN"),
+                o.get("orb_minutes", 5),
+                o.get("rr_target", 2.0),
+                o.get("confirm_bars", 2),
+                o.get("entry_model", "E1"),
+                o.get("entry_price", 2350.0),
+                o.get("stop_price", 2340.0),
+                o.get("target_price", 2370.0),
+                o["outcome"],
+                o["pnl_r"],
+                o.get("mae_r", -0.5),
+                o.get("mfe_r", 1.5),
+            ]
+            for o in outcomes
+        ]
+        out_df = pd.DataFrame(outcome_rows, columns=outcome_cols)
+        con.register("_seed_outcomes", out_df)
+        con.execute(
+            f"INSERT INTO orb_outcomes ({', '.join(outcome_cols)}) "
+            f"SELECT {', '.join(outcome_cols)} FROM _seed_outcomes"
+        )
+        con.unregister("_seed_outcomes")
 
     con.commit()
     con.close()
