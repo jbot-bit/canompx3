@@ -226,8 +226,7 @@ def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):
         out_df = pd.DataFrame(outcome_rows, columns=outcome_cols)
         con.register("_seed_outcomes", out_df)
         con.execute(
-            f"INSERT INTO orb_outcomes ({', '.join(outcome_cols)}) "
-            f"SELECT {', '.join(outcome_cols)} FROM _seed_outcomes"
+            f"INSERT INTO orb_outcomes ({', '.join(outcome_cols)}) SELECT {', '.join(outcome_cols)} FROM _seed_outcomes"
         )
         con.unregister("_seed_outcomes")
 
@@ -335,14 +334,10 @@ class TestClassifyFitness:
         At sample == MIN_ROLLING_WATCH the `<` makes it past the STALE gate; a
         `<=` mutant would wrongly return STALE. One below must still be STALE.
         """
-        at_watch, _ = classify_fitness(
-            rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_WATCH, recent_sharpe_30=0.10
-        )
+        at_watch, _ = classify_fitness(rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_WATCH, recent_sharpe_30=0.10)
         assert at_watch != "STALE", "sample==MIN_ROLLING_WATCH must clear the STALE gate"
 
-        below, _ = classify_fitness(
-            rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_WATCH - 1, recent_sharpe_30=0.10
-        )
+        below, _ = classify_fitness(rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_WATCH - 1, recent_sharpe_30=0.10)
         assert below == "STALE", "sample below MIN_ROLLING_WATCH must be STALE"
 
     def test_classify_fitness_decay_zero_expectancy_boundary(self):
@@ -352,9 +347,7 @@ class TestClassifyFitness:
         exactly-zero ExpR pass through to WATCH/FIT — a strategy earning nothing
         would not be flagged. Pin the zero boundary; a tiny positive must NOT decay.
         """
-        at_zero, notes = classify_fitness(
-            rolling_exp_r=0.0, rolling_sample=MIN_ROLLING_FIT + 5, recent_sharpe_30=0.10
-        )
+        at_zero, notes = classify_fitness(rolling_exp_r=0.0, rolling_sample=MIN_ROLLING_FIT + 5, recent_sharpe_30=0.10)
         assert at_zero == "DECAY", "exactly-zero rolling ExpR must be DECAY"
         assert "Negative" in notes
 
@@ -369,9 +362,7 @@ class TestClassifyFitness:
         The FIT gate requires sample >= MIN_ROLLING_FIT. At exactly the threshold
         the trade is FIT-eligible; a `<=` mutant would push it to WATCH (thin data).
         """
-        at_fit, _ = classify_fitness(
-            rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_FIT, recent_sharpe_30=0.10
-        )
+        at_fit, _ = classify_fitness(rolling_exp_r=0.20, rolling_sample=MIN_ROLLING_FIT, recent_sharpe_30=0.10)
         assert at_fit == "FIT", "sample==MIN_ROLLING_FIT with stable Sharpe must be FIT"
 
         below_fit, notes = classify_fitness(
@@ -511,8 +502,7 @@ class TestRecentTradeSharpe:
         must proceed and return a number. A `<=` mutant would wrongly return None.
         """
         outcomes = [
-            {"trading_day": date(2025, 3, d), "outcome": "win" if d % 2 else "loss",
-             "pnl_r": 1.5 if d % 2 else -1.0}
+            {"trading_day": date(2025, 3, d), "outcome": "win" if d % 2 else "loss", "pnl_r": 1.5 if d % 2 else -1.0}
             for d in range(1, 4)  # exactly 3 trades
         ]
         result = _recent_trade_sharpe(outcomes, 3)
@@ -1279,6 +1269,134 @@ class TestDecayDiagnostics:
         assert isinstance(diag, DecayDiagnosis)
         assert diag.strategy_id == strategies[0]["strategy_id"]
         assert diag.diagnosis in ("REGIME_SHIFT", "OVERFIT", "FRAGMENTED", "SINGLETON", "NO_FAMILY")
+
+    # --- Tier-2 mutation-killing tests: diagnose_decay BOUNDARIES + branches ---
+    # The tests above assert on STRUCTURE (which diagnosis enum, dataclass shape)
+    # but never sit ON the decay-fraction boundary or exercise the FRAGMENTED
+    # branch, so the comparison/branch mutants on lines 997-1015 survive (coverage
+    # 100%, mutation kill 0% — the exact gap this campaign targets). Each test
+    # below pins a specific mutant: the assertion fails if the operator/branch is
+    # flipped. Constructed so the target strategy itself decays (DECAY/WATCH) and
+    # siblings' fitness is controlled per rr_target via their win/loss outcomes.
+
+    def _family_strategies(self, decay_rrs, fit_rrs):
+        """Strategies sharing one family — target is the first decay_rr.
+
+        decay_rrs get all-loss recent outcomes (→ DECAY); fit_rrs get all-win
+        recent outcomes (→ FIT). Each rr_target is a distinct sibling.
+        """
+        strategies = []
+        for rr in [*decay_rrs, *fit_rrs]:
+            strategies.append(
+                {
+                    "strategy_id": f"MGC_CME_REOPEN_E1_RR{rr}_CB2_NO_FILTER",
+                    "rr_target": rr,
+                    "filter_type": "NO_FILTER",
+                    "sample_size": 100,
+                    "expectancy_r": 0.30,
+                    "sharpe_ratio": 0.25,
+                }
+            )
+        return strategies
+
+    def _family_outcomes(self, decay_rrs, fit_rrs):
+        """20 recent outcomes per rr: losses for decay_rrs, wins for fit_rrs."""
+        outcomes = []
+        for i in range(20):
+            td = date(2025, (i % 11) + 1, (i % 27) + 1)
+            for rr in decay_rrs:
+                outcomes.append(
+                    {"trading_day": td, "outcome": "loss", "pnl_r": -1.0, "rr_target": rr, "confirm_bars": 2}
+                )
+            for rr in fit_rrs:
+                outcomes.append({"trading_day": td, "outcome": "win", "pnl_r": rr, "rr_target": rr, "confirm_bars": 2})
+        return outcomes
+
+    def test_decay_frac_below_half_is_fragmented(self, tmp_path):
+        """1 decaying sibling of 4 (decay_frac 0.25 < 0.50) -> FRAGMENTED.
+
+        Kills the FRAGMENTED-branch mutants (lines 1006/1011): if the OVERFIT
+        guard `counts["DECAY"] == 0 and counts["WATCH"] == 0` is mutated, a set
+        with one DECAY sibling misroutes to OVERFIT. Target = a FIT rr so its
+        OWN status doesn't dominate; we read the sibling mix.
+        """
+        # Target RR1.5 (FIT); siblings: RR2.0 decays, RR2.5/RR3.0 FIT -> of the 3
+        # siblings, 1 DECAY + 2 FIT = decay_frac 1/3 = 0.33 < 0.50 -> FRAGMENTED.
+        strategies = self._family_strategies(decay_rrs=[2.0], fit_rrs=[1.5, 2.5, 3.0])
+        outcomes = self._family_outcomes(decay_rrs=[2.0], fit_rrs=[1.5, 2.5, 3.0])
+        db_path = _setup_family_db(tmp_path, strategies, outcomes)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            diag = diagnose_decay(
+                con,
+                "MGC_CME_REOPEN_E1_RR1.5_CB2_NO_FILTER",
+                as_of_date=date(2025, 12, 31),
+                rolling_months=18,
+            )
+        finally:
+            con.close()
+
+        assert diag.diagnosis == "FRAGMENTED"
+        assert diag.siblings_decay == 1
+        assert diag.siblings_fit == 2
+
+    def test_decay_frac_exactly_half_is_regime_shift(self, tmp_path):
+        """decay_frac == 0.50 exactly -> REGIME_SHIFT (boundary is inclusive).
+
+        Kills the `decay_frac >= 0.50` -> `decay_frac > 0.50` mutant on line
+        1003: with 2 decaying + 2 FIT siblings the fraction is exactly 0.50, so
+        `>=` routes to REGIME_SHIFT but `>` flips it to FRAGMENTED.
+        """
+        # Target RR1.5 (FIT). Siblings: RR2.0/RR2.5 decay, RR3.0/RR3.5 FIT ->
+        # 2 DECAY + 2 FIT of 4 siblings = decay_frac 0.50 exactly.
+        strategies = self._family_strategies(decay_rrs=[2.0, 2.5], fit_rrs=[1.5, 3.0, 3.5])
+        outcomes = self._family_outcomes(decay_rrs=[2.0, 2.5], fit_rrs=[1.5, 3.0, 3.5])
+        db_path = _setup_family_db(tmp_path, strategies, outcomes)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            diag = diagnose_decay(
+                con,
+                "MGC_CME_REOPEN_E1_RR1.5_CB2_NO_FILTER",
+                as_of_date=date(2025, 12, 31),
+                rolling_months=18,
+            )
+        finally:
+            con.close()
+
+        assert diag.diagnosis == "REGIME_SHIFT"
+        assert diag.siblings_decay == 2
+        assert diag.siblings_fit == 2
+
+    def test_all_fit_siblings_is_overfit_with_exact_counts(self, tmp_path):
+        """0 decaying siblings -> OVERFIT, with exact sibling-count arithmetic.
+
+        Kills the sibling-count accumulator mutants (line 992 `+ 1`) and the
+        OVERFIT-branch guard: asserting the exact counts (3 FIT, 0 DECAY, 0
+        WATCH) fails if the increment or the zero-checks are mutated.
+        """
+        # Target RR2.0 (FIT). Siblings RR1.5/RR2.5/RR3.0 all FIT -> 3 FIT, 0
+        # decay -> OVERFIT (target's own decay, if any, is isolated).
+        strategies = self._family_strategies(decay_rrs=[], fit_rrs=[2.0, 1.5, 2.5, 3.0])
+        outcomes = self._family_outcomes(decay_rrs=[], fit_rrs=[2.0, 1.5, 2.5, 3.0])
+        db_path = _setup_family_db(tmp_path, strategies, outcomes)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            diag = diagnose_decay(
+                con,
+                "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+                as_of_date=date(2025, 12, 31),
+                rolling_months=18,
+            )
+        finally:
+            con.close()
+
+        assert diag.diagnosis == "OVERFIT"
+        assert diag.siblings_fit == 3
+        assert diag.siblings_decay == 0
+        assert diag.siblings_watch == 0
 
 
 def test_compute_fitness_raises_valueerror_for_missing_strategy(tmp_path):

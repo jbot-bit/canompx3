@@ -195,6 +195,41 @@ Per-mutant detail (all confirmed RED on re-apply):
    DB-fixture tests for compute/diagnose/enrich + the scoped re-mutation are the
    remaining Tier-2 work (NOT yet done).
 
+   **Stage 2 of Tier-2 DONE (2026-06-07): `diagnose_decay` decision-boundary slice.**
+   The existing `TestDecayDiagnostics` tests asserted on STRUCTURE (which diagnosis
+   enum fired, dataclass shape) but never sat ON the decay-fraction boundary nor
+   exercised the FRAGMENTED branch — coverage 100%, mutation-kill 0% on the
+   sibling-classification decision block (`diagnose_decay` lines 987-1015). 3
+   DB-fixture tests added (`tests/test_trading_app/test_strategy_fitness.py`,
+   `TestDecayDiagnostics`, +2 helper builders `_family_strategies`/`_family_outcomes`):
+   - `test_decay_frac_exactly_half_is_regime_shift` — 2 DECAY + 2 FIT siblings →
+     `decay_frac == 0.50` exactly. Kills the L1003 `decay_frac >= 0.50` → `> 0.50`
+     mutant (inclusive boundary). **Proven RED via `Edit`-apply:** misroutes
+     REGIME_SHIFT → FRAGMENTED.
+   - `test_decay_frac_below_half_is_fragmented` — 1 DECAY + 2 FIT (frac 0.33).
+     Kills the L1006 OVERFIT-guard `... == 0 and ... == 0` → `or` mutant. **Proven
+     RED:** misroutes FRAGMENTED → OVERFIT.
+   - `test_all_fit_siblings_is_overfit_with_exact_counts` — 3 FIT siblings, exact
+     count asserts. Kills the L992 sibling accumulator `+ 1` → `- 1` mutant.
+     **Proven RED:** `siblings_fit == -3`.
+   All 3 killed mutant-by-mutant via apply→RED→restore (same per-mutant method as
+   the Tier-1 kills; stronger than an aggregate rerun). Source byte-identical to
+   HEAD after restore (`git diff trading_app/strategy_fitness.py` empty). Suite
+   39 → 42 green (3.13.9), drift **180/0**, ruff clean.
+
+   **HONEST residual gaps (NOT yet done — this is a slice, not Tier-2 complete):**
+   - **Module kill rate unchanged in the headline (48.7%)** — per-mutant apply
+     proves these 3, but no full re-run was done, so the aggregate figure is not
+     re-quoted. These 3 are a small fraction of the ~322 Tier-2 survivors.
+   - **`diagnose_decay` L998 `total_assessed == 0` → SINGLETON-fallback branch**
+     and the L1002 `decay_frac` division remain untested (real branches, real
+     survivors — next slice).
+   - **`_compute_fitness_from_cache` / `_compute_fitness_with_con` / `_enrich_*` /
+     `diagnose_portfolio_decay`** — entirely untouched this slice; the bulk of the
+     path to ≥80% and the largest remaining clusters.
+   - Cosmetic survivors (diagnosis_notes string constants L1005/L1008/L1013)
+     deliberately NOT chased per § "100% is NOT the goal" — justified-not-killed.
+
 ### `trading_app/execution_engine.py` — pending
 ### `pipeline/build_daily_features.py` — pending (hermeticity-gated)
 

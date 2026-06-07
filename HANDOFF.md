@@ -117,9 +117,24 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-07
-- **Commit:** e6471eea — chore: close trading-app-cohesion-clarity-fixes stage (work landed in b93122cd)
-- **Files changed:** 1 files
-  - `docs/runtime/stages/trading-app-cohesion-clarity-fixes.md`
+- **Commit:** af3df871 — @ refactor(trading_app): close cohesion WARNs — canonical delegation, kill 2 cycles, archive 2 orphans
+- **Files changed:** 20 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/trading-app-cohesion-warn-closure.md`
+  - `research/archive/setup_detector.py`
+  - `research/archive/strategy_lineage_ast.py`
+  - `tests/test_research/test_setup_detector.py`
+  - `tests/test_research/test_strategy_lineage_ast.py`
+  - `tests/test_trading_app/test_account_hwm_tracker.py`
+  - `tests/test_trading_app/test_prop_portfolio.py`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `tests/test_trading_app/test_setup_detector.py`
+  - `tests/test_trading_app/test_strategy_lineage_ast.py`
+  - `trading_app/account_hwm_tracker.py`
+  - `trading_app/deployability.py`
+  - `trading_app/dsr.py`
+  - `trading_app/live/session_orchestrator.py`
+  - ... and 5 more
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
