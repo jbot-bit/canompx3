@@ -117,24 +117,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-07
-- **Commit:** af3df871 — @ refactor(trading_app): close cohesion WARNs — canonical delegation, kill 2 cycles, archive 2 orphans
-- **Files changed:** 20 files
+- **Commit:** e0d0164a — test(mutation): kill 3 diagnose_decay decision-boundary survivors (Tier-2 slice)
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/trading-app-cohesion-warn-closure.md`
-  - `research/archive/setup_detector.py`
-  - `research/archive/strategy_lineage_ast.py`
-  - `tests/test_research/test_setup_detector.py`
-  - `tests/test_research/test_strategy_lineage_ast.py`
-  - `tests/test_trading_app/test_account_hwm_tracker.py`
-  - `tests/test_trading_app/test_prop_portfolio.py`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `tests/test_trading_app/test_setup_detector.py`
-  - `tests/test_trading_app/test_strategy_lineage_ast.py`
-  - `trading_app/account_hwm_tracker.py`
-  - `trading_app/deployability.py`
-  - `trading_app/dsr.py`
-  - `trading_app/live/session_orchestrator.py`
-  - ... and 5 more
+  - `docs/audit/2026-06-07-mutation-testing-capital-core.md`
+  - `tests/test_trading_app/test_strategy_fitness.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

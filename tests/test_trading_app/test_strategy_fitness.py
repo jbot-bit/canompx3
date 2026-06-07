@@ -21,6 +21,7 @@ from trading_app.strategy_fitness import (
     DecayDiagnosis,
     FitnessReport,
     FitnessScore,
+    _compute_fitness_from_cache,
     _load_strategy_outcomes,
     _recent_trade_sharpe,
     _rolling_window_start,
@@ -746,6 +747,214 @@ class TestComputeFitnessIntegration:
         # Only the 20 big-ORB outcomes should pass filter
         # The 20 small-ORB (size=2.0 < 4.0) should be excluded
         assert score.rolling_sample == 20
+
+
+class TestComputeFitnessFromCache:
+    """Direct-call mutation tests for `_compute_fitness_from_cache`.
+
+    Targets the cache-path survivor cluster (largest remaining in this module):
+    fail-closed unknown filter, the eligible-day filter branch, the
+    `min_rolling_trades` None-blanking boundary, and the delta_30/60 subtraction.
+    Each assertion is written to KILL a specific mutant — asserts on computed
+    VALUES (rolling_sample, rolling_exp_r, deltas), not just "returns a score".
+    """
+
+    # All these strategies share one canonical 5-tuple cache key.
+    _KEY = ("CME_REOPEN", 5, "E1", 2.0, 2)
+
+    def _params(self, filter_type="NO_FILTER", stop_multiplier=1.0, sharpe_ratio=0.25):
+        return {
+            "orb_label": "CME_REOPEN",
+            "orb_minutes": 5,
+            "entry_model": "E1",
+            "rr_target": 2.0,
+            "confirm_bars": 2,
+            "filter_type": filter_type,
+            "instrument": "MGC",
+            "expectancy_r": 0.30,
+            "sharpe_ratio": sharpe_ratio,
+            "sample_size": 120,
+            "stop_multiplier": stop_multiplier,
+        }
+
+    def _outcomes(self, n, *, win, pnl_r, year=2025, month_base=1):
+        """N outcomes on distinct days inside the rolling window (year 2025)."""
+        return [
+            {
+                "trading_day": date(year, ((month_base + i) % 11) + 1, (i % 27) + 1),
+                "outcome": "win" if win else "loss",
+                "pnl_r": pnl_r,
+            }
+            for i in range(n)
+        ]
+
+    def test_known_filter_keeps_only_eligible_days(self, tmp_path):
+        """ORB_G4 eligibility branch (sf.py:585-593): only days whose feature
+        passes filt.matches_row survive. ASYMMETRIC fixture (20 eligible wins vs
+        8 ineligible losses) + value assertion so an `in -> not in` membership
+        flip is observable: the flip would keep 8 losing days, not 20 winning
+        ones. Kills the membership flip AND the matches_row call mutants."""
+        big_days = self._outcomes(20, win=True, pnl_r=2.0, year=2025, month_base=0)
+        small_days = self._outcomes(8, win=False, pnl_r=-1.0, year=2024, month_base=5)
+        outcome_cache = {self._KEY: big_days + small_days}
+
+        # Feature cache: 2025 days have big ORB (size=10 -> passes ORB_G4),
+        # 2024 days have small ORB (size=2 -> excluded by ORB_G4 >= 4.0).
+        feature_cache = {}
+        for o in big_days:
+            feature_cache[(o["trading_day"], 5)] = {"orb_CME_REOPEN_size": 10.0}
+        for o in small_days:
+            feature_cache[(o["trading_day"], 5)] = {"orb_CME_REOPEN_size": 2.0}
+
+        score = _compute_fitness_from_cache(
+            "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G4",
+            self._params(filter_type="ORB_G4"),
+            outcome_cache,
+            feature_cache,
+            as_of_date=date(2025, 12, 31),
+            rolling_months=24,
+        )
+        # Only the 20 big-ORB winning days pass; the 8 small-ORB losing days are
+        # excluded. Asserting BOTH count and ExpR makes the membership flip
+        # observable (flip -> sample 8, ExpR -1.0).
+        assert score.rolling_sample == 20
+        assert score.rolling_exp_r == 2.0
+
+    def test_unknown_filter_fails_closed_to_zero(self, tmp_path):
+        """Fail-closed unknown filter (sf.py:581-584): an unregistered
+        filter_type yields ZERO outcomes, never all-pass. Kills the mutant that
+        deletes `all_outcomes = []`."""
+        outcome_cache = {self._KEY: self._outcomes(30, win=True, pnl_r=2.0)}
+        feature_cache = {}
+
+        score = _compute_fitness_from_cache(
+            "MGC_CME_REOPEN_E1_RR2.0_CB2_BOGUS_FILTER",
+            self._params(filter_type="DEFINITELY_NOT_A_REAL_FILTER"),
+            outcome_cache,
+            feature_cache,
+            as_of_date=date(2025, 12, 31),
+            rolling_months=24,
+        )
+        # Fail-closed: unknown filter drops ALL outcomes.
+        assert score.rolling_sample == 0
+
+    def test_no_filter_keeps_all_outcomes(self, tmp_path):
+        """NO_FILTER path bypasses the eligibility branch entirely — every
+        outcome in the window counts. Anchors the branch the fail-closed test
+        contrasts against."""
+        outcome_cache = {self._KEY: self._outcomes(30, win=True, pnl_r=2.0)}
+
+        score = _compute_fitness_from_cache(
+            "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+            self._params(filter_type="NO_FILTER"),
+            outcome_cache,
+            {},
+            as_of_date=date(2025, 12, 31),
+            rolling_months=24,
+        )
+        assert score.rolling_sample == 30
+
+    def test_rolling_exp_r_blanked_below_min_trades(self):
+        """min_rolling_trades None-blanking (sf.py:626-629): with sample <
+        min_rolling_trades, rolling_exp_r/sharpe/wr are blanked to None while
+        rolling_sample is preserved. Kills `<` -> `<=` and delete-blanking."""
+        # Exactly MIN_ROLLING_FIT - 1 = 14 outcomes -> below the FIT floor.
+        n = MIN_ROLLING_FIT - 1
+        outcome_cache = {self._KEY: self._outcomes(n, win=True, pnl_r=2.0)}
+
+        score = _compute_fitness_from_cache(
+            "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+            self._params(),
+            outcome_cache,
+            {},
+            as_of_date=date(2025, 12, 31),
+            rolling_months=24,
+            min_rolling_trades=MIN_ROLLING_FIT,
+        )
+        assert score.rolling_sample == n
+        assert score.rolling_exp_r is None
+        assert score.rolling_sharpe is None
+        assert score.rolling_win_rate is None
+
+    def test_rolling_exp_r_kept_at_min_trades_boundary(self):
+        """Boundary partner: with sample == min_rolling_trades, rolling_exp_r is
+        NOT blanked (the `<` is strict). Kills the `<` -> `<=` mutant which would
+        wrongly blank at the boundary."""
+        n = MIN_ROLLING_FIT  # exactly at the floor
+        outcome_cache = {self._KEY: self._outcomes(n, win=True, pnl_r=2.0)}
+
+        score = _compute_fitness_from_cache(
+            "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+            self._params(),
+            outcome_cache,
+            {},
+            as_of_date=date(2025, 12, 31),
+            rolling_months=24,
+            min_rolling_trades=MIN_ROLLING_FIT,
+        )
+        assert score.rolling_sample == n
+        # All wins at +2.0 -> ExpR == 2.0, NOT None.
+        assert score.rolling_exp_r is not None
+        assert score.rolling_exp_r == 2.0
+
+    def test_sharpe_delta_is_recent_minus_full(self):
+        """delta_30/60 subtraction (sf.py:616-621): sharpe_delta_30 == recent_30
+        - full_sharpe. Kills `-` -> `+` and operand-swap mutants."""
+        # 35 mixed outcomes so _recent_trade_sharpe(30) is computable (needs >=30
+        # traded and >=2 distinct values for a finite Sharpe).
+        outcomes = []
+        for i in range(35):
+            win = i % 2 == 0
+            outcomes.append(
+                {
+                    "trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
+                    "outcome": "win" if win else "loss",
+                    "pnl_r": 2.0 if win else -1.0,
+                }
+            )
+        outcome_cache = {self._KEY: outcomes}
+        full_sharpe = 0.25
+
+        score = _compute_fitness_from_cache(
+            "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+            self._params(sharpe_ratio=full_sharpe),
+            outcome_cache,
+            {},
+            as_of_date=date(2025, 12, 31),
+            rolling_months=24,
+        )
+        assert score.recent_sharpe_30 is not None
+        # Exact identity: delta == recent - full.
+        assert score.sharpe_delta_30 == score.recent_sharpe_30 - full_sharpe
+
+    def test_sharpe_delta_none_when_full_sharpe_none(self):
+        """delta guard (sf.py:618/620): when full_sharpe is None, deltas stay
+        None even if recent_30 is computable. Kills the guard-flip mutant."""
+        outcomes = []
+        for i in range(35):
+            win = i % 2 == 0
+            outcomes.append(
+                {
+                    "trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
+                    "outcome": "win" if win else "loss",
+                    "pnl_r": 2.0 if win else -1.0,
+                }
+            )
+        params = self._params()
+        params["sharpe_ratio"] = None  # full_sharpe None -> deltas must be None
+        outcome_cache = {self._KEY: outcomes}
+
+        score = _compute_fitness_from_cache(
+            "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER",
+            params,
+            outcome_cache,
+            {},
+            as_of_date=date(2025, 12, 31),
+            rolling_months=24,
+        )
+        assert score.recent_sharpe_30 is not None
+        assert score.sharpe_delta_30 is None
+        assert score.sharpe_delta_60 is None
 
 
 class TestFitnessReportSummary:
