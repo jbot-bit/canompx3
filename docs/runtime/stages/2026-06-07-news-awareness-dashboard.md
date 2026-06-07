@@ -9,7 +9,20 @@ scope_lock:
   - trading_app/live/bot_dashboard.html
   - trading_app/live/alert_engine.py
   - docs/runtime/stages/2026-06-07-news-awareness-dashboard.md
-implementation_status: IN_PROGRESS
+implementation_status: CLOSED
+closed_note: |
+  All 5 phases done. 5 commits on session/joshd-news-awareness (da3a7f26,
+  2988a8c0, 494f01e4, 42ee6f19, a42ad7f0). 76 tests pass; ruff clean; drift
+  exit 0 (only 3 pre-existing research/ canonical-import advisories remain —
+  not this work). Live + offline + all-4-provenance states verified in a real
+  browser (Playwright), zero console errors. Isolation proven: news_calendar
+  imported ONLY by bot_dashboard.py; zero refs from execution/engine/risk/
+  sizing. Live-arm path (/api/action/start, run_live_session) untouched (0 diff).
+  Pre-existing stale START_BOT.bat test de-staled (operator-approved) with a
+  stronger, teeth-verified capital-safety assertion. NOT pushed (operator drives).
+  Handoff dir (main checkout, untracked) NOT deleted — retains the EXCLUDED
+  dashboard_rework_snippets.html for its planned-later feature; defer deletion
+  to operator.
 blast_radius:
   - trading_app/live/news_calendar.py — NEW module; imported only by bot_dashboard.py (isolation invariant). Delegates to pipeline.dst (orb_utc_window, compute_trading_day_from_timestamp, SESSION_CATALOG) — read-only canonical consumers, no mutation.
   - trading_app/live/bot_dashboard.py — +1 GET route (/api/news); no change to existing routes, no new write path to gold.db.
