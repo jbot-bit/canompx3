@@ -1046,6 +1046,7 @@ def test_sizing_context_carries_engine_inputs_and_resolves_cap():
 
 def test_lane_atr_by_day_returns_per_day_atr_map():
     import duckdb
+
     from trading_app.account_survival import _lane_atr_by_day
     con = duckdb.connect(":memory:")
     con.execute(
@@ -1108,6 +1109,7 @@ def test_load_lane_trade_paths_unchanged_when_size_model_none(monkeypatch):
 
 def test_load_lane_trade_paths_fails_closed_on_nonpositive_equity(monkeypatch):
     import pytest
+
     import trading_app.account_survival as asv
     from trading_app.account_survival import SizingContext, _load_lane_trade_paths
     monkeypatch.setattr(asv, "_load_strategy_snapshot",
@@ -1119,3 +1121,74 @@ def test_load_lane_trade_paths_fails_closed_on_nonpositive_equity(monkeypatch):
                         account_size=50_000, max_contracts_by_strategy={})
     with pytest.raises(ValueError, match="account_equity"):
         _load_lane_trade_paths(None, "L1", as_of_date=date(2026, 1, 3), size_model=ctx)
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — SizingContext wired into survival-private scenario builder
+# ---------------------------------------------------------------------------
+
+
+def test_profile_scenarios_pass_size_model_but_daily_pnl_does_not(monkeypatch):
+    """Survival path scales (size_model non-None for every lane); the
+    correlation/allocation entry (_load_lane_daily_pnl) stays raw (size_model None)."""
+    import trading_app.account_survival as asv
+
+    captured = []
+    real = asv._load_lane_trade_paths
+
+    def spy(con, sid, *, as_of_date, effective_stop_multiplier=None, max_orb_size_pts=None, size_model=None):
+        captured.append((sid, size_model))
+        return real(
+            con,
+            sid,
+            as_of_date=as_of_date,
+            effective_stop_multiplier=effective_stop_multiplier,
+            max_orb_size_pts=max_orb_size_pts,
+            size_model=size_model,
+        )
+
+    monkeypatch.setattr(asv, "_load_lane_trade_paths", spy)
+
+    asv._load_profile_daily_scenarios("topstep_50k_mnq_auto", as_of_date=date(2026, 6, 1))
+    # survival path passed a non-None SizingContext for EVERY lane it loaded
+    assert captured, "expected at least one lane loaded"
+    assert all(sm is not None for _, sm in captured), captured
+    assert all(isinstance(sm, asv.SizingContext) for _, sm in captured)
+
+
+def test_load_lane_daily_pnl_passes_no_size_model(monkeypatch):
+    """_load_lane_daily_pnl (correlation/allocation path) must keep size_model=None."""
+    import duckdb
+
+    import trading_app.account_survival as asv
+    from trading_app.prop_profiles import get_profile_lane_definitions
+
+    captured = []
+    real = asv._load_lane_trade_paths
+
+    def spy(con, sid, *, as_of_date, effective_stop_multiplier=None, max_orb_size_pts=None, size_model=None):
+        captured.append((sid, size_model))
+        return real(
+            con,
+            sid,
+            as_of_date=as_of_date,
+            effective_stop_multiplier=effective_stop_multiplier,
+            max_orb_size_pts=max_orb_size_pts,
+            size_model=size_model,
+        )
+
+    monkeypatch.setattr(asv, "_load_lane_trade_paths", spy)
+
+    lane = get_profile_lane_definitions("topstep_50k_mnq_auto")[0]
+    con = duckdb.connect(str(asv.GOLD_DB_PATH), read_only=True)
+    try:
+        asv._load_lane_daily_pnl(
+            con,
+            lane["strategy_id"],
+            as_of_date=date(2026, 6, 1),
+        )
+    finally:
+        con.close()
+
+    assert captured, "expected at least one call to _load_lane_trade_paths"
+    assert all(sm is None for _, sm in captured), captured
