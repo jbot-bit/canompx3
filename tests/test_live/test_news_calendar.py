@@ -473,3 +473,116 @@ def test_relevant_events_sorted_by_time(relevant):
     rel, _ = relevant
     times = [e["when_utc"] for e in rel]
     assert times == sorted(times)
+
+
+# --- /api/news endpoint + canonical-alert wiring (FastAPI, network-isolated) ---
+#
+# These exercise the real dashboard route handler end-to-end (including the
+# asyncio.to_thread offload) with the feed loader monkeypatched — no real HTTP.
+# Cache/fired/alert ledgers are redirected to tmp_path so no runtime state is
+# touched and the live-arm path is never reached.
+
+from pipeline.dst import (  # noqa: E402
+    compute_trading_day_from_timestamp,
+    orb_utc_window,
+)
+
+
+@pytest.fixture
+def dash(tmp_path, monkeypatch):
+    """Dashboard app + news_calendar with ledgers redirected to tmp_path."""
+    from fastapi.testclient import TestClient
+
+    from trading_app.live import alert_engine as ae
+    from trading_app.live import bot_dashboard as bd
+
+    monkeypatch.setattr(bd, "NEWS_CACHE_PATH", tmp_path / "news_cache.json")
+    monkeypatch.setattr(bd, "NEWS_FIRED_PATH", tmp_path / "news_fired.json")
+    monkeypatch.setattr(ae, "ALERTS_PATH", tmp_path / "operator_alerts.jsonl")
+    return bd, ae, nc, TestClient(bd.app)
+
+
+def test_api_news_happy_path_valid_payload(dash, monkeypatch):
+    bd, ae, ncmod, client = dash
+    monkeypatch.setattr(ncmod, "_http_get_json", lambda url, timeout=5: list(PAYLOAD_EVENTS))
+    r = client.get("/api/news")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"events", "fetched_at", "source"}
+    assert body["source"] == "faireconomy"
+    assert len(body["events"]) == 2  # Medium JOLTS filtered out
+
+
+def test_api_news_feed_down_no_cache_fails_open_not_500(dash, monkeypatch):
+    bd, ae, ncmod, client = dash
+
+    def boom(url, timeout=5):
+        raise RuntimeError("net down")
+
+    monkeypatch.setattr(ncmod, "_http_get_json", boom)
+    r = client.get("/api/news")
+    assert r.status_code == 200  # fallback majors, never a 500
+    body = r.json()
+    assert set(body) == {"events", "fetched_at", "source"}
+
+
+def test_api_news_never_leaks_datetime(dash, monkeypatch):
+    bd, ae, ncmod, client = dash
+    monkeypatch.setattr(ncmod, "_http_get_json", lambda url, timeout=5: list(PAYLOAD_EVENTS))
+    body = client.get("/api/news").json()
+    for e in body["events"]:
+        assert isinstance(e["when_utc"], str)
+        assert isinstance(e["when_bris"], str)
+
+
+def _in_session_due_feed():
+    """A USD-High event anchored INSIDE a real US_DATA_830 window via the
+    canonical resolver, so relevant_events maps it session_status='in'."""
+    td = compute_trading_day_from_timestamp(datetime(2026, 6, 5, 12, 30, tzinfo=UTC))
+    start, _ = orb_utc_window(td, "US_DATA_830", 15)
+    ev_utc = start + timedelta(minutes=2)
+    # feed dates are tz-aware ISO; the module re-converts to UTC, so a UTC ISO
+    # string is equivalent input — avoids needing a fixed ET offset here.
+    iso = ev_utc.isoformat()
+    return [{"title": "NFP", "country": "USD", "date": iso, "impact": "High", "forecast": "85K"}], ev_utc
+
+
+def test_news_heads_up_fires_once_via_canonical_alert(dash):
+    bd, ae, ncmod, _client = dash
+    feed, ev_utc = _in_session_due_feed()
+    events = ncmod.relevant_events(feed, session_only=True)
+    assert events and events[0]["session_status"] == "in"
+
+    now10 = ev_utc - timedelta(minutes=10)
+    fired = ncmod.load_fired(str(bd.NEWS_FIRED_PATH))
+    due, fired = ncmod.due_alerts(events, now_utc=now10, fired=fired)
+    assert len(due) == 1
+    for ev in due:
+        hm = ev["when_bris"].strftime("%H:%M")
+        ae.record_operator_alert(
+            message=f"NEWS HEADS-UP: {ev['title']} @ {ev['session']} {hm} Bris",
+            source="news",
+        )
+    ncmod.save_fired(str(bd.NEWS_FIRED_PATH), fired)
+
+    alerts = ae.read_operator_alerts(limit=10)
+    news = [a for a in alerts if a.get("category") == "news_event"]
+    assert len(news) == 1
+    assert news[0]["level"] == "warning"
+    assert news[0]["source"] == "news"
+    assert news[0]["message"].startswith("NEWS HEADS-UP:")
+
+    # fire-once: replaying with the persisted ledger yields no new due alert
+    fired2 = ncmod.load_fired(str(bd.NEWS_FIRED_PATH))
+    due2, _ = ncmod.due_alerts(events, now_utc=now10, fired=fired2)
+    assert len(due2) == 0
+
+
+def test_news_heads_up_classifies_warning():
+    from trading_app.live.alert_engine import classify_operator_alert
+
+    level, category = classify_operator_alert(
+        "NEWS HEADS-UP: ISM Manufacturing PMI @ US_DATA_1000 00:00 Bris"
+    )
+    assert level == "warning"
+    assert category == "news_event"

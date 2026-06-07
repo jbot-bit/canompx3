@@ -2596,6 +2596,67 @@ async def api_alerts(limit: int = 25, profile: str | None = None, mode: str | No
     return {"alerts": alerts, "summary": summarize_operator_alerts(alerts)}
 
 
+# News-awareness runtime state (display + heads-up alert only — never an
+# entry/filter/sizing input). Atomic-write, fail-open ledgers under data/runtime.
+NEWS_CACHE_PATH = PROJECT_ROOT / "data" / "runtime" / "news_calendar_cache.json"
+NEWS_FIRED_PATH = PROJECT_ROOT / "data" / "runtime" / "news_fired.json"
+_NEWS_CACHE_TTL_S = 3600
+
+
+def _build_news_payload() -> dict[str, object]:
+    """Blocking: fetch (cached) calendar + map to the panel payload, then emit
+    any due heads-up alerts through the canonical operator-alert path.
+
+    Runs inside asyncio.to_thread (urllib fetch + file I/O block). Fail-open:
+    any error -> empty payload so the endpoint never 500s and the panel just
+    shows an empty state. AWARENESS-ONLY — touches no capital/entry path.
+    """
+    from trading_app.live import news_calendar as nc
+
+    raw = nc.fetch_calendar(cache_path=str(NEWS_CACHE_PATH), ttl_s=_NEWS_CACHE_TTL_S)
+    payload = nc.news_payload(raw)
+    _maybe_fire_news_alerts(nc, raw)
+    return payload
+
+
+def _maybe_fire_news_alerts(nc, raw_events) -> None:
+    """Fire-once heads-up alert (<=15 min before an in/near-session event) via
+    the canonical record_operator_alert path. Persists the fired ledger so the
+    same event never re-alerts across dashboard restarts. Fail-open."""
+    try:
+        from trading_app.live.alert_engine import record_operator_alert
+
+        events = nc.relevant_events(raw_events, session_only=True)
+        fired = nc.load_fired(str(NEWS_FIRED_PATH))
+        due, fired = nc.due_alerts(events, fired=fired)
+        for ev in due:
+            hm = ev["when_bris"].strftime("%H:%M")
+            record_operator_alert(
+                message=f"NEWS HEADS-UP: {ev['title']} @ {ev['session']} {hm} Bris",
+                source="news",
+            )
+        if due:
+            nc.save_fired(str(NEWS_FIRED_PATH), fired)
+    except Exception:
+        logging.getLogger(__name__).warning("news heads-up alert emit failed", exc_info=True)
+
+
+@app.get("/api/news")
+async def api_news():
+    """High-impact USD economic-news awareness for the dashboard panel.
+
+    Display + heads-up alert only — never an entry/filter/sizing input. Wraps
+    news_calendar.news_payload(fetch_calendar(...)); blocking I/O offloaded to a
+    thread (house idiom). Fail-open to an empty payload — never raises a 500."""
+    import asyncio
+
+    try:
+        return await asyncio.to_thread(_build_news_payload)
+    except Exception:
+        logging.getLogger(__name__).warning("/api/news failed; serving empty payload", exc_info=True)
+        return {"events": [], "source": "faireconomy", "fetched_at": ""}
+
+
 @app.get("/api/data-status")
 async def api_data_status():
     """Data freshness for all active instruments."""
