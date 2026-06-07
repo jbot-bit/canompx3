@@ -31,6 +31,16 @@ def test_pre_commit_ruff_prefers_wsl_venv_before_windows_ruff_on_posix_shells():
     assert "POSIX/WSL pre-commit selected Windows ruff" in text
 
 
+def test_pre_commit_blocks_mixed_staged_unstaged_python_before_ruff():
+    text = (ROOT / ".githooks" / "pre-commit").read_text(encoding="utf-8")
+
+    assert "MIXED_STAGED_PY" in text
+    assert "staged Python file(s) also have unstaged working-tree changes" in text
+    assert 'git diff --quiet -- "$staged_file"' in text
+    assert text.index("MIXED_STAGED_PY") < text.index('_stage "[1/8] Ruff lint..."')
+    assert text.index("MIXED_STAGED_PY") < text.index('_stage "[8/8] Syntax check..."')
+
+
 def test_pre_commit_drift_skips_advisory_but_keeps_crg_marker():
     text = (ROOT / ".githooks" / "pre-commit").read_text(encoding="utf-8")
 
