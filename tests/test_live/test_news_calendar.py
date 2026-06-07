@@ -22,14 +22,71 @@ from trading_app.live import news_calendar as nc
 # --- Shared fixtures of feed-shaped raw events (faireconomy JSON shape) --------
 
 EVENTS = [
-    {"title": "ISM Manufacturing PMI", "country": "USD", "date": "2026-06-01T10:00:00-04:00", "impact": "High", "forecast": "53.3", "previous": "52.7"},
-    {"title": "ADP Non-Farm Employment", "country": "USD", "date": "2026-06-03T08:15:00-04:00", "impact": "High", "forecast": "118K", "previous": "109K"},
-    {"title": "ISM Services PMI", "country": "USD", "date": "2026-06-03T10:00:00-04:00", "impact": "High", "forecast": "53.7", "previous": "53.6"},
-    {"title": "Non-Farm Employment Change", "country": "USD", "date": "2026-06-05T08:30:00-04:00", "impact": "High", "forecast": "85K", "previous": "115K", "actual": "52K"},
-    {"title": "Average Hourly Earnings m/m", "country": "USD", "date": "2026-06-05T08:30:00-04:00", "impact": "High", "forecast": "0.3%", "previous": "0.2%"},
-    {"title": "BOE Gov Bailey Speaks", "country": "GBP", "date": "2026-06-04T11:40:00-04:00", "impact": "High", "forecast": "", "previous": ""},
-    {"title": "JOLTS Job Openings", "country": "USD", "date": "2026-06-02T10:00:00-04:00", "impact": "Medium", "forecast": "6.87M", "previous": "6.87M"},
-    {"title": "Crude Oil Inventories", "country": "USD", "date": "2026-06-03T10:30:00-04:00", "impact": "Low", "forecast": "-2.9M", "previous": "-3.3M"},
+    {
+        "title": "ISM Manufacturing PMI",
+        "country": "USD",
+        "date": "2026-06-01T10:00:00-04:00",
+        "impact": "High",
+        "forecast": "53.3",
+        "previous": "52.7",
+    },
+    {
+        "title": "ADP Non-Farm Employment",
+        "country": "USD",
+        "date": "2026-06-03T08:15:00-04:00",
+        "impact": "High",
+        "forecast": "118K",
+        "previous": "109K",
+    },
+    {
+        "title": "ISM Services PMI",
+        "country": "USD",
+        "date": "2026-06-03T10:00:00-04:00",
+        "impact": "High",
+        "forecast": "53.7",
+        "previous": "53.6",
+    },
+    {
+        "title": "Non-Farm Employment Change",
+        "country": "USD",
+        "date": "2026-06-05T08:30:00-04:00",
+        "impact": "High",
+        "forecast": "85K",
+        "previous": "115K",
+        "actual": "52K",
+    },
+    {
+        "title": "Average Hourly Earnings m/m",
+        "country": "USD",
+        "date": "2026-06-05T08:30:00-04:00",
+        "impact": "High",
+        "forecast": "0.3%",
+        "previous": "0.2%",
+    },
+    {
+        "title": "BOE Gov Bailey Speaks",
+        "country": "GBP",
+        "date": "2026-06-04T11:40:00-04:00",
+        "impact": "High",
+        "forecast": "",
+        "previous": "",
+    },
+    {
+        "title": "JOLTS Job Openings",
+        "country": "USD",
+        "date": "2026-06-02T10:00:00-04:00",
+        "impact": "Medium",
+        "forecast": "6.87M",
+        "previous": "6.87M",
+    },
+    {
+        "title": "Crude Oil Inventories",
+        "country": "USD",
+        "date": "2026-06-03T10:30:00-04:00",
+        "impact": "Low",
+        "forecast": "-2.9M",
+        "previous": "-3.3M",
+    },
     {"title": "Malformed Date Event", "country": "USD", "date": "not-a-date", "impact": "High", "forecast": "1"},
 ]
 
@@ -44,6 +101,7 @@ def relevant():
 
 
 # --- [1] anti-spam filter -----------------------------------------------------
+
 
 def test_filter_keeps_only_usd_high(relevant):
     rel, _ = relevant
@@ -72,6 +130,7 @@ def test_filter_drops_malformed_date_without_crashing(relevant):
 
 # --- [2] canonical session mapping --------------------------------------------
 
+
 def test_nfp_maps_in_us_data_830(relevant):
     _, by = relevant
     nfp = by["Non-Farm Employment Change"]
@@ -98,6 +157,7 @@ def test_adp_0815_is_near_us_data_830(relevant):
 
 # --- [3] effect / surprise ----------------------------------------------------
 
+
 def test_nfp_effect_released(relevant):
     _, by = relevant
     assert by["Non-Farm Employment Change"]["effect"]["released"] is True
@@ -116,15 +176,16 @@ def test_ahe_not_released(relevant):
 
 # --- [4] parse_num edge cases -------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "raw,expected",
     [
         ("", None),
         (None, None),
-        ("2.54|3.9", None),     # ambiguous pipe
-        ("<0.1%", None),        # inequality
+        ("2.54|3.9", None),  # ambiguous pipe
+        ("<0.1%", None),  # inequality
         (">5", None),
-        ("~3", None),           # approx
+        ("~3", None),  # approx
         ("6.87M", 6_870_000),
         ("-23.1B", -23.1e9),
         ("0.3%", 0.3),
@@ -139,6 +200,7 @@ def test_parse_num(raw, expected):
 
 # --- [5] fire-once alerts -----------------------------------------------------
 
+
 def test_due_alert_fires_once(relevant):
     rel, by = relevant
     nfp_dt = by["Non-Farm Employment Change"]["when_utc"]
@@ -150,7 +212,16 @@ def test_due_alert_fires_once(relevant):
 
 
 def test_due_alerts_lead_zero_fires():
-    nfp = [{"title": "NFP", "country": "USD", "date": "2026-06-05T08:30:00-04:00", "impact": "High", "forecast": "85K", "actual": "52K"}]
+    nfp = [
+        {
+            "title": "NFP",
+            "country": "USD",
+            "date": "2026-06-05T08:30:00-04:00",
+            "impact": "High",
+            "forecast": "85K",
+            "actual": "52K",
+        }
+    ]
     rel = nc.relevant_events(nfp, now_utc=NOW_PRE)
     w = rel[0]["when_utc"]
     sent, _ = nc.due_alerts(rel, now_utc=w, fired=set())
@@ -158,7 +229,16 @@ def test_due_alerts_lead_zero_fires():
 
 
 def test_due_alerts_passed_event_no_fire():
-    nfp = [{"title": "NFP", "country": "USD", "date": "2026-06-05T08:30:00-04:00", "impact": "High", "forecast": "85K", "actual": "52K"}]
+    nfp = [
+        {
+            "title": "NFP",
+            "country": "USD",
+            "date": "2026-06-05T08:30:00-04:00",
+            "impact": "High",
+            "forecast": "85K",
+            "actual": "52K",
+        }
+    ]
     rel = nc.relevant_events(nfp, now_utc=NOW_PRE)
     w = rel[0]["when_utc"]
     sent, _ = nc.due_alerts(rel, now_utc=w + timedelta(minutes=1), fired=set())
@@ -166,7 +246,16 @@ def test_due_alerts_passed_event_no_fire():
 
 
 def test_due_alerts_outside_15m_window_no_fire():
-    nfp = [{"title": "NFP", "country": "USD", "date": "2026-06-05T08:30:00-04:00", "impact": "High", "forecast": "85K", "actual": "52K"}]
+    nfp = [
+        {
+            "title": "NFP",
+            "country": "USD",
+            "date": "2026-06-05T08:30:00-04:00",
+            "impact": "High",
+            "forecast": "85K",
+            "actual": "52K",
+        }
+    ]
     rel = nc.relevant_events(nfp, now_utc=NOW_PRE)
     w = rel[0]["when_utc"]
     sent, _ = nc.due_alerts(rel, now_utc=w - timedelta(minutes=16), fired=set())
@@ -178,7 +267,13 @@ def test_due_alerts_outside_15m_window_no_fire():
 EDGE = [
     {"title": "CPI winter", "country": "USD", "date": "2026-01-13T08:30:00-05:00", "impact": "High", "forecast": "0.3"},
     {"title": "NFP summer", "country": "USD", "date": "2026-06-05T08:30:00-04:00", "impact": "High", "forecast": "85K"},
-    {"title": "NYSE cash open", "country": "USD", "date": "2026-06-05T09:30:00-04:00", "impact": "High", "forecast": "1"},
+    {
+        "title": "NYSE cash open",
+        "country": "USD",
+        "date": "2026-06-05T09:30:00-04:00",
+        "impact": "High",
+        "forecast": "1",
+    },
 ]
 
 
@@ -214,6 +309,7 @@ def test_nyse_0930et_maps_nyse_open(edge_by):
 
 # --- half-open window boundary (event exactly at window end is NOT 'in') ------
 
+
 def test_window_start_is_in():
     s, _ = orb_utc_window(date(2026, 6, 5), "US_DATA_830", 15)
     st, lbl, _ = nc.session_for(s, ["US_DATA_830"])
@@ -241,6 +337,7 @@ def test_comex_settle_maps():
 
 # --- instruments_for ----------------------------------------------------------
 
+
 def test_instruments_for_usd():
     assert nc.instruments_for({"country": "USD"}) == ("MNQ", "MES", "MGC")
 
@@ -250,6 +347,7 @@ def test_instruments_for_unknown_currency_empty():
 
 
 # --- fetch_calendar: cache / TTL / fail-open / fallback (network-isolated) ----
+
 
 def test_cold_fetch_writes_cache(tmp_path):
     cache = str(tmp_path / "state" / "news_cache.json")
@@ -311,12 +409,13 @@ def test_no_cache_and_loader_down_falls_back_to_majors(tmp_path):
 
 # --- fallback_majors: deterministic first-Friday NFP --------------------------
 
+
 def test_fallback_majors_first_friday_nfp():
     fm = nc.fallback_majors(datetime(2026, 6, 1, tzinfo=UTC), months=1)
     d = datetime.fromisoformat(fm[0]["date"])
     assert d.month == 6
-    assert d.day == 5         # first Friday of June 2026
-    assert d.weekday() == 4   # Friday
+    assert d.day == 5  # first Friday of June 2026
+    assert d.weekday() == 4  # Friday
     assert d.hour == 8
     assert d.minute == 30
 
@@ -339,6 +438,7 @@ def test_fallback_majors_carry_no_fabricated_numbers():
 
 # --- provenance: fetch_calendar(with_source=True) tells the TRUE source -------
 
+
 def test_source_live_on_successful_fetch(tmp_path):
     cache = str(tmp_path / "c.json")
     now0 = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
@@ -351,7 +451,9 @@ def test_source_cache_within_ttl(tmp_path):
     cache = str(tmp_path / "c.json")
     now0 = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
     nc.fetch_calendar(cache_path=cache, loader=lambda u: [{"k": 1}], now=now0)
-    _, source = nc.fetch_calendar(cache_path=cache, loader=lambda u: [{"k": 9}], now=now0 + timedelta(minutes=5), with_source=True)
+    _, source = nc.fetch_calendar(
+        cache_path=cache, loader=lambda u: [{"k": 9}], now=now0 + timedelta(minutes=5), with_source=True
+    )
     assert source == "cache"
 
 
@@ -363,7 +465,9 @@ def test_source_stale_cache_when_feed_down(tmp_path):
     def boom(url):
         raise RuntimeError("net down")
 
-    events, source = nc.fetch_calendar(cache_path=cache, ttl_s=60, loader=boom, now=now0 + timedelta(hours=4), with_source=True)
+    events, source = nc.fetch_calendar(
+        cache_path=cache, ttl_s=60, loader=boom, now=now0 + timedelta(hours=4), with_source=True
+    )
     assert source == "stale-cache"
     assert events == [{"k": 2}]  # serves last-good, but labelled stale
 
@@ -388,6 +492,7 @@ def test_payload_honest_source_passthrough():
 
 
 # --- fired ledger: persist + prune + round-trip -------------------------------
+
 
 def test_save_fired_keeps_recent(tmp_path):
     fp = str(tmp_path / "fired.json")
@@ -422,32 +527,60 @@ def test_save_fired_keeps_unparseable_key(tmp_path):
 
 # --- signal: plain-English signs / tones --------------------------------------
 
+
 def _signals_by_title(events, now=NOW_PRE):
     return {e["title"]: e["signal"] for e in nc.relevant_events(events, now_utc=now)}
 
 
 def test_signal_released_big_surprise_is_hot():
-    ev = [{"title": "Non-Farm Employment Change", "country": "USD", "date": "2026-06-05T08:30:00-04:00", "impact": "High", "forecast": "85K", "actual": "52K"}]
+    ev = [
+        {
+            "title": "Non-Farm Employment Change",
+            "country": "USD",
+            "date": "2026-06-05T08:30:00-04:00",
+            "impact": "High",
+            "forecast": "85K",
+            "actual": "52K",
+        }
+    ]
     sig = _signals_by_title(ev)["Non-Farm Employment Change"]
     assert sig["sign"] == "HOT"
     assert "vs forecast" in sig["text"]
 
 
 def test_signal_in_session_is_hot_and_volatile():
-    ev = [{"title": "ISM Manufacturing PMI", "country": "USD", "date": "2026-06-01T10:00:00-04:00", "impact": "High", "forecast": "53.3"}]
+    ev = [
+        {
+            "title": "ISM Manufacturing PMI",
+            "country": "USD",
+            "date": "2026-06-01T10:00:00-04:00",
+            "impact": "High",
+            "forecast": "53.3",
+        }
+    ]
     sig = _signals_by_title(ev)["ISM Manufacturing PMI"]
     assert sig["sign"] == "HOT"
     assert "volatile" in sig["text"]
 
 
 def test_signal_near_session_is_heads_up():
-    ev = [{"title": "ADP Non-Farm Employment", "country": "USD", "date": "2026-06-03T08:15:00-04:00", "impact": "High", "forecast": "118K"}]
+    ev = [
+        {
+            "title": "ADP Non-Farm Employment",
+            "country": "USD",
+            "date": "2026-06-03T08:15:00-04:00",
+            "impact": "High",
+            "forecast": "118K",
+        }
+    ]
     sig = _signals_by_title(ev)["ADP Non-Farm Employment"]
     assert sig["sign"] == "HEADS-UP"
 
 
 def test_signal_outside_session_is_watch():
-    out = [{"title": "Outside", "country": "USD", "date": "2026-06-03T14:00:00-04:00", "impact": "High", "forecast": "1"}]
+    out = [
+        {"title": "Outside", "country": "USD", "date": "2026-06-03T14:00:00-04:00", "impact": "High", "forecast": "1"}
+    ]
     sig = nc.relevant_events(out, now_utc=NOW_PRE)[0]["signal"]
     assert sig["sign"] == "WATCH"
     assert "outside" in sig["text"]
@@ -455,15 +588,32 @@ def test_signal_outside_session_is_watch():
 
 # --- session_only filter (panel-vs-alert contract) ----------------------------
 
+
 def test_session_only_false_keeps_outside_event():
-    out = [{"title": "Outside Event", "country": "USD", "date": "2026-06-03T14:00:00-04:00", "impact": "High", "forecast": "1"}]
+    out = [
+        {
+            "title": "Outside Event",
+            "country": "USD",
+            "date": "2026-06-03T14:00:00-04:00",
+            "impact": "High",
+            "forecast": "1",
+        }
+    ]
     kept = nc.relevant_events(out, now_utc=NOW_PRE)
     assert len(kept) == 1
     assert kept[0]["session"] is None
 
 
 def test_session_only_true_drops_outside_event():
-    out = [{"title": "Outside Event", "country": "USD", "date": "2026-06-03T14:00:00-04:00", "impact": "High", "forecast": "1"}]
+    out = [
+        {
+            "title": "Outside Event",
+            "country": "USD",
+            "date": "2026-06-03T14:00:00-04:00",
+            "impact": "High",
+            "forecast": "1",
+        }
+    ]
     kept = nc.relevant_events(out, now_utc=NOW_PRE, session_only=True)
     assert len(kept) == 0
 
@@ -471,8 +621,21 @@ def test_session_only_true_drops_outside_event():
 # --- news_payload: the exact shape /api/news returns & the panel consumes ------
 
 PAYLOAD_EVENTS = [
-    {"title": "Non-Farm Employment Change", "country": "USD", "date": "2026-06-05T08:30:00-04:00", "impact": "High", "forecast": "85K", "actual": "52K"},
-    {"title": "ADP Non-Farm Employment", "country": "USD", "date": "2026-06-03T08:15:00-04:00", "impact": "High", "forecast": "118K"},
+    {
+        "title": "Non-Farm Employment Change",
+        "country": "USD",
+        "date": "2026-06-05T08:30:00-04:00",
+        "impact": "High",
+        "forecast": "85K",
+        "actual": "52K",
+    },
+    {
+        "title": "ADP Non-Farm Employment",
+        "country": "USD",
+        "date": "2026-06-03T08:15:00-04:00",
+        "impact": "High",
+        "forecast": "118K",
+    },
     {"title": "JOLTS", "country": "USD", "date": "2026-06-02T10:00:00-04:00", "impact": "Medium", "forecast": "1"},
 ]
 
@@ -528,6 +691,7 @@ def test_relevant_events_rows_carry_signal():
 
 
 # --- ordering guarantee -------------------------------------------------------
+
 
 def test_relevant_events_sorted_by_time(relevant):
     rel, _ = relevant
@@ -643,8 +807,6 @@ def test_news_heads_up_fires_once_via_canonical_alert(dash):
 def test_news_heads_up_classifies_warning():
     from trading_app.live.alert_engine import classify_operator_alert
 
-    level, category = classify_operator_alert(
-        "NEWS HEADS-UP: ISM Manufacturing PMI @ US_DATA_1000 00:00 Bris"
-    )
+    level, category = classify_operator_alert("NEWS HEADS-UP: ISM Manufacturing PMI @ US_DATA_1000 00:00 Bris")
     assert level == "warning"
     assert category == "news_event"
