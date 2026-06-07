@@ -13967,6 +13967,16 @@ def _imports_canonical_sizer(path: Path) -> bool | None:
     Returns None if the file cannot be read/parsed (fail-closed: the caller
     treats None as a parity violation rather than a silent pass). Static AST —
     no import or DB side-effects.
+
+    KNOWN LIMIT (capital-safe direction): only the canonical
+    ``from trading_app.portfolio import compute_position_size_vol_scaled`` form is
+    recognised. A module-alias style (``import trading_app.portfolio as p`` +
+    ``p.compute_position_size_vol_scaled(...)``) or a re-export through
+    ``portfolio/__init__.py`` would read as False even though the canonical sizer
+    is in fact used — i.e. it can FALSE-BLOCK valid code, never FALSE-PASS a real
+    re-encoded fork. Both production files use the canonical form today, so the gap
+    is latent; if a legitimate refactor adopts the alias form, broaden this matcher
+    rather than relaxing the check.
     """
     try:
         source = path.read_text(encoding="utf-8")
