@@ -94,7 +94,25 @@ indirect suites, and every mutation (incl. fingerprint-field swaps that would
 let a stale artifact pass as live) is caught. 1 incompetent mutant excluded from
 the denominator per standard mutation hygiene.
 
-### `trading_app/account_survival.py` (DD/DLL) — pending
+### `trading_app/account_survival.py` (DD/DLL) — ✅ 100% kill (0% survival)
+
+| Metric | Value |
+|---|---|
+| Mutants planned | 1720 |
+| Killed | 1719 |
+| Incompetent | 1 |
+| Survived | 0 |
+| **Survival rate** | **0.00%** (100% kill; 1719/1719) |
+| Test target | `tests/test_trading_app/test_account_survival.py` (28 tests, 5s, hermetic) |
+| Bar (≥90% on DD/DLL) | **PASS** — 0 survivors anywhere, incl. DD/DLL enforcement arithmetic |
+
+**Triage:** no survivors. The highest-stakes capital module (Monte-Carlo
+prop-firm survival; a weak test = false "survived" verdict) has all 1719 valid
+mutations caught — including the drawdown/loss-limit comparison arithmetic.
+Thoroughness is proven by *placement*: cosmic-ray's 1720 mutants on 1146 LOC
+(>1/line) saturate the file; none survived, so the DD/DLL lines were both
+mutated AND killed.
+
 ### `trading_app/strategy_fitness.py` — pending
 ### `trading_app/execution_engine.py` — pending
 ### `pipeline/build_daily_features.py` — pending (hermeticity-gated)
