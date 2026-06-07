@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Profile pipeline/check_drift.py — time each check, sort by duration.
-
-Usage: python -m scripts.tools.profile_check_drift
-Reports slow checks (>200ms) and total wall time.
-"""
+"""Profile pipeline/check_drift.py check durations."""
 
 from __future__ import annotations
 
+import argparse
 import io
+import json
 import sys
 import time
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -20,7 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from pipeline import check_drift  # noqa: E402
 
 
-def main() -> int:
+def _run_profile() -> dict[str, Any]:
     duckdb = check_drift._import_duckdb_or_exit()
     db_path = check_drift._get_db_path()
 
@@ -29,44 +28,90 @@ def main() -> int:
         try:
             shared_con = duckdb.connect(str(db_path), read_only=True)
         except Exception as exc:
-            print(f"Could not open DB ({exc}) — DB checks will skip", file=sys.stderr)
+            print(f"Could not open DB ({exc}) - DB checks will skip", file=sys.stderr)
 
-    timings: list[tuple[float, str, bool, str]] = []
+    timings: list[dict[str, Any]] = []
     overall_start = time.perf_counter()
 
-    for label, check_fn, _is_advisory, requires_db in check_drift.CHECKS:
-        buf = io.StringIO()
-        start = time.perf_counter()
-        status = "ok"
-        try:
-            with redirect_stdout(buf):
-                if requires_db:
-                    check_fn(con=shared_con)
-                else:
-                    check_fn()
-        except Exception as e:
-            status = f"error: {type(e).__name__}: {e}"[:80]
-        elapsed = time.perf_counter() - start
-        timings.append((elapsed, label, requires_db, status))
+    try:
+        for label, check_fn, _is_advisory, requires_db in check_drift.CHECKS:
+            buf = io.StringIO()
+            start = time.perf_counter()
+            status = "ok"
+            try:
+                with redirect_stdout(buf):
+                    if requires_db:
+                        check_fn(con=shared_con)
+                    else:
+                        check_fn()
+            except Exception as e:
+                status = f"error: {type(e).__name__}: {e}"[:80]
+            elapsed = time.perf_counter() - start
+            timings.append(
+                {
+                    "duration_seconds": elapsed,
+                    "label": label,
+                    "requires_db": requires_db,
+                    "status": status,
+                }
+            )
+    finally:
+        if shared_con is not None:
+            shared_con.close()
 
     overall = time.perf_counter() - overall_start
-    if shared_con is not None:
-        shared_con.close()
+    timings.sort(key=lambda item: item["duration_seconds"], reverse=True)
+    slow = [item for item in timings if item["duration_seconds"] > 0.2]
+    over_1s = [item for item in timings if item["duration_seconds"] > 1.0]
 
-    timings.sort(reverse=True)
+    return {
+        "total_seconds": overall,
+        "check_count": len(timings),
+        "slow_threshold_seconds": 0.2,
+        "slow_count": len(slow),
+        "slow_sum_seconds": sum(item["duration_seconds"] for item in slow),
+        "over_1s_count": len(over_1s),
+        "over_1s_sum_seconds": sum(item["duration_seconds"] for item in over_1s),
+        "checks": timings,
+    }
 
-    print(f"\nTotal wall time: {overall:.2f}s across {len(timings)} checks\n")
-    print(f"{'Time(s)':>8}  {'DB':>3}  Check")
-    print("-" * 100)
-    for elapsed, label, requires_db, status in timings:
-        flag = "DB" if requires_db else ""
-        suffix = "" if status == "ok" else f" [{status}]"
-        print(f"{elapsed:>8.3f}  {flag:>3}  {label}{suffix}")
 
-    slow = [t for t in timings if t[0] > 0.2]
-    print(f"\n{len(slow)} checks exceed 200ms (sum: {sum(t[0] for t in slow):.2f}s)")
-    over_1s = [t for t in timings if t[0] > 1.0]
-    print(f"{len(over_1s)} checks exceed 1.0s (sum: {sum(t[0] for t in over_1s):.2f}s)")
+def _format_text(profile: dict[str, Any]) -> str:
+    out = io.StringIO()
+    print(f"\nTotal wall time: {profile['total_seconds']:.2f}s across {profile['check_count']} checks\n", file=out)
+    print(f"{'Time(s)':>8}  {'DB':>3}  Check", file=out)
+    print("-" * 100, file=out)
+    for item in profile["checks"]:
+        flag = "DB" if item["requires_db"] else ""
+        suffix = "" if item["status"] == "ok" else f" [{item['status']}]"
+        print(f"{item['duration_seconds']:>8.3f}  {flag:>3}  {item['label']}{suffix}", file=out)
+
+    print(
+        f"\n{profile['slow_count']} checks exceed 200ms (sum: {profile['slow_sum_seconds']:.2f}s)",
+        file=out,
+    )
+    print(
+        f"{profile['over_1s_count']} checks exceed 1.0s (sum: {profile['over_1s_sum_seconds']:.2f}s)",
+        file=out,
+    )
+    return out.getvalue()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Profile pipeline/check_drift.py check durations")
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable timing data")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.json:
+        with redirect_stdout(sys.stderr):
+            profile = _run_profile()
+        print(json.dumps(profile, indent=2, sort_keys=True))
+    else:
+        profile = _run_profile()
+        print(_format_text(profile), end="")
     return 0
 
 

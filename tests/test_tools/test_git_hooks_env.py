@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 import subprocess
@@ -80,7 +81,19 @@ def test_post_commit_prefers_wsl_venv_before_windows_venv_on_posix_shells():
 #     it. These catch a `case`-ordering bug (e.g. *.md matching before docs/audit/*)
 #     that a text assertion never would. This is the load-bearing safety test.
 
-_BASH = shutil.which("bash")
+
+def _find_bash() -> str | None:
+    for candidate in (
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+        shutil.which("bash"),
+    ):
+        if candidate and Path(candidate).exists():
+            return candidate
+    return None
+
+
+_BASH = _find_bash()
 
 
 def test_pre_commit_drift_gate_markers_present():
@@ -120,11 +133,14 @@ def _classify(path: str) -> str:
     m = re.search(r"^_drift_path_is_docs_safe\(\) \{\n.*?^\}\n", hook, re.DOTALL | re.MULTILINE)
     assert m, "could not extract _drift_path_is_docs_safe from pre-commit"
     func = m.group(0)
-    script = func + '\nif _drift_path_is_docs_safe "$1"; then echo SAFE; else echo FULL; fi\n'
+    script = func + '\nif _drift_path_is_docs_safe "$CLASSIFY_PATH"; then echo SAFE; else echo FULL; fi\n'
+    env = os.environ.copy()
+    env["CLASSIFY_PATH"] = path
     proc = subprocess.run(
-        [_BASH, "-c", script, "_", path],
+        [_BASH, "-c", script],
         capture_output=True,
         text=True,
+        env=env,
     )
     return proc.stdout.strip()
 
