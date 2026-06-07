@@ -1059,6 +1059,8 @@ def test_run_preflight_subprocess_pins_single_copy_live_pilot(monkeypatch):
     assert "MNQ" in captured["cmd"]
     assert "--copies" in captured["cmd"]
     assert "1" in captured["cmd"]
+    assert "--account-id" in captured["cmd"]
+    assert "21944866" in captured["cmd"]
     assert "--preflight" in captured["cmd"]
     assert "topstep_50k_mnq_auto" in captured["cmd"]
 
