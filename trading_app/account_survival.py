@@ -705,6 +705,14 @@ def _load_profile_daily_scenarios(
             lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier) for lane in lane_specs
         }
 
+        _pf = build_profile_portfolio(profile_id=profile_id)
+        size_model = SizingContext(
+            account_equity=_pf.account_equity,
+            risk_per_trade_pct=_pf.risk_per_trade_pct,
+            account_size=profile.account_size,
+            max_contracts_by_strategy={s.strategy_id: s.max_contracts for s in _pf.strategies},
+        )
+
         for lane in lane_defs:
             trade_paths = _load_lane_trade_paths(
                 con,
@@ -712,6 +720,7 @@ def _load_profile_daily_scenarios(
                 as_of_date=as_of_date,
                 effective_stop_multiplier=effective_stop_by_strategy.get(lane["strategy_id"]),
                 max_orb_size_pts=lane.get("max_orb_size_pts"),
+                size_model=size_model,
             )
             daily: dict[date, float] = {}
             for trade in trade_paths:
