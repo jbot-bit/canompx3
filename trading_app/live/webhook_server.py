@@ -47,7 +47,9 @@ WEBHOOK_PROFILE_ID = os.environ.get("WEBHOOK_PROFILE_ID", "")
 
 # Dedup: reject identical (instrument, direction, action) within window (guards against TV double-fire)
 DEDUP_WINDOW = float(os.environ.get("WEBHOOK_DEDUP_SECONDS", "10"))
-_DEDUP_CACHE: dict[str, tuple[float, TradeResponse | None]] = {}  # key → (monotonic_ts, cached_response | in-flight placeholder)
+_DEDUP_CACHE: dict[
+    str, tuple[float, TradeResponse | None]
+] = {}  # key → (monotonic_ts, cached_response | in-flight placeholder)
 
 # Rationale: rate limiting — max 3 orders per 60 seconds. Guards against
 # runaway TradingView alert storms (a flapping setup that fires on every bar
