@@ -131,6 +131,11 @@ class SurvivalRules:
     daily_loss_limit: float | None
     consistency_rule: float | None
     freeze_at_balance: float | None
+    # VESTIGIAL (D-3 seam Stage 1): set but never read by simulate_survival. Per-trade
+    # DD is now sized + pre-scaled at TradePath construction (_load_lane_trade_paths via
+    # SizingContext). Do NOT treat this as a sizing knob — it does not bind the sim's
+    # contract count. Kept (not removed) because the spec audit confirmed PnL is
+    # pre-scaled at TradePath, so removal is a wider refactor than Stage 1's scope.
     contracts_per_trade_micro: int
     topstep_day1_max_lots: int | None
 
