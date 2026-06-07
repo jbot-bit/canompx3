@@ -789,7 +789,10 @@ def test_news_heads_up_fires_once_via_canonical_alert(dash):
             message=f"NEWS HEADS-UP: {ev['title']} @ {ev['session']} {hm} Bris",
             source="news",
         )
-    ncmod.save_fired(str(bd.NEWS_FIRED_PATH), fired)
+    # Prune relative to the simulated clock, not wall-clock — otherwise the
+    # fixed-date event key ages out of save_fired's 2-day window once real
+    # "now" is >2 days past ev_utc, emptying the ledger and breaking fire-once.
+    ncmod.save_fired(str(bd.NEWS_FIRED_PATH), fired, now=now10)
 
     alerts = ae.read_operator_alerts(limit=10)
     news = [a for a in alerts if a.get("category") == "news_event"]
