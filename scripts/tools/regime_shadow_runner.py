@@ -103,33 +103,26 @@ def assert_no_live_session() -> None:
     """Fail closed if a live trading bot holds an instance lock.
 
     Reuses the canonical live-bot lock (trading_app.live.instance_lock): a live
-    session writes %TEMP%/canompx3/bot_<INSTRUMENT>.lock with its PID. We READ
-    those lock files (never acquire them — that would contend the live bot's own
-    lock) and refuse to open a gold.db write connection while any live PID is
-    alive. This enforces the repo invariant "NEVER run two write processes
+    session writes %TEMP%/canompx3/bot_<INSTRUMENT>.lock with its PID. We use
+    the canonical observer helper, which briefly probes the OS lock and releases
+    it if free, then refuse to open a gold.db write connection while any live PID
+    or ambiguous pre-PID lock may be active. This enforces the repo invariant "NEVER run two write processes
     against the same DuckDB file simultaneously" for the shadow writer.
 
-    No re-encoded logic: PID liveness is delegated to instance_lock.is_pid_alive.
+    No re-encoded logic: PID/ambiguous-lock status is delegated to
+    instance_lock.is_lock_file_active_or_ambiguous.
     """
-    from trading_app.live.instance_lock import _LOCK_DIR, is_pid_alive
+    from trading_app.live.instance_lock import _LOCK_DIR, is_lock_file_active_or_ambiguous
 
     if not _LOCK_DIR.exists():
         return
     for lock_path in _LOCK_DIR.glob("bot_*.lock"):
-        try:
-            content = lock_path.read_text().strip()
-        except OSError:
-            continue
-        if not content:
-            continue
-        try:
-            pid = int(content)
-        except ValueError:
-            continue
-        if is_pid_alive(pid):
+        locked, pid, reason = is_lock_file_active_or_ambiguous(lock_path)
+        if locked:
+            holder = f"live PID {pid}" if reason == "live" and pid is not None else f"ambiguous lock ({reason})"
             raise RuntimeError(
-                f"LIVE SESSION ACTIVE: {lock_path.name} held by live PID {pid}. "
-                "Refusing to write shadow rows while a live bot holds the gold.db "
+                f"LIVE SESSION ACTIVE: {lock_path.name} held by {holder}. "
+                "Refusing to write shadow rows while a live bot may hold the gold.db "
                 "write path (single-writer invariant). Run after the live session "
                 "ends, or via CanonMPX_DailyRefresh (off-peak, exclusive)."
             )

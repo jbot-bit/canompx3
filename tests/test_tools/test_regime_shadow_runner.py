@@ -18,6 +18,8 @@ controlled lane set so we test the runner mechanics, not the fitness engine.
 from __future__ import annotations
 
 import datetime
+import os
+import sys
 from pathlib import Path
 
 import duckdb
@@ -383,6 +385,53 @@ def test_sync_refuses_when_live_session_lock_held(tmp_path, monkeypatch):
         runner.sync_shadow(db_path=db, as_of_date=FWD, universe_yaml=tmp_path / "u.yaml")
     # Nothing written.
     assert _source_counts(db) == {"backfill": 1}
+
+
+def test_sync_refuses_ambiguous_empty_live_lock(tmp_path, monkeypatch):
+    """Empty lock files are fail-closed: live bot may be before PID write."""
+    db = _make_db(tmp_path, [datetime.date(2026, 6, 2)])
+    monkeypatch.setattr(runner, "build_universe", lambda **kw: [_lane()])
+
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    (lock_dir / "bot_MNQ.lock").write_text("")
+    import trading_app.live.instance_lock as il
+
+    monkeypatch.setattr(il, "_LOCK_DIR", lock_dir)
+
+    with pytest.raises(RuntimeError, match="ambiguous lock"):
+        runner.sync_shadow(db_path=db, as_of_date=FWD, universe_yaml=tmp_path / "u.yaml")
+    assert _source_counts(db) == {"backfill": 1}
+
+
+def test_sync_refuses_os_locked_dead_pid_lock(tmp_path, monkeypatch):
+    """OS-locked files are fail-closed even if PID text is stale/dead."""
+    if sys.platform == "win32":
+        pytest.skip("fcntl-specific lock probe")
+    import fcntl
+
+    import trading_app.live.instance_lock as il
+
+    db = _make_db(tmp_path, [datetime.date(2026, 6, 2)])
+    monkeypatch.setattr(runner, "build_universe", lambda **kw: [_lane()])
+    monkeypatch.setattr(il, "is_pid_alive", lambda _pid: False)
+
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    lock_path = lock_dir / "bot_MNQ.lock"
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    try:
+        os.write(fd, b"999999")
+        os.fsync(fd)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        monkeypatch.setattr(il, "_LOCK_DIR", lock_dir)
+
+        with pytest.raises(RuntimeError, match="os-locked"):
+            runner.sync_shadow(db_path=db, as_of_date=FWD, universe_yaml=tmp_path / "u.yaml")
+        assert _source_counts(db) == {"backfill": 1}
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
 
 
 def test_sync_proceeds_when_lock_pid_dead(tmp_path, monkeypatch):

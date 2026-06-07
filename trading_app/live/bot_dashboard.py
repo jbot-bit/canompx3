@@ -35,7 +35,7 @@ from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.live.alert_engine import read_operator_alerts, summarize_operator_alerts
 from trading_app.live.bot_state import read_live_health, read_state
-from trading_app.live.instance_lock import is_pid_alive
+from trading_app.live.instance_lock import is_lock_file_active_or_ambiguous
 
 log = logging.getLogger(__name__)
 
@@ -95,23 +95,26 @@ def _as_float(value: object, default: float = 0.0) -> float:
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Startup: clean stale locks/state. Shutdown: terminate child processes."""
+    """Startup: classify locks and clean stale state. Shutdown: terminate child processes."""
     # ── Startup ──
     lock_dir = Path(tempfile.gettempdir()) / "canompx3"
     if lock_dir.exists():
         for lock_file in lock_dir.glob("bot_*.lock"):
             try:
-                content = lock_file.read_text(encoding="utf-8").strip()
-                pid = int(content) if content else None
-                if pid and is_pid_alive(pid):
-                    log.info("Startup: keeping live lock %s (PID %d)", lock_file.name, pid)
-                    continue
-                lock_file.unlink()
-                log.info("Startup: removed stale lock %s", lock_file.name)
-            except ValueError:
-                lock_file.unlink(missing_ok=True)
+                active, pid, reason = is_lock_file_active_or_ambiguous(lock_file)
+                if active:
+                    if pid is not None:
+                        log.info("Startup: keeping live lock %s (PID %d)", lock_file.name, pid)
+                    else:
+                        log.warning(
+                            "Startup: keeping ambiguous lock %s (%s); live bot may be between lock and PID write",
+                            lock_file.name,
+                            reason,
+                        )
+                else:
+                    log.info("Startup: leaving stale lock %s for live acquire cleanup", lock_file.name)
             except Exception:
-                pass
+                log.warning("Startup: unable to classify lock %s; leaving it in place", lock_file.name)
 
     from trading_app.live.bot_state import STATE_FILE, clear_state
 
@@ -527,15 +530,9 @@ def _instance_lock_status() -> dict[str, object]:
     if not lock_dir.exists():
         return {"locked": False, "locks": active}
     for lock_file in lock_dir.glob("bot_*.lock"):
-        try:
-            content = lock_file.read_text(encoding="utf-8").strip()
-            pid = int(content) if content else None
-        except (OSError, ValueError):
-            pid = None
-        if pid and is_pid_alive(pid):
-            active.append({"path": str(lock_file), "pid": pid})
-        elif pid is None:
-            active.append({"path": str(lock_file), "pid": None})
+        locked, pid, reason = is_lock_file_active_or_ambiguous(lock_file)
+        if locked:
+            active.append({"path": str(lock_file), "pid": pid, "reason": reason})
     return {"locked": bool(active), "locks": active}
 
 
@@ -2613,9 +2610,7 @@ def _build_news_payload() -> dict[str, object]:
     """
     from trading_app.live import news_calendar as nc
 
-    raw, source = nc.fetch_calendar(
-        cache_path=str(NEWS_CACHE_PATH), ttl_s=_NEWS_CACHE_TTL_S, with_source=True
-    )
+    raw, source = nc.fetch_calendar(cache_path=str(NEWS_CACHE_PATH), ttl_s=_NEWS_CACHE_TTL_S, with_source=True)
     payload = nc.news_payload(raw, source=source)
     _maybe_fire_news_alerts(nc, raw)
     return payload

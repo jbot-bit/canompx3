@@ -10,6 +10,7 @@ while proving a genuinely-live holder is still refused.
 """
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -18,6 +19,7 @@ import pytest
 from trading_app.live import instance_lock
 from trading_app.live.instance_lock import (
     acquire_instance_lock,
+    is_lock_file_active_or_ambiguous,
     release_instance_lock,
 )
 
@@ -33,7 +35,7 @@ def _cleanup():
     """Ensure no held locks / stray files leak between tests."""
     yield
     release_instance_lock()
-    for name in ("ORPHANEMPTY", "ORPHANDEAD", "ORPHANLIVE"):
+    for name in ("ORPHANEMPTY", "ORPHANDEAD", "ORPHANLIVE", "ORPHANLOCKED", "ORPHANLOCKEDDEAD"):
         _lock_path(name).unlink(missing_ok=True)
 
 
@@ -72,3 +74,56 @@ def test_live_holder_is_still_refused():
 
     assert exc.value.code == 1
     assert "ORPHANLIVE" not in instance_lock._locks
+
+
+def test_empty_file_with_live_os_lock_is_refused(monkeypatch):
+    """An empty-but-locked file may be a live process before PID write; fail closed."""
+    if sys.platform == "win32":
+        pytest.skip("fcntl race regression is Unix-specific")
+    import fcntl
+
+    monkeypatch.setattr(instance_lock, "_ORPHAN_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr(instance_lock, "_ORPHAN_RETRY_DELAY_S", 0)
+    _LOCK_DIR.mkdir(parents=True, exist_ok=True)
+    lock_path = _lock_path("ORPHANLOCKED")
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        before_inode = lock_path.stat().st_ino
+
+        with pytest.raises(SystemExit) as exc:
+            acquire_instance_lock("ORPHANLOCKED")
+
+        assert exc.value.code == 1
+        assert "ORPHANLOCKED" not in instance_lock._locks
+        assert lock_path.stat().st_ino == before_inode
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+        lock_path.unlink(missing_ok=True)
+
+
+def test_observer_treats_os_locked_dead_pid_as_active(monkeypatch):
+    """Observer must respect OS lock even while PID text is stale/dead."""
+    if sys.platform == "win32":
+        pytest.skip("fcntl race regression is Unix-specific")
+    import fcntl
+
+    monkeypatch.setattr(instance_lock, "is_pid_alive", lambda _pid: False)
+    _LOCK_DIR.mkdir(parents=True, exist_ok=True)
+    lock_path = _lock_path("ORPHANLOCKEDDEAD")
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    try:
+        os.write(fd, b"999999")
+        os.fsync(fd)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        locked, pid, reason = is_lock_file_active_or_ambiguous(lock_path)
+
+        assert locked is True
+        assert pid == 999999
+        assert reason == "os-locked"
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+        lock_path.unlink(missing_ok=True)

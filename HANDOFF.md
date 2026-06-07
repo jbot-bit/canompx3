@@ -248,3 +248,17 @@
 - Expanded `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md` from a conservative tiering memo into a supersonic implementation blueprint with explicit latency targets: docs-only p50 <1s/p95 <3s, small Python p50 <3s/p95 <8s, pipeline/trading p50 <8s/p95 <20s, push p50 <90s/p95 <4min.
 - Added concrete architecture: hot-path hook classifier, typed drift registry, staged drift modes, timing ledgers, staged-only Ruff/compile, test impact map, DB truth lanes, and parallel pre-push runner.
 - Added staged roadmap and first patch set that should produce immediate UX wins before any heavyweight drift check is moved: hook activation repair, staged Ruff/compile, docs-only hot path, serial pre-push gate, drift metadata substrate, then scoped whale checks.
+
+## 2026-06-05 Codex update — instance-lock race hardening
+
+- Ran a capital-at-risk `/code-review` stress pass on the current instance-lock orphan recovery change and found a second-process race: an empty-but-OS-locked file could be unlinked/replaced on Unix, allowing two distinct inodes and two bot instances for one instrument.
+- Hardened `trading_app/live/instance_lock.py` so acquisition proves ownership by locking the existing file descriptor before replacing PID metadata; empty/invalid files are only overwritten after the OS lock is held.
+- Aligned observer surfaces: dashboard startup/status and `regime_shadow_runner.assert_no_live_session()` now treat empty, invalid, unreadable, or live-PID lock files as active/ambiguous instead of deleting/ignoring them.
+- Added regressions for empty locked files, ambiguous shadow-writer refusal, and dashboard active status. Targeted tests and ruff passed; `session_preflight.py` passed after setting local `core.hooksPath=.githooks` and still reported only expected dirty-tree/active-stage warnings.
+
+## 2026-06-07 Codex follow-up — instance-lock observer merge-readiness
+
+- Re-reviewed the latest instance-lock hardening work against current `origin/main` (`a5a502e6`). PR #360 was still open but GitHub reported it `CONFLICTING`; the prior claimed commit `f5a4f10` was not present after fetch. The core acquire-before-metadata-overwrite fix remains relevant, but observers still had one high-impact gap: a file could be OS-locked by a live starter while still containing a stale/dead PID, and read-only observers would classify it as stale.
+- Updated `is_lock_file_active_or_ambiguous()` to briefly probe the platform lock and report busy locks as active/ambiguous (`reason="os-locked"`) even when PID text is stale. It still releases immediately when it can acquire the observer probe lock.
+- Removed dashboard startup deletion of stale bot lock files; dashboard now leaves lock-file cleanup to the live acquire path, avoiding a delete-after-classify race.
+- Added regressions for OS-locked stale/dead-PID locks across the canonical helper, shadow writer, and dashboard status surfaces. Targeted tests (78 passed, 4 skipped), ruff, `git diff --check`, Phase 7 live audit, behavioral audit, integrity audit, `py_compile`, and `session_preflight.py` passed. `project_pulse.py --fast --format json` remained nonzero on existing Criterion 11/live-readiness fingerprint staleness and telemetry/action-queue items, not on this diff.
