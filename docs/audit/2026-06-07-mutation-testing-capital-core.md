@@ -76,7 +76,24 @@ earlier slipped past *application*-code review — has its boundary conditions
 (`<` vs `<=`, `start` vs `start+1`, half-open vs closed) fully pinned: all 587
 mutations caught. dst's own window math is bulletproof.
 
-### `trading_app/derived_state.py` — pending
+### `trading_app/derived_state.py` — ✅ 100% kill (0% survival)
+
+| Metric | Value |
+|---|---|
+| Mutants planned | 350 |
+| Killed | 349 |
+| Incompetent (auto-skipped invalid) | 1 |
+| Survived | 0 |
+| **Survival rate** | **0.00%** (100% kill; 349/349) |
+| Test target | `test_lifecycle_state.py` + `test_sr_monitor.py` + `test_check_drift_ws2.py` (102 tests, 10.6s, hermetic) |
+| Bar (≥90% kill) | **PASS** |
+
+**Triage:** no survivors. The plan's premise was right — derived_state is NOT
+zero-coverage; its fingerprint/state-envelope logic is fully exercised by three
+indirect suites, and every mutation (incl. fingerprint-field swaps that would
+let a stale artifact pass as live) is caught. 1 incompetent mutant excluded from
+the denominator per standard mutation hygiene.
+
 ### `trading_app/account_survival.py` (DD/DLL) — pending
 ### `trading_app/strategy_fitness.py` — pending
 ### `trading_app/execution_engine.py` — pending
