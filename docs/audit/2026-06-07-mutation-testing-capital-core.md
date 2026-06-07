@@ -59,8 +59,24 @@ coverage-theatre — a genuinely strong suite, now proven mechanically.
 This run also served as the **end-to-end tooling proof**: cosmic-ray executes a
 full 566-mutant scoped run on native Windows / Python 3.11.9, exit 0.
 
+### `pipeline/dst.py` (window math) — ✅ 100% kill (0% survival)
+
+| Metric | Value |
+|---|---|
+| Mutants planned | 587 |
+| Killed | 587 |
+| Survived | 0 |
+| **Survival rate** | **0.00%** (100% kill) |
+| Test target | `tests/test_pipeline/test_dst.py` (105 tests, 2.3s, hermetic) |
+| Bar (≥90% kill) | **PASS** — well above |
+
+**Triage:** no survivors → no new killing tests required. Critically, the
+`[start, end)` half-open window math — the exact class where an off-by-one
+earlier slipped past *application*-code review — has its boundary conditions
+(`<` vs `<=`, `start` vs `start+1`, half-open vs closed) fully pinned: all 587
+mutations caught. dst's own window math is bulletproof.
+
 ### `trading_app/derived_state.py` — pending
-### `pipeline/dst.py` (window math) — pending
 ### `trading_app/account_survival.py` (DD/DLL) — pending
 ### `trading_app/strategy_fitness.py` — pending
 ### `trading_app/execution_engine.py` — pending
