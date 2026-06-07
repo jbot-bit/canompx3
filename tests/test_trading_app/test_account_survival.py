@@ -733,6 +733,14 @@ def test_evaluate_profile_survival_writes_report(tmp_path, monkeypatch):
         return scenarios, metadata
 
     monkeypatch.setattr("trading_app.account_survival._load_profile_daily_scenarios", fake_load)
+    # Hermetic: the C11 sizing-parity guard opens gold.db via build_profile_portfolio,
+    # which is absent in CI and would fail-closed (gate_pass=False). Mock it to a clean
+    # pass so this positive-path test exercises survival math, not DB availability.
+    # (Mirrors the violation-path mock in test_..._gate_fails_closed_on_sizing_parity_violation.)
+    monkeypatch.setattr(
+        "trading_app.account_survival._assert_single_micro_sizing",
+        lambda _pid: (True, "ok"),
+    )
 
     summary = evaluate_profile_survival(
         "topstep_50k_mnq_auto",
