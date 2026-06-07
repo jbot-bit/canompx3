@@ -117,10 +117,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-07
-- **Commit:** e0d0164a — test(mutation): kill 3 diagnose_decay decision-boundary survivors (Tier-2 slice)
-- **Files changed:** 3 files
+- **Commit:** 476d1905 — test(mutation): kill 5 _compute_fitness_from_cache survivors (Tier-2 cluster)
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/audit/2026-06-07-mutation-testing-capital-core.md`
   - `tests/test_trading_app/test_strategy_fitness.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout

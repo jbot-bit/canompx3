@@ -957,6 +957,88 @@ class TestComputeFitnessFromCache:
         assert score.sharpe_delta_60 is None
 
 
+class TestComputeFitnessWithConDBPath:
+    """Mutation tests for the DB-path sibling `_compute_fitness_with_con`.
+
+    This function duplicates the cache-path Layer-2/3 logic (sf.py:712-729 ==
+    616-629). The cache-path tests give it ZERO coverage (different function),
+    and the legacy DB integration tests assert only `rolling_sample > 0` /
+    `status in (...)` — so the delta-subtraction (sf.py:715) and min-trades
+    blanking (sf.py:726) mutants were PROVEN to survive the legacy suite. These
+    tests close that gap with exact-value assertions through compute_fitness.
+    """
+
+    _SID = "MGC_CME_REOPEN_E1_RR2.0_CB2_NO_FILTER"
+
+    def _strategy(self, sharpe_ratio=0.25):
+        return [
+            {
+                "strategy_id": self._SID,
+                "filter_type": "NO_FILTER",
+                "sample_size": 100,
+                "expectancy_r": 0.30,
+                "sharpe_ratio": sharpe_ratio,
+            }
+        ]
+
+    def test_db_path_sharpe_delta_is_recent_minus_full(self, tmp_path):
+        """sf.py:715 delta subtraction: sharpe_delta_30 == recent_30 -
+        full_sharpe through the DB path. Kills `-` -> `+`."""
+        # 35 alternating win/loss outcomes in the rolling window -> recent_30
+        # computable with a finite Sharpe.
+        outcomes = [
+            {
+                "trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
+                "outcome": "win" if i % 2 == 0 else "loss",
+                "pnl_r": 2.0 if i % 2 == 0 else -1.0,
+            }
+            for i in range(35)
+        ]
+        full_sharpe = 0.25
+        db_path = _setup_fitness_db(tmp_path, self._strategy(full_sharpe), outcomes)
+
+        score = compute_fitness(self._SID, db_path=db_path, as_of_date=date(2025, 12, 31), rolling_months=24)
+        assert score.recent_sharpe_30 is not None
+        assert score.sharpe_delta_30 == score.recent_sharpe_30 - full_sharpe
+
+    def test_db_path_rolling_blanked_below_floor_kept_at_floor(self, tmp_path):
+        """sf.py:726 min-trades boundary through the DB path. Paired:
+        14 outcomes -> rolling_exp_r None (below floor); 15 -> kept (at floor).
+        Kills `<` -> `<=` and delete-blanking."""
+        below = [
+            {
+                "trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
+                "outcome": "win",
+                "pnl_r": 2.0,
+            }
+            for i in range(MIN_ROLLING_FIT - 1)  # 14
+        ]
+        below_dir = tmp_path / "below"
+        below_dir.mkdir()
+        db_below = _setup_fitness_db(below_dir, self._strategy(), below)
+        score_below = compute_fitness(self._SID, db_path=db_below, as_of_date=date(2025, 12, 31), rolling_months=24)
+        assert score_below.rolling_sample == MIN_ROLLING_FIT - 1
+        assert score_below.rolling_exp_r is None
+        assert score_below.rolling_sharpe is None
+
+        at_floor = [
+            {
+                "trading_day": date(2025, (i % 11) + 1, (i % 27) + 1),
+                "outcome": "win",
+                "pnl_r": 2.0,
+            }
+            for i in range(MIN_ROLLING_FIT)  # 15
+        ]
+        floor_dir = tmp_path / "floor"
+        floor_dir.mkdir()
+        db_floor = _setup_fitness_db(floor_dir, self._strategy(), at_floor)
+        score_floor = compute_fitness(self._SID, db_path=db_floor, as_of_date=date(2025, 12, 31), rolling_months=24)
+        assert score_floor.rolling_sample == MIN_ROLLING_FIT
+        # At the floor the `<` is strict -> value is NOT blanked.
+        assert score_floor.rolling_exp_r is not None
+        assert score_floor.rolling_exp_r == 2.0
+
+
 class TestFitnessReportSummary:
     def test_fitness_report_summary_counts(self, tmp_path):
         """Summary correctly counts {fit: N, watch: N, decay: N, stale: N}."""
