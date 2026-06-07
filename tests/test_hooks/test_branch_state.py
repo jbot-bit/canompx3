@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 
@@ -166,3 +168,137 @@ class TestBranchAtStart:
             encoding="utf-8",
         )
         assert mod.branch_at_start(tmp_path) is None
+
+
+def _write_lock(git_dir: Path, **fields: object) -> None:
+    """Write a `.claude.pid` lock with the given fields."""
+    (git_dir / ".claude.pid").write_text(json.dumps(fields), encoding="utf-8")
+
+
+def _iso_hours_ago(hours: float) -> str:
+    return (datetime.now(UTC) - timedelta(hours=hours)).isoformat()
+
+
+class TestCorpseLockIgnored:
+    """A lock held by a PROVEN-dead PID >=12h old is a corpse — both readers
+    must return None so the flip-guards fall silent instead of advising on a
+    dead session's stale SHA. Origin: n=1 2026-06-07, a 124.8h corpse held by
+    dead PID 13716 nagged for ~6 days.
+    """
+
+    def test_dead_and_old_silences_head_reader(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mod = _load_module()
+        monkeypatch.setattr(mod, "_pid_is_alive", lambda pid: False, raising=True)
+        _write_lock(
+            tmp_path,
+            pid=13716,
+            iso_started=_iso_hours_ago(125),
+            head_at_start="deadbeef" * 5,
+            branch_at_start="main",
+        )
+        assert mod.head_at_start(tmp_path) is None
+        assert mod.branch_at_start(tmp_path) is None
+
+    def test_live_pid_keeps_guard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        mod = _load_module()
+        monkeypatch.setattr(mod, "_pid_is_alive", lambda pid: True, raising=True)
+        _write_lock(
+            tmp_path,
+            pid=4242,
+            iso_started=_iso_hours_ago(125),  # old, but the holder is ALIVE
+            head_at_start="abc123" + "0" * 34,
+            branch_at_start="feature/x",
+        )
+        assert mod.head_at_start(tmp_path) == "abc123" + "0" * 34
+        assert mod.branch_at_start(tmp_path) == "feature/x"
+
+    def test_dead_but_fresh_keeps_guard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Dead PID but within the 12h freshness window (e.g. /clear-and-
+        restart of the same shell) must KEEP its guard."""
+        mod = _load_module()
+        monkeypatch.setattr(mod, "_pid_is_alive", lambda pid: False, raising=True)
+        _write_lock(
+            tmp_path,
+            pid=13716,
+            iso_started=_iso_hours_ago(2),  # only 2h old
+            head_at_start="cafe" * 10,
+            branch_at_start="main",
+        )
+        assert mod.head_at_start(tmp_path) == "cafe" * 10
+        assert mod.branch_at_start(tmp_path) == "main"
+
+    def test_dead_but_no_timestamp_keeps_guard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Age unknown (no iso_started) must NEVER silence a guard — this is
+        the backward-compat property that keeps the legacy `pid:999` tests
+        (which have no timestamp) returning their values."""
+        mod = _load_module()
+        monkeypatch.setattr(mod, "_pid_is_alive", lambda pid: False, raising=True)
+        _write_lock(
+            tmp_path,
+            pid=999,
+            head_at_start="f00d" * 10,
+            branch_at_start="main",
+        )
+        assert mod.head_at_start(tmp_path) == "f00d" * 10
+        assert mod.branch_at_start(tmp_path) == "main"
+
+    def test_dead_and_unparseable_timestamp_keeps_guard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A garbage timestamp can't prove staleness -> not a corpse."""
+        mod = _load_module()
+        monkeypatch.setattr(mod, "_pid_is_alive", lambda pid: False, raising=True)
+        _write_lock(
+            tmp_path,
+            pid=13716,
+            iso_started="not-a-date",
+            head_at_start="dead" * 10,
+            branch_at_start="main",
+        )
+        assert mod.head_at_start(tmp_path) == "dead" * 10
+        assert mod.branch_at_start(tmp_path) == "main"
+
+
+class TestPidIsAliveSelf:
+    def test_self_pid_is_alive(self) -> None:
+        mod = _load_module()
+        assert mod._pid_is_alive(os.getpid()) is True
+
+    def test_invalid_pid_is_dead(self) -> None:
+        mod = _load_module()
+        assert mod._pid_is_alive(0) is False
+        assert mod._pid_is_alive(-1) is False
+
+
+class TestCanonicalLivenessDelegation:
+    """`_pid_is_alive` MUST delegate to the canonical worktree_guard probe.
+
+    The original draft re-encoded `os.kill(pid, 0)`, which on Windows returns
+    no error for a dead-but-recycled PID — so the live 124.8h corpse read as
+    ALIVE and the fix did nothing on the operator's actual platform. Delegating
+    to worktree_guard's OpenProcess probe is the only Windows-correct oracle
+    (institutional-rigor §4). These tests pin the delegation contract.
+    """
+
+    def test_delegates_to_canonical_when_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mod = _load_module()
+        # Canonical says ALIVE -> _pid_is_alive must return True regardless of
+        # what the os.kill fallback would say for this (real, dead) PID.
+        monkeypatch.setattr(mod, "_canonical_pid_is_alive", lambda pid: True)
+        assert mod._pid_is_alive(999_999_321) is True
+        # Canonical says DEAD -> _pid_is_alive must return False.
+        monkeypatch.setattr(mod, "_canonical_pid_is_alive", lambda pid: False)
+        assert mod._pid_is_alive(os.getpid()) is False
+
+    def test_falls_back_when_canonical_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Canonical import failure -> conservative os.kill fallback. The
+        fallback must still report THIS live process as alive (never silence a
+        guard on an unproven-dead lock in a degraded environment)."""
+        mod = _load_module()
+        monkeypatch.setattr(mod, "_canonical_pid_is_alive", lambda pid: None)
+        assert mod._pid_is_alive(os.getpid()) is True
+
+    def test_canonical_helper_returns_none_on_missing_module(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """If the canonical guard path doesn't exist, the delegate helper
+        returns None (signalling the caller to fall back), never raises."""
+        mod = _load_module()
+        monkeypatch.setattr(mod, "_GUARD_PATH", Path("/nonexistent/worktree_guard.py"))
+        assert mod._canonical_pid_is_alive(os.getpid()) is None

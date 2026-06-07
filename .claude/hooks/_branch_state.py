@@ -27,9 +27,101 @@ protection layer must never block a session it can't read (see
 
 from __future__ import annotations
 
+import importlib.util as _ilu
 import json
+import os
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
+
+# A lock whose holder PID is PROVEN dead AND whose `iso_started` is at least
+# this many hours old is a corpse: the session that wrote it crashed/force-
+# exited and never cleaned up. Reading `head_at_start`/`branch_at_start` from a
+# corpse made the flip-guards advise on a DEAD session's stale SHA every turn
+# (n=1 2026-06-07: a 124.8h corpse held by dead PID 13716 nagged for ~6 days).
+#
+# The 12h floor MIRRORS `session-start.py:_STALE_LOCK_RECLAIM_HOURS` — the same
+# threshold the session-lock reclaim path already trusts. It is doubly load-
+# bearing: (1) a crashed-and-restarted shell within 12h KEEPS its flip-guard;
+# (2) existing tests write locks with no `iso_started` (age unknown), so the
+# floor's "can't prove stale -> treat as live -> return the value" default
+# preserves their historical behavior. Age-unknown NEVER silences a guard.
+_CORPSE_LOCK_MIN_AGE_HOURS = 12
+
+_GUARD_PATH = Path(__file__).resolve().parents[2] / "scripts" / "tools" / "worktree_guard.py"
+
+
+def _canonical_pid_is_alive(pid: int) -> bool | None:
+    """Delegate liveness to the canonical `worktree_guard._pid_is_alive`.
+
+    institutional-rigor §4 (never re-encode canonical logic): liveness is
+    Windows-load-bearing and the project ALREADY solved it. On Windows,
+    `os.kill(pid, 0)` does NOT reliably raise for a dead PID (it returns no
+    error for a gone-but-recycled PID — the exact false-alive that let the
+    n=1 124.8h corpse survive). `worktree_guard` probes via OpenProcess +
+    GetExitCodeProcess, the only Windows-correct oracle in this repo (origin:
+    reaper corpse-lock fix 3e9aec96). Returns the bool verdict, or None when
+    the canonical module can't be loaded so the caller can fall back.
+    """
+    try:
+        spec = _ilu.spec_from_file_location("worktree_guard", str(_GUARD_PATH))
+        if spec is None or spec.loader is None:
+            return None
+        mod = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return bool(mod._pid_is_alive(pid))
+    except BaseException:
+        return None
+
+
+def _pid_is_alive(pid: int) -> bool:
+    """Cross-platform PID liveness — canonical-delegated, conservative fallback.
+
+    Primary path delegates to `worktree_guard._pid_is_alive` (the repo's only
+    Windows-correct probe). When that import fails, fall back to a conservative
+    local check that returns True unless the PID is PROVEN dead. The fallback's
+    asymmetry (false-alive is safe, false-dead is catastrophic) means a fallback
+    can only ever KEEP a guard, never silence one on an unproven-dead lock — so
+    a degraded environment loses the new corpse-detection but never the old
+    flip-protection.
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    verdict = _canonical_pid_is_alive(pid)
+    if verdict is not None:
+        return verdict
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, owned by another user — treat as alive
+    except (OSError, AttributeError):
+        return True  # cannot prove dead -> do not silence the guard
+
+
+def _lock_is_corpse(data: dict) -> bool:
+    """True iff the lock's holder is PROVEN dead AND it is >= 12h old.
+
+    Both conditions are required. A live PID at any age is a real session. A
+    dead PID within the freshness window may be a /clear-and-restart of the
+    same shell whose guard should still hold. Only a stale corpse — dead AND
+    old — is ignored. Returns False (not a corpse) whenever either condition
+    cannot be established, so the reader fails toward KEEPING the guard.
+    """
+    pid = data.get("pid")
+    if not isinstance(pid, int) or _pid_is_alive(pid):
+        return False  # no PID, or alive -> not a corpse
+    iso = data.get("iso_started", "")
+    try:
+        ts = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except (ValueError, AttributeError, TypeError):
+        return False  # age unknown -> can't prove stale -> not a corpse
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    age_hours = (datetime.now(UTC) - ts).total_seconds() / 3600.0
+    return age_hours >= _CORPSE_LOCK_MIN_AGE_HOURS
 
 
 def invoking_cwd(event: dict) -> str | None:
@@ -157,6 +249,8 @@ def head_at_start(git_dir_path: Path) -> str | None:
         data = json.loads(lock.read_text(encoding="utf-8"))
     except Exception:
         return None
+    if not isinstance(data, dict) or _lock_is_corpse(data):
+        return None  # corpse lock -> treat as absent -> guard fails open
     value = data.get("head_at_start", "")
     return value or None
 
@@ -176,5 +270,7 @@ def branch_at_start(git_dir_path: Path) -> str | None:
     except Exception:
         # fail-safe: corrupted JSON -> None; caller exits 0.
         return None
+    if not isinstance(data, dict) or _lock_is_corpse(data):
+        return None  # corpse lock -> treat as absent -> guard fails open
     value = data.get("branch_at_start", "")
     return value or None
