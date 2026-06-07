@@ -1293,3 +1293,98 @@ def test_load_lane_daily_pnl_passes_no_size_model(monkeypatch):
 
     assert captured, "expected at least one call to _load_lane_trade_paths"
     assert all(sm is None for _, sm in captured), captured
+
+
+# ── Task 8: measured-behavior integration pins (D-3 seam Stage 1) ─────────────
+# These hit the REAL gold.db production path. The numbers below were MEASURED on
+# 2026-06-07 via the canonical `_scenarios_for_context` seam (not a harness):
+#   profile=topstep_50k_mnq_auto, as_of=2026-06-01, horizon=90, n_paths=10000, seed=7
+#   cap=1 -> n_scen=2048, rolling_dd=1535.22, op_pass_prob=0.9997
+#   cap=2 -> n_scen=2048, rolling_dd=3568.02, op_pass_prob=0.3563
+# rolling_dd scales 2.32x (super-linear: per-day vol-scaling lets high-vol days
+# size past 2x before the cap binds — the plan's "~2.0x" came from a prior
+# throwaway no-floor harness and is corrected here by real measurement).
+_D3_PID = "topstep_50k_mnq_auto"
+_D3_AS_OF = date(2026, 6, 1)
+_D3_GOLDEN_CAP1_ROLLING_DD = 1535.22  # known live baseline ($1,535.22 vs $1,800 budget)
+
+
+def _d3_scenarios_at_cap(cap: int):
+    """Build common-support scenarios for the live profile at a forced contract cap."""
+    import duckdb
+
+    import trading_app.account_survival as asv
+    from trading_app.prop_profiles import get_profile_lane_definitions, load_allocation_lanes
+
+    profile = asv.get_profile(_D3_PID)
+    lane_defs = get_profile_lane_definitions(_D3_PID)
+    instruments = sorted({ln["instrument"] for ln in lane_defs})
+    lane_specs = profile.daily_lanes or load_allocation_lanes(profile.profile_id)
+    effective_stop_by_strategy = {
+        ln.strategy_id: float(ln.planned_stop_multiplier or profile.stop_multiplier) for ln in lane_specs
+    }
+    pf = asv.build_profile_portfolio(profile_id=_D3_PID)
+    ctx = asv.SizingContext(
+        account_equity=pf.account_equity,
+        risk_per_trade_pct=pf.risk_per_trade_pct,
+        account_size=profile.account_size,
+        max_contracts_by_strategy={s.strategy_id: cap for s in pf.strategies},
+    )
+    con = duckdb.connect(str(asv.GOLD_DB_PATH), read_only=True)
+    asv.configure_connection(con)
+    try:
+        scenarios, _meta = asv._scenarios_for_context(
+            con,
+            profile=profile,
+            lane_defs=lane_defs,
+            instruments=instruments,
+            effective_stop_by_strategy=effective_stop_by_strategy,
+            as_of_date=_D3_AS_OF,
+            size_model=ctx,
+        )
+    finally:
+        con.close()
+    return scenarios
+
+
+def test_d3_cap1_rolling_dd_reconciles_to_live_baseline():
+    """cap=1 via the seam must reconcile to the known live DD ($1,535.22).
+
+    This is the load-bearing 'no live verdict change today' pin: with every lane
+    at max_contracts=1 (today's reality) the gate projects exactly the production
+    drawdown, byte-for-byte, despite the new vol-sizing machinery.
+    """
+    import trading_app.account_survival as asv
+
+    scen = _d3_scenarios_at_cap(1)
+    dd = asv._max_observed_rolling_drawdown(scen, horizon_days=90)
+    assert dd == _D3_GOLDEN_CAP1_ROLLING_DD, (
+        f"cap=1 rolling_dd {dd} != live baseline {_D3_GOLDEN_CAP1_ROLLING_DD} "
+        "— the seam changed a live verdict (it must not at cap=1)"
+    )
+
+
+def test_d3_rolling_dd_scales_superlinearly_and_pass_prob_drops_at_cap2():
+    """MEASURED 2026-06-07: cap=2 rolling_dd ~2.32x cap=1; op_pass_prob 0.9997->0.3563.
+
+    Proves the seam is wired: sizing like the engine makes the gate correctly fail
+    closed at unsafe size. DD scaling is super-linear (per-day vol-scaling), so the
+    pin is a measured band, not a hardcoded 2.0x.
+    """
+    import trading_app.account_survival as asv
+
+    s1 = _d3_scenarios_at_cap(1)
+    s2 = _d3_scenarios_at_cap(2)
+    dd1 = asv._max_observed_rolling_drawdown(s1, horizon_days=90)
+    dd2 = asv._max_observed_rolling_drawdown(s2, horizon_days=90)
+    # measured 2.32x; band tolerates seed/data drift without admitting a flat or
+    # runaway scaling regression.
+    assert 2.0 * dd1 <= dd2 <= 2.6 * dd1, f"cap2/cap1 dd ratio {dd2 / dd1:.3f} outside [2.0, 2.6]"
+
+    profile = asv.get_profile(_D3_PID)
+    rules = asv._with_consistency_rule(asv._build_rules(profile), profile)
+    p1 = asv.simulate_survival(s1, rules, horizon_days=90, n_paths=10000, seed=7)["operational_pass_probability"]
+    p2 = asv.simulate_survival(s2, rules, horizon_days=90, n_paths=10000, seed=7)["operational_pass_probability"]
+    assert p2 < p1, f"op_pass_prob must drop with size: cap1={p1} cap2={p2}"
+    assert p1 > 0.90, f"cap=1 must still operationally pass on the live profile (got {p1})"
+    assert p2 < 0.50, f"cap=2 must flip the operational gate False on the live profile (got {p2})"

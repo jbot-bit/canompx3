@@ -717,8 +717,6 @@ def _load_profile_daily_scenarios(
     con = duckdb.connect(str(db), read_only=True)
     configure_connection(con)
     try:
-        lane_first_days: dict[str, date] = {}
-        trades_by_day: dict[date, list[TradePath]] = {}
         instruments = sorted({lane["instrument"] for lane in lane_defs})
         from trading_app.prop_profiles import load_allocation_lanes
 
@@ -737,60 +735,91 @@ def _load_profile_daily_scenarios(
             max_contracts_by_strategy={s.strategy_id: s.max_contracts for s in _pf.strategies},
         )
 
-        for lane in lane_defs:
-            trade_paths = _load_lane_trade_paths(
-                con,
-                lane["strategy_id"],
-                as_of_date=as_of_date,
-                effective_stop_multiplier=effective_stop_by_strategy.get(lane["strategy_id"]),
-                max_orb_size_pts=lane.get("max_orb_size_pts"),
-                size_model=size_model,
-            )
-            daily: dict[date, float] = {}
-            for trade in trade_paths:
-                daily[trade.trading_day] = daily.get(trade.trading_day, 0.0) + trade.pnl_dollars
-                trades_by_day.setdefault(trade.trading_day, []).append(trade)
-            if not daily:
-                raise ValueError(f"Lane {lane['strategy_id']} has no canonical outcome history")
-            lane_first_days[lane["strategy_id"]] = min(daily)
-
-        common_start = max(lane_first_days.values())
-
-        placeholders = ", ".join("?" for _ in instruments)
-        calendar_days = [
-            r[0]
-            for r in con.execute(
-                f"""
-                SELECT DISTINCT trading_day
-                FROM daily_features
-                WHERE symbol IN ({placeholders})
-                  AND trading_day >= ?
-                  AND trading_day <= ?
-                ORDER BY trading_day
-                """,
-                [*instruments, common_start, as_of_date],
-            ).fetchall()
-        ]
-
-        scenarios: list[DailyScenario] = []
-        for trading_day in calendar_days:
-            scenarios.append(_scenario_from_trade_paths(trading_day, trades_by_day.get(trading_day, [])))
-
-        if not scenarios:
-            raise ValueError(f"Profile {profile_id!r} has no common-support daily scenarios")
-
-        metadata = {
-            "profile_id": profile.profile_id,
-            "source_start": str(common_start),
-            "source_end": str(as_of_date),
-            "source_days": len(scenarios),
-            "lane_ids": [lane["strategy_id"] for lane in lane_defs],
-            "instruments": instruments,
-            "profile_fingerprint": _build_profile_fingerprint(profile),
-        }
-        return scenarios, metadata
+        return _scenarios_for_context(
+            con,
+            profile=profile,
+            lane_defs=lane_defs,
+            instruments=instruments,
+            effective_stop_by_strategy=effective_stop_by_strategy,
+            as_of_date=as_of_date,
+            size_model=size_model,
+        )
     finally:
         con.close()
+
+
+def _scenarios_for_context(
+    con,
+    *,
+    profile: AccountProfile,
+    lane_defs: list[dict],
+    instruments: list[str],
+    effective_stop_by_strategy: dict[str, float],
+    as_of_date: date,
+    size_model: SizingContext,
+) -> tuple[list[DailyScenario], dict]:
+    """Build common-support daily scenarios for one profile under a SizingContext.
+
+    Pure extract of the lane->scenario body of ``_load_profile_daily_scenarios``
+    (D-3 seam Stage 1). Factored so the contract cap can be varied via
+    ``size_model`` (cap=1 reconciles to the known live DD; cap>1 exercises the
+    seam's scaling) without duplicating the calendar/scenario logic.
+    """
+    lane_first_days: dict[str, date] = {}
+    trades_by_day: dict[date, list[TradePath]] = {}
+
+    for lane in lane_defs:
+        trade_paths = _load_lane_trade_paths(
+            con,
+            lane["strategy_id"],
+            as_of_date=as_of_date,
+            effective_stop_multiplier=effective_stop_by_strategy.get(lane["strategy_id"]),
+            max_orb_size_pts=lane.get("max_orb_size_pts"),
+            size_model=size_model,
+        )
+        daily: dict[date, float] = {}
+        for trade in trade_paths:
+            daily[trade.trading_day] = daily.get(trade.trading_day, 0.0) + trade.pnl_dollars
+            trades_by_day.setdefault(trade.trading_day, []).append(trade)
+        if not daily:
+            raise ValueError(f"Lane {lane['strategy_id']} has no canonical outcome history")
+        lane_first_days[lane["strategy_id"]] = min(daily)
+
+    common_start = max(lane_first_days.values())
+
+    placeholders = ", ".join("?" for _ in instruments)
+    calendar_days = [
+        r[0]
+        for r in con.execute(
+            f"""
+            SELECT DISTINCT trading_day
+            FROM daily_features
+            WHERE symbol IN ({placeholders})
+              AND trading_day >= ?
+              AND trading_day <= ?
+            ORDER BY trading_day
+            """,
+            [*instruments, common_start, as_of_date],
+        ).fetchall()
+    ]
+
+    scenarios: list[DailyScenario] = []
+    for trading_day in calendar_days:
+        scenarios.append(_scenario_from_trade_paths(trading_day, trades_by_day.get(trading_day, [])))
+
+    if not scenarios:
+        raise ValueError(f"Profile {profile.profile_id!r} has no common-support daily scenarios")
+
+    metadata = {
+        "profile_id": profile.profile_id,
+        "source_start": str(common_start),
+        "source_end": str(as_of_date),
+        "source_days": len(scenarios),
+        "lane_ids": [lane["strategy_id"] for lane in lane_defs],
+        "instruments": instruments,
+        "profile_fingerprint": _build_profile_fingerprint(profile),
+    }
+    return scenarios, metadata
 
 
 def _build_rules(profile: AccountProfile) -> SurvivalRules:
