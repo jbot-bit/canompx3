@@ -1,5 +1,6 @@
 task: Fix run_mutation.sh so survivor evidence (line-anchored) survives the EXIT trap; recover this run's 671 strategy_fitness survivors and triage them.
-mode: IMPLEMENTATION
+mode: CLOSED
+status: DONE — committed 72b27d1b (2026-06-07). Runner fix + 43/43 Tier-1 kills proven. Tier-2 is a separate follow-up stage (not started).
 
 ## Scope Lock
 - scripts/tools/run_mutation.sh
