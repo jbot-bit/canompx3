@@ -193,24 +193,33 @@ def fallback_majors(now=None, months=2):
     return out
 
 
-def fetch_calendar(*, cache_path, ttl_s=3600, loader=None, now=None):
+def fetch_calendar(*, cache_path, ttl_s=3600, loader=None, now=None, with_source=False):
     """Raw events with TTL cache, fail-open to stale cache, else fallback majors.
-    `loader` is injectable so the network call can be tested in isolation."""
+    `loader` is injectable so the network call can be tested in isolation.
+
+    When `with_source=True`, returns (events, source) where source is one of
+    'live' | 'cache' | 'stale-cache' | 'fallback' — so callers can tell the
+    operator the TRUE provenance and never imply live data when it is offline
+    fallback or stale. Default (False) returns just events for back-compat."""
     loader = loader or _http_get_json
     now = now or datetime.now(UTC)
     cached = _read_cache(cache_path)
     if cached and (now - cached["ts"]).total_seconds() < ttl_s:
-        return cached["events"]
+        return (cached["events"], "cache") if with_source else cached["events"]
     try:
         events = loader(FEED_THISWEEK)
         _write_cache(cache_path, events, now)
-        return events
+        return (events, "live") if with_source else events
     except Exception:
         log.warning("news feed fetch failed; falling back to %s",
                     "stale cache" if cached else "deterministic majors", exc_info=True)
         if cached:
-            return cached["events"]   # fail-open to last-good
-        return fallback_majors(now)   # last resort: deterministic majors
+            # fail-open to last-good — but mark it stale so the UI says so.
+            return (cached["events"], "stale-cache") if with_source else cached["events"]
+        # last resort: deterministic recurring majors (NFP first-Friday); these
+        # carry empty forecast/previous — no fabricated numbers — and are clearly
+        # labelled 'fallback' so they are never mistaken for live feed data.
+        return (fallback_majors(now), "fallback") if with_source else fallback_majors(now)
 
 
 def load_fired(path):
@@ -277,10 +286,14 @@ def signal(e):
             "text": f"{name} at {hm} Bris — high-impact but outside your sessions."}
 
 
-def news_payload(raw_events, now_utc=None, **kw):
+def news_payload(raw_events, now_utc=None, source="faireconomy", **kw):
     """Exact JSON shape the dashboard /api/news route should return and the
     panel consumes: {events:[...with signal, ISO datetimes...], fetched_at, source}.
-    Endpoint becomes a one-liner around this — no per-event mapping to forget."""
+    Endpoint becomes a one-liner around this — no per-event mapping to forget.
+
+    `source` is the TRUE data provenance (pass the second element of
+    fetch_calendar(..., with_source=True)) so the panel never implies live feed
+    data when it is actually 'cache' / 'stale-cache' / 'fallback'."""
     now_utc = now_utc or datetime.now(UTC)
     evs = relevant_events(raw_events, now_utc=now_utc, **kw)
     out = []
@@ -291,4 +304,4 @@ def news_payload(raw_events, now_utc=None, **kw):
         out.append(d)
     return {"events": out,
             "fetched_at": now_utc.astimezone(BRISBANE).strftime("%H:%M"),
-            "source": "faireconomy"}
+            "source": source}

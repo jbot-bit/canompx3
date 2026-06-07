@@ -2613,8 +2613,10 @@ def _build_news_payload() -> dict[str, object]:
     """
     from trading_app.live import news_calendar as nc
 
-    raw = nc.fetch_calendar(cache_path=str(NEWS_CACHE_PATH), ttl_s=_NEWS_CACHE_TTL_S)
-    payload = nc.news_payload(raw)
+    raw, source = nc.fetch_calendar(
+        cache_path=str(NEWS_CACHE_PATH), ttl_s=_NEWS_CACHE_TTL_S, with_source=True
+    )
+    payload = nc.news_payload(raw, source=source)
     _maybe_fire_news_alerts(nc, raw)
     return payload
 

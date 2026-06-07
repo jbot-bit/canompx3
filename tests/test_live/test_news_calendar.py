@@ -327,6 +327,66 @@ def test_fallback_majors_spans_requested_months():
     assert all(ev["impact"] == "High" and ev["country"] == "USD" for ev in fm)
 
 
+def test_fallback_majors_carry_no_fabricated_numbers():
+    """Integrity guard: the offline placeholder must NOT invent forecast/actual
+    numbers — only a real recurring date with empty value fields."""
+    fm = nc.fallback_majors(datetime(2026, 6, 1, tzinfo=UTC), months=2)
+    for ev in fm:
+        assert ev["forecast"] == ""
+        assert ev["previous"] == ""
+        assert "actual" not in ev
+
+
+# --- provenance: fetch_calendar(with_source=True) tells the TRUE source -------
+
+def test_source_live_on_successful_fetch(tmp_path):
+    cache = str(tmp_path / "c.json")
+    now0 = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
+    events, source = nc.fetch_calendar(cache_path=cache, loader=lambda u: [{"k": 1}], now=now0, with_source=True)
+    assert source == "live"
+    assert events == [{"k": 1}]
+
+
+def test_source_cache_within_ttl(tmp_path):
+    cache = str(tmp_path / "c.json")
+    now0 = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
+    nc.fetch_calendar(cache_path=cache, loader=lambda u: [{"k": 1}], now=now0)
+    _, source = nc.fetch_calendar(cache_path=cache, loader=lambda u: [{"k": 9}], now=now0 + timedelta(minutes=5), with_source=True)
+    assert source == "cache"
+
+
+def test_source_stale_cache_when_feed_down(tmp_path):
+    cache = str(tmp_path / "c.json")
+    now0 = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
+    nc.fetch_calendar(cache_path=cache, ttl_s=60, loader=lambda u: [{"k": 2}], now=now0)
+
+    def boom(url):
+        raise RuntimeError("net down")
+
+    events, source = nc.fetch_calendar(cache_path=cache, ttl_s=60, loader=boom, now=now0 + timedelta(hours=4), with_source=True)
+    assert source == "stale-cache"
+    assert events == [{"k": 2}]  # serves last-good, but labelled stale
+
+
+def test_source_fallback_when_feed_down_and_no_cache(tmp_path):
+    cache = str(tmp_path / "missing.json")
+    now0 = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
+
+    def boom(url):
+        raise RuntimeError("net down")
+
+    events, source = nc.fetch_calendar(cache_path=cache, loader=boom, now=now0, with_source=True)
+    assert source == "fallback"
+    assert len(events) >= 1
+
+
+def test_payload_honest_source_passthrough():
+    """news_payload must stamp the TRUE source it is given, never a hardcoded
+    'faireconomy' — so a fallback payload cannot masquerade as live."""
+    pl = nc.news_payload(PAYLOAD_EVENTS, now_utc=NOW_PRE, source="fallback")
+    assert pl["source"] == "fallback"
+
+
 # --- fired ledger: persist + prune + round-trip -------------------------------
 
 def test_save_fired_keeps_recent(tmp_path):
@@ -509,7 +569,7 @@ def test_api_news_happy_path_valid_payload(dash, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert set(body) == {"events", "fetched_at", "source"}
-    assert body["source"] == "faireconomy"
+    assert body["source"] == "live"  # successful fetch -> honest 'live' provenance
     assert len(body["events"]) == 2  # Medium JOLTS filtered out
 
 
@@ -524,6 +584,8 @@ def test_api_news_feed_down_no_cache_fails_open_not_500(dash, monkeypatch):
     assert r.status_code == 200  # fallback majors, never a 500
     body = r.json()
     assert set(body) == {"events", "fetched_at", "source"}
+    # honest provenance: feed-down + no cache must report 'fallback', NOT 'live'
+    assert body["source"] == "fallback"
 
 
 def test_api_news_never_leaks_datetime(dash, monkeypatch):
