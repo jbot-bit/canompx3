@@ -179,10 +179,21 @@ Per-mutant detail (all confirmed RED on re-apply):
    which is stronger per-mutant evidence than a single aggregate rerun. Measured
    new kill rate = **48.7%** (596/1224); a full rerun would just reproduce this.
 2. Tier-2: DB-fixture-backed tests for `_compute_fitness_from_cache`/`_with_con`,
-   `diagnose_decay`/`diagnose_portfolio_decay`, and the `_enrich_*` helpers — plus
-   resolving the `_compute_relative_volumes` canonical-delegation smell. This is the
-   bulk of the path to ≥80% and carries real blast radius (fixtures touch gold.db
+   `diagnose_decay`/`diagnose_portfolio_decay`, and the `_enrich_*` helpers. This is
+   the bulk of the path to ≥80% and carries real blast radius (fixtures touch gold.db
    read paths); scoped as a separate stage, deliberately NOT rushed here.
+
+   **Stage 1 of Tier-2 DONE (2026-06-07): rel-vol canonical-delegation smell resolved.**
+   `_compute_relative_volumes` (discovery) and `_enrich_relative_volumes` (fitness)
+   were near-verbatim copies of the break-bar relative-volume math (institutional-rigor
+   § 4 violation). Extracted shared canonical core
+   `strategy_discovery._enrich_rel_vol_single_label`; both now delegate. Public name +
+   signature of `_compute_relative_volumes` preserved (13 call sites). Behavior-neutral,
+   proven by 3 golden/characterization tests incl. a cross-module equivalence assert
+   (`tests/test_trading_app/test_strategy_discovery.py::TestComputeRelativeVolumes`,
+   `abs=1e-12`). 408 caller tests green (3.13.9), drift 180/0, ruff clean. The
+   DB-fixture tests for compute/diagnose/enrich + the scoped re-mutation are the
+   remaining Tier-2 work (NOT yet done).
 
 ### `trading_app/execution_engine.py` — pending
 ### `pipeline/build_daily_features.py` — pending (hermeticity-gated)
@@ -192,7 +203,7 @@ Per-mutant detail (all confirmed RED on re-apply):
 ## Definition of Done (deterministic checkers only — no AI sign-off)
 
 1. cosmic-ray score per module meets the bar; survivors all triaged (killed / equivalent / explicitly-noted).
-2. `pytest tests/ -v` green on Python 3.11.9 (output shown).
+2. `pytest tests/ -v` green on Python 3.13.9 (the project's actual interpreter via `uv run python`; output shown).
 3. `python pipeline/check_drift.py` exit 0 (after `.mutation/` removed).
 4. New Hypothesis property tests pass and demonstrably kill residual mutants.
 5. This doc holds per-module before/after scores + survivor triage.

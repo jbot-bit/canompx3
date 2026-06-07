@@ -892,38 +892,38 @@ def _ts_minute_key(ts):
     return (utc_ts.year, utc_ts.month, utc_ts.day, utc_ts.hour, utc_ts.minute)
 
 
-def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters):
-    """
-    Pre-compute relative volume at break bar for each (trading_day, orb_label).
+def _enrich_rel_vol_single_label(con, features, instrument, orb_label, lookback_days):
+    """Canonical relative-volume core: enrich one orb_label across feature rows.
 
-    Enriches each feature row dict with rel_vol_{orb_label} key.
-    Only runs if at least one VolumeFilter is in all_filters.
-    Fail-closed: missing data -> rel_vol stays absent -> filter rejects.
+    Single source of truth for the break-bar relative-volume computation. Both
+    `_compute_relative_volumes` (discovery, multi-label, VolumeFilter-gated) and
+    `strategy_fitness._enrich_relative_volumes` (fitness re-evaluation, single
+    label) delegate here so the math can never drift between the two paths
+    (institutional-rigor.md § 4 — never re-encode canonical logic).
+
+    Sets `rel_vol_{orb_label}` on each row in-place. Fail-closed: any missing
+    datum (no bars history, break bar absent, zero break volume, no baseline,
+    non-positive baseline) leaves the key UNSET so downstream filters reject.
+
+    Baseline = median of the up-to-`lookback_days` prior same-minute-of-day bars
+    immediately before the break bar (the bar itself excluded).
     """
     import statistics
 
-    # Determine max lookback needed across all volume filters
-    vol_filters = [f for f in all_filters.values() if isinstance(f, VolumeFilter)]
-    if not vol_filters:
-        return
-    max_lookback = max(f.lookback_days for f in vol_filters)
+    col = f"orb_{orb_label}_break_ts"
 
-    # Step 1: Collect all break timestamps and unique UTC minutes-of-day
-    break_ts_list = []
+    # Step 1: unique UTC minutes-of-day for this label's break bars
     unique_minutes = set()
     for row in features:
-        for orb_label in orb_labels:
-            break_ts = row.get(f"orb_{orb_label}_break_ts")
-            if break_ts is not None and hasattr(break_ts, "hour"):
-                break_ts_list.append(break_ts)
-                utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
-                unique_minutes.add(utc_ts.hour * 60 + utc_ts.minute)
+        break_ts = row.get(col)
+        if break_ts is not None and hasattr(break_ts, "hour"):
+            utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
+            unique_minutes.add(utc_ts.hour * 60 + utc_ts.minute)
 
     if not unique_minutes:
         return
 
-    # Step 2: Load historical volumes for each unique minute-of-day
-    # Keyed by minute-of-day, each entry is [(minute_key, volume), ...] sorted chronologically
+    # Step 2: load historical volumes per unique minute-of-day (chronological)
     minute_history = {}
     for mod in sorted(unique_minutes):
         h, m = divmod(mod, 60)
@@ -937,45 +937,66 @@ def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters
         ).fetchall()
         minute_history[mod] = [(_ts_minute_key(ts), vol) for ts, vol in rows]
 
-    # Step 3: Compute relative volume for each (day, orb_label) break
+    # Step 3: relative volume per break
     for row in features:
-        for orb_label in orb_labels:
-            break_ts = row.get(f"orb_{orb_label}_break_ts")
-            if break_ts is None:
-                continue
+        break_ts = row.get(col)
+        if break_ts is None:
+            continue
 
-            break_key = _ts_minute_key(break_ts)
-            utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
-            mod = utc_ts.hour * 60 + utc_ts.minute
-            history = minute_history.get(mod, [])
-            if not history:
-                continue  # fail-closed
+        break_key = _ts_minute_key(break_ts)
+        utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
+        mod = utc_ts.hour * 60 + utc_ts.minute
+        history = minute_history.get(mod, [])
+        if not history:
+            continue  # fail-closed
 
-            # Find this break bar in the chronological history
-            idx = None
-            for j, (k, _) in enumerate(history):
-                if k == break_key:
-                    idx = j
-                    break
-            if idx is None:
-                continue  # fail-closed: break bar not in bars_1m
+        # Find this break bar in the chronological history
+        idx = None
+        for j, (k, _) in enumerate(history):
+            if k == break_key:
+                idx = j
+                break
+        if idx is None:
+            continue  # fail-closed: break bar not in bars_1m
 
-            break_vol = history[idx][1]
-            if break_vol is None or break_vol == 0:
-                continue  # fail-closed
+        break_vol = history[idx][1]
+        if break_vol is None or break_vol == 0:
+            continue  # fail-closed
 
-            # Take prior N entries (up to max_lookback)
-            start = max(0, idx - max_lookback)
-            prior_vols = [v for _, v in history[start:idx] if v > 0]
+        # Take prior N entries (up to lookback_days)
+        start = max(0, idx - lookback_days)
+        prior_vols = [v for _, v in history[start:idx] if v > 0]
 
-            if not prior_vols:
-                continue  # fail-closed: no baseline
+        if not prior_vols:
+            continue  # fail-closed: no baseline
 
-            baseline = statistics.median(prior_vols)
-            if baseline <= 0:
-                continue  # fail-closed
+        baseline = statistics.median(prior_vols)
+        if baseline <= 0:
+            continue  # fail-closed
 
-            row[f"rel_vol_{orb_label}"] = break_vol / baseline
+        row[f"rel_vol_{orb_label}"] = break_vol / baseline
+
+
+def _compute_relative_volumes(con, features, instrument, orb_labels, all_filters):
+    """
+    Pre-compute relative volume at break bar for each (trading_day, orb_label).
+
+    Enriches each feature row dict with rel_vol_{orb_label} key.
+    Only runs if at least one VolumeFilter is in all_filters.
+    Fail-closed: missing data -> rel_vol stays absent -> filter rejects.
+
+    Delegates the per-label computation to `_enrich_rel_vol_single_label`
+    (shared canonical core) for each orb_label, using the max lookback across
+    all VolumeFilters. Public name + signature preserved (13 call sites).
+    """
+    # Determine max lookback needed across all volume filters
+    vol_filters = [f for f in all_filters.values() if isinstance(f, VolumeFilter)]
+    if not vol_filters:
+        return
+    max_lookback = max(f.lookback_days for f in vol_filters)
+
+    for orb_label in orb_labels:
+        _enrich_rel_vol_single_label(con, features, instrument, orb_label, max_lookback)
 
 
 def _inject_cross_asset_atrs(con, features, instrument, all_filters):
