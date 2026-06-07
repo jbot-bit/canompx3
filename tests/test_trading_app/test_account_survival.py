@@ -1063,6 +1063,76 @@ def test_lane_atr_by_day_returns_per_day_atr_map():
     assert date(2026, 1, 5) not in m   # NULL not mapped; caller falls back to vol_scalar=1.0
 
 
+def test_lane_median_atr_delegates_to_canonical_trailing_helper(monkeypatch):
+    """Task 5: the median provider delegates per-day to the CANONICAL trailing
+    helper paper_trader._get_median_atr_20 (no re-encoded SQL); only truthy
+    medians are mapped (0.0 omitted -> caller falls back to vol_scalar=1.0)."""
+    import trading_app.account_survival as asv
+    calls = []
+
+    def fake_median(con, instrument, trading_day, lookback_days=252):
+        calls.append((instrument, trading_day))
+        return 0.0 if trading_day == date(2026, 1, 3) else 10.0
+
+    monkeypatch.setattr("trading_app.paper_trader._get_median_atr_20", fake_median)
+    m = asv._lane_median_atr(None, "MNQ", {date(2026, 1, 2), date(2026, 1, 3)})
+    assert m == {date(2026, 1, 2): 10.0}          # 0.0 omitted
+    assert set(d for _, d in calls) == {date(2026, 1, 2), date(2026, 1, 3)}
+    assert all(i == "MNQ" for i, _ in calls)
+
+
+def test_d3_median_is_trailing_not_full_history(monkeypatch):
+    """Task 5b oracle (e): the median must be point-in-time (a trade on day D
+    must not see ATR on/after D). Proven by delegating to the canonical helper,
+    whose SQL uses `trading_day < ?` (paper_trader.py)."""
+    import trading_app.account_survival as asv
+    seen = []
+
+    def fake_median(con, instrument, trading_day, lookback_days=252):
+        seen.append(trading_day)
+        return 10.0
+
+    monkeypatch.setattr("trading_app.paper_trader._get_median_atr_20", fake_median)
+    asv._lane_median_atr(None, "MNQ", {date(2026, 1, 10)})
+    assert seen == [date(2026, 1, 10)]   # the trade day is handed to the trailing fn
+
+
+def test_d3_null_atr_day_falls_back_to_scalar_one_not_fail(monkeypatch):
+    """Task 5b oracle (c): a priced day with NULL/missing atr uses vol_scalar=1.0
+    (engine parity) — NOT a structural failure; sizing still produces a valid
+    count (floored to 1 at cap=1)."""
+    import trading_app.account_survival as asv
+    from trading_app.account_survival import SizingContext
+    base = [asv.TradePath(trading_day=date(2026, 1, 2), strategy_id="L1",
+                          entry_ts=None, exit_ts=None, pnl_dollars=40.0, mae_dollars=20.0,
+                          mfe_dollars=60.0, lots=1, contracts=1, instrument="MNQ")]
+    monkeypatch.setattr(asv, "_load_strategy_snapshot",
+        lambda con, sid: {"instrument": "MNQ", "orb_label": "X", "orb_minutes": 5,
+                          "entry_model": "m", "rr_target": 2.0, "confirm_bars": 1,
+                          "filter_type": "NO_FILTER", "stop_multiplier": 1.0})
+    monkeypatch.setattr(asv, "_build_trade_paths_from_outcomes", lambda *a, **k: list(base))
+    monkeypatch.setattr(asv, "_lane_atr_by_day", lambda *a, **k: {})   # NULL/missing atr
+    monkeypatch.setattr(asv, "_lane_median_atr", lambda *a, **k: {})
+    ctx = SizingContext(account_equity=50_000.0, risk_per_trade_pct=2.0,
+                        account_size=50_000, max_contracts_by_strategy={"L1": 2})
+    out = asv._load_lane_trade_paths(None, "L1", as_of_date=date(2026, 1, 3), size_model=ctx)
+    assert out[0].contracts >= 1          # vol_scalar=1.0 fallback still sizes, does not zero/raise
+    assert out[0].pnl_dollars >= 40.0
+
+
+def test_d3_structural_atr_loss_fails_closed():
+    """Task 5b oracle (f): if ATR cannot be obtained structurally (query raises
+    on a missing table), the sizing path must NOT silently swallow it — it must
+    propagate so the gate fails closed."""
+    import duckdb
+    import pytest
+
+    from trading_app.account_survival import _lane_atr_by_day
+    con = duckdb.connect(":memory:")  # no daily_features table
+    with pytest.raises(duckdb.CatalogException):
+        _lane_atr_by_day(con, "MNQ", 5, {date(2026, 1, 2)})
+
+
 # ---------------------------------------------------------------------------
 # Task 3: opt-in size_model gate in _load_lane_trade_paths
 # ---------------------------------------------------------------------------

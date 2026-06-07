@@ -433,12 +433,23 @@ def _lane_atr_by_day(con, instrument: str, orb_minutes: int, days: set) -> dict:
 
 
 def _lane_median_atr(con, instrument: str, days: set) -> dict:
-    """Per-day median_atr_20 for an instrument over the given trade days.
+    """Trailing 252d median atr_20 as-of each trade day, via the CANONICAL helper
+    ``paper_trader._get_median_atr_20`` (already point-in-time: its SQL filters
+    ``trading_day < ?`` — no look-ahead). No re-encoded SQL here (institutional
+    rigor § 4: delegate to canonical, never re-implement).
 
-    Stub — returns empty dict until a later task hardens it with a real query.
-    When empty, the caller falls back to vol_scalar=1.0 (engine parity).
+    Only truthy medians are mapped; ``_get_median_atr_20`` returns 0.0 when no
+    trailing data exists, which we omit so the caller falls back to
+    ``vol_scalar=1.0`` (engine parity) rather than dividing by zero.
     """
-    return {}
+    from trading_app.paper_trader import _get_median_atr_20
+
+    out: dict = {}
+    for d in days:
+        med = _get_median_atr_20(con, instrument, d)
+        if med:
+            out[d] = float(med)
+    return out
 
 
 def _build_trade_paths_from_outcomes(
