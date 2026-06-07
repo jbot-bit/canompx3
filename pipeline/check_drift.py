@@ -13953,6 +13953,73 @@ def check_code_fingerprint_registries_pinned(
     return violations
 
 
+# D-3 seam Stage 1 (2026-06-07): the canonical position sizer that BOTH the live
+# execution engine and the account-survival gate must resolve contracts through.
+# A re-encoded fork in either path would let the gate prove drawdown at a contract
+# count the engine never trades (silent under-protection of capital).
+_CANONICAL_SIZER_NAME = "compute_position_size_vol_scaled"
+_CANONICAL_SIZER_MODULE = "trading_app.portfolio"
+
+
+def _imports_canonical_sizer(path: Path) -> bool | None:
+    """True iff `path` imports the canonical sizer from `trading_app.portfolio`.
+
+    Returns None if the file cannot be read/parsed (fail-closed: the caller
+    treats None as a parity violation rather than a silent pass). Static AST —
+    no import or DB side-effects.
+    """
+    try:
+        source = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _CANONICAL_SIZER_MODULE:
+            if any(alias.name == _CANONICAL_SIZER_NAME for alias in node.names):
+                return True
+    return False
+
+
+def check_survival_engine_sizer_parity(
+    survival_path: Path | None = None,
+    engine_path: Path | None = None,
+) -> list[str]:
+    """Bind the survival sim and the live engine to ONE canonical sizer.
+
+    Both ``trading_app/account_survival.py`` (the C11 survival gate) and
+    ``trading_app/execution_engine.py`` (the live order path) must import
+    ``compute_position_size_vol_scaled`` from ``trading_app.portfolio``. If either
+    re-encodes its own sizing, the gate's drawdown proof silently diverges from
+    what the engine actually trades. Fails closed when a file is missing /
+    unparseable, or when either path does not import the canonical sizer.
+
+    Args are injectable for mutation-proofing (integrity-guardian §7); production
+    defaults to the real module paths.
+    """
+    if survival_path is None:
+        survival_path = TRADING_APP_DIR / "account_survival.py"
+    if engine_path is None:
+        engine_path = TRADING_APP_DIR / "execution_engine.py"
+
+    violations: list[str] = []
+    for label, path in (("account_survival", survival_path), ("execution_engine", engine_path)):
+        result = _imports_canonical_sizer(path)
+        if result is None:
+            violations.append(
+                f"{label}: cannot read/parse {path} — sizer parity UNPROVABLE (fail closed)"
+            )
+        elif result is False:
+            violations.append(
+                f"{label}: does not import {_CANONICAL_SIZER_NAME} from "
+                f"{_CANONICAL_SIZER_MODULE} — the survival sim and live engine "
+                "would size from divergent (re-encoded) logic"
+            )
+    return violations
+
+
 # Fields read off `profile` inside account_survival.py that are NOT
 # survival-VERDICT inputs and therefore need not be in the profile fingerprint.
 # Each entry is label/lookup-only (used for identity, logging, or to look up a
@@ -16841,6 +16908,12 @@ CHECKS = [
         "Code-fingerprint staleness registries pinned (class-of-four floor counts; C11 survival is capital-critical)",
         check_code_fingerprint_registries_pinned,
         False,  # blocking -- a shrunk fingerprint list lets a stale cached PASS survive (silent staleness gap)
+        False,
+    ),
+    (
+        "Survival sim <-> live engine resolve contracts through one canonical sizer (D-3 seam)",
+        check_survival_engine_sizer_parity,
+        False,  # blocking -- a re-encoded sizer fork lets the gate prove DD at a count the engine never trades
         False,
     ),
     (
