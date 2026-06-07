@@ -311,3 +311,86 @@ async def test_profile_execution_map_rejects_fractional_webhook_qty():
 
     assert exc.value.status_code == 400
     assert "not divisible" in exc.value.detail
+
+
+async def test_concurrent_duplicate_entries_only_one_submits():
+    """REGRESSION (capital-review Iter 6 fix): concurrent identical entry alerts
+    must NOT both submit. The reserve-before-await fix (webhook_server.py step 5b)
+    increments the position counter and plants an in-flight dedup placeholder
+    SYNCHRONOUSLY — before the first `await` — so the second concurrent request
+    hits the placeholder and is deduplicated. Exactly one order submits and the
+    MAX_OPEN_POSITIONS=1 cap holds.
+
+    This is the flipped form of the original TOCTOU characterization test, which
+    pinned the unsafe behavior (both submit, counter==2). Operator-approved
+    behavior change on the order-trigger path (AskUserQuestion, 2026-06-07).
+    """
+    ws = _load_ws()
+    ws.MAX_OPEN_POSITIONS = 1
+    ws.DEDUP_WINDOW = 10.0
+    ws.WEBHOOK_PROFILE_ID = ""  # no profile mapping — plain MGC entry
+
+    submit_calls = 0
+
+    class _ConcurrentLoop:
+        async def run_in_executor(self, _executor, func, *args):
+            nonlocal submit_calls
+            if func is ws._get_contract:
+                return "MGCM5"
+            submit_calls += 1
+            # Yield control so the SECOND gathered coroutine runs its synchronous
+            # guard section while this one is "awaiting" the order. The fix's
+            # reserve-before-await means the second request hits the in-flight
+            # placeholder and never reaches this executor — so we must NOT block
+            # on a 2-party barrier here (only one party ever arrives → deadlock).
+            await asyncio.sleep(0.01)
+            return 12345
+
+    with patch(
+        "trading_app.live.webhook_server.asyncio.get_running_loop",
+        return_value=_ConcurrentLoop(),
+    ):
+        results = await asyncio.gather(
+            _run_trade(ws, _ENTRY_PAYLOAD),
+            _run_trade(ws, _ENTRY_PAYLOAD),
+        )
+
+    # SAFE: only ONE order submitted; the second concurrent request deduplicated;
+    # the position counter respects the cap=1.
+    assert submit_calls == 1, "reserve-before-await must let only one concurrent entry submit"
+    statuses = sorted(r.status for r in results)
+    assert statuses == ["deduplicated_in_flight", "submitted"], (
+        f"expected one submitted + one in-flight dedup, got {statuses}"
+    )
+    assert ws._OPEN_POSITIONS["MGC"] == 1, "position counter must respect cap=1"
+
+
+async def test_failed_order_rolls_back_reservation():
+    """REGRESSION (capital-review Iter 6 fix): if the awaited order placement
+    fails AFTER the pre-await reservation, the position counter and dedup
+    placeholder must roll back — so a legitimate retry isn't permanently blocked
+    and the counter doesn't leak a phantom open position.
+    """
+    ws = _load_ws()
+    ws.MAX_OPEN_POSITIONS = 1
+    ws.DEDUP_WINDOW = 10.0
+    ws.WEBHOOK_PROFILE_ID = ""
+
+    class _FailingLoop:
+        async def run_in_executor(self, _executor, func, *args):
+            if func is ws._get_contract:
+                return "MGCM5"
+            raise RuntimeError("broker rejected order")
+
+    with patch(
+        "trading_app.live.webhook_server.asyncio.get_running_loop",
+        return_value=_FailingLoop(),
+    ):
+        with pytest.raises(Exception):  # HTTPException 500
+            await _run_trade(ws, _ENTRY_PAYLOAD)
+
+    # Rolled back: counter back to 0, no lingering in-flight dedup placeholder.
+    assert ws._OPEN_POSITIONS.get("MGC", 0) == 0, "counter must roll back after a failed order"
+    assert ws._check_dedup(ws.TradeRequest(**_ENTRY_PAYLOAD)) is None, (
+        "in-flight placeholder must be released so a retry is not blocked"
+    )
