@@ -117,7 +117,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-07
-- **Commit:** 476d1905 — test(mutation): kill 5 _compute_fitness_from_cache survivors (Tier-2 cluster)
+- **Commit:** 608d31a6 — test(mutation): kill 2 _compute_fitness_with_con DB-path survivors
 - **Files changed:** 2 files
   - `HANDOFF.md`
   - `tests/test_trading_app/test_strategy_fitness.py`

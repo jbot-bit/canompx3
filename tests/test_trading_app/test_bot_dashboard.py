@@ -13,6 +13,7 @@ from trading_app.live.bot_dashboard import (
     _connection_readiness,
     _derive_operator_state,
     _legacy_lanes_to_lane_cards,
+    _normalize_check_status,
     _parse_preflight_output,
     _profile_session_ambiguity,
     _strategy_meta,
@@ -171,6 +172,62 @@ FIX FAILURES before starting a live session.
     assert check_map["Auth check (projectx)"]["status"] == "fail"
     assert check_map["Daily features freshness"]["status"] == "warn"
     assert check_map["Contract resolution"]["status"] == "warn"
+
+
+# Canonical preflight status-token vocabulary: the set of leading words a
+# CheckResult.message can begin with in scripts/run_live_session.py. The
+# dashboard regex (bot_dashboard.py:_parse_preflight_output) captures exactly
+# these, and _normalize_check_status MUST map every one to a blocking-relevant
+# bucket — never "info", which does NOT set has_warnings and would silently
+# pass a real-money launch under the strict-zero-warn gate (action_start).
+# Drift check `check_preflight_status_token_parity` is the source-of-truth
+# guard that keeps this set in sync with run_live_session; this test pins the
+# runtime mapping behaviour against the same vocabulary.
+_CANONICAL_PREFLIGHT_TOKENS = ("OK", "FAILED", "SKIPPED", "WARN", "WARNINGS", "LOCKED")
+
+
+def test_normalize_check_status_never_fail_opens_to_info_for_any_preflight_token():
+    """Every preflight token maps to pass/warn/fail — never the 'info' fail-open
+    branch that would let a real-money --live launch through with a WARN/SKIPPED.
+    """
+    for token in _CANONICAL_PREFLIGHT_TOKENS:
+        status = _normalize_check_status(token)
+        assert status in {"pass", "warn", "fail"}, (
+            f"preflight token {token!r} normalized to {status!r}; a non-"
+            "{pass,warn,fail} bucket fails OPEN and would not block a live arm"
+        )
+    # SKIPPED specifically must be blocking-relevant (warn), not silently passed:
+    # signal-only/demo emit SKIPPED for capital gates and live strict-zero-warn
+    # must still treat them as a WARN that blocks the live launch.
+    assert _normalize_check_status("SKIPPED") == "warn"
+    assert _normalize_check_status("WARN") == "warn"
+    assert _normalize_check_status("WARNINGS") == "warn"
+    assert _normalize_check_status("FAILED") == "fail"
+    assert _normalize_check_status("OK") == "pass"
+    # LOCKED = live DuckDB writer lock held by another process → hard blocker.
+    assert _normalize_check_status("LOCKED") == "fail"
+
+
+def test_parse_preflight_output_captures_locked_token_as_fail():
+    """A LOCKED check line must be captured (not silently dropped by the regex)
+    and surfaced as a failure so the operator sees WHY the live arm is blocked.
+    """
+    output = """
+[1/3] Auth check (projectx)... OK (token: abcd1234...)
+[2/3] Live trade journal... LOCKED by live PID 4321. Run: scripts/tools/stop_live.ps1 -NoPrompt to stop it, then retry.
+[3/3] Component self-tests... OK (all components verified)
+
+Preflight: 2/3 passed
+FIX FAILURES before starting a live session.
+""".strip()
+
+    parsed = _parse_preflight_output(output)
+
+    check_map = {check["name"]: check for check in parsed["checks"]}
+    assert "Live trade journal" in check_map, "LOCKED line was dropped by the parser regex"
+    assert check_map["Live trade journal"]["status"] == "fail"
+    assert parsed["has_failures"] is True
+    assert parsed["overall"] == "fail"
 
 
 _CONNECTED_BROKER_SUMMARY: dict[str, object] = {
