@@ -5,7 +5,7 @@ Source: faireconomy weekly JSON mirror of the Forex Factory calendar
 Session timing AND trading-day attribution come from canonical pipeline.dst
 helpers (orb_utc_window, compute_trading_day_from_timestamp) — never re-encoded.
 
-Portable across Python 3.10 (sandbox) and 3.11+ (repo): uses timezone.utc.
+Requires Python 3.11+ (repo runs 3.13): uses datetime.UTC.
 """
 from __future__ import annotations
 
