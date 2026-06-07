@@ -91,6 +91,28 @@ class PortfolioStrategy:
         return classify_strategy(self.sample_size)
 
 
+DEPLOYED_MAX_CONTRACTS_CLAMP = 1
+
+
+def resolve_profile_max_contracts(profile: object, *, topstep_xfa_eod_balance: float | None = None) -> int:
+    """Resolve profile lane caps while preserving the current deployed clamp.
+
+    Stage 2 wires the TopStep scaling ladder into the profile-builder seam. Stage
+    3 is the separate capital flip that may lift DEPLOYED_MAX_CONTRACTS_CLAMP
+    after survival, live-risk, and operator gates close.
+    """
+    if (
+        topstep_xfa_eod_balance is not None
+        and getattr(profile, "firm", None) == "topstep"
+        and getattr(profile, "is_express_funded", False)
+    ):
+        from trading_app.topstep_scaling_plan import max_lots_for_xfa
+
+        ladder_cap = max_lots_for_xfa(int(profile.account_size), topstep_xfa_eod_balance)
+        return min(DEPLOYED_MAX_CONTRACTS_CLAMP, ladder_cap)
+    return DEPLOYED_MAX_CONTRACTS_CLAMP
+
+
 @dataclass
 class Portfolio:
     """A collection of strategies with risk parameters."""
@@ -717,6 +739,7 @@ def build_profile_portfolio(
     max_concurrent_positions: int = 3,
     max_daily_loss_r: float = 5.0,
     instrument: str | None = None,
+    topstep_xfa_eod_balance: float | None = None,
 ) -> Portfolio:
     """Build a portfolio from a prop_profiles.py account profile.
 
@@ -774,6 +797,7 @@ def build_profile_portfolio(
 
     strategies: list[PortfolioStrategy] = []
     cost_spec = get_cost_spec(instrument)
+    profile_max_contracts = resolve_profile_max_contracts(profile, topstep_xfa_eod_balance=topstep_xfa_eod_balance)
 
     _skip_dd_check = instrument is not None and len(lanes) < len(all_lanes)
 
@@ -874,7 +898,7 @@ def build_profile_portfolio(
                     stop_multiplier=float(effective_stop_mult),
                     source="profile",
                     weight=1.0,
-                    max_contracts=1,
+                    max_contracts=profile_max_contracts,
                 )
             )
             logger.info(

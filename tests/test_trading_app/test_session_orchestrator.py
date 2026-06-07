@@ -6459,7 +6459,7 @@ class TestResolveTopStepXFAAccountSize:
         assert _resolve_topstep_xfa_account_size(prof) is None
 
     def test_unknown_xfa_size_raises_fail_closed(self):
-        """TopStep XFA with size not in SCALING_PLAN_LADDER → RuntimeError.
+        """TopStep XFA with size not in SCALING_PLAN_LOTS → RuntimeError.
 
         Without this guard, max_lots_for_xfa would raise KeyError on the
         first entry attempt — opaque runtime failure vs. clear init failure.

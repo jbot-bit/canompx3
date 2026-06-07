@@ -55,7 +55,10 @@ is the bottom-row tier (2 lots for 50K, 3 lots for 100K/150K).
 
 from __future__ import annotations
 
-# Tier ladder: account_size (USD) → list of (min_balance, max_lots) tuples,
+# Contract conversion used by the TopStepX scaling rule.
+MICRO_CONTRACTS_PER_MINI = 10
+
+# Tier ladder: account_size (USD) → tuple of (min_balance, max_lots) tuples,
 # sorted by min_balance ascending. The function `max_lots_for_xfa` walks the
 # ladder and picks the highest tier whose threshold is met.
 #
@@ -63,26 +66,51 @@ from __future__ import annotations
 # docs/research-input/topstep/images/xfa_scaling_chart.png on 2026-04-08.
 # Re-verify after any TopStep policy announcement (quarterly cadence).
 
-SCALING_PLAN_LADDER: dict[int, list[tuple[float, int]]] = {
-    50_000: [
+SCALING_PLAN_LOTS: dict[int, tuple[tuple[float, int], ...]] = {
+    50_000: (
         (0.0, 2),
         (1500.0, 3),
         (2000.0, 5),
-    ],
-    100_000: [
+    ),
+    100_000: (
         (0.0, 3),
         (1500.0, 4),
         (2000.0, 5),
         (3000.0, 10),
-    ],
-    150_000: [
+    ),
+    150_000: (
         (0.0, 3),
         (1500.0, 4),
         (2000.0, 5),
         (3000.0, 10),
         (4500.0, 15),
-    ],
+    ),
 }
+
+
+# Backward-compatible name. New production consumers should depend on the
+# SCALING_PLAN_LOTS surface or helper functions above/below, not re-encode tiers.
+SCALING_PLAN_LADDER = SCALING_PLAN_LOTS
+
+
+def valid_xfa_account_sizes() -> tuple[int, ...]:
+    """Return the account sizes with a canonical XFA scaling ladder."""
+    return tuple(sorted(SCALING_PLAN_LOTS))
+
+
+def top_of_ladder_lots_for_xfa(account_size: int) -> int:
+    """Return the maximum mini-equivalent lots at the top XFA scaling tier."""
+    if account_size not in SCALING_PLAN_LOTS:
+        raise KeyError(
+            f"TopStep Scaling Plan ladder is only defined for "
+            f"account sizes {list(SCALING_PLAN_LOTS.keys())}; got {account_size}"
+        )
+    return SCALING_PLAN_LOTS[account_size][-1][1]
+
+
+def top_of_ladder_micros_for_xfa(account_size: int) -> int:
+    """Return the top XFA scaling tier in micro-contract equivalents."""
+    return top_of_ladder_lots_for_xfa(account_size) * MICRO_CONTRACTS_PER_MINI
 
 
 def max_lots_for_xfa(account_size: int, eod_balance: float) -> int:
@@ -105,10 +133,10 @@ def max_lots_for_xfa(account_size: int, eod_balance: float) -> int:
         KeyError: if account_size is not a known XFA tier (50K/100K/150K).
         ValueError: if eod_balance is below 0 (sentinel for missing data).
     """
-    if account_size not in SCALING_PLAN_LADDER:
+    if account_size not in SCALING_PLAN_LOTS:
         raise KeyError(
             f"TopStep Scaling Plan ladder is only defined for "
-            f"account sizes {list(SCALING_PLAN_LADDER.keys())}; got {account_size}"
+            f"account sizes {list(SCALING_PLAN_LOTS.keys())}; got {account_size}"
         )
     if eod_balance < 0:
         raise ValueError(
@@ -116,7 +144,7 @@ def max_lots_for_xfa(account_size: int, eod_balance: float) -> int:
             f"the canonical starting balance is $0, not negative."
         )
 
-    ladder = SCALING_PLAN_LADDER[account_size]
+    ladder = SCALING_PLAN_LOTS[account_size]
     # Walk ladder ascending; pick the highest tier whose threshold is met.
     max_lots = ladder[0][1]
     for threshold, lots in ladder:
@@ -141,7 +169,7 @@ def micros_to_mini_equivalent(micros: int) -> int:
     """
     if micros < 0:
         raise ValueError(f"micros must be >= 0 (got {micros})")
-    return (micros + 9) // 10  # ceiling division
+    return (micros + MICRO_CONTRACTS_PER_MINI - 1) // MICRO_CONTRACTS_PER_MINI  # ceiling division
 
 
 def lots_for_position(instrument: str, contracts: int) -> int:

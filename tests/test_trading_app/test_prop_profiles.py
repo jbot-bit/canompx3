@@ -57,14 +57,19 @@ class TestPropFirmSpec:
 class TestPropFirmAccount:
     def test_topstep_50k(self):
         tier = get_account_tier("topstep", 50_000)
+        from trading_app.topstep_scaling_plan import top_of_ladder_lots_for_xfa, top_of_ladder_micros_for_xfa
+
         assert tier.max_dd == 2_000
-        assert tier.max_contracts_mini == 5
-        assert tier.max_contracts_micro == 50
+        assert tier.max_contracts_mini == top_of_ladder_lots_for_xfa(50_000)
+        assert tier.max_contracts_micro == top_of_ladder_micros_for_xfa(50_000)
 
     def test_topstep_150k(self):
         tier = get_account_tier("topstep", 150_000)
+        from trading_app.topstep_scaling_plan import top_of_ladder_lots_for_xfa, top_of_ladder_micros_for_xfa
+
         assert tier.max_dd == 4_500
-        assert tier.max_contracts_mini == 15
+        assert tier.max_contracts_mini == top_of_ladder_lots_for_xfa(150_000)
+        assert tier.max_contracts_micro == top_of_ladder_micros_for_xfa(150_000)
 
     def test_self_funded_50k(self):
         tier = get_account_tier("self_funded", 50_000)

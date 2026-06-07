@@ -27,7 +27,7 @@ import dataclasses
 from pathlib import Path
 
 import pipeline.check_drift as cd
-from pipeline.check_drift import check_prop_caps_do_not_leak_into_self_funded
+from pipeline.check_drift import check_prop_caps_do_not_leak_into_self_funded, check_topstep_scaling_ladder_is_canonical
 
 # A minimal prop_profiles.py-shaped source: the marker comment introduces the
 # self_funded tier block, exactly as the real file does.
@@ -126,6 +126,40 @@ def test_guard_passes_on_real_repo_state():
     """The real repo must satisfy the doctrine guard (marker present + doctrine file present)."""
     violations = check_prop_caps_do_not_leak_into_self_funded()
     assert violations == [], "self-funded sizing guard must pass clean on real state: " + "; ".join(violations)
+
+
+def _fake_topstep_scaling_root(tmp_path: Path, *, prop_profiles_src: str, orchestrator_src: str) -> Path:
+    (tmp_path / "trading_app" / "live").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "trading_app" / "prop_profiles.py").write_text(prop_profiles_src, encoding="utf-8")
+    (tmp_path / "trading_app" / "live" / "session_orchestrator.py").write_text(orchestrator_src, encoding="utf-8")
+    return tmp_path
+
+
+def test_topstep_scaling_ladder_guard_passes_on_real_repo_state():
+    violations = check_topstep_scaling_ladder_is_canonical()
+    assert violations == [], "TopStep scaling-plan canonical guard must pass clean on real state: " + "; ".join(
+        violations
+    )
+
+
+def test_topstep_scaling_ladder_guard_catches_literal_profile_tiers(tmp_path):
+    root = _fake_topstep_scaling_root(
+        tmp_path,
+        prop_profiles_src='ACCOUNT_TIERS = {\n    ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50),\n}\n',
+        orchestrator_src="from trading_app.topstep_scaling_plan import valid_xfa_account_sizes\n",
+    )
+    violations = check_topstep_scaling_ladder_is_canonical(project_root=root)
+    assert any("hardcodes a TopStep top-of-ladder" in v for v in violations)
+
+
+def test_topstep_scaling_ladder_guard_catches_raw_ladder_live_consumer(tmp_path):
+    root = _fake_topstep_scaling_root(
+        tmp_path,
+        prop_profiles_src="from trading_app.topstep_scaling_plan import top_of_ladder_lots_for_xfa\n",
+        orchestrator_src="from trading_app.topstep_scaling_plan import SCALING_PLAN_LADDER\n",
+    )
+    violations = check_topstep_scaling_ladder_is_canonical(project_root=root)
+    assert any("session_orchestrator.py reads SCALING_PLAN_LADDER directly" in v for v in violations)
 
 
 def test_guard_passes_on_well_formed_temp(tmp_path, monkeypatch):

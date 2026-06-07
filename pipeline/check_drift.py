@@ -7766,6 +7766,81 @@ def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
     return violations
 
 
+def check_topstep_scaling_ladder_is_canonical(project_root: Path | None = None) -> list[str]:
+    """Fail if TopStep XFA lot caps are re-encoded outside the canonical ladder."""
+    root = project_root if project_root is not None else PROJECT_ROOT
+    violations: list[str] = []
+
+    if root == PROJECT_ROOT:
+        try:
+            from trading_app.prop_profiles import get_account_tier
+            from trading_app.topstep_scaling_plan import (
+                MICRO_CONTRACTS_PER_MINI,
+                SCALING_PLAN_LADDER,
+                SCALING_PLAN_LOTS,
+                top_of_ladder_lots_for_xfa,
+                top_of_ladder_micros_for_xfa,
+                valid_xfa_account_sizes,
+            )
+        except Exception as e:
+            return [f"  cannot import TopStep scaling-plan canonical surfaces: {e}"]
+
+        if SCALING_PLAN_LADDER != SCALING_PLAN_LOTS:
+            violations.append("  SCALING_PLAN_LADDER compatibility alias diverges from SCALING_PLAN_LOTS.")
+
+        for account_size in valid_xfa_account_sizes():
+            tier = get_account_tier("topstep", account_size)
+            expected_lots = top_of_ladder_lots_for_xfa(account_size)
+            expected_micros = top_of_ladder_micros_for_xfa(account_size)
+            if tier.max_contracts_mini != expected_lots:
+                violations.append(
+                    f"  TopStep {account_size // 1000}K tier max_contracts_mini="
+                    f"{tier.max_contracts_mini} but canonical top ladder lots={expected_lots}."
+                )
+            if tier.max_contracts_micro != expected_micros:
+                violations.append(
+                    f"  TopStep {account_size // 1000}K tier max_contracts_micro="
+                    f"{tier.max_contracts_micro} but canonical top ladder micros={expected_micros}."
+                )
+            if expected_micros != expected_lots * MICRO_CONTRACTS_PER_MINI:
+                violations.append(
+                    f"  TopStep {account_size // 1000}K canonical micro conversion is inconsistent: "
+                    f"{expected_lots} lots -> {expected_micros} micros."
+                )
+
+    prop_profiles_path = root / "trading_app" / "prop_profiles.py"
+    try:
+        prop_profiles_src = prop_profiles_path.read_text(encoding="utf-8")
+    except OSError as e:
+        violations.append(f"  cannot read trading_app/prop_profiles.py: {e}")
+    else:
+        literal_tier_patterns = (
+            'PropFirmAccount("topstep", 50_000, 2_000, 5, 50)',
+            'PropFirmAccount("topstep", 100_000, 3_000, 10, 100)',
+            'PropFirmAccount("topstep", 150_000, 4_500, 15, 150)',
+        )
+        for pattern in literal_tier_patterns:
+            if pattern in prop_profiles_src:
+                violations.append(
+                    "  prop_profiles.py hardcodes a TopStep top-of-ladder PropFirmAccount "
+                    f"literal ({pattern}); derive it from trading_app.topstep_scaling_plan."
+                )
+
+    orchestrator_path = root / "trading_app" / "live" / "session_orchestrator.py"
+    try:
+        orchestrator_src = orchestrator_path.read_text(encoding="utf-8")
+    except OSError as e:
+        violations.append(f"  cannot read trading_app/live/session_orchestrator.py: {e}")
+    else:
+        if "SCALING_PLAN_LADDER" in orchestrator_src:
+            violations.append(
+                "  session_orchestrator.py reads SCALING_PLAN_LADDER directly; "
+                "use valid_xfa_account_sizes() so production consumers do not depend on raw ladder shape."
+            )
+
+    return violations
+
+
 def check_active_profiles_survival_state_current(con=None) -> list[str]:  # noqa: ARG001
     """Row 05 (overnight capital audit): every ACTIVE prop profile must carry a
     CURRENT, PASSING Criterion-11 account-survival proof.
@@ -16670,6 +16745,12 @@ CHECKS = [
         "Prop contract caps must not leak into self_funded sizing (margin-guard marker present)",
         check_prop_caps_do_not_leak_into_self_funded,
         False,  # blocking — a prop cap silently bounding personal-capital earnings is a silent failure
+        False,
+    ),
+    (
+        "TopStep scaling-plan lot ladder is canonical (no profile/live re-encoding)",
+        check_topstep_scaling_ladder_is_canonical,
+        False,  # blocking — duplicated prop cap ladders silently desync survival/live sizing
         False,
     ),
     (

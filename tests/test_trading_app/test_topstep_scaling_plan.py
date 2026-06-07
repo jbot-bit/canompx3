@@ -12,11 +12,16 @@ from enum import Enum
 import pytest
 
 from trading_app.topstep_scaling_plan import (
+    MICRO_CONTRACTS_PER_MINI,
     SCALING_PLAN_LADDER,
+    SCALING_PLAN_LOTS,
     lots_for_position,
     max_lots_for_xfa,
     micros_to_mini_equivalent,
+    top_of_ladder_lots_for_xfa,
+    top_of_ladder_micros_for_xfa,
     total_open_lots,
+    valid_xfa_account_sizes,
 )
 
 # ─── Ladder integrity ───────────────────────────────────────────────────
@@ -26,19 +31,30 @@ class TestLadderIntegrity:
     """Verify the canonical ladder values match the official PNG."""
 
     def test_ladder_has_three_tiers(self):
-        assert set(SCALING_PLAN_LADDER.keys()) == {50_000, 100_000, 150_000}
+        assert set(SCALING_PLAN_LOTS.keys()) == {50_000, 100_000, 150_000}
+        assert valid_xfa_account_sizes() == (50_000, 100_000, 150_000)
+        assert SCALING_PLAN_LADDER == SCALING_PLAN_LOTS
 
     def test_ladder_50k_canonical(self):
-        ladder = SCALING_PLAN_LADDER[50_000]
-        assert ladder == [(0.0, 2), (1500.0, 3), (2000.0, 5)]
+        ladder = SCALING_PLAN_LOTS[50_000]
+        assert ladder == ((0.0, 2), (1500.0, 3), (2000.0, 5))
 
     def test_ladder_100k_canonical(self):
-        ladder = SCALING_PLAN_LADDER[100_000]
-        assert ladder == [(0.0, 3), (1500.0, 4), (2000.0, 5), (3000.0, 10)]
+        ladder = SCALING_PLAN_LOTS[100_000]
+        assert ladder == ((0.0, 3), (1500.0, 4), (2000.0, 5), (3000.0, 10))
 
     def test_ladder_150k_canonical(self):
-        ladder = SCALING_PLAN_LADDER[150_000]
-        assert ladder == [(0.0, 3), (1500.0, 4), (2000.0, 5), (3000.0, 10), (4500.0, 15)]
+        ladder = SCALING_PLAN_LOTS[150_000]
+        assert ladder == ((0.0, 3), (1500.0, 4), (2000.0, 5), (3000.0, 10), (4500.0, 15))
+
+    def test_top_of_ladder_helpers(self):
+        assert MICRO_CONTRACTS_PER_MINI == 10
+        assert top_of_ladder_lots_for_xfa(50_000) == 5
+        assert top_of_ladder_lots_for_xfa(100_000) == 10
+        assert top_of_ladder_lots_for_xfa(150_000) == 15
+        assert top_of_ladder_micros_for_xfa(50_000) == 50
+        assert top_of_ladder_micros_for_xfa(100_000) == 100
+        assert top_of_ladder_micros_for_xfa(150_000) == 150
 
 
 # ─── max_lots_for_xfa ───────────────────────────────────────────────────
@@ -113,6 +129,27 @@ class TestMaxLotsForXfaErrors:
 
 
 # ─── micros_to_mini_equivalent ──────────────────────────────────────────
+
+
+class TestPortfolioProfileCapResolver:
+    def test_topstep_xfa_resolves_through_ladder_but_preserves_cap1(self):
+        from types import SimpleNamespace
+
+        from trading_app.portfolio import resolve_profile_max_contracts
+
+        profile = SimpleNamespace(firm="topstep", is_express_funded=True, account_size=50_000)
+        assert resolve_profile_max_contracts(profile, topstep_xfa_eod_balance=0.0) == 1
+        assert resolve_profile_max_contracts(profile, topstep_xfa_eod_balance=2_000.0) == 1
+
+    def test_non_topstep_and_missing_balance_stay_at_deployed_cap1(self):
+        from types import SimpleNamespace
+
+        from trading_app.portfolio import resolve_profile_max_contracts
+
+        topstep_profile = SimpleNamespace(firm="topstep", is_express_funded=True, account_size=50_000)
+        other_profile = SimpleNamespace(firm="tradeify", is_express_funded=True, account_size=50_000)
+        assert resolve_profile_max_contracts(topstep_profile) == 1
+        assert resolve_profile_max_contracts(other_profile, topstep_xfa_eod_balance=2_000.0) == 1
 
 
 class TestMicrosToMini:

@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, NamedTuple
 
+from trading_app.topstep_scaling_plan import top_of_ladder_lots_for_xfa, top_of_ladder_micros_for_xfa
+
 # =========================================================================
 # Data structures
 # =========================================================================
@@ -562,8 +564,9 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     # @verbatim "$50K account: $2,000 / $100K account: $3,000 / $150K account: $4,500"
     #
     # IMPORTANT: max_contracts_mini/max_contracts_micro below are TOP-OF-LADDER
-    # (max scaling tier reached after sufficient EOD profit). They are NOT day-1 limits.
-    # Day-1 enforcement is pending — see audit finding F-1 (BLOCKER).
+    # (max scaling tier reached after sufficient EOD profit), derived from the
+    # canonical balance-gated ladder in trading_app.topstep_scaling_plan. They are
+    # NOT day-1 limits.
     # @canonical-source docs/research-input/topstep/topstep_scaling_plan_article.md  (article 8284223, scraped 2026-04-08)
     # @canonical-image docs/research-input/topstep/images/xfa_scaling_chart.png  (visually parsed canonical ladder)
     # @audit-finding F-1 (Stage 7 fix pending — trading_app/topstep_scaling_plan.py)
@@ -576,9 +579,27 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     #            $150K accounts. Regardless of account size, if the tradable balance
     #            reaches $10,000 or below, the Daily Loss Limit will be set to $2,000."
     # @audit-finding F-3 DEFERRED (no LFA today; blocker at LFA-promotion time)
-    ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50),
-    ("topstep", 100_000): PropFirmAccount("topstep", 100_000, 3_000, 10, 100),
-    ("topstep", 150_000): PropFirmAccount("topstep", 150_000, 4_500, 15, 150),
+    ("topstep", 50_000): PropFirmAccount(
+        "topstep",
+        50_000,
+        2_000,
+        top_of_ladder_lots_for_xfa(50_000),
+        top_of_ladder_micros_for_xfa(50_000),
+    ),
+    ("topstep", 100_000): PropFirmAccount(
+        "topstep",
+        100_000,
+        3_000,
+        top_of_ladder_lots_for_xfa(100_000),
+        top_of_ladder_micros_for_xfa(100_000),
+    ),
+    ("topstep", 150_000): PropFirmAccount(
+        "topstep",
+        150_000,
+        4_500,
+        top_of_ladder_lots_for_xfa(150_000),
+        top_of_ladder_micros_for_xfa(150_000),
+    ),
     # MFFU Rapid (intraday trailing sim, EOD live). 90/10 split. Official: article 13134709.
     # Contract caps are the SIM-FUNDED ladder (the sim account is what the survival model
     # and book-builder reason about), VERBATIM from the per-size Rapid Sim Funded articles

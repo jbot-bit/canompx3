@@ -84,13 +84,14 @@ def _resolve_topstep_xfa_account_size(prof) -> int | None:
         return None
     if not getattr(prof, "is_express_funded", False):
         return None
-    from trading_app.topstep_scaling_plan import SCALING_PLAN_LADDER
+    from trading_app.topstep_scaling_plan import valid_xfa_account_sizes
 
     account_size = prof.account_size
-    if account_size not in SCALING_PLAN_LADDER:
+    valid_sizes = valid_xfa_account_sizes()
+    if account_size not in valid_sizes:
         raise RuntimeError(
             f"FAIL-CLOSED: TopStep XFA profile has unknown account_size={account_size}. "
-            f"Valid XFA sizes: {sorted(SCALING_PLAN_LADDER.keys())}"
+            f"Valid XFA sizes: {list(valid_sizes)}"
         )
     return account_size
 
