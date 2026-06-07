@@ -1,6 +1,12 @@
 # Hook runtime state
 .claude/hooks/.data-first-state.json
 
+# Mutation testing (cosmic-ray session sqlite/config) + Hypothesis example DB —
+# ephemeral; must never reach a commit or a peer worktree. cosmic-ray mutates
+# in-place, so there is no `mutants/` source-copy tree to ignore.
+.mutation/
+.hypothesis/
+
 # Scratch per-chapter text extracts from OCR'd PDFs (regenerable; canonical is the PDF)
 .tmp_chapters/
 
