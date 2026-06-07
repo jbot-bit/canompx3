@@ -1,3 +1,10 @@
+---
+status: active
+owner: cross-tool
+last_reviewed: 2026-06-07
+superseded_by: ""
+---
+
 # D-3 Sizing-Seam Close — Stage 1 (DESIGN / SPEC)
 
 **Date:** 2026-06-07

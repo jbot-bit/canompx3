@@ -1,3 +1,10 @@
+---
+status: active
+owner: cross-tool
+last_reviewed: 2026-06-07
+superseded_by: ""
+---
+
 # D-3 Sizing-Seam Stage 1 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +15,7 @@
 
 **Tech Stack:** Python, duckdb (read-only gold.db), pytest. Canonical modules: `trading_app/account_survival.py`, `trading_app/portfolio.py` (sizer), `trading_app/topstep_scaling_plan.py` (`max_lots_for_xfa`), `trading_app/paper_trader.py` (`_get_median_atr_20`).
 
-**Source spec (audited 4×):** `docs/superpowers/specs/2026-06-07-d3-sizing-seam-stage1-design.md`
+**Source spec (audited 4×):** `docs/plans/active/2026-06/2026-06-07-d3-sizing-seam-stage1-design.md`
 
 > **CAPITAL-PATH DISCIPLINE:** This modifies `trading_app/account_survival.py`, a canonical capital-survival gate. Every task is TDD (RED first). NEVER raise `max_contracts`. NEVER arm. After each task run drift (`python -u pipeline/check_drift.py --fast --quiet --skip-crg-advisory`). Commit per task.
 
