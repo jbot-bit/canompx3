@@ -1002,40 +1002,44 @@ def _max_observed_rolling_drawdown(scenarios: list[DailyScenario], *, horizon_da
     return round(max_dd, 2)
 
 
-def _assert_single_micro_sizing(profile_id: str) -> tuple[bool, str]:
-    """D-3 sizing-parity guard for Criterion 11 (capital review C, 2026-06-06).
+def _assert_sizing_parity(profile_id: str) -> tuple[bool, str]:
+    """D-3 sizing-parity guard for Criterion 11 (D-3 seam Stage 1, 2026-06-07).
 
-    The C11 survival model hardcodes 1 micro contract per lane
-    (``_build_rules`` -> ``contracts_per_trade_micro=1``; ``_load_lane_trade_paths``
-    -> ``contracts_per_trade = 1``). The LIVE execution engine sizes contracts
-    from equity/risk/volatility and clamps to ``PortfolioStrategy.max_contracts``.
-    Today every lane is built with ``max_contracts == 1`` so the two agree, but
-    the instant the clamp is lifted the survival proof silently understates
-    drawdown (a 2-contract lane ~doubles realised DD against an unchanged budget).
+    The survival sim now sizes each trade like the LIVE execution engine
+    (vol-scaled off equity/risk/volatility, clamped to ``max_contracts`` — see
+    ``_load_lane_trade_paths`` + ``SizingContext``). It therefore no longer needs
+    to FORBID ``max_contracts > 1``: the honest sim fails the operational gate at
+    unsafe size on its own (measured 2026-06-07: ``operational_pass_prob`` drops
+    0.99 -> 0.10 at cap=2). The old forbid-cap>1 handcuff is gone.
 
-    This guard binds the gate to the live sizing intent: build the same profile
-    portfolio the live path uses and require every strategy to size exactly one
-    micro. Returns ``(ok, message)``; ``ok=False`` must fail the C11 gate closed.
-    Any builder error also fails closed (we cannot prove parity).
+    The guard's remaining, narrower job is to prove the sim CAN size like the
+    engine: the profile portfolio builds, and the equity that feeds the sizer is
+    positive. It fails CLOSED only when parity is UNPROVABLE:
+      * ``build_profile_portfolio`` raises (cannot construct the live sizing inputs), or
+      * ``account_equity <= 0`` — express-funded XFA accounts present
+        ``starting_balance == 0.0``; a $0-equity DD projection zeros the sizer and
+        would yield a FALSE PASS. (The sizer reads the Portfolio NOTIONAL equity,
+        never ``starting_balance`` — see ``SizingContext``.)
+
+    Returns ``(ok, message)``; ``ok=False`` must fail the C11 gate closed.
     """
     try:
         portfolio = build_profile_portfolio(profile_id=profile_id)
     except Exception as e:  # fail closed — cannot prove sizing parity
         return (False, f"sizing-parity unprovable: build_profile_portfolio failed: {e}")
 
-    offenders = [
-        f"{s.strategy_id}(max_contracts={s.max_contracts})"
-        for s in portfolio.strategies
-        if getattr(s, "max_contracts", 1) != 1
-    ]
-    if offenders:
+    if portfolio.account_equity <= 0:
         return (
             False,
-            "D-3 sizing parity VIOLATED: C11 models 1 micro/lane but live "
-            f"max_contracts > 1 for {', '.join(offenders)}. Scale the survival DD "
-            "math or keep max_contracts == 1 before passing C11.",
+            "D-3 sizing parity FAILED: portfolio account_equity="
+            f"{portfolio.account_equity} <= 0 would zero the sizer and project "
+            "DD=$0 (a false PASS).",
         )
-    return (True, f"sizing parity OK ({len(portfolio.strategies)} lanes @ 1 micro)")
+    return (
+        True,
+        f"sizing parity OK ({len(portfolio.strategies)} lanes; "
+        f"equity={portfolio.account_equity})",
+    )
 
 
 def evaluate_profile_survival(
@@ -1069,10 +1073,11 @@ def evaluate_profile_survival(
         len(historical_daily_loss_breach_days) == 0
         and historical_max_observed_90d_dd_dollars <= effective_dd_budget_dollars
     )
-    # D-3 sizing-parity guard (capital review C): the survival DD math models
-    # 1 micro/lane; if the live portfolio would size any lane above 1 micro the
-    # proof is invalid. Fail the gate closed rather than pass a stale DD figure.
-    sizing_parity_ok, sizing_parity_msg = _assert_single_micro_sizing(resolved_profile_id)
+    # D-3 sizing-parity guard (seam Stage 1): the survival sim now sizes like the
+    # live engine (vol-scaled, capped). Fail the gate closed only when parity is
+    # unprovable — the portfolio can't be built or its equity is non-positive (a
+    # $0-equity express account would zero the sizer and project DD=$0 = false PASS).
+    sizing_parity_ok, sizing_parity_msg = _assert_sizing_parity(resolved_profile_id)
     if not sizing_parity_ok:
         log.warning("Criterion 11 sizing-parity guard: %s", sizing_parity_msg)
     gate_pass = operational_gate_pass and strict_account_gate_pass and sizing_parity_ok
