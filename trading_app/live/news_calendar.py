@@ -28,7 +28,17 @@ US_SESSION_LABELS = (
     "COMEX_SETTLE", "NYSE_CLOSE",
 )
 FEED_THISWEEK = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+# Rationale: an event is flagged "near" a session if it lands within 60 min
+# before the ORB window opens. One hour is the standard pre-event positioning
+# window — it spans the typical 30-60 min build-up of volatility/liquidity
+# ahead of a high-impact print, while staying short enough that an event an
+# hour out is genuinely relevant to the upcoming session (not next-session
+# noise). Awareness-only threshold; never gates entry/sizing.
 NEAR_WINDOW_MIN = 60
+# Rationale: fire the operator heads-up alert at most 15 min before the event.
+# 15 min is the conventional "final prep" lead — long enough to read the alert
+# and check exposure before the print, short enough to avoid premature alerts
+# that the operator forgets by event time. Awareness-only; never gates capital.
 PRE_ALERT_MIN = 15
 
 
