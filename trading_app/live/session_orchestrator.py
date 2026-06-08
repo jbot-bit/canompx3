@@ -752,6 +752,11 @@ class SessionOrchestrator:
         from trading_app.live.session_safety_state import SessionSafetyState
 
         self._safety_state = SessionSafetyState(self.portfolio.name, instrument)
+        # Expire a kill switch left over from a prior, now-closed trading day.
+        # Same-day (crash-restart) kill switches are preserved — see
+        # SessionSafetyState.expire_stale_kill_switch for the safety rationale.
+        # Mirrors the daily-P&L day-gate below (only restore when day matches).
+        self._safety_state.expire_stale_kill_switch(str(self.trading_day))
         self._kill_switch_fired = self._safety_state.kill_switch_fired
         self._notifications_broken = False  # set by self-test
         self._bar_count = 0  # total bars received this session
