@@ -1550,6 +1550,40 @@ def main() -> None:
         shadow_account_ids=shadow_account_ids,
     )
 
+    # Clean-teardown signal handlers (F1). Route OS stop signals into the same
+    # `finally` teardown below so the dashboard child + instance lock + journal
+    # are cleaned up even when the operator does NOT use Ctrl+C. Without this,
+    # SIGTERM (`taskkill`) and Windows Ctrl+Break skip the finally → orphaned
+    # dashboard subprocess holding port 8080 ("stray command" on next launch).
+    #
+    # Grounded in CPython docs: asyncio's loop.add_signal_handler is Unix-only
+    # (Proactor loop raises NotImplementedError on Windows), so we use the
+    # synchronous signal.signal handler, which is portable. The handler does the
+    # MINIMAL safe thing — raise KeyboardInterrupt — which propagates out of
+    # asyncio.run() and into the `finally`, reusing the proven teardown path.
+    #
+    # IMPORTANT — this is teardown, NOT flatten. ProjectX brackets are
+    # server-side (docs/reference/PROJECTX_API_REFERENCE.md:171-176): an open
+    # position keeps its stop/target at the broker after this process exits. We
+    # deliberately do NOT close positions on a stop signal; we only release
+    # our-side state. The Stage-3 restart guard is the backstop against a
+    # hard-kill (taskkill /F) that no in-process handler can intercept.
+    def _request_teardown(signum, _frame):  # pragma: no cover - exercised via signal
+        log.warning("Received signal %s — initiating clean teardown (position left on broker bracket)", signum)
+        raise KeyboardInterrupt
+
+    import signal as _signal
+
+    _teardown_signals = [_signal.SIGINT, _signal.SIGTERM]
+    if hasattr(_signal, "SIGBREAK"):  # Windows Ctrl+Break
+        _teardown_signals.append(_signal.SIGBREAK)
+    for _sig in _teardown_signals:
+        try:
+            _signal.signal(_sig, _request_teardown)
+        except (ValueError, OSError) as e:
+            # ValueError: not main thread; OSError: signal unsupported on platform.
+            log.warning("Could not register handler for signal %s (non-fatal): %s", _sig, e)
+
     try:
         asyncio.run(session.run())
     finally:
@@ -1583,6 +1617,17 @@ def main() -> None:
                     _dashboard_proc.kill()
                 except Exception:
                     pass
+            # Symmetric cleanup: clear the dashboard PID file so the next launch
+            # has nothing stale to reap. (On an unclean [X]-close this finally is
+            # skipped and the file persists — that is exactly when the next
+            # launch's _reap_orphan_dashboard needs it, so this clear is correct
+            # only on the clean path.)
+            try:
+                from trading_app.live.bot_dashboard import _DASHBOARD_PID_FILE
+
+                _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
