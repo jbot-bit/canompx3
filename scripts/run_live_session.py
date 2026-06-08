@@ -222,6 +222,18 @@ class CheckResult:
     message: str  # printed inline after "[i/N] <name>... "
 
 
+def _check_message_is_warning(message: str) -> bool:
+    """Return True when a passing preflight check is advisory, not clean.
+
+    The dashboard parser treats printed ``WARN*`` and ``SKIPPED`` checks as
+    warnings and blocks live launches under strict-zero-warn parity. The CLI
+    preflight path must use the same token contract so direct live launches
+    cannot pass on a merely non-failing advisory.
+    """
+    token = message.strip().split(maxsplit=1)[0].rstrip(":").upper() if message.strip() else ""
+    return token.startswith("WARN") or token == "SKIPPED"
+
+
 # Type alias for a check function. Each check reads/mutates ctx and returns
 # a CheckResult. The runner enforces ordering and counts via len(checks).
 CheckFn = Callable[[PreflightContext], CheckResult]
@@ -883,6 +895,7 @@ def _run_preflight(
     requested_account_id: int | None = None,
     signal_only: bool = False,
     requested_copies: int = 0,
+    strict_zero_warn: bool = False,
 ) -> bool:
     """Pre-flight validation. Returns True if all checks pass.
 
@@ -909,6 +922,7 @@ def _run_preflight(
 
     checks_total = len(PREFLIGHT_CHECKS)
     checks_passed = 0
+    checks_warned = 0
 
     # First check is auth — header includes broker name. Other checks use
     # the function's own __doc__ (first-line title). The original output
@@ -926,16 +940,22 @@ def _run_preflight(
         print(result.message)
         if result.passed:
             checks_passed += 1
+            if _check_message_is_warning(result.message):
+                checks_warned += 1
 
     print(f"\nPreflight: {checks_passed}/{checks_total} passed")
+    if checks_warned:
+        print(f"Preflight warnings: {checks_warned}")
     if checks_passed == checks_total:
-        if not ctx.components_all_pass:
+        if strict_zero_warn and checks_warned:
+            print("STRICT-ZERO-WARN: blocked because passing preflight still has WARN/SKIPPED checks.\n")
+        elif not ctx.components_all_pass:
             print("All checks passed, but component warnings present. Review above.\n")
         else:
             print("All clear — ready to trade.\n")
     else:
         print("FIX FAILURES before starting a live session.\n")
-    return checks_passed == checks_total
+    return checks_passed == checks_total and not (strict_zero_warn and checks_warned)
 
 
 def _select_primary_and_shadow_accounts(
@@ -1083,6 +1103,13 @@ def main() -> None:
         help="Run pre-flight checks (auth, portfolio, daily_features, contract) then exit — no trading",
     )
     parser.add_argument(
+        "--strict-zero-warn",
+        action="store_true",
+        default=False,
+        help="With --preflight, return non-zero if any passing check reports WARN or SKIPPED. "
+        + "Used by real-money launchers to match dashboard live strictness.",
+    )
+    parser.add_argument(
         "--auto-confirm",
         action="store_true",
         default=False,
@@ -1213,6 +1240,7 @@ def main() -> None:
                     requested_account_id=args.account_id,
                     signal_only=args.signal_only,
                     requested_copies=args.copies,
+                    strict_zero_warn=args.strict_zero_warn,
                 )
                 if not ok:
                     all_ok = False
@@ -1227,6 +1255,7 @@ def main() -> None:
                 requested_account_id=args.account_id,
                 signal_only=args.signal_only,
                 requested_copies=args.copies,
+                strict_zero_warn=args.strict_zero_warn,
             )
             sys.exit(0 if ok else 1)
 

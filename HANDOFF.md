@@ -115,13 +115,18 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
-- **Date:** 2026-06-06
-- **Commit:** 84f1ba3f — feat(START_BOT): add live/demo mode arg so operator arms live from the front-end launcher
-- **Files changed:** 3 files
+- **Tool:** Codex
+- **Date:** 2026-06-07
+- **Commit:** current commit — fix(start-bot): reapply strict direct-live gate on current main
+- **Files changed:** 8 files
+  - `HANDOFF.md`
   - `START_BOT.bat`
-  - `docs/plans/2026-06-05-c11-stage1-stage2-design.md`
-  - `docs/research-input/topstep/topstep_payout_economics_2026-06-06.md`
+  - `scripts/run_live_session.py`
+  - `tests/test_scripts/test_run_live_session_preflight.py`
+  - `tests/test_tools/test_codex_launcher_scripts.py`
+  - `tests/test_trading_app/test_bot_dashboard.py`
+  - `trading_app/live/bot_dashboard.py`
+  - `trading_app/live/instance_lock.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
@@ -200,3 +205,10 @@
 - Expanded `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md` from a conservative tiering memo into a supersonic implementation blueprint with explicit latency targets: docs-only p50 <1s/p95 <3s, small Python p50 <3s/p95 <8s, pipeline/trading p50 <8s/p95 <20s, push p50 <90s/p95 <4min.
 - Added concrete architecture: hot-path hook classifier, typed drift registry, staged drift modes, timing ledgers, staged-only Ruff/compile, test impact map, DB truth lanes, and parallel pre-push runner.
 - Added staged roadmap and first patch set that should produce immediate UX wins before any heavyweight drift check is moved: hook activation repair, staged Ruff/compile, docs-only hot path, serial pre-push gate, drift metadata substrate, then scoped whale checks.
+
+## 2026-06-07 Codex update — stale START_BOT live fix audit/reapply
+
+- Audited stale commit `607efa5` against the only available current-main base in this checkout, `f141317` (no `main`/`origin/main` ref or remote exists here).
+- Verdicts: direct `START_BOT.bat live` control-refresh + strict preflight fix STILL_VALID; `run_live_session --strict-zero-warn` STILL_VALID; dashboard live preflight parity/status mapping STILL_VALID; launcher/backend regression tests STILL_VALID; `instance_lock.py` Ruff B007 cleanup STILL_VALID; old handoff metadata SUPERSEDED by this entry.
+- Reapplied only those valid code/test changes cleanly on `f141317` after resetting off the stale commit.
+- Known environment blocker remains: canonical `/workspace/canompx3/gold.db` is absent, so DB-backed drift/integrity and pre-commit trade-window sync cannot complete in this WSL checkout.

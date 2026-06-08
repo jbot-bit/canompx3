@@ -147,6 +147,23 @@ def test_start_bot_is_signal_only_dashboard_entrypoint() -> None:
     start_bot = (root / "START_BOT.bat").read_text(encoding="utf-8")
 
     assert "set BOT_MODE_FLAGS=--signal-only" in start_bot
-    assert "set BOT_MODE_FLAGS=--demo" not in start_bot
     assert "--source START_BOT.bat --copies 1 --instrument MNQ" in start_bot
     assert not (root / "START_LIVE_PILOT.bat").exists()
+
+
+def test_start_bot_live_direct_launch_runs_blocking_preflight_first() -> None:
+    root = Path(__file__).resolve().parents[2]
+    start_bot = (root / "START_BOT.bat").read_text(encoding="utf-8")
+
+    control_refresh = start_bot.index("Refreshing LIVE control state")
+    live_preflight = start_bot.index("Running LIVE strict preflight")
+    live_launch = start_bot.index("echo [4/5] Launching orchestrator")
+    command_launch = start_bot.index('start "ORB Orchestrator')
+
+    assert control_refresh < live_preflight < live_launch < command_launch
+    assert "set BOT_ROUTE_FLAGS=--instrument MNQ --copies 1" in start_bot
+    assert "-m scripts.tools.refresh_control_state --profile %ACTIVE_PROFILE%" in start_bot
+    assert "--profile %ACTIVE_PROFILE% %BOT_ROUTE_FLAGS% --live --preflight --strict-zero-warn" in start_bot
+    assert start_bot.count("if errorlevel 1") >= 2
+    assert "exit /b 1" in start_bot
+    assert "--profile %ACTIVE_PROFILE% %BOT_ROUTE_FLAGS% %BOT_MODE_FLAGS%" in start_bot

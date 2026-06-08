@@ -742,6 +742,7 @@ def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, obj
         cmd.append("--signal-only")
     elif mode == "live":
         cmd.append("--live")
+        cmd.append("--strict-zero-warn")
         cmd.extend(_live_pilot_cli_args(profile))
     result = subprocess.run(
         cmd,
@@ -754,7 +755,7 @@ def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, obj
     output = result.stdout + result.stderr
     parsed = _parse_preflight_output(output)
     status = "pass" if result.returncode == 0 else "fail"
-    if status == "pass" and bool(parsed.get("has_warnings")):
+    if bool(parsed.get("has_warnings")) and not bool(parsed.get("has_failures")):
         status = "warn"
     cache_entry = {
         "status": status,

@@ -53,10 +53,12 @@ set ACTIVE_PROFILE=topstep_50k_mnq_auto
 ::                               the full 14-gate preflight + CONFIRM before any
 ::                               order; --live arms capital.
 set BOT_MODE_FLAGS=--signal-only
+set BOT_ROUTE_FLAGS=
 if /i "%~1"=="signal" set BOT_MODE_FLAGS=--signal-only
 if /i "%~1"=="demo"   set BOT_MODE_FLAGS=--demo
 if /i "%~1"=="live"   set BOT_MODE_FLAGS=--live
 if /i "%~1"=="--live" set BOT_MODE_FLAGS=--live
+if /i "%BOT_MODE_FLAGS%"=="--live" set BOT_ROUTE_FLAGS=--instrument MNQ --copies 1
 
 :: Step 1: Clean up stale lock + stop files (don't kill python — other terminals may be running)
 ::   The .stop file triggers graceful-shutdown on the next feed scan; a stale one
@@ -86,10 +88,32 @@ echo [3/5] Checking data freshness...
 .venv\Scripts\python.exe -c "from pipeline.paths import GOLD_DB_PATH; import duckdb; con=duckdb.connect(str(GOLD_DB_PATH),read_only=True); r=con.execute('SELECT MAX(trading_day) FROM daily_features WHERE orb_minutes=5').fetchone(); print(f'  Latest daily_features: {r[0]}'); con.close()" 2>nul
 echo.
 
+:: Step 4a: For direct LIVE launches, run the same blocking preflight before
+:: the orchestrator process is started. Dashboard starts already do this in
+:: bot_dashboard.py; this closes the START_BOT.bat direct-live bypass.
+if /i "%BOT_MODE_FLAGS%"=="--live" (
+    echo [4/5] Refreshing LIVE control state: profile=%ACTIVE_PROFILE%
+    .venv\Scripts\python.exe -m scripts.tools.refresh_control_state --profile %ACTIVE_PROFILE%
+    if errorlevel 1 (
+        echo.
+        echo [BLOCKED] LIVE control-state refresh failed. Fix failures above before launching real-money orders.
+        pause
+        exit /b 1
+    )
+    echo [4/5] Running LIVE strict preflight: profile=%ACTIVE_PROFILE% %BOT_ROUTE_FLAGS%
+    .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_ROUTE_FLAGS% --live --preflight --strict-zero-warn
+    if errorlevel 1 (
+        echo.
+        echo [BLOCKED] LIVE preflight failed. Fix failures above before launching real-money orders.
+        pause
+        exit /b 1
+    )
+)
+
 :: Step 4: Launch orchestrator (trading engine) in a separate console window.
 :: This is the process that connects to the broker, watches bars, evaluates entries,
 :: and writes bot_state.json. Without it the dashboard reads stale state.
-echo [4/5] Launching orchestrator: profile=%ACTIVE_PROFILE% %BOT_MODE_FLAGS%
+echo [4/5] Launching orchestrator: profile=%ACTIVE_PROFILE% %BOT_MODE_FLAGS% %BOT_ROUTE_FLAGS%
 :: Suppress the orchestrator's own dashboard spawn — this bat opens the dashboard
 :: directly on line 78. Without this env var, two dashboards + two browser tabs
 :: open and race for live_journal.db (fails preflight check 6).
@@ -99,7 +123,7 @@ echo [4/5] Launching orchestrator: profile=%ACTIVE_PROFILE% %BOT_MODE_FLAGS%
 :: would hang on input() and never arm. The typed CONFIRM is the human gate.
 set WIN_STATE=/min
 if /i "%BOT_MODE_FLAGS%"=="--live" set WIN_STATE=
-start "ORB Orchestrator (%ACTIVE_PROFILE%)" %WIN_STATE% cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS%"
+start "ORB Orchestrator (%ACTIVE_PROFILE%)" %WIN_STATE% cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_ROUTE_FLAGS% %BOT_MODE_FLAGS%"
 
 :: Step 5: Launch dashboard + open browser in this (main) console.
 :: This console auto-minimises ~3s after launch (line ~107). To stop the

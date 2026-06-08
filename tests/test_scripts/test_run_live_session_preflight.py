@@ -125,6 +125,27 @@ def stub_telemetry_mature(monkeypatch, tmp_path):
 # ---------- LOAD-BEARING tests for the LOW-1 close-out ----------
 
 
+def test_strict_zero_warn_blocks_passing_advisory_check(monkeypatch, capsys):
+    """Direct real-money preflight must match dashboard strict-zero-warn semantics.
+
+    A check that returns passed=True but prints SKIPPED/WARN is not clean enough
+    for live launch. Non-strict preflight remains advisory for signal/demo paths.
+    """
+
+    def skipped_check(_ctx):
+        return rls.CheckResult(True, "SKIPPED (advisory gap)")
+
+    skipped_check.__doc__ = "Injected skipped advisory"
+    monkeypatch.setattr(rls, "PREFLIGHT_CHECKS", [skipped_check])
+
+    assert rls._run_preflight("MNQ", "topstep", demo=False, strict_zero_warn=False) is True
+    assert rls._run_preflight("MNQ", "topstep", demo=False, strict_zero_warn=True) is False
+
+    out = capsys.readouterr().out
+    assert "Preflight warnings: 1" in out
+    assert "STRICT-ZERO-WARN" in out
+
+
 def test_checks_total_equals_len_checks(
     monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature, stub_capital_state_ok
 ):
@@ -730,7 +751,7 @@ def test_repo_drift_gate_blocks_dirty_live_repo(monkeypatch):
     ctx = rls.PreflightContext(instrument="MNQ", broker_name="topstep", demo=False, portfolio=None)
     result = rls._check_repo_drift_for_live(ctx)
     assert result.passed is False
-    assert "repo dirty" in result.message
+    assert "CODE/config drift" in result.message
 
 
 def test_repo_drift_gate_blocks_ahead_live_repo(monkeypatch):
