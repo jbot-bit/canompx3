@@ -855,6 +855,100 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
     ),
     # =========================================================================
+    # REGIME prop forward-test — zero-evidence, express-funded only
+    #
+    # Stage: docs/runtime/stages/regime-prop-test-wiring.md (operator-approved
+    # 2026-06-08). Wires 6 REGIME-tier (validated sample 30-99) lanes onto a
+    # dedicated express profile to gather FORWARD evidence on a funded wrapper —
+    # a DELIBERATE override of the "never REGIME standalone" doctrine, taken
+    # eyes-open because the express-funded wrapper insulates real personal
+    # capital (the firm absorbs DD). NOT a research validation; a paid live probe.
+    #
+    # Default-OFF via active=False (the binding code-level arm gate:
+    # resolve_profile_id(active_only=True) RAISES while inactive, so the operator
+    # cannot arm this until they deliberately flip active=True). Per-lane dashboard
+    # toggling (lane_ctl / /api/lane-control/toggle) is available once active.
+    #
+    # Slate (from docs/runtime/regime_shadow_universe.yaml, all FIT):
+    #   3 MNQ COMEX_SETTLE ORB_VOL_16K (strongest pool, val_N 81-90)
+    #   3 MGC LONDON_METALS ORB_VOL_8K_O30 (near-CORE, roll_N 78-99)
+    # The thin MES CME_PRECLOSE N=16 lane was DROPPED (operator, 2026-06-08) as
+    # the genuine small-sample risk in the slate.
+    #
+    # max_orb_size_pts = canonical P90 from compute_orb_size_stats (gold.db,
+    # 2026-06-08), via lane_allocator.lane_cap_for — NOT a hand-rolled formula:
+    #   (MNQ, COMEX_SETTLE, 5)   avg 29.0 / P90 50.1 -> cap 50.1
+    #   (MGC, LONDON_METALS, 30) avg 13.8 / P90 25.8 -> cap 25.8
+    # Per-(instrument, session, aperture): lanes differing only by RR/entry-model
+    # share the cap (orb_size measures the ORB range, independent of RR target).
+    # Worst-case all-lose at 1ct: MNQ 50.1*$2*3 + MGC 25.8*$10*3 = $300.6 + $774
+    # = ~$1,075 < $2,000 MLL. A None cap = NO size guard on capital
+    # (account_survival.py:439, session_orchestrator.py:395) — every lane caps.
+    # =========================================================================
+    "topstep_50k_regime_test": AccountProfile(
+        profile_id="topstep_50k_regime_test",
+        is_express_funded=True,  # Topstep XFA — funded wrapper insulates real capital
+        firm="topstep",
+        account_size=50_000,
+        copies=1,
+        stop_multiplier=0.75,
+        max_slots=6,
+        active=False,  # DEFAULT-OFF — operator flips active=True to arm (see header)
+        allowed_sessions=frozenset({"COMEX_SETTLE", "LONDON_METALS"}),
+        allowed_instruments=frozenset({"MNQ", "MGC"}),
+        daily_lanes=(
+            # --- MNQ COMEX_SETTLE ORB_VOL_16K (cap P90 = 50.1pts) ---
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=50.1,
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_16K",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=50.1,
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR2.5_CB1_ORB_VOL_16K",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=50.1,
+            ),
+            # --- MGC LONDON_METALS ORB_VOL_8K_O30 (cap P90 = 25.8pts) ---
+            DailyLaneSpec(
+                "MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30",
+                "MGC",
+                "LONDON_METALS",
+                max_orb_size_pts=25.8,
+            ),
+            DailyLaneSpec(
+                "MGC_LONDON_METALS_E2_RR1.5_CB1_ORB_VOL_8K_O30",
+                "MGC",
+                "LONDON_METALS",
+                max_orb_size_pts=25.8,
+            ),
+            DailyLaneSpec(
+                "MGC_LONDON_METALS_E1_RR1.5_CB1_ORB_VOL_8K_O30",
+                "MGC",
+                "LONDON_METALS",
+                max_orb_size_pts=25.8,
+            ),
+        ),
+        payout_policy_id="topstep_express_standard",
+        notes=(
+            "REGIME forward-test (zero-evidence, express-funded only). 6 lanes: "
+            "3 MNQ COMEX_SETTLE ORB_VOL_16K + 3 MGC LONDON_METALS ORB_VOL_8K_O30, "
+            "all REGIME-tier (validated sample 30-99). DELIBERATE override of "
+            "'never REGIME standalone' — operator-approved 2026-06-08, eyes-open, "
+            "funded wrapper absorbs DD. Ships active=False (default-OFF arm gate). "
+            "Caps = canonical P90 from compute_orb_size_stats (2026-06-08). "
+            "MES N=16 lane dropped as small-sample risk. NOT research-validated — "
+            "a paid forward probe. Stage: regime-prop-test-wiring.md."
+        ),
+    ),
+    # =========================================================================
     # Phase 2c: Full auto-scaling — TYPE-A (TopStep) and TYPE-B (Tradeify)
     #
     # TYPE-A sessions: US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, CME_REOPEN,
