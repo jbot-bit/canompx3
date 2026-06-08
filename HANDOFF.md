@@ -172,26 +172,13 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Codex (WSL)
-- **Date:** 2026-06-07
-- **Commit:** current commit — fix(codex): enforce Claude parity routing
-- **Files changed:** 16 files
-  - `.agents/skills/README.md`
-  - `.agents/skills/canompx3-claude-parity/SKILL.md`
-  - `.codex/AGENTS.md`
-  - `.codex/COMMANDS.md`
-  - `.codex/HOOKS.md`
-  - `.codex/RULES.md`
-  - `.codex/WORKFLOWS.md`
-  - `.codex/hooks/session_start.py`
-  - `.codex/hooks/user_prompt_submit_grounding.py`
-  - `.codex/skills/README.md`
-  - `.codex/skills/canompx3-claude-parity/SKILL.md`
-  - `.codex/skills/canompx3-claude-parity/agents/openai.yaml`
+- **Tool:** Claude Code
+- **Date:** 2026-06-08
+- **Commit:** 6c98eb9b — fix(live): F1b run()-start dedup re-seed after trading-day correction (Stage 3)
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `scripts/infra/codex_local_env.py`
-  - `scripts/infra/codex_parity.py`
-  - ... and 1 more
+  - `tests/test_trading_app/test_session_orchestrator_runstart_dedup.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
