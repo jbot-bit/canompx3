@@ -4,6 +4,22 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 
 ## High-Value Commands
 
+- Full Claude command parity source:
+  - `.claude/commands/audit-code.md`
+  - `.claude/commands/check.md`
+  - `.claude/commands/cherry-pick.md`
+  - `.claude/commands/crg-blast.md`
+  - `.claude/commands/crg-context.md`
+  - `.claude/commands/crg-deadcode.md`
+  - `.claude/commands/crg-lineage.md`
+  - `.claude/commands/crg-search.md`
+  - `.claude/commands/crg-tests.md`
+  - `.claude/commands/crg-visualize.md`
+  - `.claude/commands/discover-edge.md`
+  - `.claude/commands/highrisk-review.md`
+  - `.claude/commands/nogo.md`
+  - `.claude/commands/promote-queue.md`
+  - `.claude/commands/verify-finding.md`
 - `/resource` or `/lit`: local grounding truth. Run
   `python scripts/tools/check_pdf_tooling.py` and
   `python scripts/tools/check_literature_coverage.py`, read
@@ -35,6 +51,8 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 - `verify-done/SKILL.md`: done-definition enforcement (or dispatch `.claude/agents/verify-complete.md`)
 - `audit/SKILL.md`: audit flows (full, quick, phase)
 - `ralph/SKILL.md`: autonomous Ralph loop entrypoint
+- Missing or fuzzy Claude command intent: use `canompx3-claude-parity`, then
+  read the matching `.claude/commands/*.md` file as the source recipe.
 
 ## Codex-Native CLI Shortcuts
 

@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 import subprocess
@@ -28,6 +29,16 @@ def test_pre_commit_ruff_prefers_wsl_venv_before_windows_ruff_on_posix_shells():
     assert "SCRIPT_DIR/.venv/Scripts/ruff.exe" in text
     assert text.index("SCRIPT_DIR/.venv-wsl/bin/ruff") < text.index("SCRIPT_DIR/.venv/Scripts/ruff.exe")
     assert "POSIX/WSL pre-commit selected Windows ruff" in text
+
+
+def test_pre_commit_blocks_mixed_staged_unstaged_python_before_ruff():
+    text = (ROOT / ".githooks" / "pre-commit").read_text(encoding="utf-8")
+
+    assert "MIXED_STAGED_PY" in text
+    assert "staged Python file(s) also have unstaged working-tree changes" in text
+    assert 'git diff --quiet -- "$staged_file"' in text
+    assert text.index("MIXED_STAGED_PY") < text.index('_stage "[1/8] Ruff lint..."')
+    assert text.index("MIXED_STAGED_PY") < text.index('_stage "[8/8] Syntax check..."')
 
 
 def test_pre_commit_drift_skips_advisory_but_keeps_crg_marker():
@@ -80,7 +91,19 @@ def test_post_commit_prefers_wsl_venv_before_windows_venv_on_posix_shells():
 #     it. These catch a `case`-ordering bug (e.g. *.md matching before docs/audit/*)
 #     that a text assertion never would. This is the load-bearing safety test.
 
-_BASH = shutil.which("bash")
+
+def _find_bash() -> str | None:
+    for candidate in (
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+        shutil.which("bash"),
+    ):
+        if candidate and Path(candidate).exists():
+            return candidate
+    return None
+
+
+_BASH = _find_bash()
 
 
 def test_pre_commit_drift_gate_markers_present():
@@ -120,11 +143,14 @@ def _classify(path: str) -> str:
     m = re.search(r"^_drift_path_is_docs_safe\(\) \{\n.*?^\}\n", hook, re.DOTALL | re.MULTILINE)
     assert m, "could not extract _drift_path_is_docs_safe from pre-commit"
     func = m.group(0)
-    script = func + '\nif _drift_path_is_docs_safe "$1"; then echo SAFE; else echo FULL; fi\n'
+    script = func + '\nif _drift_path_is_docs_safe "$CLASSIFY_PATH"; then echo SAFE; else echo FULL; fi\n'
+    env = os.environ.copy()
+    env["CLASSIFY_PATH"] = path
     proc = subprocess.run(
-        [_BASH, "-c", script, "_", path],
+        [_BASH, "-c", script],
         capture_output=True,
         text=True,
+        env=env,
     )
     return proc.stdout.strip()
 

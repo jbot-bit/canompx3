@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -899,6 +899,32 @@ def test_criterion11_fingerprint_paths_all_exist():
 
     for p in _criterion11_code_paths():
         assert p.exists(), f"fingerprint path does not exist: {p}"
+
+
+# ── Fork #2 (2026-06-07 capital review): the PROFILE fingerprint must change ──
+# when a survival-verdict config field changes, or a cached PASS goes stale
+# silently. These two fields are read by the survival sim
+# (effective_strict_dd_budget reads self_imposed_dd_dollars; _build_rules reads
+# daily_loss_dollars) but were absent from build_profile_fingerprint.
+def test_profile_fingerprint_changes_on_self_imposed_dd_dollars():
+    base = get_profile("self_funded_tradovate")
+    assert base.self_imposed_dd_dollars == 3_000.0  # guard the fixture
+    mutated = replace(base, self_imposed_dd_dollars=6_000.0)
+    assert _build_profile_fingerprint(base) != _build_profile_fingerprint(mutated), (
+        "loosening self_imposed_dd_dollars (3k→6k) must invalidate the profile "
+        "fingerprint — it changes the self-funded survival DD budget"
+    )
+
+
+def test_profile_fingerprint_changes_on_daily_loss_dollars():
+    # Find any live profile with a daily_loss_dollars set, else inject one.
+    base = get_profile("self_funded_tradovate")
+    a = replace(base, daily_loss_dollars=450.0)
+    b = replace(base, daily_loss_dollars=900.0)
+    assert _build_profile_fingerprint(a) != _build_profile_fingerprint(b), (
+        "changing daily_loss_dollars must invalidate the profile fingerprint — "
+        "it changes the sim's daily-loss circuit breaker"
+    )
 
 
 # ── Capital fix C — D-3 sizing parity: C11 DD models 1 micro; live sizes from ──

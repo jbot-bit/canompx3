@@ -497,6 +497,27 @@ def run_doctor(platform: str) -> None:
     else:
         checks.append(_doctor_status("Session preflight", "FAIL", f"missing {preflight_detail}"))
 
+    try:
+        from scripts.infra import codex_parity
+
+        parity_report = codex_parity.check_parity(ROOT)
+    except Exception as exc:
+        checks.append(_doctor_status("Codex Claude parity", "WARN", f"could not run parity check: {exc}"))
+    else:
+        missing_refs = parity_report.get("missing_refs", {})
+        missing_files = parity_report.get("missing_files", [])
+        ref_count = sum(len(paths) for paths in missing_refs.values()) if isinstance(missing_refs, dict) else 0
+        file_count = len(missing_files) if isinstance(missing_files, list) else 0
+        checks.append(
+            _doctor_status(
+                "Codex Claude parity",
+                "PASS" if parity_report["ok"] else "WARN",
+                "all Claude command/rule/agent/skill/hook sources indexed"
+                if parity_report["ok"]
+                else f"{file_count} missing file(s), {ref_count} missing Claude reference(s)",
+            )
+        )
+
     worktrees = capture_command(["git", "worktree", "list"], env=env)
     worktree_detail = worktrees.stdout.strip().splitlines()
     checks.append(

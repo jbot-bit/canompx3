@@ -35,7 +35,7 @@ from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.live.alert_engine import read_operator_alerts, summarize_operator_alerts
 from trading_app.live.bot_state import read_live_health, read_state
-from trading_app.live.instance_lock import is_pid_alive
+from trading_app.live.instance_lock import is_lock_file_active_or_ambiguous
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +67,8 @@ HANDOFF_STALE_AFTER_S = 1800
 LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto"
 LIVE_PILOT_INSTRUMENT = "MNQ"
 LIVE_PILOT_COPIES = 1
+# Dashboard live launches must match the explicit-account CLI preflight.
+LIVE_PILOT_ACCOUNT_ID = 21944866
 
 
 def _as_mapping(value: object) -> dict[str, object]:
@@ -95,23 +97,26 @@ def _as_float(value: object, default: float = 0.0) -> float:
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Startup: clean stale locks/state. Shutdown: terminate child processes."""
+    """Startup: classify locks and clean stale state. Shutdown: terminate child processes."""
     # ── Startup ──
     lock_dir = Path(tempfile.gettempdir()) / "canompx3"
     if lock_dir.exists():
         for lock_file in lock_dir.glob("bot_*.lock"):
             try:
-                content = lock_file.read_text(encoding="utf-8").strip()
-                pid = int(content) if content else None
-                if pid and is_pid_alive(pid):
-                    log.info("Startup: keeping live lock %s (PID %d)", lock_file.name, pid)
-                    continue
-                lock_file.unlink()
-                log.info("Startup: removed stale lock %s", lock_file.name)
-            except ValueError:
-                lock_file.unlink(missing_ok=True)
+                active, pid, reason = is_lock_file_active_or_ambiguous(lock_file)
+                if active:
+                    if pid is not None:
+                        log.info("Startup: keeping live lock %s (PID %d)", lock_file.name, pid)
+                    else:
+                        log.warning(
+                            "Startup: keeping ambiguous lock %s (%s); live bot may be between lock and PID write",
+                            lock_file.name,
+                            reason,
+                        )
+                else:
+                    log.info("Startup: leaving stale lock %s for live acquire cleanup", lock_file.name)
             except Exception:
-                pass
+                log.warning("Startup: unable to classify lock %s; leaving it in place", lock_file.name)
 
     from trading_app.live.bot_state import STATE_FILE, clear_state
 
@@ -527,15 +532,9 @@ def _instance_lock_status() -> dict[str, object]:
     if not lock_dir.exists():
         return {"locked": False, "locks": active}
     for lock_file in lock_dir.glob("bot_*.lock"):
-        try:
-            content = lock_file.read_text(encoding="utf-8").strip()
-            pid = int(content) if content else None
-        except (OSError, ValueError):
-            pid = None
-        if pid and is_pid_alive(pid):
-            active.append({"path": str(lock_file), "pid": pid})
-        elif pid is None:
-            active.append({"path": str(lock_file), "pid": None})
+        locked, pid, reason = is_lock_file_active_or_ambiguous(lock_file)
+        if locked:
+            active.append({"path": str(lock_file), "pid": pid, "reason": reason})
     return {"locked": bool(active), "locks": active}
 
 
@@ -741,7 +740,14 @@ def _live_pilot_cli_args(profile: str) -> list[str]:
     """Return server-side live pilot routing args for the funded MNQ pilot."""
     if profile != LIVE_PILOT_PROFILE:
         return []
-    return ["--instrument", LIVE_PILOT_INSTRUMENT, "--copies", str(LIVE_PILOT_COPIES)]
+    return [
+        "--instrument",
+        LIVE_PILOT_INSTRUMENT,
+        "--copies",
+        str(LIVE_PILOT_COPIES),
+        "--account-id",
+        str(LIVE_PILOT_ACCOUNT_ID),
+    ]
 
 
 def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, object]:
@@ -2608,6 +2614,67 @@ async def api_alerts(limit: int = 25, profile: str | None = None, mode: str | No
     return {"alerts": alerts, "summary": summarize_operator_alerts(alerts)}
 
 
+# News-awareness runtime state (display + heads-up alert only — never an
+# entry/filter/sizing input). Atomic-write, fail-open ledgers under data/runtime.
+NEWS_CACHE_PATH = PROJECT_ROOT / "data" / "runtime" / "news_calendar_cache.json"
+NEWS_FIRED_PATH = PROJECT_ROOT / "data" / "runtime" / "news_fired.json"
+_NEWS_CACHE_TTL_S = 3600
+
+
+def _build_news_payload() -> dict[str, object]:
+    """Blocking: fetch (cached) calendar + map to the panel payload, then emit
+    any due heads-up alerts through the canonical operator-alert path.
+
+    Runs inside asyncio.to_thread (urllib fetch + file I/O block). Fail-open:
+    any error -> empty payload so the endpoint never 500s and the panel just
+    shows an empty state. AWARENESS-ONLY — touches no capital/entry path.
+    """
+    from trading_app.live import news_calendar as nc
+
+    raw, source = nc.fetch_calendar(cache_path=str(NEWS_CACHE_PATH), ttl_s=_NEWS_CACHE_TTL_S, with_source=True)
+    payload = nc.news_payload(raw, source=source)
+    _maybe_fire_news_alerts(nc, raw)
+    return payload
+
+
+def _maybe_fire_news_alerts(nc, raw_events) -> None:
+    """Fire-once heads-up alert (<=15 min before an in/near-session event) via
+    the canonical record_operator_alert path. Persists the fired ledger so the
+    same event never re-alerts across dashboard restarts. Fail-open."""
+    try:
+        from trading_app.live.alert_engine import record_operator_alert
+
+        events = nc.relevant_events(raw_events, session_only=True)
+        fired = nc.load_fired(str(NEWS_FIRED_PATH))
+        due, fired = nc.due_alerts(events, fired=fired)
+        for ev in due:
+            hm = ev["when_bris"].strftime("%H:%M")
+            record_operator_alert(
+                message=f"NEWS HEADS-UP: {ev['title']} @ {ev['session']} {hm} Bris",
+                source="news",
+            )
+        if due:
+            nc.save_fired(str(NEWS_FIRED_PATH), fired)
+    except Exception:
+        logging.getLogger(__name__).warning("news heads-up alert emit failed", exc_info=True)
+
+
+@app.get("/api/news")
+async def api_news():
+    """High-impact USD economic-news awareness for the dashboard panel.
+
+    Display + heads-up alert only — never an entry/filter/sizing input. Wraps
+    news_calendar.news_payload(fetch_calendar(...)); blocking I/O offloaded to a
+    thread (house idiom). Fail-open to an empty payload — never raises a 500."""
+    import asyncio
+
+    try:
+        return await asyncio.to_thread(_build_news_payload)
+    except Exception:
+        logging.getLogger(__name__).warning("/api/news failed; serving empty payload", exc_info=True)
+        return {"events": [], "source": "faireconomy", "fetched_at": ""}
+
+
 @app.get("/api/data-status")
 async def api_data_status():
     """Data freshness for all active instruments."""
@@ -3756,6 +3823,106 @@ def run_dashboard(host: str = "127.0.0.1", port: int = PORT) -> None:
     uvicorn.run(app, host=host, port=port, log_level="warning", workers=1)
 
 
+_DASHBOARD_PID_FILE = Path(tempfile.gettempdir()) / "canompx3" / "bot_dashboard.pid"
+
+
+def _canonical_pid_is_alive(pid: int, expected_create_time: int | None) -> bool:
+    """Liveness via the project's ONE canonical oracle.
+
+    Per the institutional rule (`scripts/tools/fleet_state.py`, restated in
+    `reap_stale_claude_processes._pid_is_alive`): do NOT add a third liveness
+    oracle. Resolve ONLY via `worktree_guard._pid_is_alive`, which carries the
+    load-bearing Windows path (OpenProcess/STILL_ACTIVE) AND a create-time
+    PID-reuse defense that a bare OpenProcess check lacks — so a recycled PID is
+    not mistaken for the orphan. Guarded import: if the oracle is unavailable,
+    return False (treat as not-our-orphan) so we never taskkill an innocent
+    recycled PID on a guess.
+    """
+    try:
+        from scripts.tools import worktree_guard as _wg
+
+        return _wg._pid_is_alive(pid, expected_create_time=expected_create_time)
+    except Exception:
+        return False
+
+
+def _reap_orphan_dashboard() -> None:
+    """Terminate a dashboard subprocess orphaned by a prior window-[X] close.
+
+    When START_BOT is closed with the window [X] (Windows CTRL_CLOSE_EVENT)
+    instead of Ctrl+C, the orchestrator's teardown `finally`
+    (run_live_session.py:1555) is skipped, so the dashboard child is never
+    terminated — it keeps holding port 8080. The next launch would then spawn a
+    SECOND dashboard that fails to bind (uvicorn errors into DEVNULL silently).
+    This sweep, run before each launch, reclaims that orphan first.
+
+    Self-healing belt for the one teardown path Python cannot intercept on
+    Windows. Fail-open: any error leaves the launch to proceed (a stale orphan
+    is a nuisance, not a capital risk — this never touches positions/brokers).
+
+    Conventions reused (NOT reinvented):
+      - liveness: canonical `worktree_guard._pid_is_alive` with create-time
+        PID-reuse defense (the project's single oracle, via
+        _canonical_pid_is_alive).
+      - kill: `taskkill /F /PID` (Windows) / `os.kill(pid, 9)` (Unix) — the same
+        mechanism as `reap_stale_claude_processes._kill`.
+
+    The PID file stores ``pid:create_time`` so the reuse defense actually
+    engages (a recycled PID whose create-time differs is treated as dead).
+    """
+    try:
+        if not _DASHBOARD_PID_FILE.exists():
+            return
+        text = _DASHBOARD_PID_FILE.read_text(encoding="utf-8").strip()
+        if not text:
+            _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+            return
+        pid_part, _, ct_part = text.partition(":")
+        try:
+            pid = int(pid_part)
+        except ValueError:
+            _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+            return
+        try:
+            expected_create_time: int | None = int(ct_part) if ct_part else None
+        except ValueError:
+            expected_create_time = None
+        if pid == os.getpid() or not _canonical_pid_is_alive(pid, expected_create_time):
+            _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+            return
+        # A live process owns the recorded PID (and matches its create-time) —
+        # it is the orphan dashboard.
+        log.warning("Reaping orphan dashboard subprocess (PID %d) from a prior unclean close", pid)
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        else:
+            os.kill(pid, 9)
+        _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+    except Exception as e:  # noqa: BLE001 — fail-open by design (nuisance, not capital)
+        log.warning("Orphan-dashboard reap skipped (non-fatal): %s", e)
+
+
+def _record_dashboard_pid(pid: int) -> None:
+    """Write ``pid:create_time`` so the next launch's reap can defend against
+    PID reuse. create_time is best-effort (None → bare-PID liveness fallback)."""
+    create_time: int | None = None
+    if sys.platform == "win32":
+        try:
+            from scripts.tools.worktree_guard import _get_process_create_time_windows
+
+            create_time = _get_process_create_time_windows(pid)
+        except Exception:
+            create_time = None
+    payload = f"{pid}:{create_time}" if create_time is not None else str(pid)
+    _DASHBOARD_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _DASHBOARD_PID_FILE.write_text(payload, encoding="utf-8")
+
+
 def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
     """Launch dashboard as a background subprocess (Windows-safe).
 
@@ -3769,7 +3936,12 @@ def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
     (run_live_session.py:937). Auto-opening here was producing a redundant
     second browser tab when the launcher path also opened one. See
     docs/runtime/stages/2026-05-26-start-bot-double-dashboard-bug.md.
+
+    Before launching, sweeps any dashboard orphaned by a prior window-[X] close
+    (see _reap_orphan_dashboard) so we never stack a second dashboard on port
+    8080 — the "stray command" symptom of an unclean shutdown.
     """
+    _reap_orphan_dashboard()
     try:
         proc = subprocess.Popen(
             [sys.executable, "-m", "trading_app.live.bot_dashboard", "--port", str(port)],
@@ -3778,6 +3950,10 @@ def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
             stderr=subprocess.DEVNULL,
         )
         log.info("Bot dashboard launched as subprocess (PID %d) at http://localhost:%d", proc.pid, port)
+        try:
+            _record_dashboard_pid(proc.pid)
+        except OSError as e:
+            log.warning("Could not record dashboard PID file (non-fatal): %s", e)
     except Exception as e:
         log.warning("Dashboard subprocess launch failed: %s", e)
         return None

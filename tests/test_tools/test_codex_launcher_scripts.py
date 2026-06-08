@@ -146,7 +146,25 @@ def test_start_bot_is_signal_only_dashboard_entrypoint() -> None:
     root = Path(__file__).resolve().parents[2]
     start_bot = (root / "START_BOT.bat").read_text(encoding="utf-8")
 
-    assert "set BOT_MODE_FLAGS=--signal-only" in start_bot
-    assert "set BOT_MODE_FLAGS=--demo" not in start_bot
+    # Safety invariant (the real thing to protect): the DEFAULT mode is
+    # signal-only — a bare launch with no positional arg never arms capital.
+    # The default-assignment must precede any demo/live override.
+    default_idx = start_bot.index("set BOT_MODE_FLAGS=--signal-only")
+    assert default_idx >= 0
+
+    # demo/live modes exist (84f1ba3f — front-end arming) but are gated behind an
+    # EXPLICIT positional arg (`%~1`), not the default. Assert that gating, rather
+    # than forbidding the strings outright (which broke when the feature landed).
+    for marker in ('if /i "%~1"=="demo"', 'if /i "%~1"=="live"'):
+        assert marker in start_bot, f"expected mode arg gated behind explicit %~1: {marker}"
+        assert start_bot.index(marker) > default_idx, "default signal-only must precede mode overrides"
+
+    # No naked `set BOT_MODE_FLAGS=--demo`/`--live` assignment outside the %~1 gate
+    # (those would change the default and arm capital on a bare launch).
+    for line in start_bot.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("set BOT_MODE_FLAGS=") and ("--demo" in stripped or "--live" in stripped):
+            raise AssertionError(f"ungated capital-mode default assignment: {stripped!r}")
+
     assert "--source START_BOT.bat --copies 1 --instrument MNQ" in start_bot
     assert not (root / "START_LIVE_PILOT.bat").exists()

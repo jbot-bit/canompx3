@@ -22,6 +22,11 @@ Inline — no subagent fan-out (cost discipline). Auto-loaded rules are already 
 - Unsupported claims: code/comment/commit assertions with no grounding; metadata trusted as evidence.
 - Edge cases: simulate happy path, an edge (empty/sparse), and the failure mode.
 - Blast radius: callers, importers, companion tests, canonical-source coupling.
+- Future-proofing: hardening gaps and assumptions that break on the next instrument / session / schema / format bump; unhandled scale or drift.
+
+## Anti-bias discipline (no exceptions)
+
+No invented stats, no narrative injection, no confirmation bias toward the framing you were handed. Never patch a downstream symptom to mask an upstream defect — trace to the canonical source and fix it there (Source-of-Truth Chain Rule). A summary or prior claim is evidence to falsify, not a fact to repeat.
 
 ## Output contract (verbatim — these 6 sections)
 

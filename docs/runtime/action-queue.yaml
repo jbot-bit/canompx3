@@ -1172,3 +1172,80 @@ items:
       from the live-partial loop (1-of-3) that Option W fixed — a completeness
       guard does not fix it and must not skip these days. Investigation complete;
       remediation (drift check + backfill) NOT yet implemented, awaiting GO.
+
+  - id: codex_wsl_mcp_config_audit_2026_06_07
+    title: Codex WSL-portable MCP config + fail-closed audit script
+    class: ops
+    status: open
+    priority: P3
+    close_before_new_work: false
+    owner_hint: codex
+    last_verified_at: 2026-06-07
+    freshness_sla_days: 30
+    next_action: |
+      Cherry-picked from PR #364 (OpenAI agent-ops roadmap, Item 1) — the PR's
+      523-line plan doc was NOT merged; only this concrete deliverable was kept.
+      Add Codex-scoped MCP entries in `.codex/config.toml` pointing at the
+      existing WSL runner scripts (repo-state → scripts/infra/run-repo-state-mcp.sh,
+      research-catalog → run-research-catalog-mcp.sh, strategy-lab →
+      run-strategy-lab-mcp.sh, gold-db → run-gold-db-mcp.sh). Leave `.mcp.json`
+      Windows/Claude entries alone. Add `scripts/tools/codex_mcp_config_audit.py`
+      that fails closed if: an expected MCP name is missing, a runner script is
+      missing, or a Codex WSL entry points at a `C:/Users/...` absolute path
+      (the path-drift class). Add `tests/test_tools/test_codex_mcp_config_audit.py`.
+    exit_criteria: |
+      (a) `.codex/config.toml` has the four WSL-relative MCP runner entries; AND
+      (b) `codex_mcp_config_audit.py` exists, fails closed on missing-name /
+      missing-script / Windows-absolute-path; AND (c) its test passes; AND
+      (d) check_drift.py still exits 0.
+    blocked_by: []
+    decision_refs:
+      - https://github.com/jbot-bit/canompx3/pull/364
+    evidence_refs:
+      - .claude/rules/mcp-usage.md
+      - scripts/infra/run-repo-state-mcp.sh
+    notes_ref: ""
+    override_note: |
+      Provenance: PR #364 closed without merging (2026-06-08, operator decision).
+      The roadmap doc was ~70% restatement of existing .claude/rules + skills;
+      only Items 1 (this) and 2 (eval flywheel, sibling queue item) carried novel
+      build value. Cherry-picked rather than carry the full essay as canon.
+
+  - id: codex_agent_ops_eval_flywheel_2026_06_07
+    title: Agent-ops eval flywheel — grade agent BEHAVIOR (routing/grounding/live-safety), not model IQ
+    class: ops
+    status: open
+    priority: P3
+    close_before_new_work: false
+    owner_hint: codex
+    last_verified_at: 2026-06-07
+    freshness_sla_days: 30
+    next_action: |
+      Cherry-picked from PR #364 (OpenAI agent-ops roadmap, Item 2) — PR doc NOT
+      merged. Per OpenAI model-optimization/Cookbook guidance, make evals the
+      control loop, but grade AGENT behavior not model intelligence: did the
+      agent route to the right skill, read the right files, use official docs for
+      OpenAI/Anthropic claims, respect live-safety rules, emit task stubs, and
+      persist handoff/memory when appropriate? Create
+      `docs/ai/evals/codex_agent_ops_cases.yaml` seeded with ~20 cases (startup
+      routing, read-only QA, code implementation, live-trading audit, deploy
+      readiness, research-claim review, docs/API upgrade, post-change
+      verification, PR review, memory/handoff persistence, architecture design,
+      MCP contract design, bottleneck review, security review, documentation).
+    exit_criteria: |
+      (a) `docs/ai/evals/codex_agent_ops_cases.yaml` exists with >=20 behavior
+      cases; AND (b) each case names expected-route + expected-files-read +
+      live-safety-respected as gradeable fields; AND (c) a grader can run them
+      report-only (no CI gate yet). MEDIUM effort — schedule deliberately.
+    blocked_by: []
+    decision_refs:
+      - https://github.com/jbot-bit/canompx3/pull/364
+    evidence_refs:
+      - .claude/rules/auto-skill-routing.md
+      - .claude/skills/skill-improve/SKILL.md
+    notes_ref: ""
+    override_note: |
+      Provenance: PR #364 closed without merging (2026-06-08, operator decision).
+      Sibling of codex_wsl_mcp_config_audit_2026_06_07. Higher effort than the
+      MCP-audit item (20 cases + grader) — kept as a deliberate backlog item, not
+      a quick win.

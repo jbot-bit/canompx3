@@ -33,6 +33,15 @@ def build_profile_fingerprint(profile: AccountProfile) -> str:
         "payout_policy_id": profile.payout_policy_id,
         "is_express_funded": profile.is_express_funded,
         "max_risk_per_trade": profile.max_risk_per_trade,
+        # Survival-verdict inputs: both are read by the survival sim
+        # (account_survival.effective_strict_dd_budget reads
+        # self_imposed_dd_dollars; _build_survival_rules reads
+        # daily_loss_dollars). Omitting them let an operator loosen a profile's
+        # DD budget / daily-loss breaker while a cached PASS stayed valid
+        # ("fresh-by-fingerprint, stale-by-reality"). Pinned by
+        # check_profile_fingerprint_field_coverage in pipeline/check_drift.py.
+        "self_imposed_dd_dollars": profile.self_imposed_dd_dollars,
+        "daily_loss_dollars": profile.daily_loss_dollars,
         "daily_lanes": [
             {
                 "strategy_id": lane.strategy_id,

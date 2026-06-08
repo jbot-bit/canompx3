@@ -6,6 +6,63 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Codex Session — Claude parity layer made executable (2026-06-07)
+- **Tool:** Codex.
+- **What changed:** Filled the Codex-vs-Claude capability gap without mutating Claude-owned files. Added Codex-owned parity routing for Claude commands/rules/agents/hooks/skills via `.codex/AGENTS.md`, `.codex/HOOKS.md`, and `canompx3-claude-parity` skill/wrapper. Updated `.codex/COMMANDS.md`, `.codex/RULES.md`, `.codex/WORKFLOWS.md`, and skill READMEs.
+- **Executable guard:** Added `scripts/infra/codex_parity.py` plus tests. It fails if a Claude command, rule, agent, skill, or hook source is not indexed by the Codex layer. Wired parity status into `.codex/hooks/session_start.py` and `codex_local_env.py doctor`.
+- **Prompt routing:** Codex prompt grounding now explicitly catches `edge`/discovery and `blast radius`/impact-analysis intents and points to the canonical Claude recipes.
+- **MCP truth:** Current Codex session has callable repo MCPs: `repo-state`, `gold-db`, `research-catalog`, `strategy-lab`. `repo-state.list_context_views` works; one `repo-state.get_project_pulse` smoke call returned a server-side TypeError, so use CLI `project_pulse.py` or another repo-state endpoint until that endpoint is checked. Shared `.mcp.json` also declares `code-review-graph`; user-level `codex mcp list` shows remote registrations (`openaiDeveloperDocs`, Google Workspace MCPs) but not the repo-local injected tools.
+- **Verification:** `python3 scripts/infra/codex_parity.py --format text` PASS: 15 commands, 9 agents, 35 rules, 28 skills, 38 hook/support files indexed. Focused pytest PASS: `tests/test_tools/test_codex_parity.py`, `tests/test_hooks/test_targeted_grounding_router.py`, `tests/test_tools/test_codex_local_env.py` = 58 passed. `git diff --check` PASS. Final escalated `python3 scripts/infra/codex_local_env.py doctor --platform wsl` PASS, including `Codex Claude parity`.
+- **Residual state:** Worktree intentionally dirty with Codex-owned changes. Repo remains `main...origin/main [ahead 1]` from pre-existing local state. Doctor still reports active stage bloat and a concurrent mutating claim warning; do not treat this as a clean live-readiness state.
+
+## Claude Session — Monday live-readiness: C11 disambiguated + gates refreshed → PREFLIGHT 15/15 (2026-06-07)
+- **Tool:** Claude Code. Audit (read-only) + ONE operator-approved Tier-B refresh.
+- **OUTCOME: demo preflight = 15/15 PASS** after refreshing C11/C12 control state
+  (`refresh_control_state.py --profile topstep_50k_mnq_auto --force`, operator GO):
+  C11 `valid=True gate_ok=True` (operational 100%, strict_account=PASS), C12
+  `valid=True` (3 lanes CONTINUE). The two prior FAILs were pure cache fingerprint
+  staleness from `0bbe9b5d`; refresh cleared them. NOT armed live (no `--live`).
+- **Broker has 2 accounts** (fail-closed binding requires `--account-id`):
+  `21944866` = EXPRESS-V2 (Express Funded), `23055112` = 50KTC-V2 (50K Combine).
+  Single-account live: `--profile topstep_50k_mnq_auto --live --account-id 21944866`.
+  2-account (copies): `--copies 2 --account-id <primary>` — primary + 1 shadow.
+- **⚠ COMPLIANCE GATE before any 2-account live:** official Topstep wording is
+  ambiguous — Express-Funded params sanction a copier ("$750K buying power"), but
+  Prohibited-Conduct bans "trade the same strategy simultaneously" (case-by-case).
+  Operator decision: CONFIRM with Topstep compliance BEFORE enabling `--copies 2`.
+  Single-account (`--copies 1`) is unaffected. Draft question prepared this session.
+- **Dashboard account-selection UI** (pick which accounts fire): deferred to a
+  separate `/design` session (Tier-B capital-path build; backend before frontend).
+  CLI `--copies`/`--account-id` is the mechanism until then.
+- **Sizing parity verified live:** all 3 lanes `max_contracts=1`; survival sim
+  models 1 micro/lane (`account_survival.py:426,848`) → C11 PASS not inflated.
+- **Why this block:** the "C11 NO-GO" framing below (§ C11 Secure & Hold, 2026-06-04) was
+  misleading because it never separated TWO different configurations. Resolved
+  with live computation (truth over baton title).
+- **Deployed 3-lane book `topstep_50k_mnq_auto` (COMEX_SETTLE + US_DATA_1000 +
+  TOKYO_OPEN) = C11 PASS.** Live `account_survival --no-write-state`:
+  `gate=PASS @70%`, strict observed max 90d DD = **$1,535** ≤ effective Express
+  belt **$1,800** (0.90×$2,000 MLL), `daily_loss breaches=0`,
+  `Final deployability gate=PASS`. Sizing parity verified: all 3 lanes
+  `max_contracts=1`, matching the survival sim's hardcoded 1 micro/lane
+  (`account_survival.py:426,848`). This was already true on 2026-05-30
+  (§ Previous Session line: "Canonical C11/C12 refreshed green", 95.2% op-pass).
+- **The "$2,038 NO-GO" (§ 2026-06-04) is the 80pt-ORB-cap EXPERIMENT, NOT the
+  deployed book.** Per `c11-80pt-cap-wiring.md:34,39`: the 80pt cap is "NOT in
+  the deployed lane registry… lives in analysis/memory only." Deployed US_DATA
+  lane's real `max_orb_size_pts=143.2`, not 80. Different inputs → $1,535 vs
+  $2,038. The cap-remediation research path remains separately parked/open.
+- **Live blocker today is CACHE STALENESS, not economics:** preflight `[3]` C11
+  and `[4]` C12 FAIL on "profile fingerprint mismatch" — the fingerprint-
+  completeness commit `0bbe9b5d` added `daily_loss_dollars`/`self_imposed_dd_dollars`
+  to the fingerprint, fail-closing the cached reports. Fix = refresh
+  (`scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto --force`),
+  a Tier-B capital-state write — NOT done in this audit; gated on operator GO.
+- **Demo preflight = 13/15** (only `[3]`/`[4]` fail; `[10]` telemetry WAIVED for
+  Express-Funded, `[13]` account-id WARN resolves at live via `--account-id`).
+  Live launch requires explicit `--account-id` (broker shows 2 accounts; gate
+  fail-closes on ambiguity).
+
 ## Claude Session — canompx3_autopilot_v1 reviewed, fixed, MERGED to origin/main (2026-06-05)
 - **Tool:** Claude Code
 - **What landed:** `origin/main` advanced `6dadde5b → 60edcb1b` (clean fast-forward). The full `canompx3_autopilot_v1` feature is now on main: headless self-driving task runner (`scripts/autopilot/{run_autopilot.sh,tier_guard.py,review_diff.py}`), the `completion-notify.py` autopilot Stop-block extension, docs, and `tests/test_autopilot/` (67 tests).
@@ -16,7 +73,7 @@
 
 ## Claude Session — C11 Secure & Hold (2026-06-04)
 - **Tool:** Claude Code
-- **Verdict:** `topstep_50k_mnq_auto` C11 is a **measured capital NO-GO. Live NOT armed.**
+- **Verdict:** `topstep_50k_mnq_auto` C11 is a **measured capital NO-GO. Live NOT armed.** ⚠ **SCOPE CORRECTION (2026-06-07, see top block):** this NO-GO is the **80pt-ORB-cap experiment**, NOT the deployed 3-lane book. The deployed book PASSES C11 ($1,535 ≤ $1,800). Do not read this line as the deployed-book verdict.
 - **What landed (`572499d6`, rebased onto peer `5dab3861`; pushed in `b0d43c0f`):** committed the stranded C11 analysis (4 audit-result docs + corrected `c11-80pt-cap-wiring.md` stage + `.gitignore` for the dry-run scratch json). Docs/config only; no production logic, no schema, no capital lever moved.
 - **The decisive math:** the ~80pt ORB cap clears C11's operational-survival (≥70%) and zero-breach-day gates, but **NOT** the drawdown-magnitude gate — strict observed 90d DD at the current 0.75 stop = **$2,038**, exceeding both the $1,600 strict budget AND the full $2,000 Topstep MLL. A *wider* stop (1.0) makes DD worse; only a **tighter** stop (≤0.50) closes the gap (cap+0.50 → $1,142). Cap is necessary, not sufficient.
 - **Path to GO (research, not "go live ASAP"):** pre-registered cap+stop≤0.50 remediation (RULE 10) → re-run `account_survival` proving BOTH C11 gates → DSR/era checks → **independent live-path audit** (incl. the bracket-risk-parity fix `9b3fc530`, whose adversarial-audit gate is still OPEN — no independent reviewer yet) → only then live arming (separate operator GO).
@@ -201,3 +258,43 @@
 - Expanded `docs/plans/active/2026-06/2026-06-04-drift-precommit-speed-audit.md` from a conservative tiering memo into a supersonic implementation blueprint with explicit latency targets: docs-only p50 <1s/p95 <3s, small Python p50 <3s/p95 <8s, pipeline/trading p50 <8s/p95 <20s, push p50 <90s/p95 <4min.
 - Added concrete architecture: hot-path hook classifier, typed drift registry, staged drift modes, timing ledgers, staged-only Ruff/compile, test impact map, DB truth lanes, and parallel pre-push runner.
 - Added staged roadmap and first patch set that should produce immediate UX wins before any heavyweight drift check is moved: hook activation repair, staged Ruff/compile, docs-only hot path, serial pre-push gate, drift metadata substrate, then scoped whale checks.
+
+## 2026-06-05 Codex update — instance-lock race hardening
+
+- Ran a capital-at-risk `/code-review` stress pass on the current instance-lock orphan recovery change and found a second-process race: an empty-but-OS-locked file could be unlinked/replaced on Unix, allowing two distinct inodes and two bot instances for one instrument.
+- Hardened `trading_app/live/instance_lock.py` so acquisition proves ownership by locking the existing file descriptor before replacing PID metadata; empty/invalid files are only overwritten after the OS lock is held.
+- Aligned observer surfaces: dashboard startup/status and `regime_shadow_runner.assert_no_live_session()` now treat empty, invalid, unreadable, or live-PID lock files as active/ambiguous instead of deleting/ignoring them.
+- Added regressions for empty locked files, ambiguous shadow-writer refusal, and dashboard active status. Targeted tests and ruff passed; `session_preflight.py` passed after setting local `core.hooksPath=.githooks` and still reported only expected dirty-tree/active-stage warnings.
+
+## 2026-06-07 Codex follow-up — instance-lock observer merge-readiness
+
+- Re-reviewed the latest instance-lock hardening work against current `origin/main` (`a5a502e6`). PR #360 was still open but GitHub reported it `CONFLICTING`; the prior claimed commit `f5a4f10` was not present after fetch. The core acquire-before-metadata-overwrite fix remains relevant, but observers still had one high-impact gap: a file could be OS-locked by a live starter while still containing a stale/dead PID, and read-only observers would classify it as stale.
+- Updated `is_lock_file_active_or_ambiguous()` to briefly probe the platform lock and report busy locks as active/ambiguous (`reason="os-locked"`) even when PID text is stale. It still releases immediately when it can acquire the observer probe lock.
+- Removed dashboard startup deletion of stale bot lock files; dashboard now leaves lock-file cleanup to the live acquire path, avoiding a delete-after-classify race.
+- Added regressions for OS-locked stale/dead-PID locks across the canonical helper, shadow writer, and dashboard status surfaces. Targeted tests (78 passed, 4 skipped), ruff, `git diff --check`, Phase 7 live audit, behavioral audit, integrity audit, `py_compile`, and `session_preflight.py` passed. `project_pulse.py --fast --format json` remained nonzero on existing Criterion 11/live-readiness fingerprint staleness and telemetry/action-queue items, not on this diff.
+
+## 2026-06-06 Codex update — workflow speed audit + pre-commit hot-path trim
+
+- Audited repo workflow/process overhead for create/design/implement/fix speed.
+- Created `docs/plans/active/2026-06/2026-06-06-workflow-speed-audit.md` with findings and a fast-path/escalation policy.
+- Trimmed `.githooks/pre-commit` hot path:
+  - computes staged path sets once;
+  - Ruff lint/format now runs only staged Python under `pipeline/`, `trading_app/`, `scripts/`, and `tests/`;
+  - validated-setups trade-window sync skips docs-only/design commits and runs only for code/runtime-data surfaces;
+  - CRG update skips when no Python is staged.
+- Safety posture preserved: drift, targeted tests, checkpoint guard, behavioral audit, claim hygiene, syntax checks, pre-push full drift, and CI remain the escalation/backstop paths.
+- Environment note: local WSL venv setup is still blocked by PyPI tunnel failure for `propcache`; `project_pulse.py` and `system_context.py` fail under ambient Python because `yaml` is unavailable.
+
+## 2026-06-06 Codex update — local-only process-debt audit pass 1
+
+- Created `docs/audits/2026-06-06-codex-process-debt-local-only.md` as a local-only pass-1 process-debt audit.
+- No code edits were made in this pass.
+- Audit follows the constraint: no remote/cloud-only artifacts, live DBs, `gold.db`, MCP outputs, secrets, dashboards, or unpushed branches assumed.
+- Key direction: Codex defaults should be repo-local and fail-closed, with DB-required evidence explicitly marked as `NEED_REMOTE_EVIDENCE` instead of inferred from local absence.
+
+## 2026-06-07 Codex update — current-state audit of pre-commit speed patch
+
+- Re-audited the prior pre-commit/process-speed patch against current HEAD `9539661`.
+- Local issue found and fixed outside tracked files: `core.hooksPath` was unset, so `.githooks/pre-commit` was not active; ran `git config core.hooksPath .githooks` and verified `system_context.py` no longer reports the hook-inactive warning.
+- Code follow-up: `.githooks/pre-commit` now blocks staged Python files with unstaged working-tree hunks before Ruff/format/syntax checks, preventing auto-format from verifying or re-staging unintended local edits.
+- Added `docs/audits/2026-06-07-precommit-hotpath-current-state-audit.md` and updated the prior process-debt/speed docs with the current-state correction.

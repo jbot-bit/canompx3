@@ -47,7 +47,9 @@ WEBHOOK_PROFILE_ID = os.environ.get("WEBHOOK_PROFILE_ID", "")
 
 # Dedup: reject identical (instrument, direction, action) within window (guards against TV double-fire)
 DEDUP_WINDOW = float(os.environ.get("WEBHOOK_DEDUP_SECONDS", "10"))
-_DEDUP_CACHE: dict[str, tuple[float, TradeResponse]] = {}  # key → (monotonic_ts, cached_response)
+_DEDUP_CACHE: dict[
+    str, tuple[float, TradeResponse | None]
+] = {}  # key → (monotonic_ts, cached_response | in-flight placeholder)
 
 # Rationale: rate limiting — max 3 orders per 60 seconds. Guards against
 # runaway TradingView alert storms (a flapping setup that fires on every bar
@@ -229,6 +231,21 @@ def _check_dedup(req: TradeRequest) -> TradeResponse | None:
     if key in _DEDUP_CACHE:
         ts, cached = _DEDUP_CACHE[key]
         if now - ts <= DEDUP_WINDOW:
+            if cached is None:
+                # In-flight placeholder: a concurrent identical request is still
+                # awaiting its order. Block this duplicate now (the TOCTOU fix) —
+                # there is no completed order to echo yet, so report in_flight.
+                log.warning("DEDUP: blocked in-flight duplicate %s", key)
+                return TradeResponse(
+                    order_id=None,
+                    status="deduplicated_in_flight",
+                    contract="",
+                    action=req.action,
+                    direction=req.direction,
+                    qty=req.qty,
+                    demo=DEMO,
+                    timestamp=datetime.now(UTC).isoformat(),
+                )
             log.warning("DEDUP: blocked duplicate %s within %.1fs", key, now - ts)
             return TradeResponse(
                 order_id=cached.order_id,
@@ -247,6 +264,49 @@ def _cache_response(req: TradeRequest, resp: TradeResponse) -> None:
     """Cache a successful response for dedup."""
     if DEDUP_WINDOW > 0:
         _DEDUP_CACHE[_dedup_key(req)] = (time.monotonic(), resp)
+
+
+def _reserve_dedup(req: TradeRequest) -> None:
+    """Place an in-flight dedup placeholder synchronously, BEFORE any await.
+
+    This closes the TOCTOU window: under asyncio the event loop can switch
+    coroutines at every await, so a dedup/limit guard whose state is only
+    written AFTER `await _place_order` lets two concurrent identical triggers
+    both pass the guard and both submit. Reserving here — in the synchronous
+    (atomic) section between the guard checks and the first await — makes the
+    second concurrent request hit the cache and dedup. Rolled back by
+    `_release_dedup` if the order never lands; overwritten with the real
+    response by `_cache_response` on success.
+    """
+    if DEDUP_WINDOW > 0:
+        _DEDUP_CACHE[_dedup_key(req)] = (time.monotonic(), None)
+
+
+def _release_dedup(req: TradeRequest) -> None:
+    """Roll back a reservation whose order failed — only if still a placeholder.
+
+    Never deletes a real cached response (cached tuple's second element is a
+    TradeResponse, not None): a later successful request for the same key must
+    keep deduping.
+    """
+    if DEDUP_WINDOW <= 0:
+        return
+    key = _dedup_key(req)
+    entry = _DEDUP_CACHE.get(key)
+    if entry is not None and entry[1] is None:
+        del _DEDUP_CACHE[key]
+
+
+def _rollback_reservation(req: TradeRequest) -> None:
+    """Undo the pre-await reservation when the order never lands.
+
+    Decrements the position counter back (entries only) and releases the
+    in-flight dedup placeholder so a legitimate retry isn't permanently
+    blocked. Counter floors at 0 (never negative).
+    """
+    if req.action == "entry":
+        _OPEN_POSITIONS[req.instrument] = max(0, _OPEN_POSITIONS.get(req.instrument, 0) - 1)
+    _release_dedup(req)
 
 
 def _check_position_limit(req: TradeRequest) -> None:
@@ -343,11 +403,22 @@ async def trade(req: TradeRequest, request: Request):
     # 5. Position limit (entry only)
     _check_position_limit(req)
 
+    # 5b. RESERVE the slot + dedup key SYNCHRONOUSLY, before any await. The
+    # event loop can switch coroutines at every `await` below, so committing
+    # cap state only after `_place_order` (steps 9-10) let two concurrent
+    # identical triggers both pass the guards above and both submit. Reserving
+    # here — in the atomic synchronous window — makes the second concurrent
+    # request dedup. Rolled back on any failure path before the order lands.
+    if req.action == "entry":
+        _OPEN_POSITIONS[req.instrument] = _OPEN_POSITIONS.get(req.instrument, 0) + 1
+    _reserve_dedup(req)
+
     # 6. Apply optional profile execution mapping, then enforce the broker-side
     # qty cap that actually reaches the router.
     try:
         execution_instrument, execution_qty = _resolve_execution_request(req.instrument, req.qty)
     except ValueError as e:
+        _rollback_reservation(req)
         raise HTTPException(status_code=400, detail=str(e)) from e
     if execution_qty > MAX_ORDER_QTY:
         log.warning(
@@ -357,6 +428,7 @@ async def trade(req: TradeRequest, request: Request):
             req.instrument,
             req.qty,
         )
+        _rollback_reservation(req)
         raise HTTPException(
             status_code=400,
             detail=f"Execution qty {execution_qty} exceeds max {MAX_ORDER_QTY}",
@@ -366,14 +438,17 @@ async def trade(req: TradeRequest, request: Request):
     try:
         contract = await loop.run_in_executor(None, _get_contract, execution_instrument)
     except Exception as e:
+        _rollback_reservation(req)
         raise HTTPException(status_code=503, detail=f"Contract resolution failed: {e}") from e
 
     # 8. Place order (synchronous HTTP in thread pool to avoid blocking event loop)
     try:
         order_id = await loop.run_in_executor(None, _place_order, req, contract, execution_qty)
     except ValueError as e:
+        _rollback_reservation(req)
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
+        _rollback_reservation(req)
         log.error("Order failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Order failed: {e}") from e
 
@@ -398,10 +473,10 @@ async def trade(req: TradeRequest, request: Request):
         timestamp=datetime.now(UTC).isoformat(),
     )
 
-    # 9. Update position tracking
-    if req.action == "entry":
-        _OPEN_POSITIONS[req.instrument] = _OPEN_POSITIONS.get(req.instrument, 0) + 1
-    elif req.action == "exit":
+    # 9. Update position tracking. Entry increment already happened at step 5b
+    # (reserve-before-await) and survived to here, so only the exit decrement
+    # remains. Double-incrementing here would re-introduce the cap overshoot.
+    if req.action == "exit":
         _OPEN_POSITIONS[req.instrument] = max(0, _OPEN_POSITIONS.get(req.instrument, 0) - 1)
 
     # 10. Cache for dedup

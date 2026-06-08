@@ -1,0 +1,8 @@
+last_reviewed:
+  base_ref: origin/main
+  base_sha: ed29aac71b0cdc3f47ae81e18c968504399e4325
+  head_sha: 97161aad7e476f72d60ac42676bcc66c6e3815f7
+  ran_at: "2026-06-06T16:15Z"
+  verdict: approve
+  note: "first-run watermark; only shipped diff was docs-only (HANDOFF.md + stage status) — no capital code, Codex not invoked (zero-token fast path per highrisk-review edge-case table)"
+findings: []

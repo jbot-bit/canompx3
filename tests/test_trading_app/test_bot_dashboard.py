@@ -6,6 +6,8 @@ from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from trading_app.live import bot_dashboard
 from trading_app.live.bot_dashboard import (
     _build_operator_payload,
@@ -769,6 +771,8 @@ def test_action_start_pins_single_copy_live_pilot_command(monkeypatch, tmp_path)
     assert "MNQ" in captured["cmd"]
     assert "--copies" in captured["cmd"]
     assert "1" in captured["cmd"]
+    assert "--account-id" in captured["cmd"]
+    assert "21944866" in captured["cmd"]
     assert "--signal-only" not in captured["cmd"]
 
     log_file = bot_dashboard._bg_processes.pop("_session_logfile", None)
@@ -1455,3 +1459,49 @@ def test_api_status_self_heals_definitely_dead_state(monkeypatch):
     assert result["mode"] == "STOPPED"  # post-clear fallback
     assert result["is_running"] is False
     assert states[0] == {}  # state was actively cleared
+
+
+def test_instance_lock_status_treats_empty_lock_as_active(tmp_path, monkeypatch):
+    """Dashboard must not dismiss empty locks; bot may be before PID write."""
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    (lock_dir / "bot_MNQ.lock").write_text("")
+    monkeypatch.setattr(bot_dashboard, "_lock_dir", lambda: lock_dir)
+
+    status = bot_dashboard._instance_lock_status()
+
+    assert status["locked"] is True
+    assert status["locks"][0]["pid"] is None
+    assert "empty lock file" in status["locks"][0]["reason"]
+
+
+def test_instance_lock_status_treats_os_locked_dead_pid_as_active(tmp_path, monkeypatch):
+    """Dashboard reports OS-locked files even if PID text is stale/dead."""
+    import os
+    import sys
+
+    if sys.platform == "win32":
+        pytest.skip("fcntl-specific lock probe")
+    import fcntl
+
+    import trading_app.live.instance_lock as il
+
+    monkeypatch.setattr(il, "is_pid_alive", lambda _pid: False)
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    lock_path = lock_dir / "bot_MNQ.lock"
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    try:
+        os.write(fd, b"999999")
+        os.fsync(fd)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        monkeypatch.setattr(bot_dashboard, "_lock_dir", lambda: lock_dir)
+
+        status = bot_dashboard._instance_lock_status()
+
+        assert status["locked"] is True
+        assert status["locks"][0]["pid"] == 999999
+        assert status["locks"][0]["reason"] == "os-locked"
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
