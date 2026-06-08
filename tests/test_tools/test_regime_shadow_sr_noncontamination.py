@@ -45,12 +45,10 @@ def _connect_ro_or_skip(reason_label: str) -> duckdb.DuckDBPyConnection:
     held write-lock to free. SKIP (never hang, never fail) if still locked —
     lock contention is an environment state, not a regression in this test."""
     deadline = time.monotonic() + _LOCK_WAIT_S
-    last_exc: Exception | None = None
     while True:
         try:
             return duckdb.connect(str(GOLD_DB_PATH), read_only=True)
         except (duckdb.IOException, duckdb.Error) as exc:  # held write-lock, etc.
-            last_exc = exc
             if time.monotonic() > deadline:
                 pytest.skip(
                     f"canonical gold.db locked by a concurrent writer "

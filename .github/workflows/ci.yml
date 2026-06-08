@@ -51,7 +51,7 @@ jobs:
         run: uv run ruff format --check pipeline/ trading_app/ scripts/ tests/
 
       - name: Ruff lint check
-        run: uv run ruff check pipeline/ trading_app/ scripts/
+        run: uv run ruff check pipeline/ trading_app/ scripts/ tests/
 
       - name: Pyright type check (356 errors as of 2026-03-14 — fix before promoting to hard gate)
         run: uv run pyright
