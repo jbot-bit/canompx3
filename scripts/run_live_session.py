@@ -222,6 +222,31 @@ class CheckResult:
     message: str  # printed inline after "[i/N] <name>... "
 
 
+def _passing_check_is_advisory(message: str) -> bool:
+    """True when a *passing* preflight check normalizes to a warning ("warn").
+
+    Reuses the CANONICAL dashboard mapping (`_normalize_check_status`) rather
+    than re-encoding the OK/WARN/SKIPPED contract. That keeps the START_BOT
+    direct-live strict-zero-warn gate in exact lockstep with the dashboard's
+    arm guard (bot_dashboard.action_start) and with the fail-closed drift check
+    `check_preflight_status_token_parity`. The status token is the first word of
+    the message (the same token `_parse_preflight_output` extracts), e.g.
+    "SKIPPED (...)" -> "SKIPPED", "WARN: ..." -> "WARN".
+
+    Import is local + fail-closed: if the dashboard mapping cannot be loaded, we
+    treat the check as advisory (return True) so strict-zero-warn errs toward
+    BLOCKING a real-money launch, never toward silently passing one.
+    """
+    token = message.strip().split(maxsplit=1)[0] if message.strip() else ""
+    if not token:
+        return False
+    try:
+        from trading_app.live.bot_dashboard import _normalize_check_status
+    except Exception:  # noqa: BLE001 — fail-closed: unknown -> advisory -> blocks
+        return True
+    return _normalize_check_status(token) == "warn"
+
+
 # Type alias for a check function. Each check reads/mutates ctx and returns
 # a CheckResult. The runner enforces ordering and counts via len(checks).
 CheckFn = Callable[[PreflightContext], CheckResult]
@@ -970,6 +995,7 @@ def _run_preflight(
     requested_account_id: int | None = None,
     signal_only: bool = False,
     requested_copies: int = 0,
+    strict_zero_warn: bool = False,
 ) -> bool:
     """Pre-flight validation. Returns True if all checks pass.
 
@@ -980,6 +1006,14 @@ def _run_preflight(
     `profile_id` and `requested_account_id` (added 2026-05-16, A.6.5) feed the
     copy-trading dry-run check. Both default to None so non-profile callers
     (raw-baseline) and existing fixtures continue to work unchanged.
+
+    `strict_zero_warn` (added 2026-06-08): for the `--preflight` exit path used
+    by real-money launchers (START_BOT.bat live), treat a passing-but-advisory
+    check (WARN/SKIPPED, classified via the canonical `_normalize_check_status`)
+    as blocking — returning False so the launcher refuses to arm. This ports the
+    dashboard arm-guard's mode=live "warn also blocks" rule to the direct-launch
+    path. It applies ONLY to real-money runs: demo and signal-only place no live
+    orders, so advisory checks stay non-blocking there (no false block).
     """
     from trading_app.live.broker_factory import get_broker_name
 
@@ -996,6 +1030,7 @@ def _run_preflight(
 
     checks_total = len(PREFLIGHT_CHECKS)
     checks_passed = 0
+    checks_warned = 0
 
     # First check is auth — header includes broker name. Other checks use
     # the function's own __doc__ (first-line title). The original output
@@ -1013,16 +1048,27 @@ def _run_preflight(
         print(result.message)
         if result.passed:
             checks_passed += 1
+            if _passing_check_is_advisory(result.message):
+                checks_warned += 1
+
+    # strict-zero-warn only bites on real-money runs. demo/signal-only place no
+    # live orders, so an advisory check stays non-blocking there (no false block
+    # of a paper/signal launch).
+    strict_block = strict_zero_warn and not demo and not ctx.signal_only and checks_warned > 0
 
     print(f"\nPreflight: {checks_passed}/{checks_total} passed")
+    if checks_warned:
+        print(f"Preflight warnings: {checks_warned}")
     if checks_passed == checks_total:
-        if not ctx.components_all_pass:
+        if strict_block:
+            print("STRICT-ZERO-WARN: blocked — passing preflight still has WARN/SKIPPED checks.\n")
+        elif not ctx.components_all_pass:
             print("All checks passed, but component warnings present. Review above.\n")
         else:
             print("All clear — ready to trade.\n")
     else:
         print("FIX FAILURES before starting a live session.\n")
-    return checks_passed == checks_total
+    return checks_passed == checks_total and not strict_block
 
 
 def _select_primary_and_shadow_accounts(
@@ -1170,6 +1216,14 @@ def main() -> None:
         help="Run pre-flight checks (auth, portfolio, daily_features, contract) then exit — no trading",
     )
     parser.add_argument(
+        "--strict-zero-warn",
+        action="store_true",
+        default=False,
+        help="With --preflight on a real-money (--live) run, exit non-zero if any passing check "
+        "is advisory (WARN/SKIPPED). Ports the dashboard's mode=live warn-blocking arm guard to "
+        "the direct-launch path (START_BOT.bat live). No effect on demo/signal-only preflight.",
+    )
+    parser.add_argument(
         "--auto-confirm",
         action="store_true",
         default=False,
@@ -1300,6 +1354,7 @@ def main() -> None:
                     requested_account_id=args.account_id,
                     signal_only=args.signal_only,
                     requested_copies=args.copies,
+                    strict_zero_warn=args.strict_zero_warn,
                 )
                 if not ok:
                     all_ok = False
@@ -1314,6 +1369,7 @@ def main() -> None:
                 requested_account_id=args.account_id,
                 signal_only=args.signal_only,
                 requested_copies=args.copies,
+                strict_zero_warn=args.strict_zero_warn,
             )
             sys.exit(0 if ok else 1)
 

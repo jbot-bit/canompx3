@@ -86,6 +86,35 @@ echo [3/5] Checking data freshness...
 .venv\Scripts\python.exe -c "from pipeline.paths import GOLD_DB_PATH; import duckdb; con=duckdb.connect(str(GOLD_DB_PATH),read_only=True); r=con.execute('SELECT MAX(trading_day) FROM daily_features WHERE orb_minutes=5').fetchone(); print(f'  Latest daily_features: {r[0]}'); con.close()" 2>nul
 echo.
 
+:: Step 3b: For a direct LIVE launch ONLY, run the SAME blocking gate the
+:: dashboard START LIVE button runs before arming real money: refresh control
+:: state, then a strict-zero-warn preflight. This closes the direct-launch
+:: bypass — without it, START_BOT.bat live skipped the dashboard's mode=live
+:: arm guard (bot_dashboard.action_start), which blocks a real-money launch on
+:: ANY advisory (WARN/SKIPPED) check. --strict-zero-warn ports that exact rule
+:: (via the canonical run_live_session preflight) to this path. Routing flags
+:: mirror _live_pilot_cli_args (MNQ, 1 copy, account 21944866). Signal/demo
+:: launches skip this block (no live orders -> advisory checks stay advisory).
+if /i "%BOT_MODE_FLAGS%"=="--live" (
+    echo [3b/5] Refreshing LIVE control state: profile=%ACTIVE_PROFILE%
+    .venv\Scripts\python.exe -m scripts.tools.refresh_control_state --profile %ACTIVE_PROFILE%
+    if errorlevel 1 (
+        echo.
+        echo [BLOCKED] LIVE control-state refresh failed. Fix failures above before real-money launch.
+        pause
+        exit /b 1
+    )
+    echo [3b/5] Running LIVE strict preflight: profile=%ACTIVE_PROFILE%
+    .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% --instrument MNQ --copies 1 --account-id 21944866 --live --preflight --strict-zero-warn
+    if errorlevel 1 (
+        echo.
+        echo [BLOCKED] LIVE preflight failed or has advisory WARN/SKIPPED checks. Fix before real-money launch.
+        pause
+        exit /b 1
+    )
+    echo.
+)
+
 :: Step 4: Launch orchestrator (trading engine) in a separate console window.
 :: This is the process that connects to the broker, watches bars, evaluates entries,
 :: and writes bot_state.json. Without it the dashboard reads stale state.

@@ -168,3 +168,27 @@ def test_start_bot_is_signal_only_dashboard_entrypoint() -> None:
 
     assert "--source START_BOT.bat --copies 1 --instrument MNQ" in start_bot
     assert not (root / "START_LIVE_PILOT.bat").exists()
+
+
+def test_start_bot_live_runs_blocking_strict_preflight_before_orchestrator() -> None:
+    """Direct `START_BOT.bat live` must run the strict-zero-warn preflight and
+    BLOCK before launching the orchestrator, closing the direct-live bypass of
+    the dashboard's mode=live warn-blocking arm guard (parity fix 2026-06-08)."""
+    root = Path(__file__).resolve().parents[2]
+    start_bot = (root / "START_BOT.bat").read_text(encoding="utf-8")
+
+    # The strict preflight invocation must exist and carry --strict-zero-warn.
+    assert "--live --preflight --strict-zero-warn" in start_bot, (
+        "live direct launch must run the strict-zero-warn preflight"
+    )
+
+    preflight_idx = start_bot.index("--live --preflight --strict-zero-warn")
+    orchestrator_idx = start_bot.index('start "ORB Orchestrator')
+    # Preflight must run BEFORE the orchestrator process is started.
+    assert preflight_idx < orchestrator_idx, "strict preflight must precede orchestrator launch"
+
+    # It must be gated to live-only (not run for signal/demo) and block on failure.
+    live_block = start_bot[:orchestrator_idx]
+    assert 'if /i "%BOT_MODE_FLAGS%"=="--live"' in live_block, "preflight must be gated to --live"
+    assert "errorlevel 1" in start_bot[preflight_idx:orchestrator_idx], "must check preflight exit code"
+    assert "exit /b 1" in start_bot[preflight_idx:orchestrator_idx], "must abort launch on preflight failure"
