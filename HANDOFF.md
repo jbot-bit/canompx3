@@ -173,13 +173,14 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-08
-- **Commit:** a652a4f1 — Harden CLI/dashboard preflight parity: LOCKED token fail-open guard
-- **Files changed:** 4 files
-  - `HANDOFF.md`
-  - `pipeline/check_drift.py`
-  - `tests/test_trading_app/test_bot_dashboard.py`
-  - `trading_app/live/bot_dashboard.py`
+- **Date:** 2026-06-09
+- **Commit:** 975fa858 — fix(live): auto-expire prior-day kill switch on launch + START_BOT mode menu (rebased onto origin/main 4c85dfe7)
+- **Files changed:** 5 files
+  - `START_BOT.bat`
+  - `docs/runtime/stages/stale-kill-switch-day-expiry.md`
+  - `tests/test_trading_app/test_session_safety_state.py`
+  - `trading_app/live/session_orchestrator.py`
+  - `trading_app/live/session_safety_state.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
