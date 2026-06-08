@@ -2624,9 +2624,18 @@ class SessionOrchestrator:
                 self._reject_execution_qty(strategy_id=event.strategy_id, strategy_qty=event.contracts, error=exc)
                 return
 
-            # Post-market buffer: block entries within 10 minutes of firm close
+            # Post-market buffer: block entries within 10 minutes of firm close.
+            # MUST be bounded BOTH sides: _minutes_to_close_et() is signed and goes
+            # NEGATIVE once the ET close hour passes (no next-day roll — by design,
+            # see _minutes_to_close_et and its :3878 consumer which relies on the
+            # negative to detect "adjusted close already passed"). Without the
+            # `0.0 <=` lower bound a post-close value like -236 satisfies
+            # `<= 10.0` and silently skips EVERY entry for the rest of the ET day
+            # — the F0★ bug that suppressed all live routing. Block only inside the
+            # real pre-close window [0, 10] (inclusive at close: 0 min → still
+            # block); a fresh overnight session (mins < 0) must be allowed to enter.
             mins_to_close = self._minutes_to_close_et()
-            if mins_to_close is not None and mins_to_close <= 10.0:
+            if mins_to_close is not None and 0.0 <= mins_to_close <= 10.0:
                 msg = f"POST-MARKET BUFFER: skipping ENTRY for {event.strategy_id} ({mins_to_close:.0f}min to close)"
                 log.warning(msg)
                 self._notify(msg)
