@@ -285,6 +285,45 @@ class TradingBook:
 
 
 # =========================================================================
+# Drawdown-per-contract math (leaf — single source of truth)
+# Relocated from prop_portfolio.py to break the portfolio<->prop_portfolio
+# import cycle (prop_profiles is a leaf both modules already import). Pure
+# DD-math; depends only on the constants below. Used by prop survival /
+# rule-compliance sizing (legitimate prop-cap path per
+# self-funded-sizing-doctrine.md — NOT a self-funded earnings cap).
+# =========================================================================
+
+DD_PER_CONTRACT_075X = 100.0  # P95 of actual per-lane DD at S0.75
+DD_PER_CONTRACT_10X = 120.0  # P95 of actual per-lane DD at S1.0
+INTRADAY_TRAILING_FACTOR = 1.4
+
+
+def _compute_dd_per_contract(
+    stop_multiplier: float,
+    dd_type: str,
+    median_risk_points: float | None = None,
+    point_value: float | None = None,
+    friction: float | None = None,
+) -> float:
+    """DD contribution per contract per lane.
+
+    If median_risk_points is provided (from experimental_strategies), computes
+    actual risk: median_risk_pts * stop_mult * point_value + friction.
+    Otherwise falls back to conservative P95 estimate.
+    """
+    if median_risk_points is not None and point_value is not None:
+        base = median_risk_points * stop_multiplier * point_value + (friction or 0)
+    elif stop_multiplier <= 0.75:
+        base = DD_PER_CONTRACT_075X
+    else:
+        base = DD_PER_CONTRACT_10X
+
+    if dd_type == "intraday_trailing":
+        return base * INTRADAY_TRAILING_FACTOR
+    return base
+
+
+# =========================================================================
 # Verified firm specs (April 2026)
 # Sources: help.topstep.com, help.tradeify.co, support.apextraderfunding.com
 # =========================================================================

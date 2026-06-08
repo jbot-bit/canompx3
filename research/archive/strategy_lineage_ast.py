@@ -201,7 +201,7 @@ def _load_allowlist(allowlist_file: Path | None) -> set[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m trading_app.strategy_lineage_ast",
+        prog="python -m research.archive.strategy_lineage_ast",
         description="Scan Python files for canonical column references (AST + regex fallback).",
     )
     parser.add_argument("--scan", type=Path, required=True, help="File or directory to scan.")

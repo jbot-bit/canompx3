@@ -659,13 +659,25 @@ def _normalize_check_status(raw_status: str) -> str:
         return "warn"
     if status == "FAILED":
         return "fail"
-    # The "info" fallback is unreachable from scripts/run_live_session.py
-    # --preflight, which emits only OK / FAILED / WARN(S) / SKIPPED (verified
-    # 2026-06-01). It exists for an unrecognized token. CAUTION: an "info" check
-    # does NOT set has_warnings, so it would NOT block a live launch under the
-    # strict-zero-warn gate in action_start. If a new preflight token is ever
-    # added, map it to "warn" or "fail" here (never leave it as "info") so it
-    # cannot silently pass a real-money launch.
+    if status == "LOCKED":
+        # run_live_session emits LOCKED (passed=False) when the live trade
+        # journal's DuckDB writer lock is held by another live process. That is
+        # a hard blocker — another session is (or was) running — so it must map
+        # to "fail", never the fail-open "info" branch below. Parity with the
+        # emitted-token vocabulary is enforced by check_preflight_status_token_parity.
+        return "fail"
+    # The "info" fallback is the FAIL-OPEN branch: an "info" check does NOT set
+    # has_warnings, so it would NOT block a live launch under the strict-zero-warn
+    # gate in action_start. run_live_session.py --preflight currently emits
+    # OK / FAILED / WARN(S) / SKIPPED / LOCKED — all mapped above. If a NEW
+    # preflight token is ever added, map it to "warn" or "fail" here (never leave
+    # it as "info") so it cannot silently pass a real-money launch. The drift
+    # check check_preflight_status_token_parity fails CLOSED on any emitted token
+    # that reaches this fallback, so a missed mapping is caught before commit
+    # rather than at a live arm. (A 2026-06-08 audit found LOCKED reaching this
+    # fallback — latent, since LOCKED checks are passed=False and the dashboard's
+    # returncode path already blocked, but the regex dropped the line and the
+    # token mapped to info; both fixed.)
     return "info"
 
 
@@ -680,7 +692,7 @@ def _parse_preflight_output(output: str) -> dict[str, object]:
         if not line:
             continue
 
-        match = re.match(r"^\[(\d+)/(\d+)\]\s+(.+?)\.\.\.\s+(OK|FAILED|WARN(?:INGS?)?|SKIPPED)\s*(.*)$", line)
+        match = re.match(r"^\[(\d+)/(\d+)\]\s+(.+?)\.\.\.\s+(OK|FAILED|WARN(?:INGS?)?|SKIPPED|LOCKED)\s*(.*)$", line)
         if match:
             _idx, total_text, name, raw_status, tail = match.groups()
             total = int(total_text)

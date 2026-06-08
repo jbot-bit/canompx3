@@ -1782,12 +1782,11 @@ class SessionOrchestrator:
         if override_trading_day is not None:
             bar_trading_day = override_trading_day
         else:
-            _bris = ZoneInfo("Australia/Brisbane")
-            bris_time = bar_ts_utc.astimezone(_bris)
-            if bris_time.hour < 9:
-                bar_trading_day = (bris_time - timedelta(days=1)).date()
-            else:
-                bar_trading_day = bris_time.date()
+            # Canonical 09:00-Brisbane boundary — single source of truth
+            # (pipeline.dst), never re-encoded inline. bar_ts_utc is aware.
+            from pipeline.dst import compute_trading_day_from_timestamp
+
+            bar_trading_day = compute_trading_day_from_timestamp(bar_ts_utc)
 
         if bar_trading_day == self.trading_day:
             return

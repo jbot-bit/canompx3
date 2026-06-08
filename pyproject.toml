@@ -50,6 +50,16 @@ dev = [
     "ruff>=0.15.0",
     "pyright>=1.1.400",
     "pip-audit>=2.7.0",
+    # Mutation + property testing — grades the TESTS, not the code.
+    # cosmic-ray (NOT mutmut): mutmut 3.x hard-refuses native Windows on every
+    # subcommand ("To run mutmut on Windows, please use the WSL" — issue #397),
+    # which would pin mutation testing to a WSL/.venv-wsl/Python-3.12 island that
+    # no clean checkout or GitHub-Actions runner could reproduce. cosmic-ray
+    # runs natively on Windows + Linux + CI on this repo's Python 3.11.9, and
+    # applies mutations in-place (no `mutants/` source-copy tree, so no collision
+    # with check_drift.py's rglob("*.py") scans). Upper bound is load-bearing.
+    "cosmic-ray>=8.4,<9",
+    "hypothesis>=6,<7",
 ]
 
 [tool.setuptools.packages.find]
@@ -104,6 +114,9 @@ test = [
     "ruff>=0.15.0",
     "pyright>=1.1.400",
     "pip-audit>=2.7.0",
+    # See note in [project.optional-dependencies].dev — kept in sync.
+    "cosmic-ray>=8.4,<9",
+    "hypothesis>=6,<7",
 ]
 
 [tool.uv]

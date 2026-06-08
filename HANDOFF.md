@@ -174,11 +174,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-08
-- **Commit:** 6c98eb9b — fix(live): F1b run()-start dedup re-seed after trading-day correction (Stage 3)
-- **Files changed:** 3 files
+- **Commit:** a652a4f1 — Harden CLI/dashboard preflight parity: LOCKED token fail-open guard
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_session_orchestrator_runstart_dedup.py`
-  - `trading_app/live/session_orchestrator.py`
+  - `pipeline/check_drift.py`
+  - `tests/test_trading_app/test_bot_dashboard.py`
+  - `trading_app/live/bot_dashboard.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

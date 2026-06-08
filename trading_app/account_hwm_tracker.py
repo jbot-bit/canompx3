@@ -18,14 +18,14 @@ import math
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
+
+from pipeline.dst import compute_trading_day_from_timestamp
 
 log = logging.getLogger(__name__)
 
 _DEFAULT_STATE_DIR = Path(__file__).resolve().parent.parent / "data" / "state"
-_BRISBANE = ZoneInfo("Australia/Brisbane")
 
 
 def _is_finite_equity(value: float) -> bool:
@@ -416,35 +416,31 @@ class AccountHWMTracker:
 
         Trading day boundary is 09:00 Brisbane. Times before 09:00
         belong to the PREVIOUS calendar day's trading session.
+
+        Delegates the 09:00 boundary to the canonical
+        ``pipeline.dst.compute_trading_day_from_timestamp`` (single source of
+        truth) — this adapter only handles the local I/O contract: an optional
+        ISO string (None → now), naive timestamps coerced to UTC, and a string
+        return.
         """
         if utc_iso:
             dt = datetime.fromisoformat(utc_iso)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=UTC)
-            bris = dt.astimezone(_BRISBANE)
         else:
-            bris = datetime.now(_BRISBANE)
-        if bris.hour < 9:
-            bris = bris - timedelta(days=1)
-        return bris.strftime("%Y-%m-%d")
+            dt = datetime.now(UTC)
+        return compute_trading_day_from_timestamp(dt).strftime("%Y-%m-%d")
 
     @staticmethod
     def _brisbane_week_monday(utc_iso: str | None = None) -> str:
         """Compute the Monday date for the current Brisbane trading week.
 
         Week boundary is Monday 09:00 Brisbane. Before that = previous week.
+        Derives Monday FROM the canonical trading day so the 09:00 boundary is
+        defined in exactly one place (``compute_trading_day_from_timestamp``).
         """
-        if utc_iso:
-            dt = datetime.fromisoformat(utc_iso)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=UTC)
-            bris = dt.astimezone(_BRISBANE)
-        else:
-            bris = datetime.now(_BRISBANE)
-        if bris.hour < 9:
-            bris = bris - timedelta(days=1)
-        # Monday = weekday 0
-        monday = bris - timedelta(days=bris.weekday())
+        trading_day = date.fromisoformat(AccountHWMTracker._brisbane_trading_day(utc_iso))
+        monday = trading_day - timedelta(days=trading_day.weekday())
         return monday.strftime("%Y-%m-%d")
 
     def _check_period_resets(self, equity: float) -> None:

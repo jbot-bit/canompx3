@@ -386,8 +386,9 @@ async def test_failed_order_rolls_back_reservation():
         "trading_app.live.webhook_server.asyncio.get_running_loop",
         return_value=_FailingLoop(),
     ):
-        with pytest.raises(Exception):  # HTTPException 500
+        with pytest.raises(HTTPException) as exc:
             await _run_trade(ws, _ENTRY_PAYLOAD)
+    assert exc.value.status_code == 500
 
     # Rolled back: counter back to 0, no lingering in-flight dedup placeholder.
     assert ws._OPEN_POSITIONS.get("MGC", 0) == 0, "counter must roll back after a failed order"

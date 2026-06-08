@@ -674,6 +674,136 @@ class TestComputeRelativeVolumes:
         assert vol_count < nf_count
         assert vol_count == 5  # only the 5 high-volume days
 
+    # ------------------------------------------------------------------
+    # GOLDEN / CHARACTERIZATION tests — pin EXACT rel_vol output so the
+    # canonical-delegation refactor (extract shared core, fitness delegates)
+    # is proven behavior-neutral. Any output drift turns these RED.
+    # Hand-computed medians; lookback window (max=20) is deliberately
+    # exercised so the `start = max(0, idx - max_lookback)` slice matters.
+    # ------------------------------------------------------------------
+
+    def test_golden_lookback_window_excludes_pre_window_days(self, tmp_path):
+        """Baseline = median of the 20 days INSIDE the lookback window only.
+
+        25 prior days at 23:05 UTC:
+          - days 1-5  : volume 9000 (OUTSIDE the 20-day window — must be excluded)
+          - days 6-25 : volume 100  (the 20-day baseline window)
+          - day 26    : volume 300  (break bar)
+        Correct baseline = median(twenty 100s) = 100 -> rel_vol = 300/100 = 3.0.
+        If the lookback slice were broken (used all 25 prior), the median would
+        still be 100 here, so days 1-5 use an EXTREME value AND we add a second
+        case below where the window boundary changes the median.
+        """
+        con = self._setup_db(tmp_path)
+        for i in range(1, 26):  # 25 prior days
+            vol = 9000 if i <= 5 else 100
+            con.execute(
+                "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, ?)",
+                [datetime(2024, 5, i, 23, 5, tzinfo=UTC).isoformat(), vol],
+            )
+        con.execute(
+            "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, 300)",
+            [datetime(2024, 5, 26, 23, 5, tzinfo=UTC).isoformat()],
+        )
+        features = [
+            {
+                "trading_day": date(2024, 5, 26),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 5, 26, 23, 5, tzinfo=UTC),
+            }
+        ]
+        _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
+        con.close()
+        # baseline = median of days 6-25 (twenty 100s) = 100; 300/100 = 3.0
+        assert features[0]["rel_vol_CME_REOPEN"] == pytest.approx(3.0, abs=1e-9)
+
+    def test_golden_window_boundary_changes_median(self, tmp_path):
+        """Window boundary must change the median — pins the slice arithmetic.
+
+        22 prior days at 23:05 UTC, volumes chosen so median(all 22) != median(last 20):
+          - days 1-2  : volume 1 (OUTSIDE the 20-day window)
+          - days 3-22 : volumes 1..20 inclusive (the 20-day baseline window)
+          - day 23    : volume 600 (break bar)
+        median(1..20) = (10+11)/2 = 10.5  -> rel_vol = 600/10.5.
+        median(all 22 = [1,1,1,2,...,20]) would be 10.0 -> a DIFFERENT answer,
+        so a broken lookback slice is caught.
+        """
+        con = self._setup_db(tmp_path)
+        # days 1-2 outside window
+        for i in (1, 2):
+            con.execute(
+                "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, ?)",
+                [datetime(2024, 7, i, 23, 5, tzinfo=UTC).isoformat(), 1],
+            )
+        # days 3-22 carry volumes 1..20 (inside the 20-day window)
+        for n, day in enumerate(range(3, 23), start=1):
+            con.execute(
+                "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, ?)",
+                [datetime(2024, 7, day, 23, 5, tzinfo=UTC).isoformat(), n],
+            )
+        # break bar day 23
+        con.execute(
+            "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, 600)",
+            [datetime(2024, 7, 23, 23, 5, tzinfo=UTC).isoformat()],
+        )
+        features = [
+            {
+                "trading_day": date(2024, 7, 23),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 7, 23, 23, 5, tzinfo=UTC),
+            }
+        ]
+        _compute_relative_volumes(con, features, "MGC", ["CME_REOPEN"], ALL_FILTERS)
+        con.close()
+        # median(volumes 1..20) = 10.5 -> 600 / 10.5
+        assert features[0]["rel_vol_CME_REOPEN"] == pytest.approx(600.0 / 10.5, abs=1e-9)
+
+    def test_golden_fitness_enrich_matches_discovery(self, tmp_path):
+        """`strategy_fitness._enrich_relative_volumes` MUST produce the SAME
+        rel_vol as `strategy_discovery._compute_relative_volumes` on identical
+        data. This is the cross-module equivalence the refactor preserves —
+        it must hold both BEFORE (two copies) and AFTER (shared core).
+        """
+        from trading_app.strategy_fitness import _enrich_relative_volumes
+
+        def _seed(con):
+            for i in range(1, 23):  # 22 prior + break on 22
+                vol = 250 if i == 22 else 100
+                con.execute(
+                    "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, ?)",
+                    [datetime(2024, 9, i, 23, 5, tzinfo=UTC).isoformat(), vol],
+                )
+
+        def _feat():
+            return [
+                {
+                    "trading_day": date(2024, 9, 22),
+                    "orb_CME_REOPEN_break_ts": datetime(2024, 9, 22, 23, 5, tzinfo=UTC),
+                }
+            ]
+
+        # discovery path
+        con_d = self._setup_db(tmp_path)
+        _seed(con_d)
+        feat_d = _feat()
+        _compute_relative_volumes(con_d, feat_d, "MGC", ["CME_REOPEN"], ALL_FILTERS)
+        con_d.close()
+
+        # fitness path (explicit lookback_days=20 to match VolumeFilter max)
+        db2 = tmp_path / "test_vol2.db"
+        con_f = duckdb.connect(str(db2))
+        _make_bars_1m_table(con_f)
+        _seed(con_f)
+        feat_f = _feat()
+        _enrich_relative_volumes(con_f, feat_f, "MGC", "CME_REOPEN", 20)
+        con_f.close()
+
+        assert "rel_vol_CME_REOPEN" in feat_d[0]
+        assert "rel_vol_CME_REOPEN" in feat_f[0]
+        assert feat_d[0]["rel_vol_CME_REOPEN"] == pytest.approx(feat_f[0]["rel_vol_CME_REOPEN"], abs=1e-12)
+        # days 1-21 = vol 100, day 22 = break vol 250. lookback 20 -> baseline
+        # = median of the 20 prior days inside the window (all 100) = 100.
+        # rel_vol = 250 / 100 = 2.5.
+        assert feat_d[0]["rel_vol_CME_REOPEN"] == pytest.approx(2.5, abs=1e-9)
+
 
 class TestDoubleBreakNoExclusion:
     """Double-break days are NOT excluded from _build_filter_day_sets (Feb 2026).
