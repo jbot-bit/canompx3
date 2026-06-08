@@ -255,3 +255,89 @@ class TestSessionSafetyState:
             f"R3 cross-restart broken: saved {ts!r}, loaded {state2.last_connected_at!r}. "
             f"Check _load_state branch at session_safety_state.py:95."
         )
+
+
+class TestStaleKillSwitchExpiry:
+    """expire_stale_kill_switch: a kill switch from a prior, now-closed trading
+    day must auto-expire on launch (EOD flatten resolved any position concern),
+    but a SAME-DAY kill switch (crash-restart into a still-dangerous position)
+    must be PRESERVED. Mirrors the daily-P&L day-gate proven in
+    session_orchestrator.py:764.
+
+    n=1 repro 2026-06-09: a 2026-06-08 kill switch halted the 2026-06-09 launch
+    for ~340 min. The daily-P&L restore was day-gated; the kill-switch restore
+    was not. This helper closes that inconsistency.
+    """
+
+    def test_prior_day_kill_switch_expires(self, state_dir: Path) -> None:
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.kill_switch_fired = True
+        state.blocked_strategies = {"STRAT_A": "orphan"}
+        state.trading_day = "2026-06-08"
+        state.save()
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        expired = loaded.expire_stale_kill_switch("2026-06-09")
+
+        assert expired is True
+        assert loaded.kill_switch_fired is False
+        assert loaded.blocked_strategies == {}
+        # Expiry must persist so a second load is also clean.
+        reloaded = SessionSafetyState("profile_test", "MNQ")
+        assert reloaded.kill_switch_fired is False
+
+    def test_same_day_kill_switch_preserved(self, state_dir: Path) -> None:
+        """The load-bearing safety branch: a same-day crash-restart kill switch
+        must NOT be cleared (C1-race protection — position may still be live)."""
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.kill_switch_fired = True
+        state.blocked_strategies = {"STRAT_A": "orphan"}
+        state.trading_day = "2026-06-09"
+        state.save()
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        expired = loaded.expire_stale_kill_switch("2026-06-09")
+
+        assert expired is False
+        assert loaded.kill_switch_fired is True
+        assert loaded.blocked_strategies == {"STRAT_A": "orphan"}
+
+    def test_no_kill_switch_is_noop(self, state_dir: Path) -> None:
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.kill_switch_fired = False
+        state.trading_day = "2026-06-08"
+        state.save()
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        assert loaded.expire_stale_kill_switch("2026-06-09") is False
+        assert loaded.kill_switch_fired is False
+
+    def test_empty_trading_day_does_not_expire(self, state_dir: Path) -> None:
+        """A kill switch with no recorded trading_day (legacy/unknown) is NOT
+        auto-expired — we cannot prove it is stale, so fail-closed (preserve)."""
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.kill_switch_fired = True
+        state.trading_day = ""
+        state.save()
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        assert loaded.expire_stale_kill_switch("2026-06-09") is False
+        assert loaded.kill_switch_fired is True
+
+    def test_shadow_failures_preserved_across_expiry(self, state_dir: Path) -> None:
+        """shadow_failures (cross-account divergence) is INTENTIONALLY preserved
+        when a stale kill switch expires — a day rollover does not prove the
+        divergence is resolved. Fail-closed. Pins the asymmetry vs
+        blocked_strategies (which IS cleared, being position-state)."""
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.kill_switch_fired = True
+        state.blocked_strategies = {"STRAT_A": "orphan"}
+        state.shadow_failures = {"ACCT_2": "copy router divergence"}
+        state.trading_day = "2026-06-08"
+        state.save()
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        assert loaded.expire_stale_kill_switch("2026-06-09") is True
+        assert loaded.kill_switch_fired is False
+        assert loaded.blocked_strategies == {}  # position-state — cleared
+        assert loaded.shadow_failures == {"ACCT_2": "copy router divergence"}  # preserved

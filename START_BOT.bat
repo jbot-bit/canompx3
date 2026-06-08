@@ -52,11 +52,32 @@ set ACTIVE_PROFILE=topstep_50k_mnq_auto
 ::   START_BOT.bat live       -> LIVE (REAL MONEY). run_live_session still runs
 ::                               the full 14-gate preflight + CONFIRM before any
 ::                               order; --live arms capital.
-set BOT_MODE_FLAGS=--signal-only
+:: If a mode arg was passed (scripting / shortcut), honor it directly and skip
+:: the menu. A bare double-click (no arg) shows an interactive menu so the
+:: operator never has to remember CLI flags.
+set BOT_MODE_FLAGS=
 if /i "%~1"=="signal" set BOT_MODE_FLAGS=--signal-only
 if /i "%~1"=="demo"   set BOT_MODE_FLAGS=--demo
 if /i "%~1"=="live"   set BOT_MODE_FLAGS=--live
 if /i "%~1"=="--live" set BOT_MODE_FLAGS=--live
+
+:: Note: the choice-evaluation `if`s live OUTSIDE the parenthesized prompt block
+:: on purpose. Inside a single ( ... ) block %MODE_CHOICE% expands at PARSE time
+:: (before `set /p` runs), so it would always read empty — the classic batch
+:: delayed-expansion trap. Evaluating after the block closes reads the real input.
+if not defined BOT_MODE_FLAGS (
+    echo.
+    echo   Select launch mode:
+    echo     [1] SIGNAL  - no orders, just alerts ^(default^)
+    echo     [2] DEMO    - paper broker
+    echo     [3] LIVE    - REAL MONEY ^(14-gate preflight + CONFIRM still required^)
+    echo.
+    set /p MODE_CHOICE="  Enter 1, 2, or 3 [1]: "
+)
+if "%MODE_CHOICE%"=="2" set BOT_MODE_FLAGS=--demo
+if "%MODE_CHOICE%"=="3" set BOT_MODE_FLAGS=--live
+:: Default any unrecognized / empty choice to signal-only (safest).
+if not defined BOT_MODE_FLAGS set BOT_MODE_FLAGS=--signal-only
 
 :: Step 1: Clean up stale lock + stop files (don't kill python — other terminals may be running)
 ::   The .stop file triggers graceful-shutdown on the next feed scan; a stale one
@@ -80,6 +101,14 @@ if /i "%BOT_MODE_FLAGS%"=="--demo" set PLANNED_MODE=DEMO
 if /i "%BOT_MODE_FLAGS%"=="--live" set PLANNED_MODE=LIVE
 if not defined PLANNED_MODE set PLANNED_MODE=SIGNAL
 .venv\Scripts\python.exe -m trading_app.live.planned_launch write --profile %ACTIVE_PROFILE% --mode %PLANNED_MODE% --source START_BOT.bat --copies 1 --instrument MNQ >nul
+
+:: Step 2c: Safety-state preflight (read-only). Tells the operator if a
+:: persisted kill switch will halt today's session BEFORE launch — so a halt is
+:: never a silent 0-trade mystery. A STALE (prior-day) kill switch auto-expires
+:: in the orchestrator and is purely informational here; a SAME-DAY kill switch
+:: prints a clear warning + the path to clear it. Fail-open: never blocks launch.
+echo [2c/5] Safety-state preflight...
+.venv\Scripts\python.exe -m trading_app.live.session_safety_state --profile %ACTIVE_PROFILE% --instrument MNQ
 
 :: Step 3: Data freshness check
 echo [3/5] Checking data freshness...
