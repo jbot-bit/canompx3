@@ -858,7 +858,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     # REGIME prop forward-test — zero-evidence, express-funded only
     #
     # Stage: docs/runtime/stages/regime-prop-test-wiring.md (operator-approved
-    # 2026-06-08). Wires 6 REGIME-tier (validated sample 30-99) lanes onto a
+    # 2026-06-08). Wires 4 REGIME-tier (validated sample 30-99) lanes onto a
     # dedicated express profile to gather FORWARD evidence on a funded wrapper —
     # a DELIBERATE override of the "never REGIME standalone" doctrine, taken
     # eyes-open because the express-funded wrapper insulates real personal
@@ -869,20 +869,26 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     # cannot arm this until they deliberately flip active=True). Per-lane dashboard
     # toggling (lane_ctl / /api/lane-control/toggle) is available once active.
     #
-    # Slate (from docs/runtime/regime_shadow_universe.yaml, all FIT):
-    #   3 MNQ COMEX_SETTLE ORB_VOL_16K (strongest pool, val_N 81-90)
-    #   3 MGC LONDON_METALS ORB_VOL_8K_O30 (near-CORE, roll_N 78-99)
-    # The thin MES CME_PRECLOSE N=16 lane was DROPPED (operator, 2026-06-08) as
-    # the genuine small-sample risk in the slate.
+    # Slate (from docs/runtime/regime_shadow_universe.yaml, all FIT) —
+    # 3 lanes across 3 INDEPENDENT sessions (no intra-session redundancy), each
+    # the best available lane in its session at a healthy sample:
+    #   MNQ COMEX_SETTLE ORB_VOL_16K E2 RR2.0   (roll_ExpR 0.617, roll_N 63)
+    #   MNQ CME_PRECLOSE X_MES_ATR70 E2 RR1.0 O15 (roll_ExpR 0.371, roll_N 34)
+    #   MGC LONDON_METALS ORB_VOL_8K_O30 E2 RR2.0 (roll_ExpR 0.451, roll_N 78)
+    # DROPPED (operator, 2026-06-08): MES CME_PRECLOSE N=16 (small-sample) + the
+    # MNQ COMEX RR1.5/RR2.5 variants (daily-R rho~0.83 with RR2.0) + the MGC
+    # E2RR1.5/E1RR1.5 variants (daily-R rho~0.90 with E2RR2.0). Same session+
+    # aperture variants = ~1 bet, not N — keeping multiple inflates apparent
+    # breadth and concentrates DD. So: one best lane per distinct session.
     #
     # max_orb_size_pts = canonical P90 from compute_orb_size_stats (gold.db,
-    # 2026-06-08), via lane_allocator.lane_cap_for — NOT a hand-rolled formula:
-    #   (MNQ, COMEX_SETTLE, 5)   avg 29.0 / P90 50.1 -> cap 50.1
-    #   (MGC, LONDON_METALS, 30) avg 13.8 / P90 25.8 -> cap 25.8
-    # Per-(instrument, session, aperture): lanes differing only by RR/entry-model
-    # share the cap (orb_size measures the ORB range, independent of RR target).
-    # Worst-case all-lose at 1ct: MNQ 50.1*$2*3 + MGC 25.8*$10*3 = $300.6 + $774
-    # = ~$1,075 < $2,000 MLL. A None cap = NO size guard on capital
+    # 2026-06-08) via generate_profile_lanes.lane_cap_for — per-(instrument,
+    # session, APERTURE), NOT a hand-rolled formula. O15 cap ~2x O5 by design:
+    #   (MNQ, COMEX_SETTLE, 5)    avg 29.0 / P90 50.1 -> cap 50.1
+    #   (MNQ, CME_PRECLOSE, 15)   avg 56.8 / P90 99.2 -> cap 99.2  (O15 = wider ORB)
+    #   (MGC, LONDON_METALS, 30)  avg 13.8 / P90 25.8 -> cap 25.8
+    # Worst-case all-lose at 1ct: 50.1*$2 + 99.2*$2 + 25.8*$10 = $100.2 + $198.4
+    # + $258 = ~$557 < $2,000 MLL. A None cap = NO size guard on capital
     # (account_survival.py:439, session_orchestrator.py:395) — every lane caps.
     # =========================================================================
     "topstep_50k_regime_test": AccountProfile(
@@ -894,43 +900,41 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         stop_multiplier=0.75,
         max_slots=6,
         active=False,  # DEFAULT-OFF — operator flips active=True to arm (see header)
-        allowed_sessions=frozenset({"COMEX_SETTLE", "LONDON_METALS"}),
+        allowed_sessions=frozenset({"COMEX_SETTLE", "CME_PRECLOSE", "LONDON_METALS"}),
         allowed_instruments=frozenset({"MNQ", "MGC"}),
         daily_lanes=(
             # --- MNQ COMEX_SETTLE ORB_VOL_16K (cap P90 = 50.1pts) ---
+            # ONE lane only. The 3 RR-variants were daily-R correlated rho~0.83
+            # (RR2.0/RR1.5=0.85, RR2.0/RR2.5=0.89, RR1.5/RR2.5=0.76, n~1680 each) —
+            # same session + same entries, differ only by rr_target, so they are
+            # ~1 bet, not 3. Kept the highest-ExpR variant (RR2.0, roll_ExpR 0.617).
             DailyLaneSpec(
                 "MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=50.1,
             ),
+            # --- MNQ CME_PRECLOSE X_MES_ATR70 O15 (cap P90 = 99.2pts) ---
+            # Independent session (CME_PRECLOSE != COMEX_SETTLE) for diversification.
+            # ExpR 0.371, roll_N 34 (valid REGIME sample >=30, lower side). Filter
+            # X_MES_ATR70 is a live CrossAssetATRFilter (config.py:3729) — MES is a
+            # cross-asset ATR CONFIRM signal; the lane EXECUTES MNQ (no symbol map).
+            # O15 aperture cap (99.2) is ~2x the O5 COMEX cap by design — wider ORB
+            # range at 15m (compute_orb_size_stats is per-aperture; do NOT reuse 50.1).
             DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_16K",
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR70_O15",
                 "MNQ",
-                "COMEX_SETTLE",
-                max_orb_size_pts=50.1,
-            ),
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR2.5_CB1_ORB_VOL_16K",
-                "MNQ",
-                "COMEX_SETTLE",
-                max_orb_size_pts=50.1,
+                "CME_PRECLOSE",
+                max_orb_size_pts=99.2,
             ),
             # --- MGC LONDON_METALS ORB_VOL_8K_O30 (cap P90 = 25.8pts) ---
+            # ONE lane only. The 3 MGC variants were daily-R correlated rho~0.90
+            # (E2RR2.0/E2RR1.5=0.87, E2RR2.0/E1RR1.5=0.90, E2RR1.5/E1RR1.5=0.94,
+            # n~950 each) — same instrument+session+aperture, entry-model/RR barely
+            # decorrelate = ~1 bet, not 3. Kept highest-ExpR (E2 RR2.0, roll_ExpR
+            # 0.451 > E2RR1.5 0.416 > E1RR1.5 0.319).
             DailyLaneSpec(
                 "MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30",
-                "MGC",
-                "LONDON_METALS",
-                max_orb_size_pts=25.8,
-            ),
-            DailyLaneSpec(
-                "MGC_LONDON_METALS_E2_RR1.5_CB1_ORB_VOL_8K_O30",
-                "MGC",
-                "LONDON_METALS",
-                max_orb_size_pts=25.8,
-            ),
-            DailyLaneSpec(
-                "MGC_LONDON_METALS_E1_RR1.5_CB1_ORB_VOL_8K_O30",
                 "MGC",
                 "LONDON_METALS",
                 max_orb_size_pts=25.8,
@@ -938,14 +942,18 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "REGIME forward-test (zero-evidence, express-funded only). 6 lanes: "
-            "3 MNQ COMEX_SETTLE ORB_VOL_16K + 3 MGC LONDON_METALS ORB_VOL_8K_O30, "
-            "all REGIME-tier (validated sample 30-99). DELIBERATE override of "
-            "'never REGIME standalone' — operator-approved 2026-06-08, eyes-open, "
-            "funded wrapper absorbs DD. Ships active=False (default-OFF arm gate). "
-            "Caps = canonical P90 from compute_orb_size_stats (2026-06-08). "
-            "MES N=16 lane dropped as small-sample risk. NOT research-validated — "
-            "a paid forward probe. Stage: regime-prop-test-wiring.md."
+            "REGIME forward-test (zero-evidence, express-funded only). 3 lanes "
+            "across 3 independent sessions — best lane per session: MNQ COMEX_SETTLE "
+            "E2 RR2.0 (ExpR 0.617, N63), MNQ CME_PRECLOSE X_MES_ATR70 E2 RR1.0 O15 "
+            "(ExpR 0.371, N34), MGC LONDON_METALS E2 RR2.0 (ExpR 0.451, N78). All "
+            "REGIME-tier (sample 30-99). DELIBERATE override of 'never REGIME "
+            "standalone' — operator-approved 2026-06-08, eyes-open, funded wrapper "
+            "absorbs DD. Ships active=False (default-OFF arm gate). Caps = canonical "
+            "P90 from compute_orb_size_stats (per-aperture; O15 cap 99.2 != O5 50.1). "
+            "DROPPED: MES N=16 (small-sample), MNQ COMEX RR1.5/RR2.5 (rho~0.83 w/ "
+            "RR2.0), MGC E2RR1.5/E1RR1.5 (rho~0.90 w/ E2RR2.0) — same-session "
+            "redundancy. NOT research-validated — paid forward probe. Stage: "
+            "regime-prop-test-wiring.md."
         ),
     ),
     # =========================================================================

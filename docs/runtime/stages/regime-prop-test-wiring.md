@@ -1,13 +1,13 @@
 ---
-task: Wire 6 REGIME-tier lanes onto a NEW dedicated express profile (default-OFF) as a zero-evidence forward live-test
+task: Wire 3 REGIME-tier lanes (3 independent sessions) onto a NEW dedicated express profile (default-OFF) as a zero-evidence forward live-test
 slug: regime-prop-test-wiring
 mode: IMPLEMENTATION
 status: BUILD_COMPLETE_AWAITING_OPERATOR_DIFF_REVIEW
 created: 2026-06-08
 capital_path: true
-worktree: C:/Users/joshd/canompx3-regime-prop-test (branch session/joshd-regime-prop-test, off origin/main a1547acb)
+worktree: C:/Users/joshd/canompx3-regime-prop-test (branch session/joshd-regime-trim, off origin/main a6eaaef5)
 design_gate: PRESENTED + OPERATOR-APPROVED 2026-06-08 ("Build it, show me the diff, I approve before live")
-build_note: MES N=16 lane DROPPED (operator 2026-06-08) -> 6 lanes (3 MNQ + 3 MGC). Caps = canonical P90 (MNQ 50.1 / MGC 25.8). 8/8 new tests + 159 profile-suite + drift 184/0 + ruff clean. Default-OFF = active=False (hard fail-closed arm gate). NOTHING ARMED.
+build_note: FINAL SLATE = 3 lanes / 3 INDEPENDENT sessions (one best lane per session, after measuring intra-session correlation). MNQ COMEX_SETTLE E2 RR2.0 (ExpR 0.617, cap 50.1) + MNQ CME_PRECLOSE X_MES_ATR70 E2 RR1.0 O15 (ExpR 0.371, cap 99.2) + MGC LONDON_METALS E2 RR2.0 (ExpR 0.451, cap 25.8). DROPPED same-session redundant variants (MNQ COMEX RR1.5/RR2.5 rho~0.83; MGC LONDON E2RR1.5/E1RR1.5 rho~0.90) + MES N=16. Caps = canonical P90 per-aperture (O15 cap 99.2 != O5 50.1). Worst-case 1ct ~$557 < $2000 MLL. Default-OFF = active=False (hard fail-closed arm gate). NOTHING ARMED.
 ---
 
 # Stage 1 — REGIME prop-test wiring
