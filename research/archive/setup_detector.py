@@ -1,12 +1,15 @@
 """
 Filter trading days by market conditions.
 
+ARCHIVED (cohesion WARN closure): zero production callers — was never wired
+into strategy_discovery despite the docstring. Kept under research/archive/
+for reference; not part of the live trading_app surface.
+
 Given a StrategyFilter, queries daily_features and returns matching
-(trading_day, row_dict) tuples. Used by strategy_discovery to scope
-backtests to specific market regimes.
+(trading_day, row_dict) tuples.
 
 Usage:
-    from trading_app.setup_detector import detect_setups
+    from research.archive.setup_detector import detect_setups
     setups = detect_setups(con, filter, "CME_REOPEN", "MGC", start, end)
 """
 

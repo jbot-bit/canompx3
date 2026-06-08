@@ -32,7 +32,6 @@ from scripts.research.emit_nyse_preopen_verdict import (
     main,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic in-memory DuckDB seed (mirrors the Stage 4a fixture exactly).
 # ---------------------------------------------------------------------------
@@ -75,7 +74,7 @@ def _seed_synthetic_db(con: duckdb.DuckDBPyConnection) -> None:
 
 
 @pytest.fixture
-def seeded_con() -> Generator[duckdb.DuckDBPyConnection, None, None]:
+def seeded_con() -> Generator[duckdb.DuckDBPyConnection]:
     con = duckdb.connect(":memory:")
     _seed_synthetic_db(con)
     try:

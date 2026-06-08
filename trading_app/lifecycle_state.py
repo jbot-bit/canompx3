@@ -136,7 +136,7 @@ def read_criterion12_state(
         current_code_fingerprint=build_code_fingerprint(
             [
                 PROJECT_ROOT / "trading_app" / "sr_monitor.py",
-                PROJECT_ROOT / "trading_app" / "live" / "sr_monitor.py",
+                PROJECT_ROOT / "trading_app" / "live" / "sr_score_kernel.py",
                 PROJECT_ROOT / "trading_app" / "derived_state.py",
             ]
         ),

@@ -2263,6 +2263,39 @@ class TestTradingDayRollover:
         # No EOD call since we didn't roll
         orch.engine.on_trading_day_end.assert_not_called()
 
+    async def test_rollover_boundary_matches_canonical_pre_0900(self):
+        """W1: pre-09:00 Brisbane bar derives the SAME trading day as the
+        canonical pipeline.dst.compute_trading_day_from_timestamp (no inline
+        re-encode). 22:00 UTC = 08:00 Brisbane next day → rolls back to today."""
+        from pipeline.dst import compute_trading_day_from_timestamp
+
+        orch = build_orchestrator()
+        orch.engine.on_trading_day_end.return_value = []
+        orch.trading_day = date(2026, 3, 6)
+        # 2026-03-06 22:00 UTC = 2026-03-07 08:00 Brisbane → pre-09:00 → day = 03-06
+        bar_ts = datetime(2026, 3, 6, 22, 0, tzinfo=UTC)
+        assert compute_trading_day_from_timestamp(bar_ts) == date(2026, 3, 6)
+        await orch._check_trading_day_rollover(bar_ts)
+        # Same trading day → no rollover (proves derived day == 03-06, not 03-07)
+        orch.engine.on_trading_day_end.assert_not_called()
+        assert orch.trading_day == date(2026, 3, 6)
+
+    async def test_rollover_boundary_matches_canonical_at_0900(self):
+        """W1: at/after 09:00 Brisbane crosses to the new trading day, matching
+        the canonical function. 23:00 UTC = 09:00 Brisbane next day → rolls."""
+        from pipeline.dst import compute_trading_day_from_timestamp
+
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch.engine.on_trading_day_end.return_value = []
+        orch.trading_day = date(2026, 3, 6)
+        # 2026-03-06 23:00 UTC = 2026-03-07 09:00 Brisbane → day = 03-07
+        bar_ts = datetime(2026, 3, 6, 23, 0, tzinfo=UTC)
+        assert compute_trading_day_from_timestamp(bar_ts) == date(2026, 3, 7)
+        with patch.object(SessionOrchestrator, "_build_daily_features_row", return_value={}):
+            await orch._check_trading_day_rollover(bar_ts)
+        assert orch.trading_day == date(2026, 3, 7)
+
     async def test_rollover_close_failure_detects_orphans(self):
         """Rollover close failure → orphan detection logs CRITICAL + notifies."""
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))

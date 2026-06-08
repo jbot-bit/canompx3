@@ -1,12 +1,14 @@
-"""Tests for trading_app.strategy_lineage_ast.scan_python_for_column_refs.
+"""Tests for research.archive.strategy_lineage_ast.scan_python_for_column_refs.
 
-Per docs/plans/2026-04-30-crg-maximization-v2.md § PR-4a — 6 cases covering
+Archived orphan (unwired CLI MVP, zero production callers) — relocated from
+trading_app/ in the cohesion WARN closure. Per
+docs/plans/2026-04-30-crg-maximization-v2.md § PR-4a — 6 cases covering
 ast_literal hits, regex fallback, banned-column flagging, empty/malformed inputs.
 """
 
 from pathlib import Path
 
-from trading_app.strategy_lineage_ast import ColumnRef, scan_python_for_column_refs
+from research.archive.strategy_lineage_ast import ColumnRef, scan_python_for_column_refs
 
 
 def _write(tmp_path: Path, name: str, src: str) -> Path:

@@ -53,7 +53,7 @@ from trading_app.derived_state import (
 )
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.live.performance_monitor import _compute_std_r
-from trading_app.live.sr_monitor import ShiryaevRobertsMonitor, calibrate_sr_threshold
+from trading_app.live.sr_score_kernel import ShiryaevRobertsMonitor, calibrate_sr_threshold
 from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
 from trading_app.strategy_fitness import _load_strategy_outcomes
 from trading_app.validated_shelf import deployable_validated_relation
@@ -71,7 +71,7 @@ def _sr_code_paths() -> list[Path]:
     root = Path(__file__).resolve().parents[1]
     return [
         Path(__file__).resolve(),
-        Path(__file__).resolve().parent / "live" / "sr_monitor.py",
+        Path(__file__).resolve().parent / "live" / "sr_score_kernel.py",
         root / "trading_app" / "derived_state.py",
     ]
 

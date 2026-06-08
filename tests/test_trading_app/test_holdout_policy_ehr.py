@@ -24,7 +24,7 @@ from trading_app.holdout_policy import (
 
 def test_ehr_boundary_constant() -> None:
     """EHR boundary is locked at 2025-01-01 per plan Stage 1 acceptance #1."""
-    assert EARLY_HOLDOUT_BOUNDARY == date(2025, 1, 1)
+    assert date(2025, 1, 1) == EARLY_HOLDOUT_BOUNDARY
 
 
 def test_mode_a_sacred_unchanged() -> None:
@@ -34,7 +34,7 @@ def test_mode_a_sacred_unchanged() -> None:
     a downstream stage has either renamed the constant or shifted its value.
     Either is a critical Mode A integrity violation per plan top-of-doc.
     """
-    assert HOLDOUT_SACRED_FROM == date(2026, 1, 1)
+    assert date(2026, 1, 1) == HOLDOUT_SACRED_FROM
 
 
 def test_ehr_boundary_strictly_before_mode_a() -> None:

@@ -2,9 +2,8 @@
 
 import math
 
-import pytest
-
 import numpy as np
+import pytest
 
 from trading_app.dsr import (
     _norm_cdf,
