@@ -116,11 +116,13 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-07
-- **Commit:** 608d31a6 — test(mutation): kill 2 _compute_fitness_with_con DB-path survivors
-- **Files changed:** 2 files
+- **Date:** 2026-06-08
+- **Commit:** a652a4f1 — Harden CLI/dashboard preflight parity: LOCKED token fail-open guard
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_strategy_fitness.py`
+  - `pipeline/check_drift.py`
+  - `tests/test_trading_app/test_bot_dashboard.py`
+  - `trading_app/live/bot_dashboard.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

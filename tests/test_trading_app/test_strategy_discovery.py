@@ -798,9 +798,7 @@ class TestComputeRelativeVolumes:
 
         assert "rel_vol_CME_REOPEN" in feat_d[0]
         assert "rel_vol_CME_REOPEN" in feat_f[0]
-        assert feat_d[0]["rel_vol_CME_REOPEN"] == pytest.approx(
-            feat_f[0]["rel_vol_CME_REOPEN"], abs=1e-12
-        )
+        assert feat_d[0]["rel_vol_CME_REOPEN"] == pytest.approx(feat_f[0]["rel_vol_CME_REOPEN"], abs=1e-12)
         # days 1-21 = vol 100, day 22 = break vol 250. lookback 20 -> baseline
         # = median of the 20 prior days inside the window (all 100) = 100.
         # rel_vol = 250 / 100 = 2.5.
