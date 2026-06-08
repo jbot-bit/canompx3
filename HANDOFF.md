@@ -174,12 +174,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-08
-- **Commit:** 9ba23eb2 — fix(live): F0★ entry-suppression + clean-teardown stray-process fix (Stages 1+4)
-- **Files changed:** 5 files
-  - `scripts/run_live_session.py`
-  - `tests/test_trading_app/test_dashboard_orphan_reap.py`
-  - `tests/test_trading_app/test_minutes_to_close_negative_time.py`
-  - `trading_app/live/bot_dashboard.py`
+- **Commit:** 6c98eb9b — fix(live): F1b run()-start dedup re-seed after trading-day correction (Stage 3)
+- **Files changed:** 3 files
+  - `HANDOFF.md`
+  - `tests/test_trading_app/test_session_orchestrator_runstart_dedup.py`
   - `trading_app/live/session_orchestrator.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
