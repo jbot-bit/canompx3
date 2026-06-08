@@ -76,6 +76,11 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
   - `codex exec`
 - Non-interactive review:
   - `codex review`
+- Publish assistant:
+  - `python scripts/infra/codex_publish.py status`
+  - Use `preflight`, `push`, and `pr` only when publishing Codex-owned work.
+    The assistant delegates to existing session-preflight policy, Git hooks,
+    and GitHub CLI; it does not bypass hooks or create a new mutex.
 
 ## Selection Heuristic
 
