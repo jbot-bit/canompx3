@@ -76,7 +76,6 @@ from research.mnq_nyse_preopen_e2_nfp_spillover_v1 import (
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.hypothesis_loader import compute_file_sha
 
-
 # ---------------------------------------------------------------------------
 # Promoted prereg
 # ---------------------------------------------------------------------------
@@ -300,7 +299,7 @@ def _stats_factory(
     n_edt_is: int = 100,
     n_oos_on: int = 50,
     oos_power: float = 0.30,
-) -> "object":
+) -> object:
     from research.mnq_nyse_preopen_e2_nfp_spillover_v1 import CellStats
 
     spec = CellSpec(orb_minutes=5, rr_target=1.0, split="all_days")

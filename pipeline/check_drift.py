@@ -15837,6 +15837,67 @@ def check_ci_pytest_no_timeout_plugin(workflows_dir: Path | None = None) -> list
     return violations
 
 
+def check_ci_ruff_lint_covers_tests(workflows_dir: Path | None = None) -> list[str]:
+    """Require every CI `ruff check` (lint) invocation to cover `tests/`.
+
+    Background — gate-scope divergence (2026-06-08, n=1): CI's `ruff check`
+    linted only `pipeline/ trading_app/ scripts/` while `ruff format --check`
+    already covered `tests/` too. The local pre-commit hook lints *staged* files
+    regardless of path. So a lint defect committed in a test file (e.g. a `B017`
+    blind `pytest.raises(Exception)` from `e3d767ed`) stayed green on CI yet
+    blocked the NEXT merge that staged that incoming file through pre-commit.
+    Worse, `B017` masks the real exception type — a capital-path webhook test
+    asserting blind `Exception` passes even when the code raises the wrong error.
+
+    The fix added `tests/` to CI's `ruff check`. This guard pins that the two
+    enforcement layers can't silently diverge again: it asserts every CI step
+    that runs `ruff check` includes a `tests` path arg, mirroring the repo's
+    `*-parity` drift-check family (193/197/198/199). Static text scan of the
+    workflow YAML — never opens gold.db, no network.
+
+    Returns
+    -------
+    list[str]
+        Empty when every `ruff check` line in `.github/workflows/*.yml` carries
+        a `tests` path argument. One descriptive violation per offending line.
+        Fail-open if the workflows directory is absent.
+    """
+    root = workflows_dir or (PROJECT_ROOT / ".github" / "workflows")
+    if not root.exists():
+        return []  # no workflows directory — nothing to enforce, fail-open
+
+    violations: list[str] = []
+    for yml in sorted(root.glob("*.yml")) + sorted(root.glob("*.yaml")):
+        try:
+            text = yml.read_text(encoding="utf-8")
+        except Exception as exc:
+            violations.append(
+                f"check_ci_ruff_lint_covers_tests: could not read {yml.name}: {type(exc).__name__}: {exc}"
+            )
+            continue
+
+        rel = yml.relative_to(PROJECT_ROOT) if yml.is_relative_to(PROJECT_ROOT) else yml
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue  # comments may narrate the old scope
+            # Match the lint invocation specifically — NOT `ruff format`.
+            if "ruff check" not in line:
+                continue
+            # The path args follow `ruff check`; require `tests` among them.
+            args = line.split("ruff check", 1)[1]
+            if not re.search(r"\btests/?\b", args):
+                violations.append(
+                    f"{rel}:{lineno}: CI `ruff check` must include `tests/` so a "
+                    "lint defect in a test file cannot reach main green while the "
+                    "path-agnostic pre-commit hook blocks the next merge that "
+                    "stages it. Add `tests/` to the path args. See "
+                    "memory/feedback_ci_ruff_check_omits_tests_dir_pre_commit_catches_2026_06_08.md."
+                )
+
+    return violations
+
+
 # Status values a manifest row may declare, and which expected_resource shape each
 # implies. The check enforces this internal consistency in CI-safe mode (no PDF
 # needed) so a green never depends on — nor implies — a binary that wasn't verified.
@@ -16960,6 +17021,12 @@ CHECKS = [
         check_ci_pytest_no_timeout_plugin,
         False,  # blocking — class has failed CI 5+ times; further regression silently red-CIs main
         False,
+    ),
+    (
+        "CI `ruff check` (lint) must cover tests/ -- pre-commit lints staged tests but CI did not, letting test-file lint defects reach main green (n=1, 2026-06-08)",
+        check_ci_ruff_lint_covers_tests,
+        False,  # blocking — gate-scope divergence; B017 in a test file masks the real exception type on capital paths
+        False,  # static text scan of workflow YAML — never opens gold.db
     ),
     (
         "paper_trades reads exclude shadow rows (VIEW or execution_source guard)",
