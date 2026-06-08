@@ -174,13 +174,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-09
-- **Commit:** 975fa858 — fix(live): auto-expire prior-day kill switch on launch + START_BOT mode menu (rebased onto origin/main 4c85dfe7)
-- **Files changed:** 5 files
-  - `START_BOT.bat`
-  - `docs/runtime/stages/stale-kill-switch-day-expiry.md`
-  - `tests/test_trading_app/test_session_safety_state.py`
-  - `trading_app/live/session_orchestrator.py`
-  - `trading_app/live/session_safety_state.py`
+- **Commit:** 4d6ee0ff — docs(handoff): record rebased kill-switch commit (975fa858 on origin/main 4c85dfe7)
+- **Files changed:** 1 files
+  - `HANDOFF.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

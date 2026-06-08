@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 from subprocess import TimeoutExpired
 
@@ -71,20 +71,23 @@ def _ensure_manifest_table(con: duckdb.DuckDBPyConnection) -> bool:
 
 
 def _trading_days_between(d1: date | None, d2: date | None) -> int:
-    """Count weekdays between d1 and d2 (exclusive of d1, inclusive of d2).
+    """Count CME trading sessions between d1 and d2 (exclusive of d1, inclusive of d2).
 
     Returns 0 if d1 >= d2 or either is None.
     Used to avoid weekend/holiday false positives in staleness detection.
+
+    Delegates to the canonical, holiday-aware
+    :func:`pipeline.market_calendar.trading_days_between` (single source of
+    truth for trading-day counting) — this wrapper only adds the None-handling
+    the staleness callers rely on. Previously this re-encoded a weekday-only
+    loop that miscounted CME holidays (e.g. Thanksgiving Thursday); the
+    canonical helper fixes that via the exchange_calendars CMES schedule.
     """
     if d1 is None or d2 is None or d1 >= d2:
         return 0
-    count = 0
-    current = d1 + timedelta(days=1)
-    while current <= d2:
-        if current.weekday() < 5:  # Mon-Fri
-            count += 1
-        current += timedelta(days=1)
-    return count
+    from pipeline.market_calendar import trading_days_between
+
+    return trading_days_between(d1, d2)
 
 
 def is_stale(

@@ -892,6 +892,72 @@ class TestDailyFeaturesFailClosed:
             with pytest.raises(RuntimeError, match="FAIL-CLOSED"):
                 SessionOrchestrator._build_daily_features_row(date(2026, 3, 7), "MGC", orb_minutes=5)
 
+    @staticmethod
+    def _mock_duckdb_with_latest(latest_trading_day):
+        """Build a mocked duckdb whose main SELECT returns one row with the
+        given latest trading_day, so the staleness gate is exercised."""
+        import duckdb as real_duckdb
+        import pandas as pd
+
+        mock_con = MagicMock()
+        mock_con.__enter__ = MagicMock(return_value=mock_con)
+        mock_con.__exit__ = MagicMock(return_value=False)
+
+        main_df = pd.DataFrame([{"trading_day": pd.Timestamp(latest_trading_day), "atr_20": 300.0}])
+        mock_main = MagicMock()
+        mock_main.fetchdf.return_value = main_df
+        mock_call = MagicMock()
+        mock_call.fetchone.return_value = None
+
+        # Route by SQL content, not call order — configure_connection() issues
+        # several SET statements before the main SELECT, so a counter is fragile.
+        def _execute_side_effect(sql="", *_args, **_kwargs):
+            if "SELECT * FROM daily_features" in str(sql):
+                return mock_main
+            return mock_call
+
+        mock_con.execute = MagicMock(side_effect=_execute_side_effect)
+        mock_duckdb = MagicMock(spec=real_duckdb)
+        mock_duckdb.connect.return_value = mock_con
+        return mock_duckdb
+
+    def test_holiday_gap_does_not_false_fail(self):
+        """THE BUG FIX: Wed-built → Mon-run across Thanksgiving is 5 calendar
+        days but only 3 trading sessions. Must NOT raise FAIL-CLOSED (gap>3 in
+        trading days). Pre-fix this raised on calendar gap=5."""
+        mock_duckdb = self._mock_duckdb_with_latest(date(2025, 11, 26))
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
+            # today = Mon 12-01 (next trading day after the Thanksgiving gap)
+            row = SessionOrchestrator._build_daily_features_row(date(2025, 12, 1), "MGC", orb_minutes=5)
+        assert row.get("atr_20") == 300.0  # row built, no raise
+
+    def test_genuine_trading_day_staleness_fails_closed(self):
+        """A real ingest outage — built Mon 06-01, running Mon 06-08 with no
+        builds all week = 5 trading sessions > 3 → must FAIL-CLOSED."""
+        mock_duckdb = self._mock_duckdb_with_latest(date(2026, 6, 1))
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
+            with pytest.raises(RuntimeError, match="FAIL-CLOSED.*trading days stale"):
+                SessionOrchestrator._build_daily_features_row(date(2026, 6, 8), "MGC", orb_minutes=5)
+
+    def test_steady_state_one_trading_day_ok(self):
+        """Built yesterday (Mon), running today (Tue) = 1 trading day → no raise,
+        no warn."""
+        mock_duckdb = self._mock_duckdb_with_latest(date(2026, 6, 8))
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
+            row = SessionOrchestrator._build_daily_features_row(date(2026, 6, 9), "MGC", orb_minutes=5)
+        assert row.get("atr_20") == 300.0
+
+    def test_import_fallback_uses_calendar_days_fail_closed(self):
+        """If market_calendar can't be imported, the gate MUST fall back to
+        calendar days (fail-closed), never silent-pass. Calendar days ≥ trading
+        days so the fallback is conservative. Force the import to fail by mapping
+        the module to None in sys.modules (import then raises ImportError)."""
+        # Built 06-05, run 06-09 = 4 calendar days > 3 → fallback must FAIL-CLOSED.
+        mock_duckdb = self._mock_duckdb_with_latest(date(2026, 6, 5))
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb, "pipeline.market_calendar": None}):
+            with pytest.raises(RuntimeError, match="FAIL-CLOSED.*calendar days stale"):
+                SessionOrchestrator._build_daily_features_row(date(2026, 6, 9), "MGC", orb_minutes=5)
+
 
 class TestApertureRouting:
     """_build_daily_features_row MUST honour the lane's orb_minutes (PR #189 class bug).

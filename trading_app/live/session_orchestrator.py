@@ -1187,18 +1187,38 @@ class SessionOrchestrator:
                     for k, v in latest.items():
                         if k not in row:  # don't overwrite today's calendar flags
                             row[k] = v
-                    # Staleness warning — daily_features should be from yesterday or today
+                    # Staleness gate — daily_features should be from the previous
+                    # trading day (steady-state gap = 1). Measured in TRADING days,
+                    # NOT calendar days: a calendar-day count false-fails over
+                    # holiday weekends (Wed-built → Mon-run across Thanksgiving is
+                    # 5 calendar days but only 3 trading sessions), halting the bot
+                    # on a perfectly current dataset. Delegates to the canonical
+                    # CME schedule via market_calendar.trading_days_between.
                     latest_day = latest.get("trading_day")
                     if latest_day is not None:
-                        gap = (trading_day - (latest_day.date() if hasattr(latest_day, "date") else latest_day)).days
-                        if gap > 5:
+                        latest_date = latest_day.date() if hasattr(latest_day, "date") else latest_day
+                        try:
+                            from pipeline.market_calendar import trading_days_between
+
+                            gap = trading_days_between(latest_date, trading_day)
+                            unit = "trading"
+                        except ImportError:
+                            # Fail-closed: market_calendar unavailable → fall back to
+                            # calendar days so the gate still protects (never silent-
+                            # pass). Mirrors the orchestrator's holiday-check import
+                            # fallback (~line 3927). Calendar days ≥ trading days, so
+                            # this is conservative (may warn/fail slightly early).
+                            gap = (trading_day - latest_date).days
+                            unit = "calendar"
+                            log.warning("market_calendar import failed — staleness gate using calendar days")
+                        if gap > 3:
                             raise RuntimeError(
-                                f"FAIL-CLOSED: daily_features is {gap} days stale (latest: {latest_day}). "
+                                f"FAIL-CLOSED: daily_features is {gap} {unit} days stale (latest: {latest_day}). "
                                 f"Filters would silently reject all trades. Run: "
                                 f"python pipeline/build_daily_features.py --instrument {instrument}"
                             )
-                        elif gap > 3:
-                            log.warning("daily_features data is %d days stale (latest: %s)", gap, latest_day)
+                        elif gap > 1:
+                            log.warning("daily_features data is %d %s days stale (latest: %s)", gap, unit, latest_day)
 
                 # median_atr_20 is NOT in daily_features — it's a rolling median computed
                 # by paper_trader. Compute it here for live vol-scaling.

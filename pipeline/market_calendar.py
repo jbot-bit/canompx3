@@ -19,7 +19,7 @@ the alternative (fail-closed) would block trading on unknown dates.
 """
 
 import logging
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import exchange_calendars as xcals
@@ -47,6 +47,50 @@ def is_cme_holiday(trading_day: date) -> bool:
             trading_day,
         )
         return False
+
+
+def trading_days_between(start: date, end: date) -> int:
+    """Count CME trading sessions strictly after ``start`` up to and including ``end``.
+
+    Used by the live daily_features staleness gate to measure data lag in
+    TRADING days rather than calendar days. Calendar-day counting false-fails
+    over holiday weekends (e.g. Wed-built → Mon-run across Thanksgiving is 5
+    calendar days but only 3 trading sessions), halting the bot on a perfectly
+    current dataset.
+
+    Semantics: ``start`` is the last-built trading day (we already have its
+    data); ``end`` is today. Steady state (built yesterday, running today) = 1.
+    Returns 0 if ``end <= start`` (defensive against clock skew / a future
+    ``latest_day``).
+
+    Delegates to the authoritative ``exchange_calendars`` CMES schedule — the
+    same source as :func:`is_cme_holiday` — so shortened sessions (Black Friday,
+    early-close days) correctly count as sessions and full closures do not.
+
+    Fail-open: if the range is beyond library coverage, falls back to a
+    weekday count (excludes Sat/Sun) so the gate never crashes on an unknown
+    future date — consistent with this module's fail-open posture (see module
+    docstring) and the orchestrator's import-fail fallback.
+    """
+    if end <= start:
+        return 0
+    range_start = start + timedelta(days=1)  # exclusive of the already-built day
+    try:
+        sessions = _CMES.sessions_in_range(pd.Timestamp(range_start), pd.Timestamp(end))
+        return len(sessions)
+    except (ValueError, KeyError, IndexError):
+        log.warning(
+            "Calendar data unavailable for %s..%s — counting weekdays (fail-open)",
+            range_start,
+            end,
+        )
+        n = 0
+        d = range_start
+        while d <= end:
+            if d.weekday() < 5:  # Mon-Fri
+                n += 1
+            d += timedelta(days=1)
+        return n
 
 
 def is_nyse_holiday(trading_day: date, *, strict: bool = True) -> bool:

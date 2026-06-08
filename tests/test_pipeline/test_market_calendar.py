@@ -12,6 +12,7 @@ from pipeline.market_calendar import (
     is_market_open_at,
     is_nyse_holiday,
     session_close_utc,
+    trading_days_between,
 )
 
 UTC = ZoneInfo("UTC")
@@ -250,3 +251,40 @@ class TestEffectiveCloseEt:
     def test_holiday_returns_none(self):
         result = effective_close_et(date(2025, 12, 25), firm_close_et=time(16, 10))
         assert result is None  # No trading at all
+
+
+class TestTradingDaysBetween:
+    """Count CME trading sessions in (start, end] — used by the live
+    daily_features staleness gate so it never false-fails over holiday gaps.
+
+    Semantics: sessions strictly AFTER `start` up to and INCLUDING `end`.
+    `start` is the last-built trading day (already have its data); `end` is
+    today. Steady state (built yesterday, running today) = 1.
+    """
+
+    def test_same_day_is_zero(self):
+        assert trading_days_between(date(2026, 6, 8), date(2026, 6, 8)) == 0
+
+    def test_normal_weekend_fri_to_mon_is_one(self):
+        # Built Fri 06-05, today Mon 06-08: Sat/Sun are not sessions → 1.
+        assert trading_days_between(date(2026, 6, 5), date(2026, 6, 8)) == 1
+
+    def test_consecutive_weekdays_is_one(self):
+        # Built Mon, today Tue → exactly 1 session elapsed.
+        assert trading_days_between(date(2026, 6, 8), date(2026, 6, 9)) == 1
+
+    def test_thanksgiving_gap_stays_low(self):
+        # THE BUG: Wed 11-26 built, next real run Mon 12-01. Calendar = 5 days
+        # (would WARN→near-fail). Trading sessions = Thu(11-27, shortened),
+        # Fri(11-28, Black Friday shortened), Mon(12-01) = 3. Must be ≤3 so the
+        # fail>3 gate does NOT false-halt.
+        assert trading_days_between(date(2025, 11, 26), date(2025, 12, 1)) == 3
+
+    def test_genuine_week_outage_exceeds_fail_threshold(self):
+        # Real staleness: built Mon 06-01, today Mon 06-08 with no builds all
+        # week → 5 sessions (Tue-Fri + Mon) > 3 → gate SHOULD fail-close.
+        assert trading_days_between(date(2026, 6, 1), date(2026, 6, 8)) == 5
+
+    def test_end_before_start_is_zero(self):
+        # Defensive: a clock skew / future latest_day must not go negative.
+        assert trading_days_between(date(2026, 6, 9), date(2026, 6, 5)) == 0
