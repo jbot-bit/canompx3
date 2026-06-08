@@ -222,6 +222,31 @@ class CheckResult:
     message: str  # printed inline after "[i/N] <name>... "
 
 
+def _passing_check_is_advisory(message: str) -> bool:
+    """True when a *passing* preflight check normalizes to a warning ("warn").
+
+    Reuses the CANONICAL dashboard mapping (`_normalize_check_status`) rather
+    than re-encoding the OK/WARN/SKIPPED contract. That keeps the START_BOT
+    direct-live strict-zero-warn gate in exact lockstep with the dashboard's
+    arm guard (bot_dashboard.action_start) and with the fail-closed drift check
+    `check_preflight_status_token_parity`. The status token is the first word of
+    the message (the same token `_parse_preflight_output` extracts), e.g.
+    "SKIPPED (...)" -> "SKIPPED", "WARN: ..." -> "WARN".
+
+    Import is local + fail-closed: if the dashboard mapping cannot be loaded, we
+    treat the check as advisory (return True) so strict-zero-warn errs toward
+    BLOCKING a real-money launch, never toward silently passing one.
+    """
+    token = message.strip().split(maxsplit=1)[0] if message.strip() else ""
+    if not token:
+        return False
+    try:
+        from trading_app.live.bot_dashboard import _normalize_check_status
+    except Exception:  # noqa: BLE001 — fail-closed: unknown -> advisory -> blocks
+        return True
+    return _normalize_check_status(token) == "warn"
+
+
 # Type alias for a check function. Each check reads/mutates ctx and returns
 # a CheckResult. The runner enforces ordering and counts via len(checks).
 CheckFn = Callable[[PreflightContext], CheckResult]
@@ -970,6 +995,7 @@ def _run_preflight(
     requested_account_id: int | None = None,
     signal_only: bool = False,
     requested_copies: int = 0,
+    strict_zero_warn: bool = False,
 ) -> bool:
     """Pre-flight validation. Returns True if all checks pass.
 
@@ -980,6 +1006,14 @@ def _run_preflight(
     `profile_id` and `requested_account_id` (added 2026-05-16, A.6.5) feed the
     copy-trading dry-run check. Both default to None so non-profile callers
     (raw-baseline) and existing fixtures continue to work unchanged.
+
+    `strict_zero_warn` (added 2026-06-08): for the `--preflight` exit path used
+    by real-money launchers (START_BOT.bat live), treat a passing-but-advisory
+    check (WARN/SKIPPED, classified via the canonical `_normalize_check_status`)
+    as blocking — returning False so the launcher refuses to arm. This ports the
+    dashboard arm-guard's mode=live "warn also blocks" rule to the direct-launch
+    path. It applies ONLY to real-money runs: demo and signal-only place no live
+    orders, so advisory checks stay non-blocking there (no false block).
     """
     from trading_app.live.broker_factory import get_broker_name
 
@@ -996,6 +1030,7 @@ def _run_preflight(
 
     checks_total = len(PREFLIGHT_CHECKS)
     checks_passed = 0
+    checks_warned = 0
 
     # First check is auth — header includes broker name. Other checks use
     # the function's own __doc__ (first-line title). The original output
@@ -1013,16 +1048,27 @@ def _run_preflight(
         print(result.message)
         if result.passed:
             checks_passed += 1
+            if _passing_check_is_advisory(result.message):
+                checks_warned += 1
+
+    # strict-zero-warn only bites on real-money runs. demo/signal-only place no
+    # live orders, so an advisory check stays non-blocking there (no false block
+    # of a paper/signal launch).
+    strict_block = strict_zero_warn and not demo and not ctx.signal_only and checks_warned > 0
 
     print(f"\nPreflight: {checks_passed}/{checks_total} passed")
+    if checks_warned:
+        print(f"Preflight warnings: {checks_warned}")
     if checks_passed == checks_total:
-        if not ctx.components_all_pass:
+        if strict_block:
+            print("STRICT-ZERO-WARN: blocked — passing preflight still has WARN/SKIPPED checks.\n")
+        elif not ctx.components_all_pass:
             print("All checks passed, but component warnings present. Review above.\n")
         else:
             print("All clear — ready to trade.\n")
     else:
         print("FIX FAILURES before starting a live session.\n")
-    return checks_passed == checks_total
+    return checks_passed == checks_total and not strict_block
 
 
 def _select_primary_and_shadow_accounts(
@@ -1170,6 +1216,14 @@ def main() -> None:
         help="Run pre-flight checks (auth, portfolio, daily_features, contract) then exit — no trading",
     )
     parser.add_argument(
+        "--strict-zero-warn",
+        action="store_true",
+        default=False,
+        help="With --preflight on a real-money (--live) run, exit non-zero if any passing check "
+        "is advisory (WARN/SKIPPED). Ports the dashboard's mode=live warn-blocking arm guard to "
+        "the direct-launch path (START_BOT.bat live). No effect on demo/signal-only preflight.",
+    )
+    parser.add_argument(
         "--auto-confirm",
         action="store_true",
         default=False,
@@ -1300,6 +1354,7 @@ def main() -> None:
                     requested_account_id=args.account_id,
                     signal_only=args.signal_only,
                     requested_copies=args.copies,
+                    strict_zero_warn=args.strict_zero_warn,
                 )
                 if not ok:
                     all_ok = False
@@ -1314,6 +1369,7 @@ def main() -> None:
                 requested_account_id=args.account_id,
                 signal_only=args.signal_only,
                 requested_copies=args.copies,
+                strict_zero_warn=args.strict_zero_warn,
             )
             sys.exit(0 if ok else 1)
 
@@ -1550,6 +1606,40 @@ def main() -> None:
         shadow_account_ids=shadow_account_ids,
     )
 
+    # Clean-teardown signal handlers (F1). Route OS stop signals into the same
+    # `finally` teardown below so the dashboard child + instance lock + journal
+    # are cleaned up even when the operator does NOT use Ctrl+C. Without this,
+    # SIGTERM (`taskkill`) and Windows Ctrl+Break skip the finally → orphaned
+    # dashboard subprocess holding port 8080 ("stray command" on next launch).
+    #
+    # Grounded in CPython docs: asyncio's loop.add_signal_handler is Unix-only
+    # (Proactor loop raises NotImplementedError on Windows), so we use the
+    # synchronous signal.signal handler, which is portable. The handler does the
+    # MINIMAL safe thing — raise KeyboardInterrupt — which propagates out of
+    # asyncio.run() and into the `finally`, reusing the proven teardown path.
+    #
+    # IMPORTANT — this is teardown, NOT flatten. ProjectX brackets are
+    # server-side (docs/reference/PROJECTX_API_REFERENCE.md:171-176): an open
+    # position keeps its stop/target at the broker after this process exits. We
+    # deliberately do NOT close positions on a stop signal; we only release
+    # our-side state. The Stage-3 restart guard is the backstop against a
+    # hard-kill (taskkill /F) that no in-process handler can intercept.
+    def _request_teardown(signum, _frame):  # pragma: no cover - exercised via signal
+        log.warning("Received signal %s — initiating clean teardown (position left on broker bracket)", signum)
+        raise KeyboardInterrupt
+
+    import signal as _signal
+
+    _teardown_signals = [_signal.SIGINT, _signal.SIGTERM]
+    if hasattr(_signal, "SIGBREAK"):  # Windows Ctrl+Break
+        _teardown_signals.append(_signal.SIGBREAK)
+    for _sig in _teardown_signals:
+        try:
+            _signal.signal(_sig, _request_teardown)
+        except (ValueError, OSError) as e:
+            # ValueError: not main thread; OSError: signal unsupported on platform.
+            log.warning("Could not register handler for signal %s (non-fatal): %s", _sig, e)
+
     try:
         asyncio.run(session.run())
     finally:
@@ -1583,6 +1673,17 @@ def main() -> None:
                     _dashboard_proc.kill()
                 except Exception:
                     pass
+            # Symmetric cleanup: clear the dashboard PID file so the next launch
+            # has nothing stale to reap. (On an unclean [X]-close this finally is
+            # skipped and the file persists — that is exactly when the next
+            # launch's _reap_orphan_dashboard needs it, so this clear is correct
+            # only on the clean path.)
+            try:
+                from trading_app.live.bot_dashboard import _DASHBOARD_PID_FILE
+
+                _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

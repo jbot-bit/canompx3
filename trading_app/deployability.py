@@ -28,11 +28,12 @@ from trading_app.config import (
     REGIME_MIN_SAMPLES,
     is_e2_deployment_unsafe_filter,
 )
+from trading_app.dsr import benjamini_hochberg
 from trading_app.lifecycle_state import read_lifecycle_state
 from trading_app.opportunity_awareness import describe_opportunity_awareness
 from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
 from trading_app.strategy_fitness import _load_strategy_outcomes
-from trading_app.strategy_validator import _evaluate_criterion_8_oos, benjamini_hochberg
+from trading_app.strategy_validator import _evaluate_criterion_8_oos
 
 DEPLOYABLE_CANDIDATE = "DEPLOYABLE_CANDIDATE"
 CONTROLLED_LIVE_PILOT_CANDIDATE = "CONTROLLED_LIVE_PILOT_CANDIDATE"

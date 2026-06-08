@@ -1,5 +1,6 @@
 """
-Tests for trading_app.setup_detector module.
+Tests for research.archive.setup_detector module (archived orphan — zero
+production callers; relocated from trading_app/ in the cohesion WARN closure).
 """
 
 import sys
@@ -9,8 +10,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from research.archive.setup_detector import detect_setups
 from trading_app.config import NoFilter, OrbSizeFilter
-from trading_app.setup_detector import detect_setups
 
 
 def _setup_db(tmp_path, days_data):

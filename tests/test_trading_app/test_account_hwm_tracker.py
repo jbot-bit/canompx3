@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from trading_app.account_hwm_tracker import _BRISBANE, AccountHWMTracker, HWMState
+from trading_app.account_hwm_tracker import AccountHWMTracker, HWMState
 
 
 @pytest.fixture
@@ -469,6 +469,84 @@ def _mock_brisbane_time(hour, weekday=1, day_offset=0):
     target_bris = target_bris.replace(hour=hour, minute=0, second=0)
     target_utc = target_bris - timedelta(hours=10)  # Brisbane is UTC+10
     return target_utc
+
+
+class TestBrisbaneBoundaryCanonicalEquivalence:
+    """Pin the trading-day/week boundary helpers to the canonical
+    pipeline.dst.compute_trading_day_from_timestamp before W2 refactor.
+
+    These are characterization tests: they must pass BEFORE the refactor
+    (proving the inline math == canonical) and AFTER (proving the swap is
+    byte-identical). Cover the contract the refactor must preserve:
+      - string return ("YYYY-MM-DD"), not date
+      - pre-09:00 Brisbane rolls back to previous trading day
+      - at/after 09:00 stays on the same day
+      - naive utc_iso is coerced to UTC (not rejected)
+      - the week-Monday helper derives Monday FROM the trading day
+    """
+
+    @staticmethod
+    def _canonical_day_str(utc_iso):
+        from datetime import UTC as _UTC
+        from datetime import datetime as _dt
+
+        from pipeline.dst import compute_trading_day_from_timestamp
+
+        dt = _dt.fromisoformat(utc_iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_UTC)
+        return compute_trading_day_from_timestamp(dt).strftime("%Y-%m-%d")
+
+    def test_trading_day_after_0900_same_day(self):
+        # Tuesday 10:00 Brisbane → same calendar day
+        ts = _mock_brisbane_time(10, weekday=1).isoformat()
+        got = AccountHWMTracker._brisbane_trading_day(ts)
+        assert got == self._canonical_day_str(ts)
+
+    def test_trading_day_before_0900_rolls_back(self):
+        # Tuesday 08:00 Brisbane → previous trading day (Monday's session)
+        ts = _mock_brisbane_time(8, weekday=1).isoformat()
+        got = AccountHWMTracker._brisbane_trading_day(ts)
+        assert got == self._canonical_day_str(ts)
+        # And it must actually be the prior calendar day vs a 10:00 same-day ts
+        later = AccountHWMTracker._brisbane_trading_day(_mock_brisbane_time(10, weekday=1).isoformat())
+        assert got < later
+
+    def test_trading_day_naive_iso_treated_as_utc(self):
+        # Naive ISO (no tzinfo) — current contract coerces to UTC, does NOT raise
+        naive = _mock_brisbane_time(10, weekday=1).replace(tzinfo=None).isoformat()
+        got = AccountHWMTracker._brisbane_trading_day(naive)
+        assert got == self._canonical_day_str(naive)
+
+    def test_trading_day_returns_string(self):
+        ts = _mock_brisbane_time(10, weekday=1).isoformat()
+        got = AccountHWMTracker._brisbane_trading_day(ts)
+        assert isinstance(got, str)
+        assert len(got) == 10 and got[4] == "-" and got[7] == "-"
+
+    def test_week_monday_from_midweek(self):
+        # Wednesday 10:00 Brisbane → Monday of that week
+        ts = _mock_brisbane_time(10, weekday=2).isoformat()
+        got = AccountHWMTracker._brisbane_week_monday(ts)
+        # Monday of the same trading week; derived from the trading day
+        day = AccountHWMTracker._brisbane_trading_day(ts)
+        from datetime import date as _date
+
+        d = _date.fromisoformat(day)
+        expected_monday = (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
+        assert got == expected_monday
+
+    def test_week_monday_before_0900_rolls_into_prev_day_first(self):
+        # Monday 08:00 Brisbane → trading day is Sunday → that week's Monday
+        # is the PREVIOUS Monday (boundary correctness).
+        ts = _mock_brisbane_time(8, weekday=0).isoformat()
+        got = AccountHWMTracker._brisbane_week_monday(ts)
+        day = AccountHWMTracker._brisbane_trading_day(ts)
+        from datetime import date as _date
+
+        d = _date.fromisoformat(day)
+        expected_monday = (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
+        assert got == expected_monday
 
 
 class TestDailyLossLimit:

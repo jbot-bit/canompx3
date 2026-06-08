@@ -911,8 +911,10 @@ def build_profile_portfolio(
     # by validate_dd_budget() in tests. Per-instrument subset check is meaningless
     # (the total DD is what matters, not per-instrument slices).
     if not _skip_dd_check:
-        from trading_app.prop_portfolio import _compute_dd_per_contract
-        from trading_app.prop_profiles import get_firm_spec
+        # _compute_dd_per_contract now lives in prop_profiles (leaf) — importing
+        # it from there instead of prop_portfolio breaks the import cycle
+        # (prop_portfolio imports portfolio at module load).
+        from trading_app.prop_profiles import _compute_dd_per_contract, get_firm_spec
 
         firm_spec = get_firm_spec(profile.firm)
         dd_type = firm_spec.dd_type

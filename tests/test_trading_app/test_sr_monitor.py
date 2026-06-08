@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import duckdb
 
 from trading_app import sr_monitor
-from trading_app.live.sr_monitor import ShiryaevRobertsMonitor, calibrate_sr_threshold
+from trading_app.live.sr_score_kernel import ShiryaevRobertsMonitor, calibrate_sr_threshold
 
 
 def test_sr_no_alarm_on_good_performance():
@@ -235,6 +235,7 @@ def test_sr_code_paths_include_shared_derived_state():
     paths = sr_monitor._sr_code_paths()
 
     assert any(path.name == "sr_monitor.py" for path in paths)
+    assert any(path.name == "sr_score_kernel.py" for path in paths)
     assert any(path.name == "derived_state.py" for path in paths)
 
 

@@ -20,7 +20,7 @@ import json
 import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from datetime import UTC, date
+from datetime import date
 from pathlib import Path
 
 from pipeline.log import get_logger
@@ -207,75 +207,15 @@ def _load_strategy_params(con, strategy_id: str) -> dict | None:
 def _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, lookback_days):
     """Compute rel_vol_{orb_label} for daily_features row dicts using bars_1m.
 
-    Mirrors strategy_discovery._compute_relative_volumes() for a single orb_label.
+    Thin wrapper over the canonical core
+    `strategy_discovery._enrich_rel_vol_single_label` — both discovery and
+    fitness MUST compute relative volume identically (institutional-rigor.md
+    § 4; parity contract also asserted by pipeline/build_daily_features.py).
     Modifies feat_dicts in-place. Fail-closed: missing data = no rel_vol key.
     """
-    import statistics
+    from trading_app.strategy_discovery import _enrich_rel_vol_single_label
 
-    col = f"orb_{orb_label}_break_ts"
-    unique_minutes = set()
-    for row in feat_dicts:
-        break_ts = row.get(col)
-        if break_ts is not None and hasattr(break_ts, "hour"):
-            utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
-            unique_minutes.add(utc_ts.hour * 60 + utc_ts.minute)
-
-    if not unique_minutes:
-        return
-
-    def _minute_key(ts):
-        utc = ts.astimezone(UTC) if ts.tzinfo is not None else ts
-        return (utc.year, utc.month, utc.day, utc.hour, utc.minute)
-
-    # Load historical volumes for each unique minute-of-day
-    minute_history = {}
-    for mod in sorted(unique_minutes):
-        h, m = divmod(mod, 60)
-        rows = con.execute(
-            """SELECT ts_utc, volume FROM bars_1m
-               WHERE symbol = ?
-               AND EXTRACT(HOUR FROM (ts_utc AT TIME ZONE 'UTC')) = ?
-               AND EXTRACT(MINUTE FROM (ts_utc AT TIME ZONE 'UTC')) = ?
-               ORDER BY ts_utc""",
-            [instrument, h, m],
-        ).fetchall()
-        minute_history[mod] = [(_minute_key(ts), vol) for ts, vol in rows]
-
-    # Compute relative volume for each row
-    for row in feat_dicts:
-        break_ts = row.get(col)
-        if break_ts is None:
-            continue
-
-        break_key = _minute_key(break_ts)
-        utc_ts = break_ts.astimezone(UTC) if break_ts.tzinfo is not None else break_ts
-        mod = utc_ts.hour * 60 + utc_ts.minute
-        history = minute_history.get(mod, [])
-        if not history:
-            continue
-
-        idx = None
-        for j, (k, _) in enumerate(history):
-            if k == break_key:
-                idx = j
-                break
-        if idx is None:
-            continue
-
-        break_vol = history[idx][1]
-        if break_vol is None or break_vol == 0:
-            continue
-
-        start_idx = max(0, idx - lookback_days)
-        prior_vols = [v for _, v in history[start_idx:idx] if v > 0]
-        if not prior_vols:
-            continue
-
-        baseline = statistics.median(prior_vols)
-        if baseline <= 0:
-            continue
-
-        row[f"rel_vol_{orb_label}"] = break_vol / baseline
+    _enrich_rel_vol_single_label(con, feat_dicts, instrument, orb_label, lookback_days)
 
 
 def _enrich_cross_asset_atr(con, feat_dicts, source_instrument):

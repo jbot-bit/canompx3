@@ -1004,27 +1004,9 @@ class SessionOrchestrator:
         # Crash recovery: seed engine with strategies that already traded today.
         # Prevents duplicate entries after restart mid-session.
         # Fail-closed: if journal is broken in live/demo mode, refuse to start.
-        if not self.journal.is_healthy:
-            if not signal_only:
-                raise RuntimeError(
-                    "FAIL-CLOSED: Trade journal is not healthy — cannot perform crash recovery. "
-                    "Duplicate entries could occur. Fix journal or use --signal-only."
-                )
-            log.warning(
-                "TradeJournal unavailable in signal-only mode — skipping crash-recovery dedup for %s",
-                self.instrument,
-            )
-            already_traded: set[str] = set()
-        else:
-            already_traded = self.journal.get_strategy_ids_for_day(self.trading_day)
-        for sid in already_traded:
-            self.engine.mark_strategy_traded(sid)
-        if already_traded:
-            log.warning(
-                "RESTART RECOVERY: %d strategies already traded today — will NOT re-enter: %s",
-                len(already_traded),
-                sorted(already_traded),
-            )
+        # run() re-seeds for the corrected day if init straddled the 09:00
+        # Brisbane boundary (F1b) — same seam, different day.
+        self._seed_journal_dedup(self.trading_day)
 
         # Restore position tracker from incomplete journal trades (crash recovery).
         # If the bot crashed with open positions, the journal has entry records but no exits.
@@ -1740,6 +1722,47 @@ class SessionOrchestrator:
 
             print(line, file=sys.stderr, end="")
 
+    def _seed_journal_dedup(self, day) -> None:
+        """Seed the engine's dedup state from the journal for ``day``.
+
+        Marks every strategy that already has a journal entry for ``day`` as
+        traded, so the engine will NOT re-enter it. Called on two startup paths
+        that must agree on the day they seed for:
+          - session setup (init day, :999 block),
+          - run()-start day-correction (catches restart that straddled the
+            09:00 Brisbane boundary during init latency — the F1b gap).
+
+        NOT used by the running trading-day rollover (:1815): that path runs
+        mid-session after the journal was already validated at startup, and a
+        fail-closed RAISE there would crash a live session on a transient journal
+        hiccup. It keeps its own inline seed (no raise) deliberately.
+
+        Fail-closed parity with the original init block: an unhealthy journal in
+        live/demo mode RAISES (a silent skip would allow re-entry = double-up);
+        signal-only tolerates it (no capital) and seeds nothing.
+        """
+        if not self.journal.is_healthy:
+            if not self.signal_only:
+                raise RuntimeError(
+                    "FAIL-CLOSED: Trade journal is not healthy — cannot perform crash recovery. "
+                    "Duplicate entries could occur. Fix journal or use --signal-only."
+                )
+            log.warning(
+                "TradeJournal unavailable in signal-only mode — skipping crash-recovery dedup for %s",
+                self.instrument,
+            )
+            return
+        already_traded = self.journal.get_strategy_ids_for_day(day)
+        for sid in already_traded:
+            self.engine.mark_strategy_traded(sid)
+        if already_traded:
+            log.warning(
+                "RESTART RECOVERY: %d strategies already traded on %s — will NOT re-enter: %s",
+                len(already_traded),
+                day,
+                sorted(already_traded),
+            )
+
     async def _check_trading_day_rollover(
         self,
         bar_ts_utc,
@@ -1764,12 +1787,11 @@ class SessionOrchestrator:
         if override_trading_day is not None:
             bar_trading_day = override_trading_day
         else:
-            _bris = ZoneInfo("Australia/Brisbane")
-            bris_time = bar_ts_utc.astimezone(_bris)
-            if bris_time.hour < 9:
-                bar_trading_day = (bris_time - timedelta(days=1)).date()
-            else:
-                bar_trading_day = bris_time.date()
+            # Canonical 09:00-Brisbane boundary — single source of truth
+            # (pipeline.dst), never re-encoded inline. bar_ts_utc is aware.
+            from pipeline.dst import compute_trading_day_from_timestamp
+
+            bar_trading_day = compute_trading_day_from_timestamp(bar_ts_utc)
 
         if bar_trading_day == self.trading_day:
             return
@@ -2629,9 +2651,18 @@ class SessionOrchestrator:
                 self._reject_execution_qty(strategy_id=event.strategy_id, strategy_qty=event.contracts, error=exc)
                 return
 
-            # Post-market buffer: block entries within 10 minutes of firm close
+            # Post-market buffer: block entries within 10 minutes of firm close.
+            # MUST be bounded BOTH sides: _minutes_to_close_et() is signed and goes
+            # NEGATIVE once the ET close hour passes (no next-day roll — by design,
+            # see _minutes_to_close_et and its :3878 consumer which relies on the
+            # negative to detect "adjusted close already passed"). Without the
+            # `0.0 <=` lower bound a post-close value like -236 satisfies
+            # `<= 10.0` and silently skips EVERY entry for the rest of the ET day
+            # — the F0★ bug that suppressed all live routing. Block only inside the
+            # real pre-close window [0, 10] (inclusive at close: 0 min → still
+            # block); a fresh overnight session (mins < 0) must be allowed to enter.
             mins_to_close = self._minutes_to_close_et()
-            if mins_to_close is not None and mins_to_close <= 10.0:
+            if mins_to_close is not None and 0.0 <= mins_to_close <= 10.0:
                 msg = f"POST-MARKET BUFFER: skipping ENTRY for {event.strategy_id} ({mins_to_close:.0f}min to close)"
                 log.warning(msg)
                 self._notify(msg)
@@ -3827,6 +3858,10 @@ class SessionOrchestrator:
                 actual_day,
             )
             self.trading_day = actual_day
+            # F1b: the init-time dedup seed (:999) used the now-stale day. Re-seed
+            # for the corrected day so a strategy that traded under the corrected
+            # day cannot re-enter after a restart that straddled 09:00 Brisbane.
+            self._seed_journal_dedup(self.trading_day)
 
         # Market calendar checks — FAIL-LOUD on holidays, adjust on early close
         self._flatten_on_start = False

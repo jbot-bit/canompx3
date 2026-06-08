@@ -40,7 +40,6 @@ import pytest
 
 from pipeline.check_drift import check_literature_source_integrity
 
-
 # --- helpers ---------------------------------------------------------------
 
 

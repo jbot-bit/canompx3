@@ -124,6 +124,76 @@ def stub_telemetry_mature(monkeypatch, tmp_path):
     monkeypatch.setattr(rls.SessionOrchestrator, "SIGNALS_DIR", sig_dir)
 
 
+# ---------- strict-zero-warn parity (START_BOT direct-live bypass close-out) ----------
+#
+# The dashboard live-arm guard (bot_dashboard.action_start) blocks a real-money
+# --live launch on ANY check that normalizes to "warn" (WARN/SKIPPED via
+# _normalize_check_status). START_BOT.bat live launched the orchestrator
+# directly, skipping that guard. --strict-zero-warn ports the SAME rule into the
+# --preflight exit path so the .bat can block on it. Classification reuses the
+# canonical _normalize_check_status (NOT a re-encoded string-prefix matcher), so
+# it stays in lockstep with the dashboard and check_preflight_status_token_parity.
+
+
+def _only_check(monkeypatch, message: str):
+    """Replace PREFLIGHT_CHECKS with a single passing check emitting `message`.
+
+    Stubs the auth/journal imports `_check_auth`-class checks would touch are
+    irrelevant here — the injected check is the only one that runs.
+    """
+    injected = lambda _ctx: rls.CheckResult(True, message)  # noqa: E731
+    injected.__doc__ = "Injected advisory check"
+    monkeypatch.setattr(rls, "PREFLIGHT_CHECKS", [injected])
+
+
+def test_strict_zero_warn_blocks_live_on_passing_skipped_check(monkeypatch, capsys):
+    """A passing-but-SKIPPED check must block a live launch under strict-zero-warn,
+    matching the dashboard guard; non-strict stays advisory (returns True)."""
+    _only_check(monkeypatch, "SKIPPED (advisory gap)")
+
+    assert rls._run_preflight("MNQ", "topstep", demo=False, strict_zero_warn=False) is True
+    assert rls._run_preflight("MNQ", "topstep", demo=False, strict_zero_warn=True) is False
+
+    out = capsys.readouterr().out
+    assert "Preflight warnings: 1" in out
+    assert "STRICT-ZERO-WARN" in out
+
+
+def test_strict_zero_warn_blocks_live_on_passing_warn_check(monkeypatch):
+    """A passing WARN check also normalizes to a warning and blocks under strict."""
+    _only_check(monkeypatch, "WARN: advisory text")
+    assert rls._run_preflight("MNQ", "topstep", demo=False, strict_zero_warn=True) is False
+
+
+def test_strict_zero_warn_does_not_block_clean_live(monkeypatch):
+    """A clean OK check must still launch under strict-zero-warn (no false block)."""
+    _only_check(monkeypatch, "OK (all clear)")
+    assert rls._run_preflight("MNQ", "topstep", demo=False, strict_zero_warn=True) is True
+
+
+def test_strict_zero_warn_never_blocks_demo(monkeypatch):
+    """Demo places no live orders, so an advisory SKIPPED is non-blocking even
+    under strict-zero-warn — must not false-block a paper launch."""
+    _only_check(monkeypatch, "SKIPPED (advisory gap)")
+    assert rls._run_preflight("MNQ", "topstep", demo=True, strict_zero_warn=True) is True
+
+
+def test_strict_zero_warn_never_blocks_signal_only(monkeypatch):
+    """Signal-only places no live orders; advisory SKIPPED must not block."""
+    _only_check(monkeypatch, "SKIPPED (signal-only)")
+    assert rls._run_preflight("MNQ", "topstep", demo=False, signal_only=True, strict_zero_warn=True) is True
+
+
+def test_strict_zero_warn_still_fails_on_hard_failure(monkeypatch):
+    """A real FAILED check (passed=False) blocks regardless of strict-zero-warn
+    (fail-closed) — strict mode does not relax the base pass/fail contract."""
+    failing = lambda _ctx: rls.CheckResult(False, "FAILED: synthetic")  # noqa: E731
+    failing.__doc__ = "Injected failing check"
+    monkeypatch.setattr(rls, "PREFLIGHT_CHECKS", [failing])
+    assert rls._run_preflight("MNQ", "topstep", demo=False, strict_zero_warn=True) is False
+    assert rls._run_preflight("MNQ", "topstep", demo=False, strict_zero_warn=False) is False
+
+
 # ---------- LOAD-BEARING tests for the LOW-1 close-out ----------
 
 

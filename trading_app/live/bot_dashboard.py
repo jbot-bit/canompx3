@@ -659,13 +659,25 @@ def _normalize_check_status(raw_status: str) -> str:
         return "warn"
     if status == "FAILED":
         return "fail"
-    # The "info" fallback is unreachable from scripts/run_live_session.py
-    # --preflight, which emits only OK / FAILED / WARN(S) / SKIPPED (verified
-    # 2026-06-01). It exists for an unrecognized token. CAUTION: an "info" check
-    # does NOT set has_warnings, so it would NOT block a live launch under the
-    # strict-zero-warn gate in action_start. If a new preflight token is ever
-    # added, map it to "warn" or "fail" here (never leave it as "info") so it
-    # cannot silently pass a real-money launch.
+    if status == "LOCKED":
+        # run_live_session emits LOCKED (passed=False) when the live trade
+        # journal's DuckDB writer lock is held by another live process. That is
+        # a hard blocker — another session is (or was) running — so it must map
+        # to "fail", never the fail-open "info" branch below. Parity with the
+        # emitted-token vocabulary is enforced by check_preflight_status_token_parity.
+        return "fail"
+    # The "info" fallback is the FAIL-OPEN branch: an "info" check does NOT set
+    # has_warnings, so it would NOT block a live launch under the strict-zero-warn
+    # gate in action_start. run_live_session.py --preflight currently emits
+    # OK / FAILED / WARN(S) / SKIPPED / LOCKED — all mapped above. If a NEW
+    # preflight token is ever added, map it to "warn" or "fail" here (never leave
+    # it as "info") so it cannot silently pass a real-money launch. The drift
+    # check check_preflight_status_token_parity fails CLOSED on any emitted token
+    # that reaches this fallback, so a missed mapping is caught before commit
+    # rather than at a live arm. (A 2026-06-08 audit found LOCKED reaching this
+    # fallback — latent, since LOCKED checks are passed=False and the dashboard's
+    # returncode path already blocked, but the regex dropped the line and the
+    # token mapped to info; both fixed.)
     return "info"
 
 
@@ -680,7 +692,7 @@ def _parse_preflight_output(output: str) -> dict[str, object]:
         if not line:
             continue
 
-        match = re.match(r"^\[(\d+)/(\d+)\]\s+(.+?)\.\.\.\s+(OK|FAILED|WARN(?:INGS?)?|SKIPPED)\s*(.*)$", line)
+        match = re.match(r"^\[(\d+)/(\d+)\]\s+(.+?)\.\.\.\s+(OK|FAILED|WARN(?:INGS?)?|SKIPPED|LOCKED)\s*(.*)$", line)
         if match:
             _idx, total_text, name, raw_status, tail = match.groups()
             total = int(total_text)
@@ -3811,6 +3823,106 @@ def run_dashboard(host: str = "127.0.0.1", port: int = PORT) -> None:
     uvicorn.run(app, host=host, port=port, log_level="warning", workers=1)
 
 
+_DASHBOARD_PID_FILE = Path(tempfile.gettempdir()) / "canompx3" / "bot_dashboard.pid"
+
+
+def _canonical_pid_is_alive(pid: int, expected_create_time: int | None) -> bool:
+    """Liveness via the project's ONE canonical oracle.
+
+    Per the institutional rule (`scripts/tools/fleet_state.py`, restated in
+    `reap_stale_claude_processes._pid_is_alive`): do NOT add a third liveness
+    oracle. Resolve ONLY via `worktree_guard._pid_is_alive`, which carries the
+    load-bearing Windows path (OpenProcess/STILL_ACTIVE) AND a create-time
+    PID-reuse defense that a bare OpenProcess check lacks — so a recycled PID is
+    not mistaken for the orphan. Guarded import: if the oracle is unavailable,
+    return False (treat as not-our-orphan) so we never taskkill an innocent
+    recycled PID on a guess.
+    """
+    try:
+        from scripts.tools import worktree_guard as _wg
+
+        return _wg._pid_is_alive(pid, expected_create_time=expected_create_time)
+    except Exception:
+        return False
+
+
+def _reap_orphan_dashboard() -> None:
+    """Terminate a dashboard subprocess orphaned by a prior window-[X] close.
+
+    When START_BOT is closed with the window [X] (Windows CTRL_CLOSE_EVENT)
+    instead of Ctrl+C, the orchestrator's teardown `finally`
+    (run_live_session.py:1555) is skipped, so the dashboard child is never
+    terminated — it keeps holding port 8080. The next launch would then spawn a
+    SECOND dashboard that fails to bind (uvicorn errors into DEVNULL silently).
+    This sweep, run before each launch, reclaims that orphan first.
+
+    Self-healing belt for the one teardown path Python cannot intercept on
+    Windows. Fail-open: any error leaves the launch to proceed (a stale orphan
+    is a nuisance, not a capital risk — this never touches positions/brokers).
+
+    Conventions reused (NOT reinvented):
+      - liveness: canonical `worktree_guard._pid_is_alive` with create-time
+        PID-reuse defense (the project's single oracle, via
+        _canonical_pid_is_alive).
+      - kill: `taskkill /F /PID` (Windows) / `os.kill(pid, 9)` (Unix) — the same
+        mechanism as `reap_stale_claude_processes._kill`.
+
+    The PID file stores ``pid:create_time`` so the reuse defense actually
+    engages (a recycled PID whose create-time differs is treated as dead).
+    """
+    try:
+        if not _DASHBOARD_PID_FILE.exists():
+            return
+        text = _DASHBOARD_PID_FILE.read_text(encoding="utf-8").strip()
+        if not text:
+            _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+            return
+        pid_part, _, ct_part = text.partition(":")
+        try:
+            pid = int(pid_part)
+        except ValueError:
+            _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+            return
+        try:
+            expected_create_time: int | None = int(ct_part) if ct_part else None
+        except ValueError:
+            expected_create_time = None
+        if pid == os.getpid() or not _canonical_pid_is_alive(pid, expected_create_time):
+            _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+            return
+        # A live process owns the recorded PID (and matches its create-time) —
+        # it is the orphan dashboard.
+        log.warning("Reaping orphan dashboard subprocess (PID %d) from a prior unclean close", pid)
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        else:
+            os.kill(pid, 9)
+        _DASHBOARD_PID_FILE.unlink(missing_ok=True)
+    except Exception as e:  # noqa: BLE001 — fail-open by design (nuisance, not capital)
+        log.warning("Orphan-dashboard reap skipped (non-fatal): %s", e)
+
+
+def _record_dashboard_pid(pid: int) -> None:
+    """Write ``pid:create_time`` so the next launch's reap can defend against
+    PID reuse. create_time is best-effort (None → bare-PID liveness fallback)."""
+    create_time: int | None = None
+    if sys.platform == "win32":
+        try:
+            from scripts.tools.worktree_guard import _get_process_create_time_windows
+
+            create_time = _get_process_create_time_windows(pid)
+        except Exception:
+            create_time = None
+    payload = f"{pid}:{create_time}" if create_time is not None else str(pid)
+    _DASHBOARD_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _DASHBOARD_PID_FILE.write_text(payload, encoding="utf-8")
+
+
 def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
     """Launch dashboard as a background subprocess (Windows-safe).
 
@@ -3824,7 +3936,12 @@ def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
     (run_live_session.py:937). Auto-opening here was producing a redundant
     second browser tab when the launcher path also opened one. See
     docs/runtime/stages/2026-05-26-start-bot-double-dashboard-bug.md.
+
+    Before launching, sweeps any dashboard orphaned by a prior window-[X] close
+    (see _reap_orphan_dashboard) so we never stack a second dashboard on port
+    8080 — the "stray command" symptom of an unclean shutdown.
     """
+    _reap_orphan_dashboard()
     try:
         proc = subprocess.Popen(
             [sys.executable, "-m", "trading_app.live.bot_dashboard", "--port", str(port)],
@@ -3833,6 +3950,10 @@ def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
             stderr=subprocess.DEVNULL,
         )
         log.info("Bot dashboard launched as subprocess (PID %d) at http://localhost:%d", proc.pid, port)
+        try:
+            _record_dashboard_pid(proc.pid)
+        except OSError as e:
+            log.warning("Could not record dashboard PID file (non-fatal): %s", e)
     except Exception as e:
         log.warning("Dashboard subprocess launch failed: %s", e)
         return None
