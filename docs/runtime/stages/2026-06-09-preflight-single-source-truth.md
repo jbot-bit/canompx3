@@ -40,17 +40,19 @@ not_this_stage: |
   - Orchestrator boot consuming the module → Stage 3.
   - Any frontend / chart liveness → Stage 4.
   - Launch/shutdown unification → Stage 5.
-implementation_status: DESIGN_DONE_AWAITING_GO
+implementation_status: STAGE_1_DONE_COMMITTED_9b7c2a8f — STAGE_1b_DASHBOARD_ADAPTER_OPERATOR_DEFERRED
 resume_pointer: |
-  Design COMPLETE + AUDITED (CONDITIONAL→absorbed). NO code written yet.
-  Design doc: docs/plans/2026-06-09-preflight-single-source-truth-design.md
-  Baseline: 71 preflight tests GREEN (cold run 2026-06-09).
-  Operator answered all forks: (a) dashboard adapter preserves dict shape;
-  (b) keep exact strict_zero_warn semantics, expose as field;
-  (c) re-point drift extractor to preflight.py (new residence).
-  NEXT after /clear: on operator "go", implement in the order in Turn 3 of the
-  design doc. First action = create trading_app/live/preflight.py (move engine).
-  Capital-adjacent but behavior-preserving — no operator sign-off gate on Stage 1
+  STATUS (verified 2026-06-09 via git + grep, /next session):
+  Stage 1 (3 of 4 Turn-3 steps) DONE + COMMITTED as `9b7c2a8f` (local-only; operator front-end owns push):
+    - trading_app/live/preflight.py created (engine moved + structured run_preflight()/PreflightReport). VERIFIED exists.
+    - scripts/run_live_session.py thinned, re-imports moved names from preflight.py. VERIFIED imports (line 69).
+    - pipeline/check_drift.py _extract_preflight_emitted_tokens re-pointed to preflight.py. VERIFIED (line 1046).
+  REMAINING done_when items (#2 module test, #3 dashboard in-process re-point, #5 dead-code sweep of
+  _run_preflight_subprocess) are STAGE 1b = dashboard in-process adapter, which the OPERATOR DEFERRED
+  to its own scope (see memory/project_app_overhaul_stage1_preflight_seam_IMPL_DONE_dashboard_NEXT_2026_06_09.md).
+  bot_dashboard.py STILL uses _run_preflight_subprocess (line 753/852) BY DESIGN until Stage 1b.
+  NEXT (operator-gated, NOT autonomous /next): push/merge 9b7c2a8f, then schedule Stage 1b.
+  Capital-adjacent but behavior-preserving — no operator sign-off gate on Stage 1 itself
   itself (Stages 2/3/5 are the capital-sign-off stages).
 ---
 
