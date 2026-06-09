@@ -174,11 +174,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-09
-- **Commit:** 38fd92c4 — test+docs: violation-test 4 critical drift checks; correct preflight Stage-1b docstring
-- **Files changed:** 3 files
-  - `HANDOFF.md`
-  - `tests/test_pipeline/test_check_drift_critical_safety_checks.py`
-  - `trading_app/live/preflight.py`
+- **Commit:** 670025b9 — @ chore(stages): close completed staleness-gate stage; reconcile stale preflight-SSOT stage to git truth
+- **Files changed:** 2 files
+  - `docs/runtime/stages/2026-06-09-live-staleness-gate-trading-days.md`
+  - `docs/runtime/stages/2026-06-09-preflight-single-source-truth.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

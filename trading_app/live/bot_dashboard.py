@@ -68,7 +68,12 @@ LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto"
 LIVE_PILOT_INSTRUMENT = "MNQ"
 LIVE_PILOT_COPIES = 1
 # Dashboard live launches must match the explicit-account CLI preflight.
-LIVE_PILOT_ACCOUNT_ID = 21944866
+# Rationale: 23055112 = 50K Trading Combine (50KTC-V2). Repointed off Express
+# (21944866) 2026-06-10 per operator to route START LIVE at the evaluation
+# account. Both are Topstep 50K ($2000 trailing-DD) so the C11 survival proof
+# for topstep_50k_mnq_auto holds for either. Proper dashboard selector staged
+# (docs/runtime/stages/2026-06-10-dashboard-live-account-selection.md).
+LIVE_PILOT_ACCOUNT_ID = 23055112
 
 
 def _as_mapping(value: object) -> dict[str, object]:
