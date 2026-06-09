@@ -28,6 +28,16 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts import run_live_session as rls  # noqa: E402
+from trading_app.live import preflight as pf  # noqa: E402
+
+# App Overhaul Stage 1: the 15-gate engine moved to trading_app/live/preflight.py.
+# `rls` re-imports every name for namespace parity, so direct calls like
+# `rls._check_repo_drift_for_live(ctx)` still resolve (same function object).
+# BUT a monkeypatch that the *running engine* must observe internally (a helper
+# one gate calls, or a gate `_run_preflight` invokes via PREFLIGHT_CHECKS) has to
+# be applied on the module where the lookup happens at call time — `pf`. Patches
+# of `rls.subprocess.<attr>` need no change: `rls.subprocess is pf.subprocess`
+# (the same shared stdlib module object), so mutating it is observed in both.
 
 
 def _build_portfolio():
@@ -219,7 +229,7 @@ def test_checks_total_equals_len_checks(
     monkeypatch.setattr(bf, "create_broker_components", lambda *a, **kw: all_pass_components)
     monkeypatch.setattr(bf, "get_broker_name", lambda: "topstep")
     monkeypatch.setattr(
-        rls,
+        pf,
         "_run_lightweight_component_self_tests",
         lambda *, instrument, components=None: {"notifications": True, "brackets": True, "fill_poller": True},
     )
@@ -254,7 +264,7 @@ def test_known_failing_check_counted_toward_total(
     monkeypatch.setattr(bf, "create_broker_components", lambda *a, **kw: all_pass_components)
     monkeypatch.setattr(bf, "get_broker_name", lambda: "topstep")
     monkeypatch.setattr(
-        rls,
+        pf,
         "_run_lightweight_component_self_tests",
         lambda *, instrument, components=None: {"notifications": True, "brackets": True, "fill_poller": True},
     )
@@ -285,7 +295,7 @@ def test_all_pass_smoke(
     monkeypatch.setattr(bf, "create_broker_components", lambda *a, **kw: all_pass_components)
     monkeypatch.setattr(bf, "get_broker_name", lambda: "topstep")
     monkeypatch.setattr(
-        rls,
+        pf,
         "_run_lightweight_component_self_tests",
         lambda *, instrument, components=None: {"notifications": True, "brackets": True, "fill_poller": True},
     )
@@ -1135,7 +1145,7 @@ def test_self_tests_threads_components_into_probes(monkeypatch):
         captured["components"] = components
         return {"notifications": True, "brackets": True, "fill_poller": True}
 
-    monkeypatch.setattr(rls, "_run_lightweight_component_self_tests", _spy)
+    monkeypatch.setattr(pf, "_run_lightweight_component_self_tests", _spy)
     components = _components_with_router(_BracketSupportingRouter)
     ctx = rls.PreflightContext(
         instrument="MNQ",
@@ -1155,7 +1165,7 @@ def test_check_notifications_summary_surfaces_per_component_status(monkeypatch):
     not just lump them under "WARNINGS". This is the operator-visibility
     contract that motivated the fix."""
     monkeypatch.setattr(
-        rls,
+        pf,
         "_run_lightweight_component_self_tests",
         lambda *, instrument, components=None: {
             "notifications": True,
@@ -1188,7 +1198,7 @@ def test_notifications_fail_closed_on_probe_failure_for_order_routing(monkeypatc
     real orders route on a known-degraded broker path (unprotected entries /
     untracked fills). Single-probe failure is sufficient to fail."""
     monkeypatch.setattr(
-        rls,
+        pf,
         "_run_lightweight_component_self_tests",
         lambda *, instrument, components=None: {"notifications": True, "brackets": False, "fill_poller": True},
     )
@@ -1206,7 +1216,7 @@ def test_notifications_probe_failure_is_advisory_for_signal_only(monkeypatch):
     """Signal-only places no orders — a probe failure stays advisory (WARNINGS,
     passed=True) so evidence accumulation is not blocked by a degraded probe."""
     monkeypatch.setattr(
-        rls,
+        pf,
         "_run_lightweight_component_self_tests",
         lambda *, instrument, components=None: {"notifications": True, "brackets": False, "fill_poller": True},
     )
@@ -1231,7 +1241,7 @@ def test_live_launch_blocks_when_bracket_probe_fails(monkeypatch, _gate_seams):
     monkeypatch.setattr(bf, "get_broker_name", lambda: "topstep")
     # Everything else in the preflight chain passes; only the component probe fails.
     monkeypatch.setattr(
-        rls,
+        pf,
         "_run_lightweight_component_self_tests",
         lambda *, instrument, components=None: {"notifications": True, "brackets": False, "fill_poller": True},
     )
@@ -1265,7 +1275,7 @@ def test_check_notifications_summary_lists_all_pass_components(monkeypatch):
     """Even on the happy path, every component is listed by name with PASS so
     the operator can scan the line and confirm each subsystem was exercised."""
     monkeypatch.setattr(
-        rls,
+        pf,
         "_run_lightweight_component_self_tests",
         lambda *, instrument, components=None: {
             "notifications": True,
@@ -1334,7 +1344,7 @@ def _patch_locked(monkeypatch, holder_pid):
 def test_journal_lock_live_holder_says_stop_live(monkeypatch):
     """Holder PID is alive → tell the operator to stop it."""
     _patch_locked(monkeypatch, 4242)
-    monkeypatch.setattr(rls, "_pid_is_alive", lambda pid: True)
+    monkeypatch.setattr(pf, "_pid_is_alive", lambda pid: True)
     result = rls._check_trade_journal(_journal_ctx())
     assert result.passed is False
     assert "live PID 4242" in result.message
@@ -1344,7 +1354,7 @@ def test_journal_lock_live_holder_says_stop_live(monkeypatch):
 def test_journal_lock_dead_holder_says_retry(monkeypatch):
     """Holder PID is provably dead → DuckDB should release; advise retry."""
     _patch_locked(monkeypatch, 81372)
-    monkeypatch.setattr(rls, "_pid_is_alive", lambda pid: False)
+    monkeypatch.setattr(pf, "_pid_is_alive", lambda pid: False)
     result = rls._check_trade_journal(_journal_ctx())
     assert result.passed is False
     assert "stale/dead PID 81372" in result.message
@@ -1354,7 +1364,7 @@ def test_journal_lock_dead_holder_says_retry(monkeypatch):
 def test_journal_lock_unknown_liveness_falls_back_to_stop_live(monkeypatch):
     """Liveness cannot be determined → conservative stop_live advice."""
     _patch_locked(monkeypatch, 999999)
-    monkeypatch.setattr(rls, "_pid_is_alive", lambda pid: None)
+    monkeypatch.setattr(pf, "_pid_is_alive", lambda pid: None)
     result = rls._check_trade_journal(_journal_ctx())
     assert result.passed is False
     assert "liveness unknown" in result.message
@@ -1367,7 +1377,7 @@ def test_journal_lock_no_holder_pid(monkeypatch):
     _patch_locked(monkeypatch, None)
     # Probe must NOT be consulted when there is no PID.
     monkeypatch.setattr(
-        rls, "_pid_is_alive", lambda pid: (_ for _ in ()).throw(AssertionError("probe called with no PID"))
+        pf, "_pid_is_alive", lambda pid: (_ for _ in ()).throw(AssertionError("probe called with no PID"))
     )
     result = rls._check_trade_journal(_journal_ctx())
     assert result.passed is False

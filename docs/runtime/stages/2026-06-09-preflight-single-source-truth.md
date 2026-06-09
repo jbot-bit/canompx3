@@ -67,5 +67,14 @@ module, one verdict shape, every surface reads it.
 3. `bot_dashboard.py` calls the module in-process instead of parsing subprocess stdout.
 4. Verify byte-for-byte gate parity via the existing preflight test + a new module unit test.
 
+## Blast Radius
+- `trading_app/live/preflight.py` — NEW module; receives the moved 15-gate engine, probes, dataclasses, `PREFLIGHT_CHECKS`, `_passing_check_is_advisory`, and a new structured `run_preflight() -> PreflightReport`. Zero callers until the launcher + dashboard re-point to it.
+- `scripts/run_live_session.py` — re-imports every moved name back into its namespace (keeps `monkeypatch.setattr(rls, …)` + `rls.CheckResult`/`rls.PreflightContext`/`rls._check_*` test swaps resolving); `_run_preflight` delegates to `run_preflight()` then renders; `main()` unchanged. Source-grep tests pin `checks_total = len(PREFLIGHT_CHECKS)` + `_probe_brackets`/`_probe_fill_poller` textually present here.
+- `trading_app/live/bot_dashboard.py` — `_run_preflight_subprocess` replaced by in-process `run_preflight()` call shaped through a fail-closed adapter into the EXACT existing cache-entry dict (`status`/`checks`/`passed`/`total`/`overall`/`has_warnings`/`has_failures`/`output`); arm-guard (`action_start`) + SSE UI consume those keys unchanged.
+- `pipeline/check_drift.py` — `_extract_preflight_emitted_tokens` re-pointed from `run_live_session.py` to `preflight.py` (the new honest residence); `check_preflight_status_token_parity` must still fail-closed on a known-bad token. Capital-path guard.
+- `tests/test_scripts/test_run_live_session_preflight.py` — 71 tests, MUST stay green untouched (parity proof).
+- `tests/test_trading_app/test_preflight_module.py` — NEW; structured-report-vs-printed parity, fail-closed adapter, anti-rubber-stamp guard on `preflight.py`.
+- Reads: `gold.db` read-only (daily_features freshness probe), broker API read-only (account/contract probes). Writes: none (preflight is exit-after-report; no order routing, no DB writes).
+
 ## Verification profile
 drift + preflight test + module test + grep-no-duplicate-gates + standalone --preflight parity.

@@ -975,9 +975,10 @@ def check_dashboard_sse_single_worker(trading_app_dir: Path) -> list[str]:
     return violations
 
 
-def _extract_preflight_emitted_tokens(run_live_session_py: Path) -> set[str]:
-    """Leading status word of every CheckResult message in run_live_session.py.
+def _extract_preflight_emitted_tokens(preflight_source: Path) -> set[str]:
+    """Leading status word of every CheckResult message in the preflight engine.
 
+    The engine lives in trading_app/live/preflight.py (App Overhaul Stage 1).
     These are the tokens the dashboard's preflight regex captures from each
     `[i/N] <title>... <message>` line. Extracted statically: the first
     all-caps word of any string literal passed as the second positional arg to
@@ -986,7 +987,7 @@ def _extract_preflight_emitted_tokens(run_live_session_py: Path) -> set[str]:
     """
     tokens: set[str] = set()
     try:
-        tree = ast.parse(run_live_session_py.read_text(encoding="utf-8"))
+        tree = ast.parse(preflight_source.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
         return tokens
     for node in ast.walk(tree):
@@ -1012,35 +1013,44 @@ def _extract_preflight_emitted_tokens(run_live_session_py: Path) -> set[str]:
     return tokens
 
 
-def check_preflight_status_token_parity(trading_app_dir: Path, scripts_dir: Path) -> list[str]:
+def check_preflight_status_token_parity(trading_app_dir: Path) -> list[str]:
     """Dashboard MUST map every preflight status token to a blocking bucket.
 
-    Capital-path guard. The bot dashboard delegates preflight to
-    ``run_live_session --preflight`` (shared gate logic, correct pattern) and
-    blocks a real-money --live arm on any WARN under strict-zero-warn
-    (action_start). The bridge between them is ``_normalize_check_status``,
-    which maps each emitted token (OK/FAILED/WARN(S)/SKIPPED) to
-    pass/warn/fail. Its fallback returns ``"info"`` — a bucket that does NOT
-    set ``has_warnings`` and would therefore SILENTLY PASS a live launch.
+    Capital-path guard. The bot dashboard now consumes the preflight verdict
+    in-process from ``trading_app/live/preflight.py`` (App Overhaul Stage 1;
+    shared gate logic, correct pattern) and blocks a real-money --live arm on
+    any WARN under strict-zero-warn (action_start). The bridge between them is
+    ``_normalize_check_status``, which maps each emitted token
+    (OK/FAILED/WARN(S)/SKIPPED) to pass/warn/fail. Its fallback returns
+    ``"info"`` — a bucket that does NOT set ``has_warnings`` and would therefore
+    SILENTLY PASS a live launch.
 
-    If run_live_session ever emits a NEW status token and the dashboard map is
-    not updated, that token falls through to ``"info"`` and fails OPEN on the
+    If the preflight engine ever emits a NEW status token and the dashboard map
+    is not updated, that token falls through to ``"info"`` and fails OPEN on the
     capital path. This check fails CLOSED before that can ship: every token the
     preflight can emit must be explicitly handled by ``_normalize_check_status``
     and resolve to pass/warn/fail — never the info fallback.
 
-    Static: parses both source files; no execution, no DB.
+    Static: parses both source files (preflight.py + bot_dashboard.py); no
+    execution, no DB. ``trading_app_dir`` locates both — the launcher is no
+    longer the token residence, so ``scripts_dir`` is no longer needed.
     """
     violations: list[str] = []
     dash = trading_app_dir / "live" / "bot_dashboard.py"
-    rls = scripts_dir / "run_live_session.py"
-    if not dash.exists() or not rls.exists():
+    # App Overhaul Stage 1: the 15-gate preflight engine (and every CheckResult
+    # call site) moved from scripts/run_live_session.py to trading_app/live/
+    # preflight.py. The token extractor ASTs for CheckResult(...) literals, so it
+    # MUST parse the new residence — parsing the thinned launcher (which now only
+    # re-imports the names) would yield an EMPTY token set and trip the
+    # fail-closed branch below on a capital-path guard for no real reason.
+    preflight_py = trading_app_dir / "live" / "preflight.py"
+    if not dash.exists() or not preflight_py.exists():
         return violations
 
-    emitted = _extract_preflight_emitted_tokens(rls)
+    emitted = _extract_preflight_emitted_tokens(preflight_py)
     if not emitted:
         violations.append(
-            "  run_live_session.py: could not extract any CheckResult status tokens — "
+            "  trading_app/live/preflight.py: could not extract any CheckResult status tokens — "
             "preflight token parity guard cannot verify the dashboard mapping (fail-closed)."
         )
         return violations
@@ -1066,7 +1076,7 @@ def check_preflight_status_token_parity(trading_app_dir: Path, scripts_dir: Path
         bucket = normalize(token)
         if bucket not in {"pass", "warn", "fail"}:
             violations.append(
-                f"  preflight token {token!r} (emitted by run_live_session.py) normalizes to "
+                f"  preflight token {token!r} (emitted by trading_app/live/preflight.py) normalizes to "
                 f"{bucket!r} in bot_dashboard._normalize_check_status — NOT a blocking-relevant "
                 f"bucket. It would fail OPEN and let a real-money --live arm through. Map it to "
                 f"'warn' or 'fail' (never the 'info' fallback)."
@@ -16148,7 +16158,7 @@ CHECKS = [
     ),
     (
         "Preflight status-token parity (dashboard maps every token to a blocking bucket; no live-arm fail-open)",
-        lambda: check_preflight_status_token_parity(TRADING_APP_DIR, SCRIPTS_DIR),
+        lambda: check_preflight_status_token_parity(TRADING_APP_DIR),
         False,
         False,
     ),
