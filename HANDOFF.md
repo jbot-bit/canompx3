@@ -172,11 +172,12 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Unknown
 - **Date:** 2026-06-09
-- **Commit:** dd63be8b — fix(hooks): resolve coordination hooks via ${CLAUDE_PROJECT_DIR} not hardcoded main path
-- **Files changed:** 0
-0 files
+- **Commit:** 4e600db — docs(workflow): plan CLI entrypoint integration
+- **Files changed:** 2 files
+  - `HANDOFF.md`
+  - `docs/plans/active/2026-06/2026-06-09-cli-entrypoints-integration-plan.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
@@ -295,3 +296,9 @@
 - Local issue found and fixed outside tracked files: `core.hooksPath` was unset, so `.githooks/pre-commit` was not active; ran `git config core.hooksPath .githooks` and verified `system_context.py` no longer reports the hook-inactive warning.
 - Code follow-up: `.githooks/pre-commit` now blocks staged Python files with unstaged working-tree hunks before Ruff/format/syntax checks, preventing auto-format from verifying or re-staging unintended local edits.
 - Added `docs/audits/2026-06-07-precommit-hotpath-current-state-audit.md` and updated the prior process-debt/speed docs with the current-state correction.
+
+## Current Codex Follow-up - CLI Entrypoints Integration Plan
+- **Tool:** Codex
+- **Date:** 2026-06-09
+- **Summary:** Reworked the active CLI entrypoints plan after operator feedback. The plan is now shorter, grounded in official PyPA/setuptools/argparse guidance and repo probes, and recommends a two-layer UX: one discoverable `canompx3` umbrella command plus a small set of `canompx3-*` aliases. Work is split into Terminal A (Tier 0 umbrella/aliases/tests), Terminal B (docs parity), Terminal C (Tier 1 non-broker side-effecting wrappers), and Terminal D (Tier 2 live/app wrappers, last). Ready Claude Code prompt remains embedded in the plan; recommended first pass is Terminal A only.
+- **Status:** Plan-only change; no CLI wrappers implemented yet.
