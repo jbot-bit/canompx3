@@ -122,7 +122,7 @@ echo.
 :: arm guard (bot_dashboard.action_start), which blocks a real-money launch on
 :: ANY advisory (WARN/SKIPPED) check. --strict-zero-warn ports that exact rule
 :: (via the canonical run_live_session preflight) to this path. Routing flags
-:: mirror _live_pilot_cli_args (MNQ, 1 copy, account 21944866). Signal/demo
+:: mirror _live_pilot_cli_args (MNQ, 1 copy, account 23055112 = 50K Combine). Signal/demo
 :: launches skip this block (no live orders -> advisory checks stay advisory).
 if /i "%BOT_MODE_FLAGS%"=="--live" (
     echo [3b/5] Refreshing LIVE control state: profile=%ACTIVE_PROFILE%
@@ -134,7 +134,7 @@ if /i "%BOT_MODE_FLAGS%"=="--live" (
         exit /b 1
     )
     echo [3b/5] Running LIVE strict preflight: profile=%ACTIVE_PROFILE%
-    .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% --instrument MNQ --copies 1 --account-id 21944866 --live --preflight --strict-zero-warn
+    .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% --instrument MNQ --copies 1 --account-id 23055112 --live --preflight --strict-zero-warn
     if errorlevel 1 (
         echo.
         echo [BLOCKED] LIVE preflight failed or has advisory WARN/SKIPPED checks. Fix before real-money launch.
@@ -162,7 +162,7 @@ if /i "%BOT_MODE_FLAGS%"=="--live" set WIN_STATE=
 :: re-runs its own boot preflight, sees 2 broker accounts, and FAILS check [13]
 :: ("no --account-id would default to accounts[0]") -> never arms. Mirror line 137.
 set LIVE_ROUTING=
-if /i "%BOT_MODE_FLAGS%"=="--live" set LIVE_ROUTING=--instrument MNQ --copies 1 --account-id 21944866
+if /i "%BOT_MODE_FLAGS%"=="--live" set LIVE_ROUTING=--instrument MNQ --copies 1 --account-id 23055112
 start "ORB Orchestrator (%ACTIVE_PROFILE%)" %WIN_STATE% cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS% %LIVE_ROUTING%"
 
 :: Step 5: Launch dashboard + open browser in this (main) console.
