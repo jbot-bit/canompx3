@@ -1,14 +1,21 @@
 """Single source of preflight truth — the canonical live-launch gate engine.
 
 App Overhaul Stage 1 (cohesion seam). This module houses the 15-gate preflight
-engine that was previously inline in ``scripts/run_live_session.py``. Every
-surface that needs a launch verdict now reads ONE in-process engine instead of
-the four divergent copies that made the app "feel disjointed":
+engine that was previously inline in ``scripts/run_live_session.py``. The engine
+is now ONE in-process source of truth, replacing the divergent copies that made
+the app "feel disjointed":
 
   - ``scripts/run_live_session.py`` re-imports these names and keeps only the
     run-and-print CLI wrapper (``_run_preflight``) + ``main()``.
-  - ``trading_app/live/bot_dashboard.py`` calls :func:`run_preflight` in-process
-    (no third subprocess, no stdout regex-parse).
+
+Stage 1b (DEFERRED — not yet wired): ``trading_app/live/bot_dashboard.py`` is
+intended to call :func:`run_preflight` in-process via an adapter. **Today it
+still shells out** to ``python -m scripts.run_live_session --preflight`` and
+regex-parses stdout (``_run_preflight_subprocess`` / ``_parse_preflight_output``
+in bot_dashboard.py). That subprocess path is the legacy seam this module's
+Stage 1b will retire; until then the launcher's ``_run_preflight`` renders the
+report to stdout in the exact ``[i/N] <title>... <message>`` format the dashboard
+regex tolerates, so the two paths stay in agreement.
 
 The engine is **behavior-preserving**: gate verdicts, ordering, fail-closed
 semantics, and the ``strict_zero_warn`` rule are byte-for-byte what they were in

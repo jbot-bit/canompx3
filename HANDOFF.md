@@ -174,18 +174,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-09
-- **Commit:** 32063684 — feat(hooks): hollow-commit prevention gate (commit-msg) — Stage 2
-- **Files changed:** 5 files
-  - `.githooks/commit-msg`
-  - `docs/runtime/stages/multi-terminal-coordination-stage2.md`
-  - `docs/superpowers/specs/2026-06-09-multi-terminal-coordination-design.md`
-  - `scripts/tools/commit_message_content_gate.py`
-  - `tests/test_hooks/test_commit_msg_content_gate.py`
-- **Commit:** d7662919 — fix(pulse): scope worktree metadata to canonical repo + surface all capital blockers
-- **Files changed:** 3 files
-  - `docs/runtime/stages/fix_worktree_metadata_path_leak.md`
-  - `scripts/tools/project_pulse.py`
-  - `tests/test_tools/test_project_pulse.py`
+- **Commit:** 0658119d — docs(handoff): update Last Session block to current HEAD
+- **Files changed:** 1 files
+  - `HANDOFF.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
