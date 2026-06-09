@@ -1320,6 +1320,43 @@ class TestCollectWorktrees:
         items = collect_worktrees(tmp_path)
         assert items == []
 
+    def test_ignores_host_machine_worktrees(self, tmp_path: Path) -> None:
+        """collect_worktrees(tmp_path) must not leak the host repo's live worktrees.
+
+        Regression: `git worktree list` resolves the enclosing repo when `canonical`
+        is not itself a git root (a pytest tmp_path), so the authoritative branch of
+        _worktree_metadata returned the developer machine's real worktrees on top of
+        the fixture — making the count environment-dependent and flaky. The fix scopes
+        authoritative results to `canonical/.worktrees`; this test simulates git
+        reporting an out-of-tree worktree and asserts it is dropped.
+        """
+        from scripts.tools.worktree_manager import WorktreeInfo
+
+        # One legit fixture worktree under canonical/.worktrees ...
+        meta = tmp_path / ".worktrees" / "claude" / "mine" / ".canompx3-worktree.json"
+        _mkfile(meta, json.dumps({"tool": "claude", "name": "mine", "branch": "wt-mine"}))
+
+        # ... and a foreign worktree that `git worktree list` would report because
+        # it ran against the enclosing host repo, with readable metadata of its own.
+        foreign = tmp_path.parent / "host-machine-wt"
+        _mkfile(
+            foreign / ".canompx3-worktree.json",
+            json.dumps({"tool": "claude", "name": "host", "branch": "wt-host"}),
+        )
+
+        fake_list = [
+            WorktreeInfo(path=str(foreign), branch="wt-host", head="deadbeef"),
+        ]
+        # list_worktrees is imported inside _worktree_metadata, so it resolves at
+        # call time from the worktree_manager namespace — patch it there, not on
+        # project_pulse.
+        with patch("scripts.tools.worktree_manager.list_worktrees", return_value=fake_list):
+            items = collect_worktrees(tmp_path)
+
+        assert len(items) == 1
+        assert "mine" in items[0].summary
+        assert "host" not in items[0].summary
+
 
 # ---------------------------------------------------------------------------
 # Cache
@@ -1756,6 +1793,41 @@ class TestDeploymentState:
 
         assert recommendation.startswith("NO_CHANGE:")
         assert "survival report missing" in recommendation
+
+    def test_multiple_capital_evidence_blockers_surface_all_severity_ranked(self) -> None:
+        # Two blockers of differing severity and source. The recommendation must
+        # surface BOTH (so the operator sees the whole list at once instead of
+        # peeling them one at a time) with the high-severity one ranked first,
+        # carry a "(2)" count suffix, and keep the "blocked" gate token.
+        report = PulseReport(
+            generated_at="2026-05-23T00:00:00+00:00",
+            cache_hit=False,
+            git_head="HEAD",
+            git_branch="main",
+            items=[
+                PulseItem(
+                    category="broken",
+                    severity="medium",
+                    source="sr_monitor",
+                    summary="sr monitor drift alarm",
+                ),
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="criterion11",
+                    summary="survival report missing",
+                ),
+            ],
+        )
+
+        recommendation = project_pulse._compute_capital_recommendation(report)
+
+        assert "blocked" in recommendation.lower()
+        assert "(2)" in recommendation
+        assert "survival report missing" in recommendation
+        assert "sr monitor drift alarm" in recommendation
+        # high-severity blocker ranked before medium-severity one
+        assert recommendation.index("survival report missing") < recommendation.index("sr monitor drift alarm")
 
     def test_unreadable_capital_packet_is_broken(self, tmp_path: Path) -> None:
         packet = tmp_path / "docs" / "runtime" / "fast_lane_capital_packet.json"

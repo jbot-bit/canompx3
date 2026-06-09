@@ -864,6 +864,9 @@ def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
 EXECUTION_STALE_AFTER_DAYS = 7
 REPORT_ONLY_CAPITAL_BOUNDARY = "REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY"
 AUTHORIZED_PROMOTE_CAPITAL_BOUNDARIES: frozenset[str] = frozenset()
+# Canonical severity ordering for pulse items (high -> medium -> low). Shared by
+# _compute_capital_recommendation (blocker ranking) and _build_next_actions.
+_SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
 
 def _parse_day(value: object) -> date | None:
@@ -1779,6 +1782,7 @@ def _worktree_metadata(canonical: Path, *, authoritative: bool) -> list[dict]:
         return []
 
     canonical_resolved = canonical.resolve()
+    worktree_root_resolved = worktree_root.resolve()
     worktrees_by_path: dict[Path, dict] = {}
 
     if authoritative:
@@ -1786,6 +1790,14 @@ def _worktree_metadata(canonical: Path, *, authoritative: bool) -> list[dict]:
             for info in list_worktrees(canonical):
                 path = Path(info.path).resolve()
                 if path == canonical_resolved:
+                    continue
+                # `git worktree list` resolves the enclosing repo, not `canonical`.
+                # When `canonical` is not itself a git root (e.g. a pytest tmp_path),
+                # git walks up and returns the host repo's worktrees, leaking global
+                # state into a path-scoped call. Only trust worktrees that actually
+                # live under this canonical's managed `.worktrees/` root — every
+                # managed worktree does by construction (new_session.sh).
+                if not path.is_relative_to(worktree_root_resolved):
                     continue
                 meta_path = path / WORKTREE_META
                 if not meta_path.exists():
@@ -2610,13 +2622,18 @@ def _compute_recommendation(report: PulseReport) -> str:
 
 def _compute_capital_recommendation(report: PulseReport) -> str:
     """Return the capital cockpit recommendation token plus concise reason."""
-    blocked = [
-        item
-        for item in report.broken
-        if item.source in {"execution", "criterion11", "sr_monitor", "lifecycle", "deployment"}
-    ]
+    blocked = sorted(
+        (
+            item
+            for item in report.broken
+            if item.source in {"execution", "criterion11", "sr_monitor", "lifecycle", "deployment"}
+        ),
+        key=lambda i: (_SEVERITY_RANK.get(i.severity, 9), i.source, i.summary),
+    )
     if blocked:
-        return f"NO_CHANGE: capital evidence blocked - {blocked[0].summary}"
+        summaries = "; ".join(str(item.summary or "unknown") for item in blocked)
+        suffix = f" ({len(blocked)})" if len(blocked) > 1 else ""
+        return f"NO_CHANGE: capital evidence blocked{suffix} - {summaries}"
 
     if report.pause_summary and report.pause_summary.get("paused_count", 0):
         return f"PAUSE: {report.pause_summary.get('paused_count')} lane(s) already paused"
@@ -2699,10 +2716,9 @@ def _build_next_actions(items: list[PulseItem], *, limit: int = 5) -> list[NextA
     actions: list[NextAction] = []
     seen: set[str] = set()
     priority = {"broken": 0, "decaying": 1, "unactioned": 2, "ready": 3, "paused": 4}
-    severity = {"high": 0, "medium": 1, "low": 2}
 
     for item in sorted(
-        items, key=lambda i: (priority.get(i.category, 9), severity.get(i.severity, 9), i.source, i.summary)
+        items, key=lambda i: (priority.get(i.category, 9), _SEVERITY_RANK.get(i.severity, 9), i.source, i.summary)
     ):
         if item.source == "action_queue":
             queue_id = _queue_id_from_summary(item.summary)
