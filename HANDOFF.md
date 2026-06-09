@@ -174,9 +174,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-09
-- **Commit:** dd63be8b — fix(hooks): resolve coordination hooks via ${CLAUDE_PROJECT_DIR} not hardcoded main path
-- **Files changed:** 0
-0 files
+- **Commit:** 32063684 — feat(hooks): hollow-commit prevention gate (commit-msg) — Stage 2
+- **Files changed:** 5 files
+  - `.githooks/commit-msg`
+  - `docs/runtime/stages/multi-terminal-coordination-stage2.md`
+  - `docs/superpowers/specs/2026-06-09-multi-terminal-coordination-design.md`
+  - `scripts/tools/commit_message_content_gate.py`
+  - `tests/test_hooks/test_commit_msg_content_gate.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
