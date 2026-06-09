@@ -1112,6 +1112,7 @@ def test_run_preflight_subprocess_pins_single_copy_live_pilot(monkeypatch):
     assert result["returncode"] == 0
     assert "--signal-only" not in captured["cmd"]
     assert "--live" in captured["cmd"]
+    assert "--strict-zero-warn" in captured["cmd"]
     assert "--instrument" in captured["cmd"]
     assert "MNQ" in captured["cmd"]
     assert "--copies" in captured["cmd"]
@@ -1120,6 +1121,28 @@ def test_run_preflight_subprocess_pins_single_copy_live_pilot(monkeypatch):
     assert "21944866" in captured["cmd"]
     assert "--preflight" in captured["cmd"]
     assert "topstep_50k_mnq_auto" in captured["cmd"]
+
+
+def test_run_preflight_subprocess_preserves_warn_status_on_strict_returncode(monkeypatch):
+    """Advisory-only strict-zero-warn blocks should remain WARN in the UI."""
+
+    def fake_run(_cmd, **_kw):
+        return SimpleNamespace(
+            returncode=1,
+            stdout="[1/1] Advisory check... SKIPPED (needs operator evidence)\n"
+            "\nPreflight: 1/1 passed\nPreflight warnings: 1\n"
+            "STRICT-ZERO-WARN: blocked because passing preflight still has WARN/SKIPPED checks.\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(bot_dashboard.subprocess, "run", fake_run)
+
+    result = bot_dashboard._run_preflight_subprocess("topstep_50k_mnq_auto", mode="live")
+
+    assert result["returncode"] == 1
+    assert result["status"] == "warn"
+    assert result["has_warnings"] is True
+    assert result["has_failures"] is False
 
 
 def test_run_preflight_subprocess_threads_signal_only_in_signal_mode(monkeypatch):
