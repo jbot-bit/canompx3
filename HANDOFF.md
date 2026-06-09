@@ -172,15 +172,15 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Unknown
 - **Date:** 2026-06-09
-- **Commit:** 32063684 — feat(hooks): hollow-commit prevention gate (commit-msg) — Stage 2
+- **Commit:** c754288 — audit: add industry gap report and security baselines
 - **Files changed:** 5 files
-  - `.githooks/commit-msg`
-  - `docs/runtime/stages/multi-terminal-coordination-stage2.md`
-  - `docs/superpowers/specs/2026-06-09-multi-terminal-coordination-design.md`
-  - `scripts/tools/commit_message_content_gate.py`
-  - `tests/test_hooks/test_commit_msg_content_gate.py`
+  - `.github/dependabot.yml`
+  - `.github/workflows/codeql.yml`
+  - `.github/workflows/scorecard.yml`
+  - `HANDOFF.md`
+  - `docs/audits/2026-06-09-industry-current-state-gap-audit.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
@@ -299,3 +299,10 @@
 - Local issue found and fixed outside tracked files: `core.hooksPath` was unset, so `.githooks/pre-commit` was not active; ran `git config core.hooksPath .githooks` and verified `system_context.py` no longer reports the hook-inactive warning.
 - Code follow-up: `.githooks/pre-commit` now blocks staged Python files with unstaged working-tree hunks before Ruff/format/syntax checks, preventing auto-format from verifying or re-staging unintended local edits.
 - Added `docs/audits/2026-06-07-precommit-hotpath-current-state-audit.md` and updated the prior process-debt/speed docs with the current-state correction.
+
+## 2026-06-09 Codex update — industry current-state gap audit + supply-chain baseline
+
+- Ran a repo-local/current-state audit pass against security, monitoring/observability, data, live controls, AI/model risk, infra, testing, and research practice, with external anchors from NIST SSDF, OWASP ASVS, Google SRE, OpenTelemetry, FINRA/CFTC trading-control guidance, SR 11-7, NautilusTrader, QuantConnect LEAN, and OpenBB.
+- Created `docs/audits/2026-06-09-industry-current-state-gap-audit.md` with 45 ranked findings, each carrying severity, smallest-diff fix, and concrete action.
+- Implemented the first low-blast-radius fixes from the audit: Dependabot for GitHub Actions/uv dependency update PRs, CodeQL Python security scanning, and OpenSSF Scorecard SARIF publishing.
+- Local verification caveat: `/workspace/canompx3/gold.db` remains absent in this WSL checkout, so DB-backed audit gates fail exactly as expected for local live/readiness proof. `core.hooksPath` was unset at session start and was repaired locally with `git config core.hooksPath .githooks`.
