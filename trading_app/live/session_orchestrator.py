@@ -3201,6 +3201,112 @@ class SessionOrchestrator:
                 log.critical(msg)
                 self._notify(msg)
 
+    async def _flatten_broker_positions(self, broker_open: list[dict]) -> bool:
+        """Force-close positions the BROKER reports open, by broker truth.
+
+        Unlike ``_emergency_flatten`` (which closes only locally-tracked
+        positions and returns immediately when the local tracker is empty),
+        this closes whatever ``query_open`` reports — the path for an UNTRACKED
+        orphan fill that the engine never saw (e.g. a fill landing during a
+        disconnect, or an order placed outside our flow). Concretum operational
+        rule: when broker and local state disagree, trust the broker.
+
+        Each position is market-closed via the proven ``build_exit_spec`` →
+        ``submit`` path with the same 3-attempt + backoff retry as the
+        kill-switch flatten, then CONFIRMED flat by re-polling ``query_open``.
+
+        Returns True only when the broker is confirmed flat afterwards. Returns
+        False (fail-closed, with a loud operator alert) when a position may
+        remain open — the caller must NOT report a clean state on False.
+        """
+        if self.signal_only or self.order_router is None or self.positions is None:
+            # No live order path → cannot place a broker close. Surface loudly;
+            # a real open position here needs a human.
+            if broker_open:
+                msg = (
+                    f"MANUAL CLOSE REQUIRED: {len(broker_open)} broker position(s) open but no "
+                    f"live order router (signal-only/no-router) — cannot auto-flatten: {broker_open}"
+                )
+                log.critical(msg)
+                self._notify(msg)
+            return not broker_open
+
+        loop = asyncio.get_running_loop()
+        for pos in broker_open:
+            contract_id = pos.get("contract_id")
+            direction = pos.get("side")  # "long" / "short" from query_open
+            size = pos.get("size", 0) or 0
+            if not contract_id or direction not in ("long", "short") or size <= 0:
+                msg = (
+                    f"MANUAL CLOSE REQUIRED: cannot build broker-close spec for malformed "
+                    f"position {pos} — flatten skipped for this entry."
+                )
+                log.critical(msg)
+                self._notify(msg)
+                continue
+
+            # Build the close spec ONCE with a stable idempotency key (customTag)
+            # reused across all retries. Without this, build_exit_spec emits no
+            # customTag and order_router.submit mints a fresh UUID per call — so a
+            # send-that-actually-filled-but-timed-out would, on retry, place a
+            # SECOND close and flip the position to the opposite side (the very
+            # naked-exposure failure this method prevents). One key → the broker
+            # dedups the retry. (Evidence-auditor finding, 2026-06-09.)
+            from trading_app.live.projectx.order_router import generate_client_order_id
+
+            exit_spec = self.order_router.build_exit_spec(direction=direction, symbol=contract_id, qty=size)
+            exit_spec["customTag"] = generate_client_order_id()
+            for attempt in range(3):
+                try:
+                    result = await loop.run_in_executor(None, self.order_router.submit, exit_spec)
+                    order_id = result.get("order_id") if isinstance(result, dict) else getattr(result, "order_id", None)
+                    msg = (
+                        f"ORPHAN FLATTEN: broker {direction} {size}x {contract_id} → "
+                        f"orderId={order_id} (attempt {attempt + 1})"
+                    )
+                    log.critical(msg)
+                    self._notify(msg)
+                    break
+                except Exception as e:  # noqa: BLE001 — fail-closed; retry then escalate
+                    msg = f"ORPHAN FLATTEN FAILED: {contract_id} attempt {attempt + 1}/3 — {e}"
+                    log.critical(msg)
+                    self._notify(msg)
+                    await asyncio.sleep(2**attempt)
+            else:
+                msg = f"MANUAL CLOSE REQUIRED: Failed to flatten broker position {contract_id} after 3 attempts"
+                log.critical(msg)
+                self._notify(msg)
+
+        # Confirm flat against broker truth — a submitted close is acceptance,
+        # not confirmed execution. Re-poll; if still open, fail-closed loudly.
+        try:
+            still_open = self.positions.query_open(self.order_router.account_id)
+        except NotImplementedError:
+            # Broker cannot confirm — cannot assert flat. Fail-closed.
+            msg = (
+                f"MANUAL CLOSE REQUIRED: {self._broker_name} cannot confirm flat after orphan flatten "
+                "(query_open unsupported) — verify positions manually."
+            )
+            log.critical(msg)
+            self._notify(msg)
+            return False
+        except Exception as e:  # noqa: BLE001 — fail-closed: unverified ⇒ not flat
+            msg = f"ORPHAN FLATTEN: post-close broker confirm failed ({e}) — assume NOT flat, MANUAL CLOSE REQUIRED."
+            log.critical(msg)
+            self._notify(msg)
+            return False
+
+        if still_open:
+            msg = (
+                f"ORPHAN FLATTEN INCOMPLETE: {len(still_open)} position(s) STILL OPEN after flatten — "
+                f"MANUAL CLOSE REQUIRED: {still_open}"
+            )
+            log.critical(msg)
+            self._notify(msg)
+            return False
+        log.info("ORPHAN FLATTEN: broker confirmed flat.")
+        return True
+
     def _broker_equity_stale(self) -> tuple[bool, str]:
         """Check whether the broker has stopped acknowledging equity reads.
 
@@ -3361,21 +3467,26 @@ class SessionOrchestrator:
             msg = (
                 f"RECONNECT DESYNC (attempt {reconnect_count}): broker shows {len(broker_open)} "
                 f"OPEN position(s) but local tracker is flat — untracked fill during disconnect. "
-                f"Firing kill switch + emergency flatten. Positions: {broker_open}"
+                f"Firing kill switch + broker-truth flatten. Positions: {broker_open}"
             )
             log.critical(msg)
             self._notify(msg)
+            # Latch the kill switch (blocks new entries) but flatten the orphan
+            # REGARDLESS of latch state — an already-fired latch must not leave an
+            # untracked broker position open (the -684 incident, 2026-06-08). Close
+            # by broker truth, not local tracker (_emergency_flatten no-ops here
+            # because the local tracker is empty by definition in this branch).
             if not self._kill_switch_fired:
                 self._fire_kill_switch()
-                try:
-                    await self._emergency_flatten()
-                except Exception as flatten_exc:  # noqa: BLE001 — fail-closed alert
-                    fail_msg = (
-                        f"RECONNECT DESYNC: emergency flatten failed ({flatten_exc}) — "
-                        "MANUAL CLOSE REQUIRED; untracked broker position remains open."
-                    )
-                    log.critical(fail_msg)
-                    self._notify(fail_msg)
+            try:
+                await self._flatten_broker_positions(broker_open)
+            except Exception as flatten_exc:  # noqa: BLE001 — fail-closed alert
+                fail_msg = (
+                    f"RECONNECT DESYNC: broker-truth flatten raised ({flatten_exc}) — "
+                    "MANUAL CLOSE REQUIRED; untracked broker position may remain open."
+                )
+                log.critical(fail_msg)
+                self._notify(fail_msg)
             return
 
         # Broker open AND local tracker active: a position is genuinely open across
@@ -4288,8 +4399,20 @@ class SessionOrchestrator:
                     msg = f"EOD RECONCILIATION{context}: {len(remaining)} positions still open after session end"
                     log.critical(msg)
                     self._notify(msg)
-                    if self._kill_switch_fired:
-                        msg = f"Kill switch flatten may have failed — MANUAL CLOSE REQUIRED for: {[r.get('contract_id', '?') for r in remaining]}"
+                    # Last chance to auto-close before the session ends — do not
+                    # merely log MANUAL CLOSE REQUIRED and leave capital exposed
+                    # overnight (the -684 incident, 2026-06-08). Force-flat by
+                    # broker truth and confirm; only fall through to the manual
+                    # alert if the auto-flatten could not confirm flat.
+                    # post_session() runs AFTER asyncio.run() exits (no event
+                    # loop), so drive the coroutine via asyncio.run — same pattern
+                    # as the _close_all EOD flatten above.
+                    flat = asyncio.run(self._flatten_broker_positions(remaining))
+                    if not flat:
+                        msg = (
+                            f"EOD AUTO-FLATTEN INCOMPLETE — MANUAL CLOSE REQUIRED for: "
+                            f"{[r.get('contract_id', '?') for r in remaining]}"
+                        )
                         log.critical(msg)
                         self._notify(msg)
                 else:

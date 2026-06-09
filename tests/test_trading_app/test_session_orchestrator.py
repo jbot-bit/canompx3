@@ -7180,3 +7180,180 @@ class TestLiveHealthSnapshot:
         snap = orch._build_live_health_snapshot()
         assert snap["brackets_probe"] is True
         assert snap["fill_poller_probe"] is True
+
+
+# ---------------------------------------------------------------------------
+# Orphan broker-truth flatten (_flatten_broker_positions)
+# Regression coverage for the 2026-06-08 -$684 incident: an untracked broker
+# position (fill during disconnect) that _emergency_flatten could not close
+# because it only flattens the LOCAL tracker. The broker-truth flatten closes
+# whatever query_open reports and CONFIRMS flat by re-polling.
+# ---------------------------------------------------------------------------
+
+
+class _SeqPositions:
+    """query_open returns each queued result in order, then repeats the last.
+
+    Lets a test simulate "open before flatten, flat after" for the confirm
+    re-poll, or "still open after flatten" for the fail-closed path.
+    """
+
+    def __init__(self, sequence: list[list[dict]]):
+        self._sequence = sequence
+        self.calls = 0
+
+    def query_open(self, account_id: int) -> list[dict]:
+        idx = min(self.calls, len(self._sequence) - 1)
+        self.calls += 1
+        return self._sequence[idx]
+
+
+def _orphan(contract_id="CON.F.US.MNQ.M26", side="short", size=1, avg=29106.5) -> dict:
+    return {"contract_id": contract_id, "side": side, "size": size, "avg_price": avg}
+
+
+@pytest.mark.asyncio
+async def test_orphan_flatten_closes_and_confirms_flat():
+    """Broker shows a position, local tracker empty → close submitted AND
+    confirmed flat by re-poll → returns True, no MANUAL CLOSE alert."""
+    orch = build_orchestrator()
+    orch._notify = MagicMock()
+    # query_open: [orphan] on detection (caller's), then [] on confirm re-poll.
+    orch.positions = _SeqPositions([[], []])  # confirm re-poll returns flat
+    router = orch.order_router
+
+    ok = await orch._flatten_broker_positions([_orphan()])
+
+    assert ok is True
+    assert len(router.submitted) == 1, "exactly one broker close submitted"
+    spec = router.submitted[0]
+    # build_exit_spec was called with the position's direction/symbol/qty
+    assert spec["direction"] == "short"
+    assert spec["symbol"] == "CON.F.US.MNQ.M26"
+    assert spec["qty"] == 1
+    manual = [c for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
+    assert not manual, f"no manual-close alert expected on confirmed flat: {orch._notify.call_args_list}"
+
+
+@pytest.mark.asyncio
+async def test_orphan_flatten_retries_then_succeeds():
+    """First submit raises, second succeeds → retried, close lands, True."""
+    orch = build_orchestrator()
+    orch._notify = MagicMock()
+    orch.positions = _SeqPositions([[]])  # confirm re-poll flat
+
+    calls = {"n": 0}
+    real_submit = orch.order_router.submit
+
+    def flaky_submit(spec):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("broker 503")
+        return real_submit(spec)
+
+    orch.order_router.submit = flaky_submit
+
+    ok = await orch._flatten_broker_positions([_orphan()])
+
+    assert ok is True
+    assert calls["n"] == 2, "submit retried after first failure"
+    retry_alerts = [c for c in orch._notify.call_args_list if "ORPHAN FLATTEN FAILED" in str(c)]
+    assert retry_alerts, "first-attempt failure surfaced to operator"
+
+
+@pytest.mark.asyncio
+async def test_orphan_flatten_still_open_fails_closed():
+    """Close submitted but broker STILL shows position on re-poll → returns
+    False (fail-closed) and raises MANUAL CLOSE REQUIRED."""
+    orch = build_orchestrator()
+    orch._notify = MagicMock()
+    # confirm re-poll STILL shows the orphan → not flat
+    orch.positions = _SeqPositions([[_orphan()]])
+
+    ok = await orch._flatten_broker_positions([_orphan()])
+
+    assert ok is False, "must fail-closed when broker not confirmed flat"
+    incomplete = [c for c in orch._notify.call_args_list if "STILL OPEN" in str(c) or "MANUAL CLOSE" in str(c)]
+    assert incomplete, "operator alerted that position may remain open"
+
+
+@pytest.mark.asyncio
+async def test_orphan_flatten_signal_only_cannot_close():
+    """signal-only / no router → cannot place a broker close → returns False
+    and raises MANUAL CLOSE REQUIRED (never silently reports flat)."""
+    orch = build_orchestrator(FakeBrokerComponents(signal_only=True))
+    orch._notify = MagicMock()
+
+    ok = await orch._flatten_broker_positions([_orphan()])
+
+    assert ok is False
+    manual = [c for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
+    assert manual, "signal-only open position must alert operator"
+
+
+@pytest.mark.asyncio
+async def test_orphan_flatten_query_open_unsupported_fails_closed():
+    """Broker cannot confirm (query_open NotImplementedError on re-poll) →
+    returns False, cannot assert flat."""
+    orch = build_orchestrator()
+    orch._notify = MagicMock()
+
+    class _NoConfirm:
+        def query_open(self, account_id: int):
+            raise NotImplementedError
+
+    orch.positions = _NoConfirm()
+
+    ok = await orch._flatten_broker_positions([_orphan()])
+
+    assert ok is False
+    manual = [c for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
+    assert manual, "unconfirmable flat must alert operator"
+
+
+@pytest.mark.asyncio
+async def test_orphan_flatten_retry_reuses_idempotency_key():
+    """A send-that-timed-out then retried must reuse ONE customTag across all
+    attempts — otherwise a broker that already filled attempt 1 would accept
+    attempt 2 as a NEW order and flip the position. (Evidence-auditor Risk 5.)"""
+    orch = build_orchestrator()
+    orch._notify = MagicMock()
+    orch.positions = _SeqPositions([[]])  # confirm flat afterwards
+
+    seen_tags: list[str] = []
+    calls = {"n": 0}
+
+    def capture_then_flaky(spec):
+        seen_tags.append(spec.get("customTag"))
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("timeout after broker accepted")
+        return {"order_id": 99, "status": "submitted", "fill_price": None}
+
+    orch.order_router.submit = capture_then_flaky
+
+    ok = await orch._flatten_broker_positions([_orphan()])
+
+    assert ok is True
+    assert calls["n"] == 2, "retried after timeout"
+    assert len(seen_tags) == 2 and seen_tags[0] is not None
+    assert seen_tags[0] == seen_tags[1], f"retry must reuse the same idempotency key, got {seen_tags}"
+
+
+@pytest.mark.asyncio
+async def test_orphan_flatten_skips_malformed_position():
+    """A malformed broker position (no contract_id / bad side / zero size) is
+    skipped with an alert, not crashed on."""
+    orch = build_orchestrator()
+    orch._notify = MagicMock()
+    orch.positions = _SeqPositions([[]])  # confirm flat afterwards
+
+    bad = {"contract_id": None, "side": "short", "size": 1}
+    ok = await orch._flatten_broker_positions([bad])
+
+    # No valid close was built; broker confirms flat (nothing was open) → True,
+    # but the malformed entry must have raised a MANUAL CLOSE alert.
+    assert orch.order_router.submitted == [], "no close built for malformed position"
+    manual = [c for c in orch._notify.call_args_list if "MANUAL CLOSE REQUIRED" in str(c)]
+    assert manual, "malformed position surfaced to operator"
+    assert ok is True

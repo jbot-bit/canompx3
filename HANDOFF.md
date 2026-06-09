@@ -174,9 +174,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-09
-- **Commit:** 0658119d — docs(handoff): update Last Session block to current HEAD
-- **Files changed:** 1 files
+- **Commit:** 38fd92c4 — test+docs: violation-test 4 critical drift checks; correct preflight Stage-1b docstring
+- **Files changed:** 3 files
   - `HANDOFF.md`
+  - `tests/test_pipeline/test_check_drift_critical_safety_checks.py`
+  - `trading_app/live/preflight.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
