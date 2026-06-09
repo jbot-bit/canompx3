@@ -6,6 +6,13 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Codex Session - Daily bug scan stale close-time latch fix (2026-06-09)
+- **Tool:** Codex.
+- **Grounding packet:** `python scripts/tools/daily_bug_scan.py --since 2026-06-07T23:02:02.231Z --base-ref origin/main --include-local-head --max-commits 5 --format json` returned verification mode `static_only` (`no repo-managed interpreter detected`) and surfaced local live-session commits `13f8ef1d` / `4bbe0948` as the highest-signal candidates.
+- **Finding fixed:** The fresh stale-kill-switch patch day-scoped `kill_switch_fired` but still restored prior-day `close_time_forced` unconditionally. On restart, that stale latch skipped the next session's close-time flatten gate (`if not self._close_time_forced ...`) for the whole day. This was proven with a new failing regression in `tests/test_trading_app/test_session_safety_state.py::test_prior_day_close_time_flag_expires`.
+- **What changed:** `trading_app/live/session_safety_state.py` now clears stale prior-day `close_time_forced` in the same startup stale-day sanitization path while preserving same-day and unknown-day fail-closed behavior. Added the regression test above.
+- **Verification:** red -> green on `python -m pytest tests/test_trading_app/test_session_safety_state.py -k prior_day_close_time_flag_expires -q`; then full touched file `python -m pytest tests/test_trading_app/test_session_safety_state.py -q` = 22 passed. `git diff --check` passed. No broader drift/full-suite claim in this scan.
+
 ## Codex Session — Claude parity layer made executable (2026-06-07)
 - **Tool:** Codex.
 - **What changed:** Filled the Codex-vs-Claude capability gap without mutating Claude-owned files. Added Codex-owned parity routing for Claude commands/rules/agents/hooks/skills via `.codex/AGENTS.md`, `.codex/HOOKS.md`, and `canompx3-claude-parity` skill/wrapper. Updated `.codex/COMMANDS.md`, `.codex/RULES.md`, `.codex/WORKFLOWS.md`, and skill READMEs.

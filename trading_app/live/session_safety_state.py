@@ -132,7 +132,7 @@ class SessionSafetyState:
         tmp.replace(self._state_file)
 
     def expire_stale_kill_switch(self, today: str) -> bool:
-        """Auto-expire a kill switch left over from a prior, now-closed day.
+        """Expire stale prior-day safety latches before today's session starts.
 
         A kill switch means "we left a position in a dangerous state." That
         concern is real only for the SAME trading day: once markets close and
@@ -148,11 +148,29 @@ class SessionSafetyState:
         a still-live position) is also preserved — that is the C1-race
         protection and must not be cleared.
 
-        Returns True iff a stale kill switch was expired (and persisted).
+        `close_time_forced` is also day-scoped. A prior-day close-time flatten
+        latch would suppress today's close-time flatten after a restart, so it
+        is cleared on the same stale-day proof. Returns True iff a stale kill
+        switch was expired (and persisted).
         """
+        stale_day = bool(self.trading_day) and self.trading_day != today
+        save_needed = False
+
+        if stale_day and self.close_time_forced:
+            log.info(
+                "STALE CLOSE-TIME LATCH EXPIRED: close_time_forced was set on %s, today is %s — "
+                "auto-clearing prior-day EOD latch",
+                self.trading_day,
+                today,
+            )
+            self.close_time_forced = False
+            save_needed = True
+
         if not self.kill_switch_fired:
+            if save_needed:
+                self.save()
             return False
-        if not self.trading_day or self.trading_day == today:
+        if not stale_day:
             return False  # same-day or unknown — preserve (fail-closed)
         log.critical(
             "STALE KILL SWITCH EXPIRED: kill_switch fired on %s, today is %s — "

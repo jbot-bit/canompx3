@@ -324,6 +324,18 @@ class TestStaleKillSwitchExpiry:
         assert loaded.expire_stale_kill_switch("2026-06-09") is False
         assert loaded.kill_switch_fired is True
 
+    def test_prior_day_close_time_flag_expires(self, state_dir: Path) -> None:
+        """A prior-day close-time flatten latch must not suppress today's
+        close-time flatten after a restart."""
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.close_time_forced = True
+        state.trading_day = "2026-06-08"
+        state.save()
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        assert loaded.expire_stale_kill_switch("2026-06-09") is False
+        assert loaded.close_time_forced is False
+
     def test_shadow_failures_preserved_across_expiry(self, state_dir: Path) -> None:
         """shadow_failures (cross-account divergence) is INTENTIONALLY preserved
         when a stale kill switch expires — a day rollover does not prove the
