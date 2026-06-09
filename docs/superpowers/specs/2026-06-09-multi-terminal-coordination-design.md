@@ -1,0 +1,119 @@
+# Multi-Terminal Coordination — Design
+
+**Date:** 2026-06-09
+**Author:** Claude (brainstorming + institutional audit)
+**Status:** Stage 1 approved for implementation; Stages 2-3 deferred pending Stage 1 observation.
+
+---
+
+## Problem (measured, not assumed)
+
+Operator runs many parallel terminals/worktrees and repeatedly hits messy rebases
+from overlapping work. Audit of the **actual** failure modes (2026-06-09):
+
+1. **Coordination hooks fire the MAIN checkout's copy.** All 35 hook `command`s in
+   `.claude/settings.json` hardcode `C:/Users/joshd/canompx3/.claude/hooks/X.py`
+   (the main checkout). A worktree session therefore fires **main's** copy of each
+   guard, not the worktree's. While hooks are byte-identical to main the bug is
+   latent; the moment a hook is edited in a worktree the copies diverge and the
+   guard silently misbehaves. This is the documented "doesn't always fire"
+   (`.claude/rules/auto-memory-capture.md` § "Verifying it is wired").
+   **PROVEN:** `session-start.py` fired from the worktree path exits 0 and runs the
+   worktree's concurrent-session detector; the main copy fired with the same
+   payload exits 1 — different behavior by launch path.
+
+2. **`fleet_state.py` already sees all peers** (correctly ID'd the live peer terminal
+   + this session in a live run) but nothing surfaces it at session-start or
+   edit-time — it is a manual-only tool.
+
+3. **Three task-state surfaces** (61 `docs/runtime/stages/*.md`, `action-queue.yaml`,
+   memory batons) — not contradictory, but no single "what is safe to work on now"
+   view unifies them.
+
+4. **`HANDOFF.md` is the #1 mechanical overlap** — dirty in 3 of 4 live trees at
+   once. A single shared scratch file every session edits.
+
+The official mechanism (Claude Code hooks docs + worktrees docs, fetched
+2026-06-09) is **isolation via worktrees**; there is no native peer-registry. The
+closest native coordination (Agent Teams: shared task-list + file-locking) is an
+orchestrator-spawns-subagents topology — wrong for N independent human terminals.
+So the leverage is *making the coordination layer the repo ALREADY built reliable*,
+not adding a new system.
+
+---
+
+## Approach — smallest diff first, build-new only if still needed
+
+Three stages, smallest-first, each independently shippable. **Stage 1 is the only
+one approved now.**
+
+### Stage 1 — Fix the hook-path-resolution bug (THIS change)
+
+Switch coordination/awareness hook `command`s in `.claude/settings.json` from the
+hardcoded main path to the official `${CLAUDE_PROJECT_DIR}` placeholder, which
+resolves at runtime to the **current worktree's** root (Claude Code hooks doc).
+This makes every existing coordination guard fire the current worktree's copy.
+
+**Carve-outs (from the audit — NOT a blind find-replace):**
+- **EXCLUDE** the 2 `memory-capture-*` hooks (`memory-capture-sessionstart.py`,
+  `memory-capture-advisory.py`). They are *deliberately* main-pointed per
+  `auto-memory-capture.md` (designed to activate only post-merge). Switching them
+  would break documented intent. Operator chose "exclude" (2026-06-09).
+- **DO NOT touch** `pre-edit-guard.py:29 CANONICAL_REPO` — that hardcoded path is
+  the CRG shared-graph root, intentional per `auto-skill-routing.md`
+  (`feedback_crg_worktree_repo_root_resolution`). It is internal logic, unrelated
+  to the launch path.
+
+**Scope:** `.claude/settings.json` only. ~33 `command` string edits, zero Python
+logic change.
+
+**Fail direction (per `capital_guard_fail_direction` memory):** every switched hook
+is fail-open → a path-resolution miss = silent pass, never a false block of legit
+work. Safe direction. No capital path touched.
+
+### Stage 2 — Surface fleet_state at session-start + edit-time (DEFERRED)
+
+Operator wants BOTH intervention points (chosen 2026-06-09):
+- **SessionStart:** one briefing — live peers, files they hold (dirty across live
+  trees), and a safe-lane suggestion sourced from non-overlapping stage-file
+  `scope_lock`s, falling back to "just show the conflict map" when no clean lane
+  is found (never guess silently).
+- **PreToolUse/Edit:** warn on overlap; **hard-block ONLY on capital files**
+  (`trading_app/live/`, `START_BOT.bat`, session/risk paths) — tiered by risk
+  (operator choice). Reuses the `branch-flip-guard.py` / `shared-state-commit-guard.py`
+  pattern; **imports `fleet_state` — adds no new liveness oracle**
+  (`fleet_state.py` docstring forbids a third oracle).
+
+Deferred deliberately: Stage 1 may make existing guards reliable enough that
+Stage 2 can be smaller. Observe first.
+
+### Stage 3 — Unify the 3 task-state surfaces (DEFERRED, optional)
+
+Only if Stage 2 proves a single "safe work" view is needed.
+
+---
+
+## Testing / Verification (Stage 1)
+
+1. **Prove `${CLAUDE_PROJECT_DIR}` resolves to the worktree** — DONE (live proof
+   above: worktree copy exit 0, behaves differently from main copy).
+2. **Each switched hook still executes** post-edit — pipe synthetic payloads to
+   `session-start`, `branch-flip-guard`, `shared-state-commit-guard`.
+3. **settings.json remains valid JSON** + `/hooks` registration intact.
+4. **Diff confirms the 2 memory-capture hooks are unchanged.**
+5. `python pipeline/check_drift.py` unchanged (no new violations).
+
+## Risk
+
+- **Capital:** none — coordination/awareness hooks, not live-trading logic.
+- **Reversibility:** settings.json is file-watched; revert = one `git checkout`.
+  Tier A reversible.
+- **Residual risk:** firing an unmerged, mid-edit worktree hook copy that is broken
+  — bounded by fail-open design + the memory-capture carve-out.
+
+## Blast radius (Stage 1)
+
+- `.claude/settings.json` — every coordination hook `command` string. Reads: none.
+  Writes: none at runtime. No Python module imports change. No test file asserts
+  the hardcoded path (verified). The change only affects WHICH copy of each hook
+  the harness launches.

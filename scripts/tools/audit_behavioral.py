@@ -209,6 +209,8 @@ EXCEPT_SCAN_GLOBS = [
 BROAD_EXCEPT_ALLOWLIST = {
     "live_config.py",  # Dollar gate intentionally fails open for live trading safety
     "session_orchestrator.py",  # _verify_fill_poller: 404/auth errors mean endpoint exists
+    "preflight.py",  # mirrors _verify_fill_poller (404/auth = endpoint exists, fail-open);
+    # _passing_check_is_advisory fail-CLOSED (unknown -> advisory -> blocks live launch)
 }
 
 

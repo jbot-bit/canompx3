@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/autopilot-tier-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/autopilot-tier-guard.py",
             "timeout": 5
           }
         ]
@@ -71,7 +71,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/worktree_guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/worktree_guard.py",
             "timeout": 3
           }
         ]
@@ -81,7 +81,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/worktree-destroy-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/worktree-destroy-guard.py",
             "timeout": 30
           }
         ]
@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/stage-gate-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/stage-gate-guard.py",
             "timeout": 5
           }
         ]
@@ -101,7 +101,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/pre-edit-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-edit-guard.py",
             "timeout": 5
           }
         ]
@@ -111,7 +111,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/pre-edit-discovery-marker.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-edit-discovery-marker.py",
             "timeout": 5
           }
         ]
@@ -121,7 +121,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/branch-context.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/branch-context.py",
             "timeout": 5
           }
         ]
@@ -131,7 +131,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/data-first-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/data-first-guard.py",
             "timeout": 3
           }
         ]
@@ -141,7 +141,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/subagent-budget-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/subagent-budget-guard.py",
             "timeout": 3
           }
         ]
@@ -151,7 +151,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/shared-state-commit-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/shared-state-commit-guard.py",
             "timeout": 5
           }
         ]
@@ -161,7 +161,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/judgment-review-soft-block.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/judgment-review-soft-block.py",
             "timeout": 5
           }
         ]
@@ -171,7 +171,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/shell-canon-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/shell-canon-guard.py",
             "timeout": 3
           }
         ]
@@ -183,7 +183,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/branch-flip-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/branch-flip-guard.py",
             "timeout": 5
           }
         ]
@@ -193,7 +193,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/mcp-git-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/mcp-git-guard.py",
             "timeout": 5
           }
         ]
@@ -203,7 +203,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/head-flip-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/head-flip-guard.py",
             "timeout": 5
           }
         ]
@@ -213,7 +213,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/judgment-review-nudge.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/judgment-review-nudge.py",
             "timeout": 5
           }
         ]
@@ -223,7 +223,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-edit-pipeline.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/post-edit-pipeline.py",
             "timeout": 90,
             "async": true
           }
@@ -234,7 +234,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-edit-schema.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/post-edit-schema.py",
             "timeout": 30,
             "async": true
           }
@@ -245,7 +245,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/new-skill-eval-nudge.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/new-skill-eval-nudge.py",
             "timeout": 3
           }
         ]
@@ -255,7 +255,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/stage-closed-code-review-nudge.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/stage-closed-code-review-nudge.py",
             "timeout": 5
           }
         ]
@@ -265,7 +265,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/session-heartbeat.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/session-heartbeat.py",
             "timeout": 5
           }
         ]
@@ -277,7 +277,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/stage-awareness.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/stage-awareness.py",
             "timeout": 3
           }
         ]
@@ -287,7 +287,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/data-first-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/data-first-guard.py",
             "timeout": 3
           }
         ]
@@ -297,7 +297,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/risk-tier-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/risk-tier-guard.py",
             "timeout": 3
           }
         ]
@@ -307,7 +307,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/discovery-loop-guard.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/discovery-loop-guard.py",
             "timeout": 3
           }
         ]
@@ -317,7 +317,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/targeted-grounding-router.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/targeted-grounding-router.py",
             "timeout": 3
           }
         ]
@@ -327,7 +327,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/intent-router.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/intent-router.py",
             "timeout": 3
           }
         ]
@@ -337,7 +337,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/plugin-router.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/plugin-router.py",
             "timeout": 3
           }
         ]
@@ -347,7 +347,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/context-gauge.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/context-gauge.py",
             "timeout": 3
           }
         ]
@@ -359,7 +359,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/completion-notify.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/completion-notify.py",
             "timeout": 3
           }
         ]
@@ -371,7 +371,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/completion-notify.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/completion-notify.py",
             "timeout": 3
           }
         ]
@@ -383,7 +383,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/session-start.py",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start.py",
             "timeout": 30
           },
           {

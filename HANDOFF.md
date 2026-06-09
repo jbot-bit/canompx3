@@ -174,15 +174,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-09
-- **Commit:** 4d37e384 — fix(live): staleness gate counts trading days not calendar days
-- **Files changed:** 7 files
-  - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-09-live-staleness-gate-trading-days.md`
-  - `pipeline/market_calendar.py`
-  - `scripts/tools/pipeline_status.py`
-  - `tests/test_pipeline/test_market_calendar.py`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `trading_app/live/session_orchestrator.py`
+- **Commit:** dd63be8b — fix(hooks): resolve coordination hooks via ${CLAUDE_PROJECT_DIR} not hardcoded main path
+- **Files changed:** 0
+0 files
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
