@@ -181,6 +181,11 @@
   - `docs/superpowers/specs/2026-06-09-multi-terminal-coordination-design.md`
   - `scripts/tools/commit_message_content_gate.py`
   - `tests/test_hooks/test_commit_msg_content_gate.py`
+- **Commit:** d7662919 — fix(pulse): scope worktree metadata to canonical repo + surface all capital blockers
+- **Files changed:** 3 files
+  - `docs/runtime/stages/fix_worktree_metadata_path_leak.md`
+  - `scripts/tools/project_pulse.py`
+  - `tests/test_tools/test_project_pulse.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
