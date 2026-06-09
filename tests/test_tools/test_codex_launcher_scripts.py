@@ -92,6 +92,39 @@ def test_wsl_sync_dirty_clone_error_is_operator_actionable() -> None:
     assert "Microsoft WSL and OpenAI Codex both recommend keeping Linux-tool repos under /home" in sync_guard
 
 
+def test_wsl_sync_is_churn_aware_and_discards_handoff_before_ffmerge() -> None:
+    """The sync guard must (a) classify dirt via the canonical churn predicate so
+    routine operational churn (live_journal.db / HANDOFF.md) no longer false-blocks,
+    and (b) discard the regenerable WSL-side churn stamp BEFORE the ff-merge so a
+    restamped HANDOFF.md cannot abort the fast-forward. Mirrors the live-arm drift
+    gate's churn-ignore intent (run_live_session.py _check_repo_clean)."""
+    root = Path(__file__).resolve().parents[2]
+    sync_guard = (root / "scripts" / "infra" / "codex-wsl-sync.sh").read_text(encoding="utf-8")
+
+    # (a) The dirty-check routes porcelain through the canonical churn CLI, not a
+    #     raw `status --short` block. Reuse, not a re-encoded path list.
+    assert "scripts/tools/_worktree_churn.py" in sync_guard, (
+        "dirty-check must reuse the canonical churn predicate, not re-encode the list"
+    )
+    assert 'target_dirty="$(material_dirt "$TARGET_ROOT")"' in sync_guard, (
+        "target_dirty must come from the churn-aware filter, not raw status --short"
+    )
+    # The churn filter must FAIL CLOSED to raw porcelain if the predicate is
+    # unreachable (a tooling gap must never silently wave dirt past the guard).
+    assert "printf '%s' \"$porcelain\"" in sync_guard
+
+    # (b) Between the ancestor check and the ff-merge, the guard discards tracked
+    #     churn so the fast-forward is not aborted by a restamped HANDOFF.md.
+    discard_idx = sync_guard.index('checkout -- "$churn_path"')
+    ffmerge_idx = sync_guard.index("merge --ff-only --quiet FETCH_HEAD")
+    assert discard_idx < ffmerge_idx, "churn discard must precede the ff-merge"
+    assert "diff --name-only" in sync_guard, "discard must target tracked-modified paths"
+
+    # The new error header must name the ignored churn so the operator understands
+    # WHY a previously-blocking state now passes (or what real dirt remains).
+    assert "operational churn such as live_journal.db / HANDOFF.md is ignored" in sync_guard
+
+
 def test_operator_docs_explain_wsl_home_launcher_recovery() -> None:
     root = Path(__file__).resolve().parents[2]
     handbook = (root / "docs" / "reference" / "codex-operator-handbook.md").read_text(encoding="utf-8")

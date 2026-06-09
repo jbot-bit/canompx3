@@ -54,3 +54,54 @@ def test_fleet_state_delegates_to_canonical_predicate():
 
     # is_churn_path imported into fleet_state IS the canonical function object.
     assert fs.is_churn_path is wc.is_churn_path
+
+
+# --- material_porcelain_lines: the bash-reachable porcelain filter (codex-wsl-sync) ---
+
+
+def test_material_lines_empty_for_pure_churn():
+    # The operator's real failure input: porcelain dirty ONLY on churn files.
+    porcelain = " M HANDOFF.md\n M live_journal.db\n"
+    assert wc.material_porcelain_lines(porcelain) == []
+
+
+def test_material_lines_keep_real_source_drop_churn():
+    porcelain = " M HANDOFF.md\n M trading_app/foo.py\n M live_journal.db\n"
+    assert wc.material_porcelain_lines(porcelain) == [" M trading_app/foo.py"]
+
+
+def test_material_lines_skip_untracked():
+    # '??' is not committed-code drift and cannot block an ff-merge — never material.
+    porcelain = "?? scratch.txt\n?? new_dir/\n"
+    assert wc.material_porcelain_lines(porcelain) == []
+
+
+def test_material_lines_rename_gates_on_renamed_to_path():
+    # Rename of a real source file IS material; rename-TO a churn file is not.
+    assert wc.material_porcelain_lines("R  old.py -> trading_app/new.py\n") == [
+        "R  old.py -> trading_app/new.py"
+    ]
+    assert wc.material_porcelain_lines("R  old.md -> HANDOFF.md\n") == []
+
+
+def test_material_lines_ignore_blank_lines():
+    assert wc.material_porcelain_lines("\n M HANDOFF.md\n\n") == []
+
+
+def test_cli_emits_only_material_lines(capsys, monkeypatch):
+    # The __main__ entrypoint reads porcelain on stdin and writes material lines.
+    import io
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(" M HANDOFF.md\n M trading_app/foo.py\n"))
+    rc = wc._main([])
+    assert rc == 0  # pure classifier: always exit 0, the CALLER decides to block
+    out = capsys.readouterr().out
+    assert out == " M trading_app/foo.py"
+
+
+def test_cli_pure_churn_emits_nothing(capsys, monkeypatch):
+    import io
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(" M HANDOFF.md\n M live_journal.db\n"))
+    assert wc._main([]) == 0
+    assert capsys.readouterr().out == ""

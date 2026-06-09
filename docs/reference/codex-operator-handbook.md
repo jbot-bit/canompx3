@@ -63,12 +63,26 @@ failed or suspiciously fast exit stays visible instead of flashing closed.
 
 ## WSL-Home Recovery
 
-Observed failure pattern: `codex.bat` was routed correctly, but the WSL-home
-clone at `~/canompx3` was dirty and ahead of `origin/main`, so the smart sync
-guard refused to open a mutating Codex session. That is intentional. It avoids
-silently overwriting or hiding work in the Linux-side repo.
+Routine operational churn no longer blocks `codex.bat`. The sync guard is
+**churn-aware**: it ignores the always-dirty operational files the running bot and
+session hooks rewrite every tick (`live_journal.db`, `HANDOFF.md`, and the other
+paths in the canonical `scripts/tools/_worktree_churn.py` list), and it discards
+the regenerable WSL-side `HANDOFF.md` stamp before fast-forwarding so a restamped
+baton cannot abort the merge. This mirrors the live-arm drift gate
+(`run_live_session.py` `_check_repo_clean`): it fails **only** on genuine
+source/config drift — the thing that actually risks reopening stale code.
 
-When `codex.bat` blocks on a dirty WSL clone:
+Observed failure pattern (now rare — real dirt only): `codex.bat` was routed
+correctly, but the WSL-home clone at `~/canompx3` carried uncommitted changes to
+**tracked source/config** (not operational churn), so the smart sync guard
+refused to open a mutating Codex session. That is intentional. It avoids silently
+overwriting or hiding real work in the Linux-side repo. The block message lists
+the *material* dirty files; operational churn is explicitly excluded from that
+list.
+
+When `codex.bat` blocks on **real** dirt in the WSL clone (the `cleanup`
+fallback — only needed now for genuine tracked source/config changes, not routine
+churn):
 
 ```bat
 codex.bat cleanup
