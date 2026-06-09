@@ -174,9 +174,15 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-09
-- **Commit:** 4d6ee0ff — docs(handoff): record rebased kill-switch commit (975fa858 on origin/main 4c85dfe7)
-- **Files changed:** 1 files
+- **Commit:** 4d37e384 — fix(live): staleness gate counts trading days not calendar days
+- **Files changed:** 7 files
   - `HANDOFF.md`
+  - `docs/runtime/stages/2026-06-09-live-staleness-gate-trading-days.md`
+  - `pipeline/market_calendar.py`
+  - `scripts/tools/pipeline_status.py`
+  - `tests/test_pipeline/test_market_calendar.py`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
