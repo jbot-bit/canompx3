@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+#
+# commit-msg hook: HOLLOW-COMMIT PREVENTION GATE (2026-06-09 Stage 2).
+#
+# Blocks a commit BEFORE the object is finalized when the message asserts a
+# ${...} placeholder that appears in ZERO ADDED lines of the staged diff — the
+# dd63be8b class (correct message, stale staged snapshot). Delegates the
+# token-vs-diff rule to scripts/tools/commit_message_content_gate.py (calibrated
+# to 0 false-blocks over real history; ${...}-placeholder class only).
+#
+# Setup: git config core.hooksPath .githooks  (already set in this repo).
+# Override: put [hollow-ack] in the commit message.
+# Fail-OPEN: any resolution/parse error -> exit 0 (allow). A message gate must
+# never wedge a legit commit.
+#
+# $1 is the path to the file holding the (final) commit message.
+
+# Note: NO `set -e`. This gate must fail-OPEN; a non-zero from any probe below
+# must not abort the hook into a blocking state. We exit explicitly.
+
+MSG_FILE="$1"
+[ -n "$MSG_FILE" ] || exit 0          # no message file arg -> fail-open
+[ -f "$MSG_FILE" ] || exit 0          # message file missing -> fail-open
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 0
+GATE_PY="$SCRIPT_DIR/scripts/tools/commit_message_content_gate.py"
+[ -f "$GATE_PY" ] || exit 0           # gate module absent -> fail-open
+
+case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS_SHELL=1 ;;
+    *) IS_WINDOWS_SHELL=0 ;;
+esac
+
+# Skip during a multistep git op (rebase/merge/cherry-pick): messages are
+# replayed/auto-generated and the staged diff may not reflect a single authored
+# change — mirrors pre-commit's _IN_MULTISTEP. Resolved against the REAL git-dir
+# so it is worktree-correct. Fail-open: empty git-dir -> skip the multistep test.
+GIT_DIR_PATH=$(git rev-parse --git-dir 2>/dev/null || true)
+if [ -n "$GIT_DIR_PATH" ] && { [ -d "$GIT_DIR_PATH/rebase-merge" ] || [ -d "$GIT_DIR_PATH/rebase-apply" ] \
+   || [ -f "$GIT_DIR_PATH/MERGE_HEAD" ] || [ -f "$GIT_DIR_PATH/CHERRY_PICK_HEAD" ]; }; then
+    exit 0
+fi
+
+# Resolve python — prefer SCRIPT_DIR/.venv (uv-managed), then canonical sibling
+# venv (worktree case), then legacy SCRIPT_DIR/venv, then PATH python. Mirrors
+# .githooks/pre-commit's resolver; the gate module is stdlib-only so any of these
+# suffices.
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+WORKTREE_BASENAME="$(basename "$SCRIPT_DIR")"
+CANONICAL_BASENAME="${WORKTREE_BASENAME%%-*}"
+CANONICAL_VENV_PY=""
+for candidate in \
+    "$PARENT_DIR/$CANONICAL_BASENAME/.venv-wsl/bin/python" \
+    "$PARENT_DIR/$CANONICAL_BASENAME/.venv/bin/python" \
+    "$PARENT_DIR/$CANONICAL_BASENAME/.venv/Scripts/python.exe" ; do
+    if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [[ "$candidate" == *"/Scripts/"* ]]; then
+        continue
+    fi
+    if [ "$IS_WINDOWS_SHELL" -eq 1 ] && [[ "$candidate" == *"/.venv-wsl/"* ]]; then
+        continue
+    fi
+    if [ -f "$candidate" ]; then
+        CANONICAL_VENV_PY="$candidate"
+        break
+    fi
+done
+
+PYTHON="python"
+if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/.venv-wsl/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/.venv-wsl/bin/python"
+elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/bin/python"
+elif [ "$IS_WINDOWS_SHELL" -eq 1 ] && [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
+elif [ -n "$CANONICAL_VENV_PY" ] && [ -f "$CANONICAL_VENV_PY" ]; then
+    PYTHON="$CANONICAL_VENV_PY"
+elif [ "$IS_WINDOWS_SHELL" -eq 1 ] && [ -f "$SCRIPT_DIR/venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/venv/Scripts/python.exe"
+elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/venv/bin/python"
+fi
+
+# Pipe the staged diff to the gate; pass the message file as $1. The gate reads
+# the diff from stdin and the message from the file, returns 1 = BLOCK, 0 = allow
+# (and fails OPEN on any internal error). If python itself is unresolvable the
+# command errors; we treat that as fail-open (allow) below.
+git diff --cached --unified=0 2>/dev/null | "$PYTHON" "$GATE_PY" "$MSG_FILE"
+RC=$?
+
+# RC 1 = the gate decided BLOCK. Any other non-zero (e.g. python missing, pipe
+# failure) is treated as fail-open: a message gate must never wedge a legit
+# commit on infrastructure error.
+if [ "$RC" -eq 1 ]; then
+    exit 1
+fi
+exit 0

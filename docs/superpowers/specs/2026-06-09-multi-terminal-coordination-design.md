@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-09
 **Author:** Claude (brainstorming + institutional audit)
-**Status:** Stage 1 approved for implementation; Stages 2-3 deferred pending Stage 1 observation.
+**Status:** Stage 1 DONE (`324588bf`, origin/main). Stage 2 REVISED → hollow-commit prevention gate (`.githooks/commit-msg`) — built + verified (see "Stage 2 — REVISED SCOPE" below); Guard B killed (already exists in `worktree_guard.py`); fleet_state surfacing + Stage 3 still deferred.
 
 ---
 
@@ -117,3 +117,87 @@ Only if Stage 2 proves a single "safe work" view is needed.
   Writes: none at runtime. No Python module imports change. No test file asserts
   the hardcoded path (verified). The change only affects WHICH copy of each hook
   the harness launches.
+
+---
+
+## Stage 2 — REVISED SCOPE (2026-06-09, post-Stage-1 audit-by-execution)
+
+**Stage 1 landed (`324588bf`, origin/main).** Re-auditing the 2026-06-09 n=1
+incident by EXECUTION reframed Stage 2 entirely. The incident had two failure
+modes; one is already solved and one was mis-scoped.
+
+### Guard B (double-commit block) — KILLED, already exists. Do NOT build.
+
+The "two Claudes, one worktree, double-commit" mode is **already prevented** by
+`.claude/hooks/worktree_guard.py`: a PreToolUse hook whose
+`_GIT_MUTATING_SUBCOMMANDS` includes `"commit"` (`worktree_guard.py:98`) and which
+BLOCKS (exit 2) when a live peer holds the worktree lease. **Proven by execution
+this session:** a `git commit` payload + a faked live-peer beat in this tree
+returned `EXIT 2 "BLOCKED: a live peer Claude session holds THIS worktree's
+lease."` It fired the MAIN checkout's copy during the incident (the hardcoded-path
+bug); **Stage 1's `${CLAUDE_PROJECT_DIR}` fix activated it for worktrees.**
+Building a second commit-block guard would re-encode an existing hook —
+institutional-rigor §4 violation. **Not built.** The earlier `fleet-commit-guard.py`
+Guard-B/Guard-C design is abandoned.
+
+### Hollow commit (message ≠ staged content) — THE REAL Stage 2.
+
+Commit `dd63be8b` carried a correct MESSAGE but a STALE staged SNAPSHOT (real
+fixes in the working tree, old content staged; nothing verified staged↔message).
+A single-session commit-time integrity gap — the worktree mutex does not catch it.
+
+Operator directive: *"prevention > cure, no band-aid, official fixes."* This
+overrode an earlier PostToolUse advisory (which only flags AFTER the hollow commit
+lands — cure, a downstream patch for an upstream gap → the exact band-aid the
+directive forbids). PostToolUse cannot block (CC hooks doc); only a git
+`commit-msg` hook PREVENTS before the object finalizes.
+
+**Built:**
+- `scripts/tools/commit_message_content_gate.py` — pure, testable rule core.
+- `.githooks/commit-msg` — fires via `core.hooksPath=.githooks`; reuses
+  pre-commit's PYTHON / `IS_WINDOWS_SHELL` / `_IN_MULTISTEP` blocks; fail-OPEN.
+- `tests/test_hooks/test_commit_msg_content_gate.py` — 33 tests (pure + CLI + live
+  hook in a throwaway repo).
+
+**Rule (calibrated, not assumed):** the plan proposed 4 token classes
+(`${...}` placeholder, backtick, repo path, quoted flag). Phase-0 calibration —
+replaying the rule over real commit history — MEASURED:
+- 4-class: 8 false-blocks / 80 commits (10%); the backtick/path/flag classes fire
+  on legitimate explanatory prose (moved paths, removed/behavioral symbols).
+- `${...}`-placeholder-ONLY: **0 false-blocks / 120 commits**, AND still catches
+  `dd63be8b` (`${CLAUDE_PROJECT_DIR}` in subject, 0 in staged additions → BLOCK).
+So the shipped rule is `${...}`-placeholder-only. Match target = ADDED lines only
+(`^+` excluding `^+++` headers) — a token in a context/removed line is exactly the
+hollow case. (memory:
+`feedback_hollow_commit_gate_placeholder_only_calibration_2026_06_09.md`)
+
+**Adversarial-reassessment fix (official, not ad-hoc):** at commit-msg time git
+has NOT yet applied cleanup — the raw `COMMIT_EDITMSG` still carries `#`-comment
+lines and (under `commit -v`) the diff dump below the scissors line. A placeholder
+there is not an authored claim → the gate now strips them first
+(`strip_git_comments`, replicating git `cleanup=strip` + scissors), regression-
+tested live. (memory:
+`feedback_commit_msg_hook_must_strip_git_comments_2026_06_09.md`)
+
+**Honest residual scope (stated, not hidden):**
+- Catches the `${...}`-placeholder hollow-commit sub-case only. A message
+  asserting only quantitative prose ("32 occurrences") or a backtick/path/flag
+  token is NOT caught — those classes have no clean low-false-block signal
+  (calibration above). The `dd63be8b` incident IS caught via its placeholder.
+- Guard B's documented blind spots (idle peer >90s; Codex peers writing `.codex/`
+  not `.claude-heartbeats/`) live in the existing `worktree_guard.py`, out of
+  scope here.
+- This is prevention for the proven `dd63be8b` mechanism — not a universal
+  commit-integrity system.
+
+### Verification (Stage 2)
+- `pytest tests/test_hooks/test_commit_msg_content_gate.py -v` → 33 passed.
+- Live injection (real repo): hollow → BLOCK; honest → allow; no-token → allow;
+  `[hollow-ack]` → allow.
+- Calibration replay (as-built) → 0 false-blocks / 120 commits; `dd63be8b` blocked.
+- `python pipeline/check_drift.py` → 184 passed, 0 violations.
+- `ruff check` → clean.
+
+### fleet_state surfacing (the ORIGINAL Stage 2) — still DEFERRED
+The session-start / edit-time fleet briefing described above remains a separate,
+deferred change. It is unrelated to the hollow-commit gate and not built here.
