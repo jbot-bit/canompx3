@@ -157,7 +157,13 @@ echo [4/5] Launching orchestrator: profile=%ACTIVE_PROFILE% %BOT_MODE_FLAGS%
 :: would hang on input() and never arm. The typed CONFIRM is the human gate.
 set WIN_STATE=/min
 if /i "%BOT_MODE_FLAGS%"=="--live" set WIN_STATE=
-start "ORB Orchestrator (%ACTIVE_PROFILE%)" %WIN_STATE% cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS%"
+:: Live orchestrator MUST carry the same broker-routing flags the [3b/5] preflight
+:: and the dashboard's _live_pilot_cli_args pass. Without --account-id the engine
+:: re-runs its own boot preflight, sees 2 broker accounts, and FAILS check [13]
+:: ("no --account-id would default to accounts[0]") -> never arms. Mirror line 137.
+set LIVE_ROUTING=
+if /i "%BOT_MODE_FLAGS%"=="--live" set LIVE_ROUTING=--instrument MNQ --copies 1 --account-id 21944866
+start "ORB Orchestrator (%ACTIVE_PROFILE%)" %WIN_STATE% cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS% %LIVE_ROUTING%"
 
 :: Step 5: Launch dashboard + open browser in this (main) console.
 :: This console auto-minimises ~3s after launch (line ~107). To stop the
