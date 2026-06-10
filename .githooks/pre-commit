@@ -81,6 +81,13 @@ COMMIT_LOCK_PY="python"
 [ -x "$SCRIPT_DIR/.venv-wsl/bin/python" ] && [ "$IS_WINDOWS_SHELL" -eq 0 ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv-wsl/bin/python"
 [ "$COMMIT_LOCK_PY" = "python" ] && [ -x "$SCRIPT_DIR/.venv/bin/python" ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv/bin/python"
 [ -x "$SCRIPT_DIR/.venv/Scripts/python.exe" ] && [ "$IS_WINDOWS_SHELL" -eq 1 ] && COMMIT_LOCK_PY="$SCRIPT_DIR/.venv/Scripts/python.exe"
+# Export THIS shell's native pid for the serializer's liveness check. The lock's
+# "is the holder still running?" test must key on a pid that lives for the whole
+# gate (this shell), not the helper subprocess (which exits immediately). On Git
+# Bash the shell's $$ is an MSYS pid that OpenProcess can't resolve, so use the
+# native pid from /proc/$$/winpid; POSIX shells fall back to $$ (already native).
+CANOMPX3_HOOK_NATIVE_PID="$(cat /proc/$$/winpid 2>/dev/null || echo $$)"
+export CANOMPX3_HOOK_NATIVE_PID
 set +e
 "$COMMIT_LOCK_PY" "$SCRIPT_DIR/scripts/tools/commit_serialize.py" acquire
 COMMIT_LOCK_RC=$?

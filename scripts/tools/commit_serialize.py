@@ -19,16 +19,29 @@ after the waste.
 locking is not an option. We use the same atomic `O_EXCL` create-or-fail pattern
 as `session-start.py:_acquire_lock_fd` — portable to Windows and POSIX.
 
-Contract (called from `.githooks/pre-commit` step 0)
-----------------------------------------------------
-  acquire  -> exit 0 if we took the lock (lock file written with our pid+ts),
-              exit 1 if a LIVE peer holds it (caller aborts the commit cleanly).
-  release  -> exit 0 always (idempotent; only removes a lock owned by this
-              pre-commit shell).
+Contract (called from `.githooks/pre-commit` step 0 and `.githooks/pre-push`)
+----------------------------------------------------------------------------
+  acquire [lock_name]  -> exit 0 if we took the lock (lock file written with
+              our pid+ts), exit 1 if a LIVE peer holds it (caller aborts the
+              commit/push cleanly).
+  release [lock_name]  -> exit 0 always (idempotent; only removes a lock owned
+              by this hook shell).
+
+  `lock_name` is optional and defaults to ``.commit-in-progress.lock`` so the
+  pre-commit caller (which passes no name) is unchanged. pre-push passes
+  ``.push-in-progress.lock``.
 
 The lock file lives at ``<git-common-dir>/.commit-in-progress.lock`` so all
 worktrees of the repo serialize against ONE lock (a peer worktree committing is
 exactly the HEAD-moving collision we guard against).
+
+The lock filename is parameterizable so the SAME serializer guards the pre-PUSH
+seam too. ``.githooks/pre-push`` runs a ~3-min full-drift gate then pushes
+``HEAD:main``; two terminals pushing at once each burn that drift and the loser
+hits ``cannot lock ref 'refs/heads/main'``. Passing ``.push-in-progress.lock``
+as the lock name reuses every line of liveness/staleness logic below for that
+seam instead of re-encoding it (institutional-rigor §4 — delegate, never fork).
+The default stays ``.commit-in-progress.lock`` so pre-commit is unchanged.
 
 Staleness / crash safety
 ------------------------
@@ -53,8 +66,22 @@ import sys
 import time
 from pathlib import Path
 
-LOCK_FILENAME = ".commit-in-progress.lock"
+DEFAULT_LOCK_FILENAME = ".commit-in-progress.lock"
 OWNER_ENV = "CANOMPX3_PRECOMMIT_LOCK_OWNER"
+
+# The hook shell exports its OWN native pid here. This is the pid whose liveness
+# actually gates staleness — it lives for the WHOLE gate (the ~2-min commit /
+# ~3-min push window), unlike this helper subprocess whose pid dies the instant
+# `acquire()` returns. Recording the helper's own pid (the original design) meant
+# a concurrent gate, running after the first helper exited, always saw a DEAD
+# holder pid and stole the lock — so the "live peer blocks" guard never fired in
+# practice (proven by live-repro 2026-06-09). On Git Bash the shell's MSYS `$$`
+# is NOT resolvable by `_pid_alive` (OpenProcess needs a native Windows pid), so
+# the hook resolves its native pid via `/proc/$$/winpid` before exporting it;
+# POSIX shells fall back to `$$` (already native). When the env var is absent
+# (old lock files, direct in-process unit tests) we fall back to the recorded
+# `pid` — there the calling Python process IS the live owner, so that is correct.
+LIVE_PID_ENV = "CANOMPX3_HOOK_NATIVE_PID"
 
 # A held lock older than this is treated as abandoned (crashed pre-commit). The
 # real gate runs ~2 min; 5 min is a comfortable floor above it that still frees
@@ -131,8 +158,13 @@ def _holder_is_dead_or_stale(lock_path: Path) -> bool:
     ts = holder.get("ts")
     if isinstance(ts, (int, float)) and (time.time() - ts) >= _STALE_LOCK_SECS:
         return True
-    pid = holder.get("pid")
-    if isinstance(pid, int) and not _pid_alive(pid):
+    # Liveness keys on the hook shell's native pid when recorded (it lives for the
+    # whole gate); else the helper's own pid (old locks / in-process tests, where
+    # the calling process is the live owner). Checking the ephemeral helper pid for
+    # a lock written by a now-exited helper was the original false-steal bug.
+    live_pid = holder.get("live_pid")
+    gate_pid = live_pid if isinstance(live_pid, int) else holder.get("pid")
+    if isinstance(gate_pid, int) and not _pid_alive(gate_pid):
         return True
     return False
 
@@ -140,7 +172,14 @@ def _holder_is_dead_or_stale(lock_path: Path) -> bool:
 def _try_create(lock_path: Path) -> bool:
     """Atomic O_EXCL create. Returns True if we created (own) the lock."""
     owner = os.environ.get(OWNER_ENV) or f"ppid:{os.getppid()}"
-    payload = json.dumps({"pid": os.getpid(), "ppid": os.getppid(), "owner": owner, "ts": time.time()}).encode("utf-8")
+    record = {"pid": os.getpid(), "ppid": os.getppid(), "owner": owner, "ts": time.time()}
+    # The hook shell's native pid (lives for the whole gate) is the real liveness
+    # key; record it when present. Absent (in-process tests / old locks) → liveness
+    # falls back to `pid` below, where this Python process is itself the owner.
+    live_pid_env = os.environ.get(LIVE_PID_ENV)
+    if live_pid_env and live_pid_env.strip().isdigit():
+        record["live_pid"] = int(live_pid_env.strip())
+    payload = json.dumps(record).encode("utf-8")
     try:
         fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL)
     except FileExistsError:
@@ -154,11 +193,11 @@ def _try_create(lock_path: Path) -> bool:
     return True
 
 
-def acquire() -> int:
+def acquire(lock_name: str = DEFAULT_LOCK_FILENAME) -> int:
     common = _git_common_dir()
     if common is None:
         return 0  # not a git repo / git unavailable — fail-open, allow commit
-    lock_path = common / LOCK_FILENAME
+    lock_path = common / lock_name
 
     if _try_create(lock_path):
         return 0  # clean acquire
@@ -173,22 +212,25 @@ def acquire() -> int:
             return 0
         # Lost the race to another stealer that just acquired — treat as live peer.
 
-    # A live peer holds a fresh lock — a real concurrent pre-commit. Abort cleanly
-    # so the caller does NOT burn the 2-minute gate just to lose the ref write.
+    # A live peer holds a fresh lock — a real concurrent gate. Abort cleanly so
+    # the caller does NOT burn the expensive gate just to lose the ref write.
+    # The seam word ("commit"/"push") is derived from the lock name so the one
+    # helper gives an accurate message for either caller.
+    seam = "push" if "push" in lock_name else "commit"
     holder = _read_holder(lock_path) or {}
     sys.stderr.write(
-        "BLOCKED: another pre-commit is already running in this repo "
+        f"BLOCKED: another pre-{seam} is already running in this repo "
         f"(holder pid {holder.get('pid', '?')}, started "
         f"{int(time.time() - holder.get('ts', time.time()))}s ago).\n"
-        "  Two concurrent pre-commits race git's final ref write and waste the\n"
-        "  ~2-minute gate. Wait for the other commit to finish, then retry.\n"
-        f"  If you are certain no other commit is running: rm '{lock_path}'\n"
+        f"  Two concurrent pre-{seam} gates race git's final ref write and waste the\n"
+        f"  full gate. Wait for the other {seam} to finish, then retry.\n"
+        f"  If you are certain no other {seam} is running: rm '{lock_path}'\n"
     )
     return 1
 
 
-def _holder_matches_this_precommit(holder: object) -> bool:
-    """Return True iff this helper belongs to the pre-commit shell that owns the lock."""
+def _holder_matches_this_hook(holder: object) -> bool:
+    """Return True iff this helper belongs to the hook shell that owns the lock."""
     if not isinstance(holder, dict):
         return False
     owner = os.environ.get(OWNER_ENV) or f"ppid:{os.getppid()}"
@@ -199,15 +241,15 @@ def _holder_matches_this_precommit(holder: object) -> bool:
     return holder.get("pid") == os.getpid() or (holder.get("owner") is None and holder.get("ppid") == os.getppid())
 
 
-def release() -> int:
+def release(lock_name: str = DEFAULT_LOCK_FILENAME) -> int:
     common = _git_common_dir()
     if common is None:
         return 0
-    lock_path = common / LOCK_FILENAME
+    lock_path = common / lock_name
     holder = _read_holder(lock_path)
     # acquire/release are separate helper processes. The helper pid matches only
     # for direct in-process tests; the parent shell pid is the real hook owner.
-    if _holder_matches_this_precommit(holder):
+    if _holder_matches_this_hook(holder):
         try:
             lock_path.unlink()
         except OSError:
@@ -216,13 +258,14 @@ def release() -> int:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[1] not in {"acquire", "release"}:
-        sys.stderr.write("usage: commit_serialize.py {acquire|release}\n")
+    if not (2 <= len(argv) <= 3) or argv[1] not in {"acquire", "release"}:
+        sys.stderr.write("usage: commit_serialize.py {acquire|release} [lock_name]\n")
         return 2
+    lock_name = argv[2] if len(argv) == 3 else DEFAULT_LOCK_FILENAME
     try:
-        return acquire() if argv[1] == "acquire" else release()
+        return acquire(lock_name) if argv[1] == "acquire" else release(lock_name)
     except BaseException:
-        # Fail-open on ACQUIRE (allow commit); release is already best-effort.
+        # Fail-open on ACQUIRE (allow commit/push); release is already best-effort.
         return 0 if argv[1] == "acquire" else 0
 
 

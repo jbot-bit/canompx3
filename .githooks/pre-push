@@ -92,6 +92,38 @@ if [ "$IS_WINDOWS_SHELL" -eq 1 ] && [[ "$PYTHON" == *"/.venv-wsl/"* ]]; then
     exit 1
 fi
 
+# 0-serialize. Push serialization — the push-side twin of pre-commit step 0.
+# The drift gate below takes ~3 min; two terminals pushing HEAD:main at once
+# each run that full gate and the loser hits `cannot lock ref 'refs/heads/main'`,
+# throwing away ~3 min of drift. We acquire an O_EXCL lock for the duration of
+# THIS hook (released via trap on any exit, incl. set -e abort mid-drift) so the
+# expensive window is serial. A 2nd concurrent push detects the live lock and
+# exits INSTANTLY here, BEFORE wasting any drift. Reuses the canonical
+# commit_serialize.py helper with a distinct lock name — no re-encoding.
+# Fail-OPEN: if the helper errors it exits 0 (allow) — a serializer must never
+# wedge a legitimate push; the drift gate below is the real (fail-closed) net.
+# Use PATH python for this early step (stdlib-only helper), same as pre-commit.
+PUSH_LOCK_PY="python"
+[ -x "$SCRIPT_DIR/.venv-wsl/bin/python" ] && [ "$IS_WINDOWS_SHELL" -eq 0 ] && PUSH_LOCK_PY="$SCRIPT_DIR/.venv-wsl/bin/python"
+[ "$PUSH_LOCK_PY" = "python" ] && [ -x "$SCRIPT_DIR/.venv/bin/python" ] && PUSH_LOCK_PY="$SCRIPT_DIR/.venv/bin/python"
+[ -x "$SCRIPT_DIR/.venv/Scripts/python.exe" ] && [ "$IS_WINDOWS_SHELL" -eq 1 ] && PUSH_LOCK_PY="$SCRIPT_DIR/.venv/Scripts/python.exe"
+# Native pid of THIS shell (lives for the whole 3-min gate) — the serializer's
+# real liveness key, so a 2nd push BLOCKS while this one runs and only steals
+# once this shell exits. /proc/$$/winpid on Git Bash; $$ on POSIX (already native).
+CANOMPX3_HOOK_NATIVE_PID="$(cat /proc/$$/winpid 2>/dev/null || echo $$)"
+export CANOMPX3_HOOK_NATIVE_PID
+export CANOMPX3_PRECOMMIT_LOCK_OWNER="push:$$"
+set +e
+"$PUSH_LOCK_PY" "$SCRIPT_DIR/scripts/tools/commit_serialize.py" acquire .push-in-progress.lock
+PUSH_LOCK_RC=$?
+set -e
+if [ "$PUSH_LOCK_RC" -ne 0 ]; then
+    # Helper already printed a structured BLOCKED message to stderr.
+    exit 1
+fi
+# Release the push lock on any exit (success, drift failure, or set -e abort).
+trap '"$PUSH_LOCK_PY" "$SCRIPT_DIR/scripts/tools/commit_serialize.py" release .push-in-progress.lock >/dev/null 2>&1 || true' EXIT
+
 echo "=== PRE-PUSH: full drift safety gate ==="
 echo "  (full blocking drift set — the net for pre-commit's path-scoped skip)"
 
