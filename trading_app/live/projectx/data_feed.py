@@ -12,6 +12,7 @@ Auth: JWT passed as access_token_factory to pysignalr.
 
 import asyncio
 import logging
+import os
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ from typing import Any
 
 from ..bar_aggregator import Bar, BarAggregator
 from ..broker_base import BrokerAuth, BrokerFeed
+from ..spread_accumulator import SpreadAccumulator
 from .auth import MARKET_HUB_URL
 
 log = logging.getLogger(__name__)
@@ -34,6 +36,14 @@ _BACKOFF_MAX = 60.0  # cap at 60s
 # Liveness monitoring — detect "connected but silent" state
 _STALE_TIMEOUT = 90.0  # seconds with no data before first warning
 _MAX_STALE_BEFORE_RECONNECT = 2  # consecutive stale checks before forcing reconnect
+
+# Spread capture (Defect B) — off unless this env flag is truthy.
+_SPREAD_CAPTURE_ENV = "CANOMPX_CAPTURE_SPREAD"
+
+
+def _spread_capture_enabled() -> bool:
+    """True iff CANOMPX_CAPTURE_SPREAD is set to a truthy value (default OFF)."""
+    return os.environ.get(_SPREAD_CAPTURE_ENV, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 class ProjectXDataFeed(BrokerFeed):
@@ -51,11 +61,23 @@ class ProjectXDataFeed(BrokerFeed):
         self,
         auth: BrokerAuth,
         on_bar,
+        on_quote_minute=None,
         **kwargs,
     ):
         super().__init__(auth, on_bar, **kwargs)
         self._agg = BarAggregator()
         self._symbol: str = ""
+        # Spread capture (Defect B) — OFF by default. When CANOMPX_CAPTURE_SPREAD
+        # is set, every quote's (bestBid, bestAsk) is accumulated into per-minute
+        # spread summaries and emitted via on_quote_minute. Runs in its own
+        # try/except branch after the bar/order path and CANNOT perturb trading.
+        # When off, neither object exists and no spread branch is taken — the
+        # capital path is byte-identical to a feed without this feature.
+        self._capture_spread_enabled: bool = _spread_capture_enabled()
+        self._spread_acc: SpreadAccumulator | None = SpreadAccumulator() if self._capture_spread_enabled else None
+        # Plain synchronous callback (QuotePersister.append is lock-guarded), so
+        # it is safe to invoke from both the async and foreign-thread quote paths.
+        self._on_quote_minute = on_quote_minute
         self._stop_requested = False
         self._force_reconnect = False
         self._bar_queue: asyncio.Queue = asyncio.Queue()
@@ -97,6 +119,47 @@ class ProjectXDataFeed(BrokerFeed):
         vol = quote.get("volume")
         return float(price), int(vol) if vol is not None else 1
 
+    @staticmethod
+    def parse_bid_ask(quote: dict) -> tuple[float | None, float | None]:
+        """Extract (bestBid, bestAsk) from a GatewayQuote — pure, no fallback.
+
+        Returns (None, None)-tolerant tuple: a missing or non-numeric side
+        becomes None so the accumulator's crossed/one-sided guard drops it.
+        Spread capture only (Defect B); never feeds the price/bar path.
+        """
+
+        def _num(v: Any) -> float | None:
+            if v is None or isinstance(v, bool):
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        return _num(quote.get("bestBid")), _num(quote.get("bestAsk"))
+
+    def _capture_spread(self, quote: dict, now: datetime) -> None:
+        """Feed one quote's bid/ask to the spread accumulator (Defect B).
+
+        Shared by BOTH quote paths (_on_quote async + _on_quote_sync foreign
+        thread). Self-contained try/except: a failure here must NEVER propagate
+        into the bar/order path. No-op when spread capture is disabled.
+
+        The accumulator is thread-safe (its own lock) and QuotePersister.append
+        is lock-guarded, so this is safe to call from either thread.
+        """
+        acc = self._spread_acc
+        if acc is None:
+            return
+        try:
+            bid, ask = self.parse_bid_ask(quote)
+            qm = acc.add(bid, ask, now)
+            if qm is not None and self._on_quote_minute is not None:
+                qm.symbol = self._symbol
+                self._on_quote_minute(qm)
+        except Exception:
+            log.warning("Spread capture failed (trading unaffected)", exc_info=True)
+
     def _cum_to_delta(self, cum_volume: int) -> int:
         """Convert a cumulative session-volume reading into a per-tick delta.
 
@@ -128,10 +191,23 @@ class ProjectXDataFeed(BrokerFeed):
             return delta
 
     def flush(self, symbol: str = "") -> Bar | None:
-        """Force-close current bar at session end."""
+        """Force-close current bar at session end.
+
+        Also force-closes the spread accumulator's in-progress minute (Defect B)
+        so the final partial minute of the session is not lost — mirrors the bar
+        flush. The QuoteMinute is emitted via on_quote_minute; failures here
+        never affect the returned bar (own try/except).
+        """
         bar = self._agg.flush()
         if bar is not None:
             bar.symbol = symbol or self._symbol
+        if self._spread_acc is not None:
+            try:
+                qm = self._spread_acc.flush(symbol or self._symbol)
+                if qm is not None and self._on_quote_minute is not None:
+                    self._on_quote_minute(qm)
+            except Exception:
+                log.warning("Spread accumulator flush failed (trading unaffected)", exc_info=True)
         return bar
 
     # ------------------------------------------------------------------
@@ -391,6 +467,12 @@ class ProjectXDataFeed(BrokerFeed):
                     await self.on_bar(bar)
             except (ValueError, KeyError) as e:
                 log.debug("Skipping quote: %s", e)
+            # Spread capture runs AFTER the bar/order path, in its own branch
+            # inside _capture_spread (Defect B). Outside the except above so a
+            # price-parse failure does not skip a capturable bid/ask quote; its
+            # own try/except means it can never raise into this handler.
+            if self._spread_acc is not None:
+                self._capture_spread(quote, datetime.now(UTC))
 
     async def _on_trade(self, args: list[Any]) -> None:
         """Handle GatewayTrade event (pysignalr — async callback)."""
@@ -441,6 +523,13 @@ class ProjectXDataFeed(BrokerFeed):
                     self._apply_tick_state(now, bar)
             except (ValueError, KeyError) as e:
                 log.debug("Skipping quote: %s", e)
+            # Spread capture (Defect B) — runs on this foreign thread directly:
+            # SpreadAccumulator.add and QuotePersister.append are both
+            # lock-guarded, so no event-loop hop is needed (unlike the bar
+            # path, which must route the queue put through the loop). Own
+            # try/except inside _capture_spread — cannot raise into this handler.
+            if self._spread_acc is not None:
+                self._capture_spread(quote, datetime.now(UTC))
 
     def _on_trade_sync(self, args: Any) -> None:
         """Handle GatewayTrade (signalrcore — sync on foreign thread).

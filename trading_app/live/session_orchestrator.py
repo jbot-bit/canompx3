@@ -33,6 +33,8 @@ from trading_app.live.http_client import BrokerHTTPError
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
 from trading_app.live.position_tracker import PositionState, PositionTracker
+from trading_app.live.projectx.data_feed import _spread_capture_enabled
+from trading_app.live.quote_persister import QuotePersister
 from trading_app.live.trade_journal import TradeJournal, generate_trade_id
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.prop_profiles import resolve_execution_order, resolve_execution_symbol
@@ -761,6 +763,13 @@ class SessionOrchestrator:
         self._notifications_broken = False  # set by self-test
         self._bar_count = 0  # total bars received this session
         self._bar_persister = BarPersister(instrument, db_path=str(GOLD_DB_PATH))
+        # Spread capture (Defect B) — diagnostic, OFF by default, never on the
+        # capital path. Built only when CANOMPX_CAPTURE_SPREAD is set; the same
+        # flag gates the feed-side accumulator so both sides agree. When off,
+        # _quote_persister is None and no quote wiring happens.
+        self._quote_persister: QuotePersister | None = (
+            QuotePersister(instrument, db_path=str(GOLD_DB_PATH)) if _spread_capture_enabled() else None
+        )
         self._close_time_forced = self._safety_state.close_time_forced
 
         # Crash recovery: restore daily P&L so RiskManager re-derives halt state.
@@ -2108,6 +2117,18 @@ class SessionOrchestrator:
         # Previously ran before engine.on_bar(), adding 2-50ms disk write latency
         # to the signal detection critical path. Dashboard staleness of 1 bar is acceptable.
         self._publish_state()
+
+    def _on_quote_minute(self, qm) -> None:
+        """Collect a completed per-minute spread summary (Defect B).
+
+        Diagnostic-only seam, symmetric with _on_bar's bar_persister.append.
+        Called from the feed (both quote paths) only when spread capture is on;
+        _quote_persister is None otherwise so this is a guarded no-op. Never
+        raises into the feed — QuotePersister.append is a lock-guarded list
+        append, and the feed wraps the call in its own try/except.
+        """
+        if self._quote_persister is not None:
+            self._quote_persister.append(qm)
 
     def _compute_actual_r(self, entry_price: float, exit_price: float, direction: str, risk_pts: float) -> float:
         """Compute cost-adjusted R-multiple from entry/exit prices."""
@@ -4122,11 +4143,19 @@ class SessionOrchestrator:
                     f"'{self._broker_name}' which has no market data feed. "
                     "Feedless brokers must use a different entry path (e.g. webhook_server)."
                 )
+                # Spread capture (Defect B): wire the diagnostic seam ONLY when
+                # enabled, so the feed ctor call is byte-identical to today when
+                # off (no new kwarg passed → no behavioral delta on the capital
+                # path, and feed classes that don't know the kwarg are unaffected).
+                _feed_kwargs = {}
+                if self._quote_persister is not None:
+                    _feed_kwargs["on_quote_minute"] = self._on_quote_minute
                 feed = self._feed_class(
                     self.auth,
                     on_bar=self._on_bar,
                     on_stale=self._on_feed_stale,
                     demo=self.demo,
+                    **_feed_kwargs,
                 )
                 self._feed_status["status"] = "connecting" if reconnect_count == 0 else "reconnecting"
                 self._feed_status["dead"] = False
@@ -4478,6 +4507,18 @@ class SessionOrchestrator:
                 self.instrument,
                 f"ring_preserved:bars_captured={bars_captured},n_persisted=0",
             )
+
+        # Spread capture (Defect B) — flush AFTER the bar flush above. Bars are
+        # the capital artifact and persist first; quotes are diagnostic. Gated
+        # (None when capture off) and fail-open: a quote-flush failure is logged
+        # at CRITICAL inside flush_to_db and never aborts shutdown.
+        if self._quote_persister is not None:
+            try:
+                n_quotes = self._quote_persister.flush_to_db()
+                if n_quotes > 0:
+                    log.info("Quote persister: %d quote-minutes written to live_quotes", n_quotes)
+            except Exception as exc:
+                log.critical("Quote persister: flush_to_db raised: %s", exc, exc_info=True)
 
         # Clear crash-recovery state on clean session end.
         # If blocked strategies or kill switch fired, leave state for next startup.

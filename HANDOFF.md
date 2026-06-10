@@ -6,20 +6,6 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Codex Session - project_pulse staleness collector batched (2026-06-08)
-- **Tool:** Codex.
-- **What changed:** Replaced the `collect_staleness()` dependency on `pipeline_status.staleness_engine` with a pulse-local, read-only fast path in `scripts/tools/project_pulse.py`. The new path batches the per-instrument max-date reads across `bars_1m`, `bars_5m`, active-aperture `daily_features`/`orb_outcomes`, `experimental_strategies`, deployable `validated_setups`, and `edge_families`, then applies the same surfaced stale-step logic pulse already reports. No queue/live/deployment logic changed.
-- **Tests:** `tests/test_tools/test_project_pulse.py` now seeds a tiny real DuckDB fixture for staleness coverage instead of mocking `pipeline_status`, verifies active aperture parsing without importing the heavy builder, and adds an explicit regression that `collect_staleness()` still works when `pipeline_status` is unavailable. Full file PASS: 100 tests.
-- **Measured before/after:** direct `collect_staleness()` fell from **3.21s / 1.49s** (cold/warm) to **1.29s / 0.71s**. `cProfile` on `collect_staleness()` fell from about **4.19s** to about **1.90s** cumulative. `project_pulse --fast --format json > $null` improved further from **13.07s / 13.12s** after the prior pass to **12.68s / 9.97s** in this worktree.
-- **Residual hotspot:** full fast-path `cProfile` now shifts primary cost to DuckDB-heavy/import-heavy collectors: `collect_lifecycle_control` (~3.66s), `collect_staleness` (~2.70s, with repeated `deployable_validated_relation` checks still visible), `collect_upcoming_sessions` (~1.63s), and `collect_system_identity` (~1.25s). The next win is no longer queue or core staleness parsing.
-
-## Codex Session - project_pulse fast path bounded + queue coverage cached (2026-06-08)
-- **Tool:** Codex.
-- **What changed:** Scoped performance fix in `scripts/tools/project_pulse.py`. Added a reusable `QueueCoverageContext` so queue parsing and normalized coverage blobs are built once per pulse run and threaded through debt, plan, and pulse queue-reconciliation. Reused the parsed queue for `collect_action_queue` and `collect_followup_coverage`. Made `collect_live_readiness(fast=True)` return a lightweight skipped summary so `project_pulse --fast` no longer pays the Windows scheduled-task probe cost.
-- **Tests:** `tests/test_tools/test_project_pulse.py` now covers supplied coverage-context reuse and the `fast=True` live-readiness path. Full file PASS: 98 tests.
-- **Measured before/after:** `project_pulse --fast --format json > $null` improved from **25.9s / 25.4s** to **13.07s / 13.12s** in this worktree. `check_drift --fast --skip-crg-advisory` stayed roughly flat (**18.85s -> 19.28s**). `audit_behavioral.py` stayed roughly flat (**7.08s -> 7.33s**).
-- **Residual hotspot:** fresh cProfile now points primarily at `collect_staleness` (~5.4s), then DuckDB-heavy system/deployment/lifecycle collectors. Queue reconciliation is no longer the dominant cost.
-
 ## Codex Session — Claude parity layer made executable (2026-06-07)
 - **Tool:** Codex.
 - **What changed:** Filled the Codex-vs-Claude capability gap without mutating Claude-owned files. Added Codex-owned parity routing for Claude commands/rules/agents/hooks/skills via `.codex/AGENTS.md`, `.codex/HOOKS.md`, and `canompx3-claude-parity` skill/wrapper. Updated `.codex/COMMANDS.md`, `.codex/RULES.md`, `.codex/WORKFLOWS.md`, and skill READMEs.
@@ -186,13 +172,14 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Unknown
-- **Date:** 2026-06-08
-- **Commit:** 8884ade3 — perf(project-pulse): bound fast-path collectors
-- **Files changed:** 3 files
+- **Tool:** Claude Code
+- **Date:** 2026-06-10
+- **Commit:** d16dbb78 — fix(refresh_data): derive build boundary from canonical trading-day window, not calendar today-1
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `scripts/tools/project_pulse.py`
-  - `tests/test_tools/test_project_pulse.py`
+  - `docs/runtime/stages/2026-06-10-refresh-data-canonical-trading-day-boundary.md`
+  - `scripts/tools/refresh_data.py`
+  - `tests/test_tools/test_refresh_data.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

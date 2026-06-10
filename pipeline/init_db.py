@@ -98,6 +98,20 @@ ORB_LABELS_DYNAMIC = [
 # Combined label list — used by schema generation and feature builders
 ORB_LABELS = ORB_LABELS_DYNAMIC
 
+LIVE_QUOTES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS live_quotes (
+    ts_utc        TIMESTAMPTZ NOT NULL,
+    symbol        TEXT        NOT NULL,
+    source_symbol TEXT        NOT NULL,
+    avg_spread    DOUBLE      NOT NULL,
+    close_spread  DOUBLE      NOT NULL,
+    min_spread    DOUBLE      NOT NULL,
+    max_spread    DOUBLE      NOT NULL,
+    n_quotes      BIGINT      NOT NULL,
+    PRIMARY KEY (symbol, ts_utc)
+);
+"""
+
 PROSPECTIVE_SIGNALS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS prospective_signals (
     signal_id        VARCHAR NOT NULL,
@@ -607,6 +621,9 @@ def init_db(db_path: Path, force: bool = False):
 
         con.execute(PIPELINE_AUDIT_LOG_SCHEMA)
         logger.info("  pipeline_audit_log: created (or already exists)")
+
+        con.execute(LIVE_QUOTES_SCHEMA)
+        logger.info("  live_quotes: created (or already exists)")
 
         con.commit()
 
