@@ -8041,7 +8041,12 @@ def _read_sweep_block(profile_id: str) -> dict | None:
             return None
         block = payload.get("survival_cap_sweep")
         return block if isinstance(block, dict) else None
-    except Exception:  # noqa: BLE001
+    except (OSError, json.JSONDecodeError) as exc:
+        # Read/parse error is NOT "sweep missing" — surface it so the operator can
+        # tell a corrupted report from an un-swept one. Still returns None so the
+        # caller fails CLOSED (blocks the clamp-lift), but no longer silently
+        # (institutional-rigor § 6 — no silent failures).
+        print(f"  WARN: survival_cap_sweep block unreadable for {profile_id!r}: {exc}")
         return None
 
 

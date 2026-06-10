@@ -174,10 +174,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** 06525bf8 — feat(dashboard): surface chart time axis + live/stale dot
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `trading_app/live/bot_dashboard.html`
+- **Commit:** ebb122ed — @ docs(claude): compress Task Routing / Default Mode / Shell / grounding to fit 12KB cap
+- **Files changed:** 1 files
+  - `CLAUDE.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

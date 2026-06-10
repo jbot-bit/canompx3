@@ -1265,6 +1265,24 @@ def evaluate_profile_survival(
 DEFAULT_SWEEP_CEILING = 5
 
 
+def _contiguous_safe_ceiling(per_cap: list[dict]) -> int:
+    """Largest contract cap CONTIGUOUS from 1 whose gate passes (fail-closed).
+
+    ``per_cap`` is the ordered (1..ceiling) list of per-cap gate results. Survival
+    is NOT guaranteed monotonic in cap once a strict-DD belt trips, so a pass ABOVE
+    a failure cannot be honored — only the unbroken passing run starting at cap=1
+    counts. If even cap=1 fails, returns 0: a fail-closed signal the operator must
+    see (the profile cannot survive at ANY size).
+    """
+    ceiling = 0
+    for entry in per_cap:
+        if entry.get("gate_pass"):
+            ceiling = int(entry["contracts"])
+        else:
+            break
+    return ceiling
+
+
 @dataclass(frozen=True)
 class SurvivalCapSweepResult:
     """Result of probing contract caps {1..ceiling} against the C11 survival gate.
@@ -1381,17 +1399,7 @@ def sweep_survival_cap(
     finally:
         con.close()
 
-    # Largest cap CONTIGUOUS from 1 that passes. Survival is not guaranteed
-    # monotonic in cap once a strict-DD belt trips, so a pass ABOVE a failure
-    # cannot be honored — only the unbroken run from cap=1 counts. If even cap=1
-    # fails, ceiling is 0: a fail-closed signal the operator must see (the profile
-    # cannot survive at ANY size). per_cap is ordered 1..ceiling by construction.
-    survival_safe_ceiling = 0
-    for entry in per_cap:
-        if entry["gate_pass"]:
-            survival_safe_ceiling = entry["contracts"]
-        else:
-            break
+    survival_safe_ceiling = _contiguous_safe_ceiling(per_cap)
 
     sweep = SurvivalCapSweepResult(
         profile_id=resolved_profile_id,

@@ -1596,3 +1596,155 @@ def test_d3_rolling_dd_scales_superlinearly_and_pass_prob_drops_at_cap2():
     assert p2 < p1, f"op_pass_prob must drop with size: cap1={p1} cap2={p2}"
     assert p1 > 0.90, f"cap=1 must still operationally pass on the live profile (got {p1})"
     assert p2 < 0.50, f"cap=2 must flip the operational gate False on the live profile (got {p2})"
+
+
+# ---------------------------------------------------------------------------
+# Survival-cap sweep Stage 1 (D-3 follow-on) — sweep + gate extract + persist
+# ---------------------------------------------------------------------------
+
+
+def test_contiguous_safe_ceiling_all_pass():
+    """All caps pass -> ceiling is the top probed cap."""
+    import trading_app.account_survival as asv
+
+    per_cap = [{"contracts": n, "gate_pass": True} for n in range(1, 6)]
+    assert asv._contiguous_safe_ceiling(per_cap) == 5
+
+
+def test_contiguous_safe_ceiling_breaks_at_first_failure():
+    """Pass 1,2 then fail 3 -> ceiling 2, even if a LATER cap passes (non-monotonic)."""
+    import trading_app.account_survival as asv
+
+    per_cap = [
+        {"contracts": 1, "gate_pass": True},
+        {"contracts": 2, "gate_pass": True},
+        {"contracts": 3, "gate_pass": False},
+        {"contracts": 4, "gate_pass": True},  # must NOT be honored — gap above failure
+    ]
+    assert asv._contiguous_safe_ceiling(per_cap) == 2
+
+
+def test_contiguous_safe_ceiling_fails_closed_to_zero_when_cap1_fails():
+    """Even cap=1 fails -> ceiling 0 (profile cannot survive at any size)."""
+    import trading_app.account_survival as asv
+
+    per_cap = [{"contracts": 1, "gate_pass": False}, {"contracts": 2, "gate_pass": True}]
+    assert asv._contiguous_safe_ceiling(per_cap) == 0
+
+
+def test_evaluate_gate_matches_inline_verdict_math():
+    """_evaluate_gate reproduces the inline verdict the eval used to compute.
+
+    Builds a synthetic scenario set + sim result and asserts the extracted gate
+    helper resolves operational/strict/overall pass exactly as the prior inline
+    math (round-to-4 op_pass >= floor; zero historical breach days; rolling DD
+    within budget; AND sizing_parity). One definition of "survives" (rigor s.4).
+    """
+    import trading_app.account_survival as asv
+
+    profile = asv.get_profile("topstep_50k_mnq_auto")
+    rules = asv._with_consistency_rule(asv._build_rules(profile), profile)
+    # A single benign day: tiny positive pnl, no daily-loss breach, trivial DD.
+    scenarios = [
+        asv.DailyScenario(
+            trading_day="2026-01-02",
+            total_pnl_dollars=50.0,
+            positive_pnl_dollars=50.0,
+            active_lane_count=1,
+            min_balance_delta_dollars=-10.0,
+            max_balance_delta_dollars=60.0,
+        )
+    ]
+    result = asv.simulate_survival(scenarios, rules, horizon_days=1, n_paths=64, seed=0)
+    gate = asv._evaluate_gate(
+        scenarios,
+        rules,
+        result,
+        profile,
+        min_survival_probability=asv.MIN_SURVIVAL_PROBABILITY,
+        sizing_parity_ok=True,
+    )
+    # Re-derive the verdict independently from the same primitives.
+    expected_op = round(result["operational_pass_probability"], 4) >= asv.MIN_SURVIVAL_PROBABILITY
+    expected_breaches = asv._historical_daily_loss_breach_days(scenarios, rules)
+    expected_dd = asv._max_observed_rolling_drawdown(scenarios, horizon_days=asv.STRICT_DD_HORIZON_DAYS)
+    expected_budget = asv.effective_strict_dd_budget(profile, rules)
+    expected_strict = len(expected_breaches) == 0 and expected_dd <= expected_budget
+    assert gate.operational_gate_pass == expected_op
+    assert gate.strict_account_gate_pass == expected_strict
+    assert gate.gate_pass == (expected_op and expected_strict and True)
+
+
+def test_evaluate_gate_fails_when_sizing_parity_false():
+    """sizing_parity_ok=False forces gate_pass False regardless of sim outcome."""
+    import trading_app.account_survival as asv
+
+    profile = asv.get_profile("topstep_50k_mnq_auto")
+    rules = asv._with_consistency_rule(asv._build_rules(profile), profile)
+    scenarios = [
+        asv.DailyScenario(
+            trading_day="2026-01-02",
+            total_pnl_dollars=50.0,
+            positive_pnl_dollars=50.0,
+            active_lane_count=1,
+            min_balance_delta_dollars=-10.0,
+            max_balance_delta_dollars=60.0,
+        )
+    ]
+    result = asv.simulate_survival(scenarios, rules, horizon_days=1, n_paths=64, seed=0)
+    gate = asv._evaluate_gate(
+        scenarios, rules, result, profile,
+        min_survival_probability=asv.MIN_SURVIVAL_PROBABILITY,
+        sizing_parity_ok=False,
+    )
+    assert gate.gate_pass is False
+
+
+def test_persist_sweep_round_trips_into_existing_c11_envelope(tmp_path, monkeypatch):
+    """Persisting a sweep adds a survival_cap_sweep block without clobbering summary."""
+    import trading_app.account_survival as asv
+
+    monkeypatch.setattr(asv, "STATE_DIR", tmp_path)
+    # Avoid touching the real DB/profile fingerprints — stub the canonical-inputs
+    # and git_head so the re-stamp is deterministic and DB-free.
+    monkeypatch.setattr(asv, "_current_survival_canonical_inputs", lambda *_a, **_k: _canonical_inputs())
+    monkeypatch.setattr(asv, "get_git_head", lambda *_a, **_k: "test-head")
+
+    pid = "topstep_50k_mnq_auto"
+    report_path = asv.get_survival_report_path(pid)
+    base = _survival_envelope(as_of_date="2026-06-01", operational_pass_probability=0.99, gate_pass=True)
+    report_path.write_text(json.dumps(base), encoding="utf-8")
+
+    sweep = asv.SurvivalCapSweepResult(
+        profile_id=pid,
+        ceiling_probed=3,
+        survival_safe_ceiling=2,
+        sizing_parity_ok=True,
+        sizing_parity_msg="ok",
+        per_cap=[
+            {"contracts": 1, "gate_pass": True},
+            {"contracts": 2, "gate_pass": True},
+            {"contracts": 3, "gate_pass": False},
+        ],
+    )
+    asv._persist_sweep_into_c11_envelope(pid, sweep)
+
+    raw = json.loads(report_path.read_text(encoding="utf-8"))
+    block = raw["payload"]["survival_cap_sweep"]
+    assert block["survival_safe_ceiling"] == 2
+    assert block["ceiling_probed"] == 3
+    # Original summary untouched.
+    assert raw["payload"]["summary"]["operational_pass_probability"] == 0.99
+
+
+def test_persist_sweep_raises_when_base_report_missing(tmp_path, monkeypatch):
+    """No base C11 report -> persist raises (never silently masks a missing report)."""
+    import trading_app.account_survival as asv
+
+    monkeypatch.setattr(asv, "STATE_DIR", tmp_path)
+    sweep = asv.SurvivalCapSweepResult(
+        profile_id="topstep_50k_mnq_auto", ceiling_probed=1, survival_safe_ceiling=1,
+        sizing_parity_ok=True, sizing_parity_msg="ok", per_cap=[{"contracts": 1, "gate_pass": True}],
+    )
+    with pytest.raises(FileNotFoundError):
+        asv._persist_sweep_into_c11_envelope("topstep_50k_mnq_auto", sweep)
