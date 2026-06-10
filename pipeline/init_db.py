@@ -225,6 +225,9 @@ def _build_daily_features_ddl() -> str:
                 f"    rel_vol_{label}               DOUBLE,",
                 f"    orb_{label}_vwap              DOUBLE,",
                 f"    orb_{label}_pre_velocity      DOUBLE,",
+                f"    orb_{label}_poc               DOUBLE,",
+                f"    orb_{label}_vah               DOUBLE,",
+                f"    orb_{label}_val               DOUBLE,",
             ]
         )
     orb_block = "\n".join(orb_cols)
@@ -568,10 +571,14 @@ def init_db(db_path: Path, force: bool = False):
                     pass  # column already exists
 
         # Migration: add VWAP + pre-velocity columns (Mar 2026)
+        # + pre-session volume profile POC/VAH/VAL (Jun 2026)
         for label in ORB_LABELS:
             for col, typedef in [
                 (f"orb_{label}_vwap", "DOUBLE"),
                 (f"orb_{label}_pre_velocity", "DOUBLE"),
+                (f"orb_{label}_poc", "DOUBLE"),
+                (f"orb_{label}_vah", "DOUBLE"),
+                (f"orb_{label}_val", "DOUBLE"),
             ]:
                 try:
                     con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")

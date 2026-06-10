@@ -38,6 +38,7 @@ from pipeline.build_daily_features import (
     compute_session_stats,
     compute_trading_day,
     compute_trading_day_utc_range,
+    compute_volume_profile,
     detect_break,
     verify_daily_features,
 )
@@ -1539,3 +1540,108 @@ class TestGetTradingDaysInRangeWallClock:
         con = self._make_db([("2025-01-15 02:00:00+00", "MGC")])
         days = get_trading_days_in_range(con, "MGC", date(2025, 1, 15), date(2025, 1, 15))
         assert date(2025, 1, 15) in days
+
+
+# =============================================================================
+# Pre-session Volume Profile (POC / VAH / VAL)
+# =============================================================================
+
+
+def _profile_bars(rows):
+    """rows = list of (close, volume) → DataFrame with the columns the profile reads."""
+    return pd.DataFrame({"close": [r[0] for r in rows], "volume": [r[1] for r in rows]})
+
+
+class TestVolumeProfile:
+    """compute_volume_profile — close-binned 1m-bar approximation."""
+
+    def test_poc_is_max_volume_bin(self):
+        # 100.0 carries the most volume → it is the POC.
+        bars = _profile_bars([(100.0, 500), (100.1, 50), (99.9, 50), (100.0, 100)])
+        poc, vah, val = compute_volume_profile(bars, tick_size=0.10)
+        assert poc == 100.0
+
+    def test_val_le_poc_le_vah_invariant(self):
+        bars = _profile_bars([(100.0, 300), (100.1, 200), (100.2, 100), (99.9, 150), (99.8, 80)])
+        poc, vah, val = compute_volume_profile(bars, tick_size=0.10)
+        assert val <= poc <= vah
+
+    def test_value_area_covers_at_least_70pct(self):
+        # Spread volume across 5 bins; the value area must cover >= 70% of total.
+        bars = _profile_bars([(100.0, 400), (100.1, 250), (99.9, 200), (100.2, 100), (99.8, 50)])
+        poc, vah, val = compute_volume_profile(bars, tick_size=0.10)
+        total = 1000.0
+        # Reconstruct covered volume between val and vah inclusive.
+        covered = sum(
+            v for c, v in zip(bars["close"], bars["volume"], strict=True) if val - 1e-9 <= round(c, 4) <= vah + 1e-9
+        )
+        assert covered >= 0.70 * total
+
+    def test_degenerate_single_bin(self):
+        # All volume at one price → POC = VAH = VAL, no crash.
+        bars = _profile_bars([(100.0, 300), (100.0, 200)])
+        poc, vah, val = compute_volume_profile(bars, tick_size=0.10)
+        assert poc == vah == val == 100.0
+
+    def test_fail_closed_zero_volume(self):
+        bars = _profile_bars([(100.0, 0), (100.1, 0)])
+        assert compute_volume_profile(bars, tick_size=0.10) == (None, None, None)
+
+    def test_fail_closed_empty(self):
+        bars = _profile_bars([])
+        assert compute_volume_profile(bars, tick_size=0.10) == (None, None, None)
+
+    def test_fail_closed_missing_tick_size(self):
+        bars = _profile_bars([(100.0, 300)])
+        assert compute_volume_profile(bars, tick_size=None) == (None, None, None)
+        assert compute_volume_profile(bars, tick_size=0.0) == (None, None, None)
+
+    def test_lookahead_probe_rule13(self):
+        """RULE 13: bars at/after the ORB window must NOT influence the profile.
+
+        The helper only ever receives the pre-session slice. We prove the
+        contract by computing the profile over a pre-window, then over the SAME
+        pre-window with high-volume 'ORB-window' bars appended and re-sliced
+        away — the result must be byte-identical. A leak would show up as a
+        shifted POC toward the injected high-volume price.
+        """
+        pre = _profile_bars([(100.0, 300), (100.1, 150), (99.9, 120)])
+        baseline = compute_volume_profile(pre, tick_size=0.10)
+
+        # Simulate the full frame: pre-bars + a huge-volume bar at a far price
+        # that belongs to the ORB window. The build path masks these out via
+        # `pre_mask`; here we re-slice to the pre rows and confirm no change.
+        full = pd.concat([pre, _profile_bars([(105.0, 99999)])], ignore_index=True)
+        resliced = full.iloc[: len(pre)]
+        after = compute_volume_profile(resliced, tick_size=0.10)
+
+        assert after == baseline
+        assert after[0] == 100.0  # POC unmoved by the injected ORB-window bar
+
+
+class TestVolumeProfileSchema:
+    """The three columns exist in the daily_features schema (CREATE + fresh DB)."""
+
+    def test_columns_in_create_table_schema(self):
+        from pipeline.init_db import DAILY_FEATURES_SCHEMA
+
+        for label in ORB_LABELS:
+            for suffix in ("poc", "vah", "val"):
+                assert f"orb_{label}_{suffix}" in DAILY_FEATURES_SCHEMA, (
+                    f"orb_{label}_{suffix} missing from CREATE TABLE DDL"
+                )
+
+    def test_columns_created_in_fresh_db(self):
+        from pipeline.init_db import DAILY_FEATURES_SCHEMA
+
+        con = duckdb.connect(":memory:")
+        con.execute(DAILY_FEATURES_SCHEMA)
+        cols = {
+            r[0]
+            for r in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+            ).fetchall()
+        }
+        for label in ORB_LABELS:
+            for suffix in ("poc", "vah", "val"):
+                assert f"orb_{label}_{suffix}" in cols

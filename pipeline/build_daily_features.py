@@ -73,6 +73,13 @@ UTC_TZ = ZoneInfo("UTC")
 # Trading day starts at 09:00 Brisbane = 23:00 UTC previous day
 TRADING_DAY_START_HOUR_LOCAL = 9  # Brisbane hour
 
+# Value-area coverage for the pre-session volume profile (POC/VAH/VAL).
+# 0.70 is the Steidlmayer/Dalton Market-Profile standard (the central 70% of
+# traded volume defines the "value area"). Grounded in
+# docs/institutional/literature/howard_2026_value_area_breakouts_es.md (§2,
+# value-area construction) and topstep_2026_auction_market_theory_intro.md.
+VALUE_AREA_PCT = 0.70
+
 # ORB local times (Brisbane) -> UTC hour offsets
 # Brisbane = UTC+10, so local HH:00 = UTC (HH-10):00
 # For 00:30 Brisbane = 14:30 UTC previous day? No:
@@ -1096,6 +1103,72 @@ def compute_outcome(
     return result
 
 
+def compute_volume_profile(pre_bars: pd.DataFrame, tick_size: float) -> tuple[float | None, float | None, float | None]:
+    """Pre-session volume profile → (POC, VAH, VAL).
+
+    CLOSE-BINNED PROFILE (1m-bar approximation), NOT a true intra-bar tick
+    profile. We only have 1m OHLCV bars, so each bar's full ``volume`` is
+    attributed to a single price — its ``close`` — snapped to the nearest
+    ``tick_size`` grid. A real volume profile distributes a bar's volume across
+    the price range it actually traded; that requires tick/trade data we do not
+    have. This approximation is disclosed deliberately (institutional-rigor §6:
+    no silent methodological lie) and is fit ONLY for coarse value-area
+    structure, not micro price-level precision.
+
+    - POC = price bin holding the most volume (Point of Control).
+    - Value area = the contiguous set of bins, grown outward from the POC
+      (always adding the heavier of the two neighbouring bins), until it covers
+      ``VALUE_AREA_PCT`` (70%, Steidlmayer/Dalton standard) of total volume.
+    - VAH / VAL = the high / low price bounds of that value area.
+
+    tick_size is the canonical bin width from ``COST_SPECS[symbol].tick_size``
+    (pipeline.cost_model), never from asset_configs (which has no tick field).
+
+    Fail-closed: caller passes a pre-session-only ``pre_bars`` window (zero
+    look-ahead by construction — same mask as VWAP). Returns (None, None, None)
+    when tick_size is missing/non-positive or the window has no volume.
+    """
+    import numpy as np
+
+    if tick_size is None or tick_size <= 0:
+        return None, None, None
+    vols = pre_bars["volume"].values.astype(float)
+    total_vol = vols.sum()
+    if len(pre_bars) == 0 or total_vol <= 0:
+        return None, None, None
+
+    closes = pre_bars["close"].values.astype(float)
+    # Snap each close to the tick grid, then aggregate volume per price bin.
+    bins = np.round(closes / tick_size) * tick_size
+    order = np.argsort(bins)
+    bins_sorted = bins[order]
+    vols_sorted = vols[order]
+    uniq_bins, idx = np.unique(bins_sorted, return_index=True)
+    bin_vols = np.add.reduceat(vols_sorted, idx)
+
+    poc_i = int(np.argmax(bin_vols))
+    poc = float(uniq_bins[poc_i])
+
+    # Grow the value area outward from the POC until it covers VALUE_AREA_PCT.
+    target = total_vol * VALUE_AREA_PCT
+    lo = hi = poc_i
+    covered = float(bin_vols[poc_i])
+    n = len(uniq_bins)
+    while covered < target and (lo > 0 or hi < n - 1):
+        below = float(bin_vols[lo - 1]) if lo > 0 else -1.0
+        above = float(bin_vols[hi + 1]) if hi < n - 1 else -1.0
+        if above >= below:
+            hi += 1
+            covered += float(bin_vols[hi])
+        else:
+            lo -= 1
+            covered += float(bin_vols[lo])
+
+    val = round(float(uniq_bins[lo]), 4)
+    vah = round(float(uniq_bins[hi]), 4)
+    return round(poc, 4), vah, val
+
+
 # =============================================================================
 # ORCHESTRATOR: BUILD ONE TRADING DAY
 # =============================================================================
@@ -1294,6 +1367,19 @@ def build_features_for_day(
             row[f"orb_{label}_pre_velocity"] = round(float(slope), 4)
         else:
             row[f"orb_{label}_pre_velocity"] = None
+
+        # Pre-session Volume Profile (POC/VAH/VAL) — SAME pre_bars window as
+        # VWAP above, so look-ahead-safe by construction. Close-binned 1m-bar
+        # approximation (see compute_volume_profile docstring). Tick size is the
+        # canonical bin width from COST_SPECS[symbol].tick_size, passed in as
+        # cost_spec. Fail-closed: <5 pre-bars, zero volume, or no cost spec → None.
+        if len(pre_bars) >= 5 and pre_bars["volume"].sum() > 0 and cost_spec is not None:
+            poc, vah, val = compute_volume_profile(pre_bars, cost_spec.tick_size)
+        else:
+            poc, vah, val = None, None, None
+        row[f"orb_{label}_poc"] = poc
+        row[f"orb_{label}_vah"] = vah
+        row[f"orb_{label}_val"] = val
 
     return row
 
