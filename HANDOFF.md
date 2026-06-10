@@ -174,9 +174,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** 73ba5a90 — @ docs(plans): overall cleanup & action plan — live-readiness first
-- **Files changed:** 1 files
-  - `docs/plans/2026-06-10-overall-cleanup-action-plan.md`
+- **Commit:** 65e94fd1 — feat(pipeline): VP partial-triple integrity check + strict-bar VA prereg
+- **Files changed:** 3 files
+  - `docs/audit/hypotheses/2026-06-10-volume-profile-value-area-breakout.yaml`
+  - `pipeline/build_daily_features.py`
+  - `tests/test_pipeline/test_build_daily_features.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

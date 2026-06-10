@@ -2005,6 +2005,60 @@ def verify_daily_features(
         if bad_outcome > 0:
             failures.append(f"Invalid outcome for {label}: {bad_outcome}")
 
+    # Check 6: Volume profile invariants (val <= poc <= vah, both > 0) when not NULL
+    for label in ORB_LABELS:
+        bad_vp = con.execute(
+            f"""
+            SELECT COUNT(*) FROM daily_features
+            WHERE symbol = ?
+            AND trading_day >= ? AND trading_day <= ?
+            {orb_clause}
+            AND orb_{label}_poc IS NOT NULL
+            AND (
+                orb_{label}_val > orb_{label}_poc
+                OR orb_{label}_poc > orb_{label}_vah
+                OR orb_{label}_val <= 0
+                OR orb_{label}_vah <= 0
+            )
+        """,
+            base_params,
+        ).fetchone()[0]
+
+        if bad_vp > 0:
+            failures.append(
+                f"Volume profile invariant violation for {label} (val<=poc<=vah, val>0, vah>0): {bad_vp} rows"
+            )
+
+        # Check 6b: partial (poc, vah, val) triple. compute_volume_profile
+        # returns all-three-or-all-None, so a row with SOME but not ALL of the
+        # triple NULL is corruption (interrupted backfill / manual surgery /
+        # schema drift), NOT a legitimate not-yet-backfilled row. The invariant
+        # comparisons above silently SKIP such rows: SQL three-valued logic makes
+        # `vah > poc` evaluate to NULL when vah is NULL, so they never count.
+        # CAST(... IS NULL AS INTEGER) → 0/1 (DuckDB has no BOOLEAN+BOOLEAN
+        # overload); IN (1, 2) = "1 or 2 of the three NULL" = not-all-present
+        # and not-all-absent.
+        partial_vp = con.execute(
+            f"""
+            SELECT COUNT(*) FROM daily_features
+            WHERE symbol = ?
+            AND trading_day >= ? AND trading_day <= ?
+            {orb_clause}
+            AND (
+                CAST(orb_{label}_poc IS NULL AS INTEGER)
+                + CAST(orb_{label}_vah IS NULL AS INTEGER)
+                + CAST(orb_{label}_val IS NULL AS INTEGER)
+            ) IN (1, 2)
+        """,
+            base_params,
+        ).fetchone()[0]
+
+        if partial_vp > 0:
+            failures.append(
+                f"Volume profile partial triple for {label} "
+                f"(poc/vah/val must be all-present or all-NULL): {partial_vp} rows"
+            )
+
     return len(failures) == 0, failures
 
 
