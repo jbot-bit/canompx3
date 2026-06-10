@@ -10,6 +10,18 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 **For research methodology, statistical standards, and market structure knowledge → see `RESEARCH_RULES.md`.**
 **For strategy research routing, test sequences, variable space, and NO-GO registry → see `docs/STRATEGY_BLUEPRINT.md`.**
 
+## Operating Discipline (every task)
+
+Summary of `institutional-rigor.md` + `workflow-preferences.md` — reference, don't restate.
+
+- **THINK FIRST:** state assumptions + success criteria; stop when confused, don't guess.
+- **SURGICAL:** smallest diff; touch only what's asked; flag unrelated issues, don't fix them.
+- **GOAL-DRIVEN:** define verification first; show evidence before claiming done. A finding/title/status word is a *claim* — falsify vs ground truth first.
+- **AUDITS IMPLEMENT FIXES:** when running an audit/code review, ALWAYS implement the fixes in the same session — never just present findings ("GROUND IN TRUTH AND CONTEXT AND YES IMPLEMENT FIXES PHASES"). After fixes, run the full test suite + commit; report pass/fail counts.
+- **CHECKPOINT:** at a natural stop → 1-line baton → `/clear` early; save reusable findings to memory the turn they emerge.
+- **Multi-terminal/Codex sync:** `add → commit → pull --rebase → push`; never `--force` on reject; one terminal pushes or each owns its branch; `HANDOFF.md` = cross-tool baton. Push has no lock yet — don't race a peer (tracked follow-up).
+- **Tooling default:** trade book / HTML reports open in browser by default (don't pass `--no-open` unless asked).
+
 ## Quick Commands
 
 ```bash
@@ -48,13 +60,6 @@ Institutional rigor: cite literature, query live, falsify before validating. Det
 ## Shell
 
 **Canonical shell: bash.** Run git, python/uv/pytest/ruff, file ops, and search via the Bash tool — it is bash-native across every infra script, the pre-commit hook, venv routing, and all WSL paths. PowerShell is for **Windows-only** tasks only: GUI launchers, scheduled tasks, `*.ps1` infra, `Get-Process`/`Get-Item`, `wsl`, registry, `stop_live`. `shell-canon-guard.py` (PreToolUse/PowerShell) soft-steers bash-equivalent PowerShell back to Bash; fail-open. Detail → `.claude/rules/shell-canon.md`.
-
-## Workflow Mandates
-- When running audits/code reviews, ALWAYS implement fixes in the same session — do not just present findings. User has explicitly demanded 'GROUND IN TRUTH AND CONTEXT AND YES IMPLEMENT FIXES PHASES'.
-- After fixes, run the full test suite and commit. Report pass/fail counts.
-- When generating the trade book or HTML reports, open in browser by default (do NOT pass --no-open unless asked).
-
----
 
 ## Architecture
 
