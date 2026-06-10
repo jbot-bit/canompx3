@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -514,119 +515,123 @@ class TestCollectTests:
 
 
 class TestCollectStaleness:
+    @staticmethod
+    def _seed_staleness_db(db_path: Path) -> None:
+        con = duckdb.connect(str(db_path))
+        try:
+            con.execute("CREATE TABLE bars_1m(symbol VARCHAR, ts_utc TIMESTAMPTZ)")
+            con.execute("CREATE TABLE bars_5m(symbol VARCHAR, ts_utc TIMESTAMPTZ)")
+            con.execute("CREATE TABLE daily_features(symbol VARCHAR, orb_minutes INTEGER, trading_day DATE)")
+            con.execute("CREATE TABLE orb_outcomes(symbol VARCHAR, orb_minutes INTEGER, trading_day DATE)")
+            con.execute("CREATE TABLE experimental_strategies(instrument VARCHAR, created_at TIMESTAMPTZ)")
+            con.execute("CREATE TABLE validated_setups(instrument VARCHAR, promoted_at TIMESTAMPTZ, status VARCHAR)")
+            con.execute("CREATE TABLE edge_families(instrument VARCHAR, created_at TIMESTAMPTZ)")
+        finally:
+            con.close()
+
     def test_db_missing(self, tmp_path: Path) -> None:
         items = collect_staleness(tmp_path, tmp_path / "nonexistent.db")
         assert len(items) == 1
         assert items[0].category == "broken"
         assert "not found" in items[0].summary
 
+    def test_active_orb_minutes_read_without_importing_builder(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "pipeline" / "build_daily_features.py",
+            "\n".join(["VALID_ORB_MINUTES = [5, 15, 30]", "ACTIVE_ORB_MINUTES = [5, 15]"]),
+        )
+
+        with patch.object(project_pulse, "PROJECT_ROOT", tmp_path):
+            assert project_pulse._pulse_active_orb_minutes() == (5, 15)
+
     def test_stale_instruments(self, tmp_path: Path) -> None:
         db_path = tmp_path / "gold.db"
-        db_path.touch()
-        mock_engine = MagicMock(return_value={"stale_steps": ["outcome_builder", "discovery"]})
+        self._seed_staleness_db(db_path)
         mock_asset_configs = MagicMock()
         mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MGC"]
         mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = ["MGC"]
-        mock_pipeline_status = MagicMock(staleness_engine=mock_engine)
         with (
-            patch.dict(
-                "sys.modules",
-                {
-                    "pipeline.asset_configs": mock_asset_configs,
-                    "pipeline_status": mock_pipeline_status,
-                },
-            ),
-            patch("duckdb.connect") as mock_connect,
+            patch.dict("sys.modules", {"pipeline.asset_configs": mock_asset_configs}),
+            patch.object(project_pulse, "deployable_validated_relation", return_value="validated_setups"),
         ):
-            mock_con = MagicMock()
-            mock_connect.return_value = mock_con
+            con = duckdb.connect(str(db_path))
+            con.execute("INSERT INTO bars_1m VALUES ('MGC', '2026-04-10 00:00:00+00')")
+            con.close()
             items = collect_staleness(tmp_path, db_path)
         assert isinstance(items, list)
-        # With mocked staleness_engine returning stale steps, we expect a decaying item
         assert any(i.category == "decaying" for i in items)
+        assert "bars_5m" in items[0].summary
 
     def test_research_only_validated_setups_step_suppressed(self, tmp_path: Path) -> None:
-        """Research-only instruments (active but not deployable) must not surface
-        the 'validated_setups' stale step, because the empty shelf is by-design.
-        Any OTHER stale step for the same instrument still alerts."""
         db_path = tmp_path / "gold.db"
-        db_path.touch()
-        mock_engine = MagicMock(return_value={"stale_steps": ["validated_setups"]})
-        mock_asset_configs = MagicMock()
-        mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MGC"]
-        mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = []  # MGC not deployable
-        mock_pipeline_status = MagicMock(staleness_engine=mock_engine)
-        with (
-            patch.dict(
-                "sys.modules",
-                {
-                    "pipeline.asset_configs": mock_asset_configs,
-                    "pipeline_status": mock_pipeline_status,
-                },
-            ),
-            patch("duckdb.connect") as mock_connect,
-        ):
-            mock_con = MagicMock()
-            mock_connect.return_value = mock_con
-            items = collect_staleness(tmp_path, db_path)
-        # Only stale step was validated_setups → research-only → filtered → no alert
-        assert not any(i.source == "staleness" for i in items)
-
-    def test_research_only_other_steps_still_alert(self, tmp_path: Path) -> None:
-        """For a research-only instrument, non-validated_setups stale steps still
-        surface — only the validated_setups entry is filtered."""
-        db_path = tmp_path / "gold.db"
-        db_path.touch()
-        mock_engine = MagicMock(return_value={"stale_steps": ["validated_setups", "outcome_builder"]})
+        self._seed_staleness_db(db_path)
         mock_asset_configs = MagicMock()
         mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MGC"]
         mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = []
-        mock_pipeline_status = MagicMock(staleness_engine=mock_engine)
         with (
-            patch.dict(
-                "sys.modules",
-                {
-                    "pipeline.asset_configs": mock_asset_configs,
-                    "pipeline_status": mock_pipeline_status,
-                },
-            ),
-            patch("duckdb.connect") as mock_connect,
+            patch.dict("sys.modules", {"pipeline.asset_configs": mock_asset_configs}),
+            patch.object(project_pulse, "deployable_validated_relation", return_value="validated_setups"),
         ):
-            mock_con = MagicMock()
-            mock_connect.return_value = mock_con
+            con = duckdb.connect(str(db_path))
+            con.execute("INSERT INTO orb_outcomes VALUES ('MGC', 5, DATE '2026-04-10')")
+            con.execute("INSERT INTO experimental_strategies VALUES ('MGC', '2026-04-10 00:00:00+00')")
+            con.close()
+            items = collect_staleness(tmp_path, db_path)
+        assert not any(i.source == "staleness" for i in items)
+
+    def test_research_only_other_steps_still_alert(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "gold.db"
+        self._seed_staleness_db(db_path)
+        mock_asset_configs = MagicMock()
+        mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MGC"]
+        mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = []
+        with (
+            patch.dict("sys.modules", {"pipeline.asset_configs": mock_asset_configs}),
+            patch.object(project_pulse, "deployable_validated_relation", return_value="validated_setups"),
+        ):
+            con = duckdb.connect(str(db_path))
+            con.execute("INSERT INTO bars_1m VALUES ('MGC', '2026-04-10 00:00:00+00')")
+            con.close()
             items = collect_staleness(tmp_path, db_path)
         decaying = [i for i in items if i.source == "staleness"]
         assert len(decaying) == 1
-        # outcome_builder survives the filter; validated_setups does not.
-        assert "outcome_builder" in decaying[0].summary
+        assert "bars_5m" in decaying[0].summary
         assert "validated_setups" not in decaying[0].summary
 
     def test_deployable_validated_setups_step_still_alerts(self, tmp_path: Path) -> None:
-        """Deployable instruments still get the validated_setups alert — the
-        filter is ONLY for research-only instruments."""
         db_path = tmp_path / "gold.db"
-        db_path.touch()
-        mock_engine = MagicMock(return_value={"stale_steps": ["validated_setups"]})
+        self._seed_staleness_db(db_path)
         mock_asset_configs = MagicMock()
         mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MES"]
         mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = ["MES"]
-        mock_pipeline_status = MagicMock(staleness_engine=mock_engine)
         with (
-            patch.dict(
-                "sys.modules",
-                {
-                    "pipeline.asset_configs": mock_asset_configs,
-                    "pipeline_status": mock_pipeline_status,
-                },
-            ),
-            patch("duckdb.connect") as mock_connect,
+            patch.dict("sys.modules", {"pipeline.asset_configs": mock_asset_configs}),
+            patch.object(project_pulse, "deployable_validated_relation", return_value="validated_setups"),
         ):
-            mock_con = MagicMock()
-            mock_connect.return_value = mock_con
+            con = duckdb.connect(str(db_path))
+            con.execute("INSERT INTO orb_outcomes VALUES ('MES', 5, DATE '2026-04-10')")
+            con.execute("INSERT INTO experimental_strategies VALUES ('MES', '2026-04-10 00:00:00+00')")
+            con.close()
             items = collect_staleness(tmp_path, db_path)
         decaying = [i for i in items if i.source == "staleness"]
         assert len(decaying) == 1
         assert "validated_setups" in decaying[0].summary
+
+    def test_staleness_fast_path_does_not_import_pipeline_status(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "gold.db"
+        self._seed_staleness_db(db_path)
+        mock_asset_configs = MagicMock()
+        mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MES"]
+        mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = ["MES"]
+        with (
+            patch.dict("sys.modules", {"pipeline.asset_configs": mock_asset_configs, "pipeline_status": None}),
+            patch.object(project_pulse, "deployable_validated_relation", return_value="validated_setups"),
+        ):
+            con = duckdb.connect(str(db_path))
+            con.execute("INSERT INTO bars_1m VALUES ('MES', '2026-04-10 00:00:00+00')")
+            con.close()
+            items = collect_staleness(tmp_path, db_path)
+        assert any(i.source == "staleness" for i in items)
 
 
 # ---------------------------------------------------------------------------
@@ -1039,6 +1044,20 @@ class TestFollowupReconciliation:
 
         assert collect_debt_reconciliation(tmp_path) == []
 
+    def test_debt_reconciliation_uses_supplied_coverage_context(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "debt-ledger.md",
+            "\n".join(["# Debt Ledger", "", "## Open Debt", "- `covered-debt` - Fix covered workflow debt."]),
+        )
+
+        coverage_context = project_pulse.QueueCoverageContext(
+            queue=None,
+            blobs=["covered debt fix covered workflow debt"],
+        )
+
+        with patch.object(project_pulse, "load_queue", side_effect=AssertionError("queue reload not expected")):
+            assert collect_debt_reconciliation(tmp_path, coverage_context=coverage_context) == []
+
     def test_plan_reconciliation_flags_active_plan_without_queue_coverage(self, tmp_path: Path) -> None:
         plan = tmp_path / "docs" / "plans" / "active" / "2026-05" / "2026-05-31-missing-plan.md"
         _mkfile(
@@ -1107,6 +1126,46 @@ class TestFollowupReconciliation:
         )
 
         assert collect_plan_reconciliation(tmp_path) == []
+
+    def test_plan_reconciliation_uses_supplied_coverage_context(self, tmp_path: Path) -> None:
+        rel = "docs/plans/active/2026-05/2026-05-31-covered-plan.md"
+        _mkfile(
+            tmp_path / rel,
+            "\n".join(
+                [
+                    "---",
+                    "status: active",
+                    "owner: codex",
+                    "last_reviewed: 2026-05-31",
+                    'superseded_by: ""',
+                    "---",
+                    "# Covered Plan",
+                ]
+            ),
+        )
+
+        coverage_context = project_pulse.QueueCoverageContext(
+            queue=None,
+            blobs=["docs plans active 2026 05 2026 05 31 covered plan md covered plan"],
+        )
+
+        with patch.object(project_pulse, "load_queue", side_effect=AssertionError("queue reload not expected")):
+            assert collect_plan_reconciliation(tmp_path, coverage_context=coverage_context) == []
+
+    def test_queue_reconciliation_uses_supplied_coverage_context(self, tmp_path: Path) -> None:
+        coverage_context = project_pulse.QueueCoverageContext(
+            queue=None,
+            blobs=["live journal lock followup investigate live journal locked pulse finding"],
+        )
+
+        with patch.object(project_pulse, "load_queue", side_effect=AssertionError("queue reload not expected")):
+            items = collect_queue_reconciliation(
+                tmp_path,
+                [PulseItem(category="broken", severity="high", source="live_journal", summary="live journal locked")],
+                coverage_context=coverage_context,
+            )
+
+        assert items == []
 
 
 class TestCollectFollowupCoverage:
@@ -1615,6 +1674,52 @@ class TestBuildPulse:
         mock_drift.assert_not_called()
         mock_tests.assert_not_called()
         assert isinstance(report, PulseReport)
+
+    def test_fast_mode_passes_fast_live_readiness_and_builds_queue_context_once(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "## Last Session\n- **Tool:** Test\n- **Date:** today\n- **Summary:** test")
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+        fake_context = project_pulse.QueueCoverageContext(queue=None, blobs=[])
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(project_pulse, "_canonical_repo_root", return_value=tmp_path))
+            stack.enter_context(patch.object(project_pulse, "_git_head", return_value="abc123"))
+            stack.enter_context(patch.object(project_pulse, "_git_branch", return_value="main"))
+            stack.enter_context(
+                patch.object(project_pulse, "_run_git", return_value=MagicMock(returncode=0, stdout=""))
+            )
+            mock_context = stack.enter_context(
+                patch.object(project_pulse, "_build_queue_coverage_context", return_value=fake_context)
+            )
+            stack.enter_context(patch.object(project_pulse, "collect_system_identity", return_value=({}, [])))
+            stack.enter_context(patch.object(project_pulse, "collect_work_capsule", return_value=(None, [])))
+            stack.enter_context(patch.object(project_pulse, "collect_staleness", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_fitness_fast", return_value=({}, [])))
+            stack.enter_context(patch.object(project_pulse, "collect_deployment_state", return_value=(None, [])))
+            stack.enter_context(
+                patch.object(project_pulse, "collect_lifecycle_control", return_value=(None, None, None, []))
+            )
+            mock_live_readiness = stack.enter_context(
+                patch.object(project_pulse, "collect_live_readiness", return_value=(None, []))
+            )
+            stack.enter_context(patch.object(project_pulse, "collect_handoff", return_value=({}, [])))
+            stack.enter_context(patch.object(project_pulse, "collect_worktrees", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_session_claims", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_git_state", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_action_queue", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_debt_ledger", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_debt_reconciliation", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_plan_reconciliation", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_queue_reconciliation", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_followup_coverage", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_ralph_deferred", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_session_delta", return_value=[]))
+            stack.enter_context(patch.object(project_pulse, "collect_upcoming_sessions", return_value=[]))
+            report = build_pulse(tmp_path, db_path=db_path, fast=True, skip_drift=True, skip_tests=True)
+
+        assert isinstance(report, PulseReport)
+        mock_context.assert_called_once_with(tmp_path)
+        mock_live_readiness.assert_called_once_with(fast=True)
 
 
 class TestDeploymentState:

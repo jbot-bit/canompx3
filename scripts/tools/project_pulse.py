@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -84,6 +85,7 @@ if _SCRIPTS_TOOLS_DIR not in sys.path:
 
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from pipeline.work_queue import (
+    WorkQueue,
     handoff_active_steps_match,
     load_queue,
     top_baton_items,
@@ -111,6 +113,9 @@ SKILL_SUGGESTIONS: dict[str, str] = {
     "sr_monitor": "python -m trading_app.sr_monitor",
     "criterion11": "python -m trading_app.account_survival --profile topstep_50k_mnq_auto",
 }
+
+
+_PULSE_ACTIVE_ORB_MINUTES_FALLBACK: tuple[int, ...] = (5,)
 
 
 @dataclass
@@ -149,6 +154,12 @@ class PlanEntry:
     owner: str
     status: str
     last_reviewed: str
+
+
+@dataclass(frozen=True)
+class QueueCoverageContext:
+    queue: WorkQueue | None
+    blobs: list[str]
 
 
 @dataclass
@@ -750,16 +761,17 @@ def collect_staleness(root: Path, db_path: Path) -> list[PulseItem]:
 
     try:
         import duckdb
-        from pipeline_status import staleness_engine
 
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, DEPLOYABLE_ORB_INSTRUMENTS
 
         deployable_set = set(DEPLOYABLE_ORB_INSTRUMENTS)
         con = duckdb.connect(str(db_path), read_only=True)
         try:
+            instrument_list = list(ACTIVE_ORB_INSTRUMENTS)
+            active_apertures = _pulse_active_orb_minutes()
+            dates = _collect_staleness_dates(con, instrument_list, active_apertures)
             for inst in ACTIVE_ORB_INSTRUMENTS:
-                status = staleness_engine(con, inst)
-                stale = list(status.get("stale_steps", []))
+                stale = _stale_steps_for_instrument(inst, dates, active_apertures)
                 # For research-only instruments, the validated_setups shelf is
                 # expected empty (insufficient real-micro data horizon for T7
                 # survival). Filter that entry out instead of alerting. Any
@@ -798,6 +810,164 @@ def collect_staleness(root: Path, db_path: Path) -> list[PulseItem]:
             )
 
     return items
+
+
+def _trading_days_between(d1: date | None, d2: date | None) -> int:
+    """Mirror pipeline_status trading-day gap semantics without heavy imports."""
+    if d1 is None or d2 is None or d1 >= d2:
+        return 0
+    count = 0
+    current = d1
+    while current < d2:
+        current = current.fromordinal(current.toordinal() + 1)
+        if current.weekday() < 5:
+            count += 1
+    return count
+
+
+def _pulse_is_stale(
+    table_date: date | None,
+    reference_date: date | None,
+    max_gap_trading_days: int = 1,
+) -> bool:
+    """Mirror the pulse-facing staleness rule from pipeline_status."""
+    if reference_date is None:
+        return False
+    if table_date is None:
+        return True
+    return _trading_days_between(table_date, reference_date) > max_gap_trading_days
+
+
+def _fetch_max_dates_by_instrument(
+    con,
+    query: str,
+    params: list[object],
+) -> dict[str, date | None]:
+    return {str(inst): day for inst, day in con.execute(query, params).fetchall()}
+
+
+def _fetch_max_dates_by_instrument_and_aperture(
+    con,
+    query: str,
+    params: list[object],
+) -> dict[str, dict[int, date | None]]:
+    rows: dict[str, dict[int, date | None]] = {}
+    for inst, aperture, day in con.execute(query, params).fetchall():
+        rows.setdefault(str(inst), {})[int(aperture)] = day
+    return rows
+
+
+def _collect_staleness_dates(
+    con, instruments: list[str], active_apertures: tuple[int, ...] | None = None
+) -> dict[str, object]:
+    """Batch the pulse staleness reads and only fetch the fields pulse surfaces."""
+    if not instruments:
+        return {
+            "bars_1m": {},
+            "bars_5m": {},
+            "daily_features": {},
+            "orb_outcomes": {},
+            "experimental": {},
+            "validated": {},
+            "edge_families": {},
+        }
+
+    instrument_params: list[object] = [instruments]
+    active_apertures = active_apertures or _pulse_active_orb_minutes()
+    aperture_params: list[object] = [instruments, list(active_apertures)]
+    shelf_relation = deployable_validated_relation(con)
+    return {
+        "bars_1m": _fetch_max_dates_by_instrument(
+            con,
+            "SELECT symbol, MAX(ts_utc::DATE) FROM bars_1m WHERE symbol = ANY(?) GROUP BY symbol",
+            instrument_params,
+        ),
+        "bars_5m": _fetch_max_dates_by_instrument(
+            con,
+            "SELECT symbol, MAX(ts_utc::DATE) FROM bars_5m WHERE symbol = ANY(?) GROUP BY symbol",
+            instrument_params,
+        ),
+        "daily_features": _fetch_max_dates_by_instrument_and_aperture(
+            con,
+            "SELECT symbol, orb_minutes, MAX(trading_day) FROM daily_features "
+            "WHERE symbol = ANY(?) AND orb_minutes = ANY(?) GROUP BY symbol, orb_minutes",
+            aperture_params,
+        ),
+        "orb_outcomes": _fetch_max_dates_by_instrument_and_aperture(
+            con,
+            "SELECT symbol, orb_minutes, MAX(trading_day) FROM orb_outcomes "
+            "WHERE symbol = ANY(?) AND orb_minutes = ANY(?) GROUP BY symbol, orb_minutes",
+            aperture_params,
+        ),
+        "experimental": _fetch_max_dates_by_instrument(
+            con,
+            "SELECT instrument, MAX(created_at::DATE) FROM experimental_strategies "
+            "WHERE instrument = ANY(?) GROUP BY instrument",
+            instrument_params,
+        ),
+        "validated": _fetch_max_dates_by_instrument(
+            con,
+            f"SELECT instrument, MAX(promoted_at::DATE) FROM {shelf_relation} "
+            "WHERE instrument = ANY(?) GROUP BY instrument",
+            instrument_params,
+        ),
+        "edge_families": _fetch_max_dates_by_instrument(
+            con,
+            "SELECT instrument, MAX(created_at::DATE) FROM edge_families WHERE instrument = ANY(?) GROUP BY instrument",
+            instrument_params,
+        ),
+    }
+
+
+def _pulse_active_orb_minutes() -> tuple[int, ...]:
+    """Read the active aperture contract without importing the heavy builder."""
+    path = PROJECT_ROOT / "pipeline" / "build_daily_features.py"
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return _PULSE_ACTIVE_ORB_MINUTES_FALLBACK
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+            if "ACTIVE_ORB_MINUTES" in names:
+                try:
+                    value = ast.literal_eval(node.value)
+                except (ValueError, SyntaxError):
+                    return _PULSE_ACTIVE_ORB_MINUTES_FALLBACK
+                if isinstance(value, list) and all(isinstance(item, int) for item in value):
+                    return tuple(value)
+    return _PULSE_ACTIVE_ORB_MINUTES_FALLBACK
+
+
+def _stale_steps_for_instrument(
+    inst: str, dates: dict[str, object], active_apertures: tuple[int, ...] | None = None
+) -> list[str]:
+    active_apertures = active_apertures or _pulse_active_orb_minutes()
+    bars_1m = dates["bars_1m"].get(inst)
+    bars_5m = dates["bars_5m"].get(inst)
+    daily_features = dates["daily_features"].get(inst, {})
+    orb_outcomes = dates["orb_outcomes"].get(inst, {})
+    experimental = dates["experimental"].get(inst)
+    validated = dates["validated"].get(inst)
+    edge_families = dates["edge_families"].get(inst)
+    active_outcomes = [orb_outcomes.get(ap) for ap in active_apertures if orb_outcomes.get(ap) is not None]
+    orb_outcomes_min = min(active_outcomes) if active_outcomes else None
+
+    stale_steps: list[str] = []
+    if _pulse_is_stale(bars_5m, bars_1m):
+        stale_steps.append("bars_5m")
+    for ap in active_apertures:
+        if _pulse_is_stale(daily_features.get(ap), bars_5m):
+            stale_steps.append(f"daily_features_O{ap}")
+        if _pulse_is_stale(orb_outcomes.get(ap), daily_features.get(ap)):
+            stale_steps.append(f"orb_outcomes_O{ap}")
+    if _pulse_is_stale(experimental, orb_outcomes_min):
+        stale_steps.append("experimental_strategies")
+    if _pulse_is_stale(validated, experimental):
+        stale_steps.append("validated_setups")
+    if _pulse_is_stale(edge_families, validated):
+        stale_steps.append("edge_families")
+    return stale_steps
 
 
 def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
@@ -1430,8 +1600,27 @@ def collect_capital_packet(root: Path) -> tuple[dict | None, list[PulseItem]]:
     return summary, items
 
 
-def collect_live_readiness(profile_id: str = "topstep_50k_mnq_auto") -> tuple[dict | None, list[PulseItem]]:
+def collect_live_readiness(
+    profile_id: str = "topstep_50k_mnq_auto", *, fast: bool = False
+) -> tuple[dict | None, list[PulseItem]]:
     """Read the live-readiness cockpit and project it into pulse actions."""
+    if fast:
+        return (
+            {
+                "profile_id": profile_id,
+                "runtime_root": None,
+                "strict_zero_warn": None,
+                "automation_health": {
+                    "available": False,
+                    "overall": "SKIPPED_FAST",
+                    "tasks": [],
+                    "notes": ["Skipped in project_pulse --fast to avoid scheduled-task probes."],
+                },
+                "telemetry_maturity": None,
+                "profile_launch": None,
+            },
+            [],
+        )
     try:
         from scripts.tools.live_readiness_report import build_live_readiness_report
 
@@ -1968,7 +2157,9 @@ def collect_session_claims(root: Path) -> list[PulseItem]:
     return items
 
 
-def collect_action_queue(canonical: Path, *, now: datetime | None = None) -> list[PulseItem]:
+def collect_action_queue(
+    canonical: Path, *, now: datetime | None = None, queue: WorkQueue | None = None
+) -> list[PulseItem]:
     """Parse the canonical active-work queue.
 
     `now` overrides the reference clock for the staleness sweep. Default uses
@@ -1980,7 +2171,7 @@ def collect_action_queue(canonical: Path, *, now: datetime | None = None) -> lis
     if not queue_path.exists():
         return items
 
-    queue = load_queue(canonical)
+    queue = queue or load_queue(canonical)
     stale_ids = {item.id for item in queue_stale_items(queue, now=now)}
     for item in queue.items:
         if item.status in {"closed", "superseded"}:
@@ -2114,15 +2305,9 @@ def _coverage_needles(*needles: str) -> list[tuple[str, list[str]]]:
     return candidates
 
 
-def _queue_coverage_blobs(root: Path) -> list[str]:
-    queue_path = root / "docs" / "runtime" / "action-queue.yaml"
-    if not queue_path.exists():
+def _queue_coverage_blobs_from_queue(queue: WorkQueue | None) -> list[str]:
+    if queue is None:
         return []
-    try:
-        queue = load_queue(root)
-    except Exception:
-        return []
-
     blobs: list[str] = []
     for item in queue.items:
         if item.status in {"closed", "superseded"}:
@@ -2142,8 +2327,19 @@ def _queue_coverage_blobs(root: Path) -> list[str]:
     return blobs
 
 
-def _is_covered_by_queue(root: Path, *needles: str) -> bool:
-    blobs = _queue_coverage_blobs(root)
+def _build_queue_coverage_context(root: Path) -> QueueCoverageContext:
+    queue_path = root / "docs" / "runtime" / "action-queue.yaml"
+    if not queue_path.exists():
+        return QueueCoverageContext(queue=None, blobs=[])
+    try:
+        queue = load_queue(root)
+    except Exception:
+        return QueueCoverageContext(queue=None, blobs=[])
+    return QueueCoverageContext(queue=queue, blobs=_queue_coverage_blobs_from_queue(queue))
+
+
+def _is_covered_by_queue(root: Path, *needles: str, coverage_context: QueueCoverageContext | None = None) -> bool:
+    blobs = (coverage_context or _build_queue_coverage_context(root)).blobs
     if not blobs:
         return False
 
@@ -2200,12 +2396,12 @@ def _parse_debt_entries(root: Path) -> list[DebtEntry]:
     return entries
 
 
-def collect_debt_reconciliation(root: Path) -> list[PulseItem]:
+def collect_debt_reconciliation(root: Path, *, coverage_context: QueueCoverageContext | None = None) -> list[PulseItem]:
     """Flag open debt that lacks queue coverage or an explicit parking decision."""
     items: list[PulseItem] = []
     for entry in _parse_debt_entries(root):
         debt_key = entry.debt_id or entry.text
-        covered = _is_covered_by_queue(root, debt_key, entry.text)
+        covered = _is_covered_by_queue(root, debt_key, entry.text, coverage_context=coverage_context)
         has_complete_metadata = entry.has_owner and entry.has_status
         intentionally_parked = entry.has_parking_decision and has_complete_metadata
         if covered or intentionally_parked:
@@ -2233,7 +2429,9 @@ def collect_debt_reconciliation(root: Path) -> list[PulseItem]:
     return items
 
 
-def collect_queue_reconciliation(canonical: Path, items: list[PulseItem]) -> list[PulseItem]:
+def collect_queue_reconciliation(
+    canonical: Path, items: list[PulseItem], *, coverage_context: QueueCoverageContext | None = None
+) -> list[PulseItem]:
     """Report actionable pulse findings that are not represented in action-queue.yaml."""
     missing: list[PulseItem] = []
     ignored_sources = {
@@ -2254,7 +2452,7 @@ def collect_queue_reconciliation(canonical: Path, items: list[PulseItem]) -> lis
         actionable = item.category in {"broken", "decaying", "unactioned"}
         if not actionable:
             continue
-        if _is_covered_by_queue(canonical, item.summary, item.detail or ""):
+        if _is_covered_by_queue(canonical, item.summary, item.detail or "", coverage_context=coverage_context):
             continue
         missing.append(
             PulseItem(
@@ -2319,12 +2517,12 @@ def _active_plan_entries(root: Path) -> list[PlanEntry]:
     return entries
 
 
-def collect_plan_reconciliation(root: Path) -> list[PulseItem]:
+def collect_plan_reconciliation(root: Path, *, coverage_context: QueueCoverageContext | None = None) -> list[PulseItem]:
     """Flag active design plans that have not been routed into the queue."""
     items: list[PulseItem] = []
     for entry in _active_plan_entries(root):
         rel = entry.path.as_posix()
-        if _is_covered_by_queue(root, rel, entry.title):
+        if _is_covered_by_queue(root, rel, entry.title, coverage_context=coverage_context):
             continue
         owner = entry.owner or "unowned"
         items.append(
@@ -2340,16 +2538,19 @@ def collect_plan_reconciliation(root: Path) -> list[PulseItem]:
     return items
 
 
-def collect_followup_coverage(canonical: Path, items: list[PulseItem]) -> list[PulseItem]:
+def collect_followup_coverage(
+    canonical: Path, items: list[PulseItem], *, queue: WorkQueue | None = None
+) -> list[PulseItem]:
     """Flag actionable pulse findings when the canonical queue has no open work."""
     queue_path = canonical / "docs" / "runtime" / "action-queue.yaml"
     if not queue_path.exists():
         return []
 
-    try:
-        queue = load_queue(canonical)
-    except Exception:
-        return []
+    if queue is None:
+        try:
+            queue = load_queue(canonical)
+        except Exception:
+            return []
     if any(item.is_open for item in queue.items):
         return []
 
@@ -2915,6 +3116,8 @@ def build_pulse(
         )
 
     # --- Cheap collectors: always fresh ---
+    queue_coverage_context = _build_queue_coverage_context(canonical)
+    queue = queue_coverage_context.queue
     system_identity, identity_items = collect_system_identity(root, canonical, db_path)
     work_capsule_summary, work_capsule_items = collect_work_capsule(root)
     if fast:
@@ -2949,17 +3152,17 @@ def build_pulse(
     execution_summary = deployment_summary.get("execution_evidence") if isinstance(deployment_summary, dict) else None
     survival_summary, sr_summary, pause_summary, lifecycle_items = collect_lifecycle_control(db_path)
     capital_packet_summary, capital_packet_items = collect_capital_packet(root)
-    live_readiness_summary, live_readiness_items = collect_live_readiness()
+    live_readiness_summary, live_readiness_items = collect_live_readiness(fast=fast)
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical, fast=fast)
     claim_items = collect_session_claims(root)
     conflict_items = [] if fast else collect_worktree_conflicts(canonical)
     stale_work_items = [] if fast else collect_stale_work(canonical)
     git_items = collect_git_state(root)
-    action_items = collect_action_queue(canonical)
+    action_items = collect_action_queue(canonical, queue=queue)
     debt_items = collect_debt_ledger(root)
-    debt_reconciliation_items = collect_debt_reconciliation(root)
-    plan_reconciliation_items = collect_plan_reconciliation(root)
+    debt_reconciliation_items = collect_debt_reconciliation(root, coverage_context=queue_coverage_context)
+    plan_reconciliation_items = collect_plan_reconciliation(root, coverage_context=queue_coverage_context)
     ralph_items = collect_ralph_deferred(root)
     session_delta = collect_session_delta(root, canonical, tool_name=tool_name)
     upcoming = collect_upcoming_sessions(db_path)
@@ -3009,8 +3212,8 @@ def build_pulse(
         + plan_reconciliation_items
         + ralph_items
     )
-    all_items += collect_queue_reconciliation(canonical, all_items)
-    all_items += collect_followup_coverage(canonical, all_items)
+    all_items += collect_queue_reconciliation(canonical, all_items, coverage_context=queue_coverage_context)
+    all_items += collect_followup_coverage(canonical, all_items, queue=queue)
 
     # Attach skill invocation suggestions
     _attach_skill_suggestions(all_items)
