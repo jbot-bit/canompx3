@@ -18,7 +18,7 @@ import argparse
 import os
 import subprocess
 import sys
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -225,6 +225,34 @@ def run_research_build_steps(instrument: str, start: date, end: date) -> bool:
     return True
 
 
+def _now_utc() -> datetime:
+    """Current time as an aware UTC datetime. Wrapped so tests can stub it."""
+    return datetime.now(tz=UTC)
+
+
+def _last_complete_trading_day(now_utc: datetime) -> date:
+    """Last COMPLETE trading day = most recent trading_day whose canonical
+    09:00->09:00 Brisbane window has FULLY ELAPSED at ``now_utc``.
+
+    Delegates to canonical ``pipeline.dst`` — the SAME source Check 79
+    (``check_active_instrument_bars_without_daily_features``) uses — so the
+    nightly refresh's build boundary and the drift check can never disagree.
+    Replaces the prior calendar ``today - 1`` guess, which silently dropped a
+    complete trading day whenever Databento availability clamped ``api_end``
+    back a day (institutional-rigor §4, §10).
+    """
+    from pipeline.dst import compute_trading_day_from_timestamp, compute_trading_day_utc_range
+
+    # compute_trading_day_from_timestamp(now) = today's (possibly in-progress)
+    # trading day. Walk back to the last day whose window END is at or before
+    # now (i.e. fully elapsed). Window end is EXCLUSIVE, so "complete" means
+    # end <= now, equivalently NOT (end > now).
+    td = compute_trading_day_from_timestamp(now_utc)
+    while compute_trading_day_utc_range(td)[1] > now_utc:
+        td -= timedelta(days=1)
+    return td
+
+
 def refresh_instrument(instrument: str, dry_run: bool = False, full_rebuild: bool = False) -> bool:
     """Full refresh for one instrument: download -> ingest -> build."""
     print(f"\n{'=' * 60}")
@@ -238,6 +266,9 @@ def refresh_instrument(instrument: str, dry_run: bool = False, full_rebuild: boo
 
     # Databento uses EXCLUSIVE end semantics: end=Apr 2 fetches through Apr 1.
     # Use today as API end to get data through yesterday (last complete session).
+    # `yesterday`/`api_end` drive the Databento FETCH range only — a dataset
+    # *availability* concern. The BUILD boundary (`build_end`, below) is a
+    # trading-day concern and is derived separately from canonical pipeline.dst.
     yesterday = date.today() - timedelta(days=1)
     api_end = date.today()  # exclusive — fetches data through yesterday
 
@@ -260,6 +291,15 @@ def refresh_instrument(instrument: str, dry_run: bool = False, full_rebuild: boo
         # 422 surface from the actual fetch — which is the legacy behavior we're
         # superseding, not making worse. Log loudly so silent regressions show up.
         print(f"  WARNING: could not read dataset range ({exc}); proceeding without clamp")
+
+    # BUILD boundary — the last COMPLETE trading day per the canonical
+    # trading-day window (the SAME source as drift Check 79), NOT calendar
+    # `today-1`. This closes the mismatch where a clamped `yesterday` silently
+    # skipped a complete trading day (e.g. 06-09), blocking unrelated commits on
+    # Check 79. The per-branch `build_end` (below) additionally clamps this to
+    # the bars that actually exist AT BUILD TIME so we never build past ingested
+    # data (institutional-rigor §4, §10).
+    complete_trading_day = _last_complete_trading_day(_now_utc())
 
     fetch_start = last_date + timedelta(days=1)
 
@@ -287,23 +327,32 @@ def refresh_instrument(instrument: str, dry_run: bool = False, full_rebuild: boo
             return False
 
         build_start = fetch_start
+        # After ingest, re-read the bars that actually landed so we never ask the
+        # builder to build past ingested data. Clamp the canonical complete-day
+        # boundary to the post-ingest last bar.
+        post_ingest_last = get_last_bar_date(instrument) or last_date
+        build_end = min(complete_trading_day, post_ingest_last)
     else:
         print(f"  Bars up to date (last bar: {last_date})")
         if dry_run:
             return True
-        # Safety net: always (re)build features/outcomes for yesterday even when
-        # bars are current. Protects against out-of-band bar ingestion (e.g. the
-        # live bot's BarPersister writes bars_1m at session end without running
-        # the daily pipeline). Builds are idempotent via DELETE+INSERT.
-        # See docs/runtime/stages/refresh-data-build-decoupling.md.
-        build_start = yesterday
+        # Safety net: always (re)build features/outcomes for the last COMPLETE
+        # trading day even when bars are current. Protects against out-of-band
+        # bar ingestion (e.g. the live bot's BarPersister writes bars_1m at
+        # session end without running the daily pipeline) — the exact 06-09 case
+        # that blocked this session's commit. Builds are idempotent via
+        # DELETE+INSERT. See docs/runtime/stages/refresh-data-build-decoupling.md.
+        # `last_date` IS the true last bar here (no fetch happened), so it bounds
+        # the canonical boundary.
+        build_end = min(complete_trading_day, last_date)
+        build_start = build_end
 
     # Step 3: Build downstream artifacts
     # Use canonical ACTIVE_ORB_INSTRUMENTS (not raw orb_active flag — M2K trap)
     if instrument in ACTIVE_ORB_INSTRUMENTS:
-        ok = run_build_steps(instrument, build_start, yesterday, full_rebuild=full_rebuild)
+        ok = run_build_steps(instrument, build_start, build_end, full_rebuild=full_rebuild)
     else:
-        ok = run_research_build_steps(instrument, build_start, yesterday)
+        ok = run_research_build_steps(instrument, build_start, build_end)
 
     if not ok:
         return False
@@ -317,7 +366,7 @@ def refresh_instrument(instrument: str, dry_run: bool = False, full_rebuild: boo
         print(f"  WARNING: atr_20_pct patch failed: {e}")
         # Non-fatal — filter will fail-closed on NULL (safe direction)
 
-    print(f"  DONE: {instrument} refreshed to {yesterday}")
+    print(f"  DONE: {instrument} refreshed to {build_end}")
     return True
 
 

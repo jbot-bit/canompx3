@@ -173,11 +173,11 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-09
-- **Commit:** 670025b9 — @ chore(stages): close completed staleness-gate stage; reconcile stale preflight-SSOT stage to git truth
+- **Date:** 2026-06-10
+- **Commit:** 4feb53a6 — feat(sr-review): register Tokyo lane WATCH for live launch of topstep_50k_mnq_auto
 - **Files changed:** 2 files
-  - `docs/runtime/stages/2026-06-09-live-staleness-gate-trading-days.md`
-  - `docs/runtime/stages/2026-06-09-preflight-single-source-truth.md`
+  - `docs/runtime/stages/2026-06-10-tokyo-sr-watch-review.md`
+  - `trading_app/sr_review_registry.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
