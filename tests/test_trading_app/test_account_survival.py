@@ -740,7 +740,7 @@ def test_evaluate_profile_survival_writes_report(tmp_path, monkeypatch):
     # pass so this positive-path test exercises survival math, not DB availability.
     # (Mirrors the violation-path mock in test_..._gate_fails_closed_on_sizing_parity_violation.)
     monkeypatch.setattr(
-        "trading_app.account_survival._assert_single_micro_sizing",
+        "trading_app.account_survival._assert_sizing_parity",
         lambda _pid: (True, "ok"),
     )
 
