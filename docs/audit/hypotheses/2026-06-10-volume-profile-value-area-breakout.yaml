@@ -1,0 +1,268 @@
+# Pre-Registered Hypothesis: Pre-Session Value-Area Context — Depth & Veto
+# Locked: 2026-06-10 | Holdout: 2026-01-01 | Mode: A (IS < 2026-01-01)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# REVISION NOTE (2026-06-10, Opus second-pass audit of the Sonnet v0 draft):
+#   The original draft (v0, not committed) proposed VA_BREAK_OUT → DIRECTIONAL
+#   long/short continuation. That framing was REJECTED on two grounds verified
+#   against the actual literature extracts (not training memory):
+#     1. Tolušić §4 (magnitude-direction separation theorem) and its extract's
+#        ILLEGITIMATE-USE #4 EXPRESSLY FORBID direction-predictive value-area
+#        signals — profile features predict MAGNITUDE/DEPTH, not direction.
+#     2. Yordanov §3.5 EMPIRICALLY REVERSES the naive intuition: Case A (close
+#        INSIDE the VA) has the HIGHEST follow-through depth (54.1% @ 1.5×),
+#        while Case C (close below VAL) has the LOWEST (10.5%). Breaking OUT of
+#        the VA is NOT the continuation signal; VA-containment is.
+#   The v0 draft also cited a non-existent "tolusic §2.3". This version cites
+#   only verified anchors (§3.1/§3.2/§3.3/§4 in Tolušić; §3.2/§3.5/§3.8 in
+#   Yordanov). MGC grounding is explicitly disclaimed per Tolušić §6.3.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# SUBSTRATE DEPENDENCY:
+#   Requires orb_{label}_poc / _vah / _val columns populated in daily_features.
+#   As of 2026-06-10 these columns are NULL in gold.db (substrate added in
+#   commit 03224494, backfill deferred — must not race the live gold.db writer).
+#   Run, SOLO (no concurrent DB writer):
+#     python -m scripts.tools.refresh_data --instrument MNQ --rebuild-features
+#   The poc/vah/val classification (Case A/B/C) is computable from these columns.
+#   The Cross+Miss veto (H3) additionally needs intra-session monitoring over
+#   bars_1m — that is a RUNNER-SIDE computation, NOT a new daily_features column.
+#
+# MECHANISM (Auction Market Theory — magnitude/depth, NEVER direction):
+#   AMT holds markets cycle between balance (price accepted inside the Value
+#   Area) and imbalance (acceptance outside it). The Value Area is the central
+#   70% of traded volume (Tolušić §3.1: VA ≈ 70% confidence interval under a
+#   Gaussian balance distribution; Steidlmayer/Dalton standard).
+#
+#   The CRITICAL theory constraint (Tolušić §4, magnitude-direction separation
+#   theorem): value-area-derived features can predict the MAGNITUDE of the next
+#   move (range expansion / follow-through depth) but CANNOT predict its
+#   DIRECTION. Any directional value-area signal is theory-contradicted and is
+#   listed as an ILLEGITIMATE use in the Tolušić extract.
+#
+#   Therefore the only theory-legitimate hypotheses are:
+#     - DEPTH/RR conditioning: does the pre-session VA-context (where the ORB
+#       closes relative to VAH/VAL/POC) predict how FAR a break runs, justifying
+#       a higher RR target on some contexts and a lower one on others?
+#     - VETO gating: does a specific VA-context predict FAILURE strongly enough
+#       to skip the trade (a don't-trade gate on an already-deployed lane)?
+#   Neither claims a long-vs-short directional edge from the profile.
+#
+#   Literature anchors (VERIFIED against docs/institutional/literature/ extracts):
+#   - tolusic_2026_amt_inventory_dynamics.md §3.1 (VA = 70% CI under balance),
+#     §3.2 (balance↔imbalance phase transition at |I*|=σ/α), §4 (magnitude-
+#     direction separation theorem — the binding constraint), §3.3 (initiative/
+#     responsive). FX paper — mechanism only, NOT portable empirical numbers.
+#   - yordanov_2026_nq_orb_value_area_breakouts.md §3.2 (71.1% @ 0.5× baseline;
+#     decay to 25.2% @ 2×), §3.5 (Filter Case A/B/C as the key DEPTH predictor;
+#     Case A inside-VA = highest follow-through), §3.8 ("Cross + Miss" veto =
+#     strongest single signal, 22.7% vs 71.1% baseline = 48.4pp drop). NQ, 159
+#     days, no costs — empirical pattern source, single-instrument.
+#   - howard_2026_value_area_breakouts_es.md (ES VA-breakout empirics — triangulation).
+#   - fitschen_2013_path_of_least_resistance.md Ch3 (ORB continuation premise).
+#
+# FEATURE VALIDITY:
+#   poc/vah/val are computed over bars where ts_utc < orb_start (same mask as
+#   VWAP). SAFE for all sessions — no look-ahead by construction
+#   (backtesting-methodology.md RULE 1.2 / RULE 6.1 safe-feature list). The
+#   Case A/B/C classification compares ORB-window close vs pre-session VAH/VAL,
+#   which is knowable at ORB end (before E2 entry). The Cross+Miss veto monitors
+#   post-breakout bars — it is a SESSION-OUTCOME conditioner used as a don't-trade
+#   gate evaluated at decision time, NOT a predictor using post-entry data; the
+#   runner MUST evaluate the cross/miss state only from bars at or before the
+#   entry decision (RULE 6 trade-time-knowability audit REQUIRED in the runner).
+#
+# KILL CRITERIA (docs/institutional/pre_registered_criteria.md — all apply):
+#   Hard kills (any one → DEAD):
+#   - BH-FDR q=0.05 FAILS at K_family framing (Criterion 3, Pathway A)
+#   - Chordia t < 3.79 (Criterion 4 — no theory grant; strict no-theory bar)
+#   - WFE < 0.50 (Criterion 6)
+#   - OOS 2026 ExpR < 0 when N_oos >= 30 (Criterion 8)
+#   - Any era (N >= 50) ExpR < -0.05 R (Criterion 9)
+#   - A DIRECTIONAL edge claim from the profile (would violate Tolušić §4 — if
+#     a cell only "works" as long-vs-short selection, it is theory-contradicted
+#     and REJECTED regardless of stats)
+#   Soft kills (CONDITIONAL / WATCH, not DEAD):
+#   - OOS power < 0.50 when a binary OOS gate fails → DIRECTIONAL_ONLY (RULE 3.3)
+#   - Fire rate < 5% or > 95% (extreme_fire — exclude cell, not study)
+#   - |corr(filter_fire, deployed_filter_fire)| > 0.70 (tautology T0 — exclude cell)
+#
+# THEORY GRANT: NO (set 2026-06-10). The AMT magnitude/veto mechanism (Tolušić
+#   §4 + Yordanov §3.5/§3.8) is structurally sound and justifies the SEARCH, but
+#   this VA-context substrate was just added to the pipeline today and has ZERO
+#   empirical baseline on CME micros. Per the operator's 2026-06-10 decision and
+#   Amendment 3.4 (PROVISIONAL, re-audit OPEN), a brand-new filter class clears
+#   the strict no-theory bar rather than self-granting the relaxed with-theory
+#   floor. If the AMT edge is robust in our data it clears t >= 3.79 easily; if it
+#   only clears 3.00 it is too fragile to survive forward-testing.
+# → Chordia floor t >= 3.79 (strict, no-theory — Chordia et al 2018 empirical bound).
+
+metadata:
+  name: "volume-profile-value-area-depth-veto"
+  date_locked: "2026-06-10"
+  holdout_date: "2026-01-01"
+  testing_mode: "family"
+  theory_grant: false   # 2026-06-10: strict no-theory bar (t>=3.79). New VA-context
+                        # substrate, zero empirical baseline; theory justifies search,
+                        # not a lowered stat bar. Amendment 3.4 PROVISIONAL re-audit OPEN.
+  total_expected_trials: 24
+  # MinBTL HORIZON BOUND (Bailey 2013, NOT the 300 operational cap):
+  #   2*ln(N)/E[max_N]^2 <= clean_years. At E[max_N]=1.0, N=24 needs ~6.35yr;
+  #   MNQ/MES have 6.65yr → PASS (verified via estimate_k_budget, see check below).
+  #   The 300-cap is a CEILING, not the binding constraint — the horizon bound is.
+  #   N_max(MNQ/MES, 6.65yr) = floor(exp(6.65/2)) = 27. N=24 < 27 → PASS.
+  data_horizon_years_clean:
+    MNQ: 6.65   # 2019-05-06 – 2025-12-31 (1,951 pre-holdout days), N_max=27
+    MES: 6.65   # N_max=27
+  min_btl_budget_check: "VERIFIED 2026-06-10 via scripts/tools/estimate_k_budget.py — N=24 PASSES Bailey horizon for MNQ+MES (need 6.35yr, have 6.65yr). MGC EXCLUDED: 2.70yr → N_max=3, cannot support a value-area family; see mgc_deferral."
+  substrate_status: "COLUMNS EXIST (commit 03224494); DATA NULL until solo backfill"
+  execution_blocker: "Do not run until daily_features poc/vah/val >= 50% populated for MNQ+MES AND the runner's RULE 6 trade-time-knowability audit for the Cross+Miss veto is written and reviewed"
+  mgc_deferral: "MGC is EXCLUDED from this pre-reg's K-budget. At 2.70yr clean its Bailey horizon ceiling is N_max=3 — physically too small for a value-area family. Compounding this, Tolušić §6.3 + extract ILLEGITIMATE-USE #1 disclaim the FX paper as sole MGC grounding, and no metals value-area empirical anchor exists locally (Yordanov=NQ, Howard=ES). A metals value-area test requires its own future pre-reg with either a longer MGC horizon or a metals-specific mechanism source. Do NOT smuggle MGC cells into this study to inflate N."
+
+# =============================================================================
+# VARIABLE SPACE
+# =============================================================================
+# This study tests DEPTH/RR conditioning and a VETO gate — NOT directional entry.
+#
+# VA-CONTEXT CLASSIFICATION (Yordanov Filter Case, computable from substrate):
+#   Case A: ORB-window close is INSIDE [VAL, VAH]            (containment)
+#   Case B: ORB-window close is ABOVE VAH                     (upper imbalance)
+#   Case C: ORB-window close is BELOW VAL                     (lower imbalance)
+#   Empirical (Yordanov NQ): Case A has the HIGHEST follow-through depth.
+#
+# Sessions: the deployed/high-volume MNQ/MES ORB sessions where AMT context is
+#   meaningful and pre-session bar count supports a VA (>= 5 pre-bars; filter
+#   fail-closes to NULL otherwise — those rows are excluded by the substrate
+#   guard already): EUROPE_FLOW, NYSE_OPEN, TOKYO_OPEN.
+#   (LONDON_METALS dropped with MGC — see metadata.mgc_deferral.)
+# Entry model: E2, CB1, stop_multiplier=1.0 (canonical deployed entry).
+# Aperture: 5 min ONLY (fixed to control K; 15/30 deferred to a follow-up
+#   pre-reg — see hypotheses[*].scope.orb_minutes and the K_family accounting).
+# RR targets: 1.0, 1.5, 2.0.
+# Instruments: MNQ, MES only (MGC excluded by Bailey horizon, see mgc_deferral).
+
+variable_space:
+  instruments: [MNQ, MES]
+  sessions: [EUROPE_FLOW, NYSE_OPEN, TOKYO_OPEN]
+  orb_minutes: [5]   # LOCKED to 5 — both hypotheses fix [5]; N=24 K-budget and
+                     # the Bailey horizon check assume aperture=5. 15/30 = future pre-reg.
+  rr_targets: [1.0, 1.5, 2.0]
+  entry_models: [E2]
+  confirm_bars: [1]
+  stop_multipliers: [1.0]
+  va_context_classes: [CASE_A_INSIDE, CASE_B_ABOVE_VAH, CASE_C_BELOW_VAL]
+  # The classification is a CONDITIONER, not a long/short selector. Direction is
+  # set by the ORB break itself (existing entry rules); VA-context conditions
+  # which RR target is expected to pay off (H1) or whether to trade (H2).
+  # K_family accounting (N=24, within Bailey N_max=27 for MNQ/MES 6.65yr):
+  #   H1 depth-conditioning: 2 instr × 3 sessions × 2 deep-RR cells = 12 trials.
+  #   H2 Cross+Miss veto:     2 instr × 3 sessions × 2 RR (overlay) = 12 trials.
+  #   Total = 24. Verified via estimate_k_budget (see min_btl_budget_check).
+  #   MGC excluded (horizon N_max=3) — see metadata.mgc_deferral.
+
+# =============================================================================
+# HYPOTHESES
+# =============================================================================
+hypotheses:
+  - id: 1
+    name: "VA-context predicts follow-through DEPTH (Case A = deepest) — MNQ/MES"
+    theory_citation:
+      - "yordanov_2026_nq_orb_value_area_breakouts.md §3.5 (Case A inside-VA highest depth: 54.1% @ 1.5× vs Case C 10.5%)"
+      - "tolusic_2026_amt_inventory_dynamics.md §4 (magnitude-direction separation theorem — magnitude is predictable, direction is not)"
+      - "fitschen_2013_path_of_least_resistance.md Ch3 (ORB continuation premise)"
+    economic_basis: |
+      AMT predicts the VA-context conditions the MAGNITUDE of follow-through, not
+      its direction. Yordanov's NQ data shows Case A (ORB closes inside the
+      pre-session VA) produces the deepest follow-through. HYPOTHESIS: on MNQ/MES
+      deployed sessions, ORB breaks classified Case A achieve higher ExpR at
+      DEEPER RR targets (1.5, 2.0) than Case B/C breaks on the same lane. This is
+      an RR-conditioning edge: take higher RR on Case A, lower RR (or skip) on
+      Case C. NO long-vs-short claim is made.
+    measurement: |
+      For each (instrument, session, aperture, RR) cell, stratify the deployed
+      E2 trades by VA-context class (A/B/C) and compare ExpR across classes.
+      Edge = monotone ExpR(A) > ExpR(C) at RR 1.5 and 2.0, BH-FDR significant.
+    scope:
+      instruments: [MNQ, MES]
+      sessions: [EUROPE_FLOW, NYSE_OPEN, TOKYO_OPEN]
+      rr_targets: [1.5, 2.0]   # deep targets where Yordanov Case A/C divergence is largest
+      orb_minutes: [5]          # fix aperture to control K; 15/30 deferred to a follow-up
+      entry_models: [E2]
+      confirm_bars: [1]
+    expected_trial_count: 12   # 2 instr × 3 sessions × 2 deep-RR
+    kill_criteria:
+      - "BH-FDR q=0.05 fails at K_family"
+      - "Chordia t < 3.79 (strict no-theory bar; theory_grant=false)"
+      - "ExpR(Case A) NOT > ExpR(Case C) at RR 1.5 (refutes Yordanov depth finding on MNQ)"
+      - "WFE < 0.50"
+      - "2026 OOS ExpR < 0 (N_oos >= 30)"
+      - "Any era N>=50 ExpR < -0.05 R"
+      - "Edge only appears as a directional (long-vs-short) selector → REJECT (Tolušić §4)"
+
+  - id: 2
+    name: "'Cross + Miss' VETO gate on deployed lanes — MNQ/MES"
+    theory_citation:
+      - "yordanov_2026_nq_orb_value_area_breakouts.md §3.8 ('Cross + Miss' = strongest single signal: 22.7% vs 71.1% baseline, 48.4pp drop, strengthened at n=159)"
+      - "tolusic_2026_amt_inventory_dynamics.md §3.2 (balance/imbalance phase transition — a break that fails to clear inventory reverts)"
+    economic_basis: |
+      The strongest empirical signal in Yordanov is a VETO, not an entry: a
+      breakout that retreats through the Filter Mid WITHOUT extending even 0.5×
+      of the filter range has a high probability of full failure (22.7% vs 71.1%
+      baseline). HYPOTHESIS: applying a "Cross + Miss" don't-trade gate to
+      existing deployed MNQ/MES E2 lanes IMPROVES ExpR by suppressing the
+      lowest-quality breakouts. This is an overlay test (RULE 2 Pass-2 filtered)
+      on deployed lanes — lowest multiple-comparison cost, directionally distinct
+      from the NO-GO registry.
+    measurement: |
+      Overlay the Cross+Miss veto on deployed E2 lanes. Compare deployed-lane
+      ExpR WITH vs WITHOUT the veto. Edge = veto-on ExpR significantly higher
+      (the suppressed trades have significantly negative ExpR). The veto state
+      MUST be evaluated only from bars knowable at the entry decision (RULE 6
+      trade-time-knowability audit REQUIRED — the "miss" of 0.5× and the Filter
+      Mid cross must both resolve at or before the E2 entry timestamp, else the
+      veto is post-entry look-ahead and the cell is BANNED per RULE 6.3).
+    scope:
+      instruments: [MNQ, MES]
+      sessions: [EUROPE_FLOW, NYSE_OPEN, TOKYO_OPEN]
+      rr_targets: [1.0, 2.0]   # veto effect tested at near + deep target
+      orb_minutes: [5]          # fix aperture to control K (matches H1)
+      entry_models: [E2]
+      confirm_bars: [1]
+    expected_trial_count: 12   # 2 instr × 3 sessions × 2 RR
+    kill_criteria:
+      - "BH-FDR q=0.05 fails at K_family"
+      - "Chordia t < 3.79 (strict no-theory bar; theory_grant=false)"
+      - "Veto-on ExpR NOT > veto-off ExpR (suppressed trades not significantly negative)"
+      - "WFE < 0.50"
+      - "2026 OOS ExpR < 0 (N_oos >= 30)"
+      - "Veto state not trade-time-knowable → BANNED (RULE 6.3 look-ahead)"
+      - "Tautology T0: |corr(veto_fire, deployed_filter_fire)| > 0.70 → exclude cell"
+
+# =============================================================================
+# EXECUTION GATE CHECKLIST (complete IN ORDER before running scan)
+# =============================================================================
+# [ ] 1. Solo backfill daily_features poc/vah/val for MNQ + MES — no concurrent
+#         DB writer. Verify >= 50% populated:
+#         SELECT COUNT(*), COUNT(orb_EUROPE_FLOW_poc) FROM daily_features
+#         WHERE symbol='MNQ' AND orb_minutes=5 AND trading_day < '2026-01-01';
+# [ ] 2. Re-confirm estimate_k_budget for MNQ + MES at N=24 (already VERIFIED
+#         2026-06-10 — N_max=27 at 6.65yr). MGC is OUT OF SCOPE (see mgc_deferral).
+# [ ] 3. /nogo check for the value-area filter family (don't re-litigate a buried verdict).
+# [ ] 4. Write research/run_va_context_scan.py following
+#         comprehensive_deployed_lane_scan.py patterns:
+#         - RULE 1.2 validity gates (pre-session VA features always safe)
+#         - Case A/B/C classifier from orb_{label}_poc/_vah/_val + ORB close
+#         - DEPTH conditioning (H1): stratify deployed E2 ExpR by VA-context class
+#         - VETO overlay (H2): MUST pass an explicit RULE 6 trade-time-knowability
+#           audit — the Cross+Miss state resolves only from bars ≤ entry ts
+#         - T0 tautology vs deployed G8/G5 filter
+#         - bh_fdr_multi_framing() for K_family + K_lane
+#         - oos_power.py power check before any OOS/dir_match kill (RULE 3.3)
+#         - report fire_rate, t, ExpR-by-class, WFE, OOS power, dir_match
+# [ ] 5. RULE 13 pressure test: inject a known look-ahead feature; confirm the
+#         scan excludes it. ESPECIALLY validate the H2 veto cannot peek past entry.
+# [ ] 6. Result doc → docs/audit/results/YYYY-MM-DD-va-context-depth-veto-scan.md.
+#
+# THEORY GUARDRAIL (do not remove): NO hypothesis in this file may be salvaged
+# as a directional (long-vs-short) value-area edge. Tolušić §4 forbids it. If a
+# cell only "works" directionally, it is REJECTED, not promoted.

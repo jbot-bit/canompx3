@@ -1645,3 +1645,92 @@ class TestVolumeProfileSchema:
         for label in ORB_LABELS:
             for suffix in ("poc", "vah", "val"):
                 assert f"orb_{label}_{suffix}" in cols
+
+
+# =============================================================================
+# verify_daily_features — Check 6: volume profile invariants
+# =============================================================================
+
+
+def _make_verify_db_with_vp(poc, vah, val):
+    """Create an in-memory DB with one MGC row using the given poc/vah/val for CME_REOPEN."""
+    from pipeline.init_db import DAILY_FEATURES_SCHEMA, ORB_LABELS
+
+    con = duckdb.connect(":memory:")
+    con.execute(DAILY_FEATURES_SCHEMA)
+    label = f"orb_{ORB_LABELS[0]}"  # e.g. orb_CME_REOPEN
+    con.execute(
+        f"""
+        INSERT INTO daily_features
+          (symbol, trading_day, orb_minutes, bar_count_1m,
+           {label}_poc, {label}_vah, {label}_val)
+        VALUES ('MGC', DATE '2024-01-05', 5, 100, ?, ?, ?)
+        """,
+        [poc, vah, val],
+    )
+    return con
+
+
+class TestVolumeProfileVerify:
+    """verify_daily_features Check 6: vol-profile invariant SQL gate."""
+
+    def test_clean_row_passes(self):
+        con = _make_verify_db_with_vp(poc=100.0, vah=100.2, val=99.8)
+        ok, failures = verify_daily_features(con, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        vp_failures = [f for f in failures if "Volume profile" in f]
+        assert vp_failures == [], vp_failures
+
+    def test_null_poc_skipped(self):
+        """Rows with poc IS NULL are excluded — substrate not yet backfilled."""
+        from pipeline.init_db import DAILY_FEATURES_SCHEMA
+
+        con = duckdb.connect(":memory:")
+        con.execute(DAILY_FEATURES_SCHEMA)
+        con.execute(
+            "INSERT INTO daily_features (symbol, trading_day, orb_minutes, bar_count_1m) "
+            "VALUES ('MGC', DATE '2024-01-05', 5, 100)"
+        )
+        ok, failures = verify_daily_features(con, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        vp_failures = [f for f in failures if "Volume profile" in f]
+        assert vp_failures == [], vp_failures
+
+    def test_val_greater_than_poc_fails(self):
+        con = _make_verify_db_with_vp(poc=99.0, vah=100.0, val=99.5)  # val > poc
+        ok, failures = verify_daily_features(con, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        assert any("Volume profile" in f for f in failures)
+
+    def test_poc_greater_than_vah_fails(self):
+        con = _make_verify_db_with_vp(poc=100.5, vah=100.0, val=99.0)  # poc > vah
+        ok, failures = verify_daily_features(con, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        assert any("Volume profile" in f for f in failures)
+
+    def test_val_zero_fails(self):
+        con = _make_verify_db_with_vp(poc=100.0, vah=100.2, val=0.0)  # val <= 0
+        ok, failures = verify_daily_features(con, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        assert any("Volume profile" in f for f in failures)
+
+    def test_vah_zero_fails(self):
+        con = _make_verify_db_with_vp(poc=0.0, vah=0.0, val=-1.0)  # vah <= 0
+        ok, failures = verify_daily_features(con, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        assert any("Volume profile" in f for f in failures)
+
+    def test_partial_triple_poc_only_fails(self):
+        """poc populated but vah/val NULL = corruption. The invariant SQL above
+        silently skips it (three-valued logic); Check 6b must catch it."""
+        con = _make_verify_db_with_vp(poc=100.0, vah=None, val=None)
+        ok, failures = verify_daily_features(con, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        assert any("partial triple" in f for f in failures), failures
+
+    def test_partial_triple_vah_missing_fails(self):
+        """Two-present-one-NULL (poc+val, vah missing) is also corruption."""
+        con = _make_verify_db_with_vp(poc=100.0, vah=None, val=99.8)
+        ok, failures = verify_daily_features(con, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        assert any("partial triple" in f for f in failures), failures
+
+    def test_all_null_triple_skipped(self):
+        """All-NULL triple is the legitimate not-yet-backfilled state — Check 6b
+        must NOT flag it (boundary partner to the partial-triple cases)."""
+        con = _make_verify_db_with_vp(poc=None, vah=None, val=None)
+        ok, failures = verify_daily_features(con, "MGC", date(2024, 1, 5), date(2024, 1, 5))
+        vp_failures = [f for f in failures if "Volume profile" in f]
+        assert vp_failures == [], vp_failures
