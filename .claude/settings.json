@@ -390,6 +390,11 @@
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/memory-capture-sessionstart.py",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/drain-nudge-sessionstart.py",
+            "timeout": 10
           }
         ]
       }
