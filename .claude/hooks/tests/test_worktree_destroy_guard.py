@@ -144,6 +144,24 @@ class TestTargetParsing:
         assert op == "worktree"
         assert target == "/c/victim"
 
+    def test_parse_handles_quoted_worktree_target_with_spaces(self) -> None:
+        hook = _load_hook()
+        op, target = hook._parse_destroy_target('git worktree remove --force "C:/tmp/tree with spaces"')
+        assert op == "worktree"
+        assert target == "C:/tmp/tree with spaces"
+
+    def test_parse_handles_quoted_git_c_prefix_and_target(self) -> None:
+        hook = _load_hook()
+        op, target = hook._parse_destroy_target('Git -C "C:/repo root" worktree remove --force "C:/tmp/tree with spaces"')
+        assert op == "worktree"
+        assert target == "C:/tmp/tree with spaces"
+
+    def test_parse_handles_quoted_branch_name_with_spaces(self) -> None:
+        hook = _load_hook()
+        op, target = hook._parse_destroy_target('git branch -D "feature/branch with spaces"')
+        assert op == "branch"
+        assert target == "feature/branch with spaces"
+
     @pytest.mark.parametrize("binary", ["GIT", "Git", "git.EXE", "GIT.exe"])
     def test_parse_case_insensitive_git_binary(self, binary: str) -> None:
         """Windows resolves GIT/Git/git.EXE to the same binary — a case-exact

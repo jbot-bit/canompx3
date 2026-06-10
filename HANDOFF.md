@@ -6,12 +6,12 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Codex Session - Daily bug scan stale close-time latch fix (2026-06-09)
+## Codex Session - daily bug scan hook fixes pending commit (2026-06-08)
 - **Tool:** Codex.
-- **Grounding packet:** `python scripts/tools/daily_bug_scan.py --since 2026-06-07T23:02:02.231Z --base-ref origin/main --include-local-head --max-commits 5 --format json` returned verification mode `static_only` (`no repo-managed interpreter detected`) and surfaced local live-session commits `13f8ef1d` / `4bbe0948` as the highest-signal candidates.
-- **Finding fixed:** The fresh stale-kill-switch patch day-scoped `kill_switch_fired` but still restored prior-day `close_time_forced` unconditionally. On restart, that stale latch skipped the next session's close-time flatten gate (`if not self._close_time_forced ...`) for the whole day. This was proven with a new failing regression in `tests/test_trading_app/test_session_safety_state.py::test_prior_day_close_time_flag_expires`.
-- **What changed:** `trading_app/live/session_safety_state.py` now clears stale prior-day `close_time_forced` in the same startup stale-day sanitization path while preserving same-day and unknown-day fail-closed behavior. Added the regression test above.
-- **Verification:** red -> green on `python -m pytest tests/test_trading_app/test_session_safety_state.py -k prior_day_close_time_flag_expires -q`; then full touched file `python -m pytest tests/test_trading_app/test_session_safety_state.py -q` = 22 passed. `git diff --check` passed. No broader drift/full-suite claim in this scan.
+- **Why:** Daily bug scan packet (`static_only`) surfaced candidate commit `4678c3d852a0794b0c66c3e1381f54021d411811`, which touched `.claude/hooks/worktree-destroy-guard.py`.
+- **What changed:** Fixed two verified guard regressions in `.claude/hooks/worktree-destroy-guard.py`: quoted worktree paths / branch names are now parsed via `shlex.split(..., posix=False)` with quote stripping, and the fast unpushed probe no longer falls back to the executor repo `HEAD` for a missing worktree target when fleet-state is unavailable. Added regression coverage in `.claude/hooks/tests/test_worktree_destroy_guard.py` for quoted targets and the brain-unavailable path.
+- **Verification:** Direct parser repro now returns full quoted targets; `python -m pytest .claude/hooks/tests/test_worktree_destroy_guard.py -q` passed `30/30`; `python -m py_compile .claude/hooks/worktree-destroy-guard.py` passed; `git diff --check` passed.
+- **State:** Worktree is still detached `HEAD` with two uncommitted modified files (the hook + its tests). No commit or push yet.
 
 ## Codex Session — Claude parity layer made executable (2026-06-07)
 - **Tool:** Codex.
@@ -179,13 +179,26 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
-- **Date:** 2026-06-10
-- **Commit:** 552f756e — fix(live): convert cumulative GatewayQuote.volume to per-tick delta (Defect A)
-- **Files changed:** 3 files
-  - `docs/runtime/stages/2026-06-10-live-volume-cumulative-to-delta.md`
-  - `tests/test_trading_app/test_projectx_feed.py`
-  - `trading_app/live/projectx/data_feed.py`
+- **Tool:** Codex (WSL)
+- **Date:** 2026-06-07
+- **Commit:** current commit — fix(codex): enforce Claude parity routing
+- **Files changed:** 16 files
+  - `.agents/skills/README.md`
+  - `.agents/skills/canompx3-claude-parity/SKILL.md`
+  - `.codex/AGENTS.md`
+  - `.codex/COMMANDS.md`
+  - `.codex/HOOKS.md`
+  - `.codex/RULES.md`
+  - `.codex/WORKFLOWS.md`
+  - `.codex/hooks/session_start.py`
+  - `.codex/hooks/user_prompt_submit_grounding.py`
+  - `.codex/skills/README.md`
+  - `.codex/skills/canompx3-claude-parity/SKILL.md`
+  - `.codex/skills/canompx3-claude-parity/agents/openai.yaml`
+  - `HANDOFF.md`
+  - `scripts/infra/codex_local_env.py`
+  - `scripts/infra/codex_parity.py`
+  - ... and 1 more
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

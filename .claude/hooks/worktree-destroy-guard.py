@@ -150,7 +150,7 @@ def _parse_destroy_target(command: str) -> tuple[str | None, str | None]:
                 for a in args[1:]:
                     if a.startswith("-"):
                         continue  # --force / -f
-                    return "worktree", a
+                    return "worktree", _strip_wrapping_quotes(a)
                 return "worktree", None  # remove with no positional (let git error)
         elif sub == "branch":
             # `git branch -D|-d|--delete [--force] <name>` — a DELETE form only.
@@ -165,7 +165,7 @@ def _parse_destroy_target(command: str) -> tuple[str | None, str | None]:
                 for a in args:
                     if a.startswith("-"):
                         continue
-                    return "branch", a
+                    return "branch", _strip_wrapping_quotes(a)
                 return "branch", None
     return None, None
 
@@ -274,13 +274,16 @@ def _live_unpushed_count(op: str, target: str | None, state) -> int:
     if op == "branch" and target:
         branch = target
 
-    # Choose a cwd to run git in. For a worktree target, the tree itself; if it
-    # is already gone, fall back to the project root (the branch ref still lives
-    # in the shared object store).
+    # Choose a cwd to run git in. For a worktree target, the tree itself. If the
+    # tree is already gone, only fall back to the project root when we know the
+    # target branch to inspect; otherwise we'd accidentally probe the executor's
+    # own HEAD and block the wrong tree when the fleet-state brain is unavailable.
     cwd: Path
     if target_path is not None and target_path.exists():
         cwd = target_path
     else:
+        if branch is None:
+            return 0
         cwd = PROJECT_ROOT
 
     rev = branch if branch else "HEAD"
