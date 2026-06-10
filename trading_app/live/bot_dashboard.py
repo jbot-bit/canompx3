@@ -165,7 +165,17 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
                     pass
             continue
         if val.poll() is None:
-            log.warning("Shutdown: terminating orphaned %s process (PID %d)", name, val.pid)
+            # Distinguish a genuine orphan from the expected stop case. When a
+            # stop was requested (STOP_FILE present — the STOP button writes it,
+            # see action_kill), a still-alive child mid-teardown is normal, not
+            # orphaned: log at debug. Only the unexpected case (alive child, no
+            # stop asked for) warrants a WARNING. This kills the false
+            # "terminating orphaned session process" noise on every clean stop.
+            stop_requested = STOP_FILE.exists()
+            if stop_requested:
+                log.debug("Shutdown: terminating %s process (PID %d) — stop in progress", name, val.pid)
+            else:
+                log.warning("Shutdown: terminating orphaned %s process (PID %d)", name, val.pid)
             try:
                 val.terminate()
                 val.wait(timeout=10)

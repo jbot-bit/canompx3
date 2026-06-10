@@ -174,12 +174,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** 7f6e52fa — wip(survival): survival-cap sweep Stage 1 - sweep + gate extract + blocking AST guard (UNTESTED)
-- **Files changed:** 4 files
+- **Commit:** 06525bf8 — feat(dashboard): surface chart time axis + live/stale dot
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-10-survival-cap-sweep-stage1.md`
-  - `pipeline/check_drift.py`
-  - `trading_app/account_survival.py`
+  - `trading_app/live/bot_dashboard.html`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

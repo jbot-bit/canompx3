@@ -724,6 +724,19 @@ def main() -> None:
 
     try:
         asyncio.run(session.run())
+    except KeyboardInterrupt:
+        # Clean teardown path. The signal handlers above (_request_teardown)
+        # turn SIGINT (Ctrl+C) / SIGTERM (dashboard STOP -> proc.terminate())
+        # into KeyboardInterrupt; it propagates out of asyncio.run() here. We
+        # swallow it and log a single clean line instead of letting Python
+        # print a multi-frame traceback to the console — a stop is a normal,
+        # operator-initiated event, not a crash. The `finally:` below still
+        # runs (instance lock release, stop-file unlink, bot_state clear,
+        # dashboard-child terminate), so teardown is unchanged. NOTE: this is
+        # teardown only — open positions stay on their server-side broker
+        # bracket (see _request_teardown). Fail-closed: even if this except
+        # were somehow skipped, the finally still cleans up.
+        log.info("Session stopped (clean teardown — open positions remain on broker bracket)")
     finally:
         session.post_session()
         release_instance_lock()
