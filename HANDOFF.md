@@ -174,9 +174,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** ebb122ed — @ docs(claude): compress Task Routing / Default Mode / Shell / grounding to fit 12KB cap
-- **Files changed:** 1 files
-  - `CLAUDE.md`
+- **Commit:** 7146a6d0 — test(survival): survival-cap sweep Stage 1 - tests + ceiling-reducer extract + audit fix
+- **Files changed:** 5 files
+  - `HANDOFF.md`
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift_survival_cap_sweep_guard.py`
+  - `tests/test_trading_app/test_account_survival.py`
+  - `trading_app/account_survival.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

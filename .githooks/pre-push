@@ -81,6 +81,29 @@ elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
     PYTHON="$SCRIPT_DIR/venv/bin/python"
 fi
 
+# Robust fallback (kills the exit-127 class). When this hook fires from a
+# WORKTREE (operator launches via start_worktree) or from an odd CWD, SCRIPT_DIR
+# points at a tree with no .venv, and the canonical-sibling probe above can miss
+# (its $PARENT_DIR/$CANONICAL_BASENAME name heuristic doesn't match every
+# worktree naming). PYTHON then stays the literal "python" default, which is NOT
+# on git's stripped push PATH -> the drift step below returns 127, MISREPORTED
+# as "drift failed". `git rev-parse --show-toplevel` resolves the canonical
+# checkout root from ANY worktree or CWD, so the real venv is found regardless
+# of launch context. This is the launch-context-agnostic fix (the operator does
+# not always push from a worktree).
+if [ "$PYTHON" = "python" ]; then
+    REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
+    if [ -n "$REPO_ROOT" ]; then
+        if [ "$IS_WINDOWS_SHELL" -eq 1 ] && [ -f "$REPO_ROOT/.venv/Scripts/python.exe" ]; then
+            PYTHON="$REPO_ROOT/.venv/Scripts/python.exe"
+        elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$REPO_ROOT/.venv-wsl/bin/python" ]; then
+            PYTHON="$REPO_ROOT/.venv-wsl/bin/python"
+        elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$REPO_ROOT/.venv/bin/python" ]; then
+            PYTHON="$REPO_ROOT/.venv/bin/python"
+        fi
+    fi
+fi
+
 if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [[ "$PYTHON" == *"/Scripts/"* || "$PYTHON" == *.exe ]]; then
     echo "BLOCKED (pre-push): POSIX/WSL selected Windows Python: $PYTHON"
     echo "         Use .venv-wsl/bin/python in WSL/Linux; do not cross-wire .venv/Scripts."
@@ -126,6 +149,26 @@ trap '"$PUSH_LOCK_PY" "$SCRIPT_DIR/scripts/tools/commit_serialize.py" release .p
 
 echo "=== PRE-PUSH: full drift safety gate ==="
 echo "  (full blocking drift set — the net for pre-commit's path-scoped skip)"
+
+# Honest interpreter gate. If $PYTHON still doesn't actually execute (every probe
+# above missed AND the git-toplevel fallback couldn't find a venv), STOP here
+# with a CLEAR message — do NOT let the drift step below return 127 and get
+# misreported as "drift failed (exit $DRIFT_EXIT)". A resolver miss is an
+# environment problem, not a drift violation; conflating them is what made the
+# original exit-127 so confusing. Fail-closed: a push without a working
+# interpreter is still blocked (refusing to push unverified work is the safe
+# default at push time).
+if ! "$PYTHON" --version >/dev/null 2>&1; then
+    echo ""
+    echo "BLOCKED (pre-push): python interpreter not found — cannot run the drift gate."
+    echo "  Resolved PYTHON=$PYTHON (does not execute under git's push environment)."
+    echo "  This is an ENVIRONMENT problem (no venv on PATH / not found from this"
+    echo "  worktree), NOT a drift failure. Expected venv: <repo>/.venv/Scripts/python.exe"
+    echo "  (Windows) or <repo>/.venv-wsl/bin/python (WSL). Re-run the push from a"
+    echo "  shell where the repo venv resolves, or (last resort, drift proven green"
+    echo "  by hand) authorized: git push --no-verify"
+    exit 1
+fi
 
 # Run the FULL drift set. No --skip-crg-advisory / --skip-advisory here: pre-push
 # is the place we pay for complete coverage, because a docs-only commit may have
