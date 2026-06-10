@@ -174,11 +174,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** 48468da9 — @ Dynamic sizing policy Stage A — 3-constraint MIN seam (zero live change)
-- **Files changed:** 3 files
-  - `docs/plans/2026-06-10-dynamic-account-aware-vol-targeted-sizing.md`
-  - `tests/test_trading_app/test_dynamic_sizing_policy.py`
-  - `trading_app/dynamic_sizing_policy.py`
+- **Commit:** c18fb173 — docs(trading-rules): reconcile RT friction + session count vs canonical code
+- **Files changed:** 2 files
+  - `HANDOFF.md`
+  - `TRADING_RULES.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
