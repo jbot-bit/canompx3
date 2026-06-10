@@ -1496,6 +1496,68 @@ def _stale_process_reaper_lines() -> list[str]:
         return []
 
 
+def _cwd_outside_repo_lines(event_cwd: str) -> list[str]:
+    """Warn LOUDLY when the session's launch cwd is NOT inside this git repo.
+
+    Origin (2026-06-11): a session was launched from a leftover screenshot
+    folder named like a worktree (`canompx3-wt-06Wed10-...`) that was never
+    `git worktree add`-ed — no `.git`, no source. Every other helper here works
+    against `PROJECT_ROOT` (computed from THIS file's location via `parents[2]`),
+    so they all silently operated on the real repo and NOTHING flagged that the
+    operator's actual cwd was a non-repo dir. Edits then got routed into the
+    shared `main` checkout next to a peer's uncommitted work — the exact
+    index-thrash hazard this repo guards against everywhere else.
+
+    The SessionStart event payload carries the authoritative launch `cwd`. If it
+    resolves to a path that is NOT inside `PROJECT_ROOT` (the real repo this hook
+    lives in), the operator is in a phantom/stray directory: surface it so the
+    very first thing the session sees is "cd into the repo or a real worktree."
+
+    Fail-open: any unresolvable / empty input → [] (never wedge startup).
+    """
+    if not event_cwd:
+        return []
+    try:
+        cwd_resolved = Path(event_cwd).resolve()
+        root_resolved = PROJECT_ROOT.resolve()
+    except (OSError, ValueError, RuntimeError):
+        return []
+
+    # Inside the repo (root itself or any descendant) → nothing to warn about.
+    try:
+        if cwd_resolved == root_resolved or root_resolved in cwd_resolved.parents:
+            return []
+    except (OSError, ValueError):
+        return []
+
+    # A real linked worktree resolves outside PROJECT_ROOT but still has a `.git`
+    # file/dir wiring it to the repo. Only warn when there is NO git wiring at the
+    # cwd — that is the genuine phantom-folder case, not a sanctioned worktree.
+    try:
+        if (cwd_resolved / ".git").exists():
+            return []
+    except OSError:
+        pass
+
+    return [
+        "",
+        "  ====================================================================",
+        "  WARNING: launch directory is OUTSIDE the git repo (phantom cwd).",
+        "  --------------------------------------------------------------------",
+        f"  Launched in: {cwd_resolved}",
+        f"  Repo root:   {root_resolved}",
+        "  This folder has no .git wiring — it is NOT a worktree. Edits/commits",
+        "  here get misrouted into the shared main checkout (index-thrash risk).",
+        "",
+        "  Fix before working:",
+        f"    cd '{root_resolved}'            # the canonical checkout, OR",
+        "    cd into a real worktree (git worktree list), OR",
+        "    spawn a fresh one:  scripts/tools/new_session.sh",
+        "  ====================================================================",
+        "",
+    ]
+
+
 def main() -> None:
     try:
         event = json.load(sys.stdin)
@@ -1524,6 +1586,12 @@ def main() -> None:
     )
     lines: list[str] = []
     task_route_lines = _task_route_lines()
+
+    # Phantom-cwd awareness (warn-only, all session types). Computed up front so
+    # it can be prepended to the brief below — the operator must see "you are not
+    # in the repo" before anything else, since every other line here is computed
+    # against the real repo root and would otherwise look reassuringly normal.
+    cwd_warn_lines = _cwd_outside_repo_lines(str(event.get("cwd", "")))
 
     if session_type == "startup":
         # Hard-block FIRST if another Claude session holds the worktree lock.
@@ -1575,6 +1643,12 @@ def main() -> None:
             lines.extend(
                 _superpower_lines("interactive") or ["Re-read docs/runtime/stages/*.md if active work exists."]
             )
+
+    # Phantom-cwd warning goes at the VERY TOP of the brief — before any of the
+    # repo-root-computed signals that would otherwise look normal. Prepend (not
+    # extend) and force the print path even if the brief is otherwise empty.
+    if cwd_warn_lines:
+        lines = cwd_warn_lines + lines
 
     if lines:
         # Live-peer heartbeat check FIRST among the drift signals: a concurrent

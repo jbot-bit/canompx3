@@ -173,10 +173,11 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-10
-- **Commit:** 56767024 — fix(preflight): clear stale live-stage gate refs to swept terminal stages
-- **Files changed:** 1 files
-  - `scripts/tools/live_readiness_report.py`
+- **Date:** 2026-06-11
+- **Commit:** e0927a37 — fix(live): clean teardown on Ctrl+C in multi-instrument mode (#5)
+- **Files changed:** 2 files
+  - `scripts/run_live_session.py`
+  - `tests/test_trading_app/test_multi_runner.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
