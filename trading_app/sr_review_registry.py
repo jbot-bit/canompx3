@@ -284,6 +284,58 @@ SR_ALARM_REVIEWS: dict[tuple[str, str], SrAlarmReview] = {
             "routing (block_source='sr_review_pause')."
         ),
     ),
+    # TOKYO_OPEN COST_LT08 RR1.5 — reviewed 2026-06-10 for the live launch of
+    # topstep_50k_mnq_auto (all-3-lanes operator decision). SR=ALARM surfaced
+    # when refresh_control_state recomputed C12 against current data.
+    # SR figures verified 2026-06-10 via sr_monitor.prepare_monitor_inputs:
+    #   baseline_source=paper_trades_first_50, stream_source=paper_trades,
+    #   monitored stream N=24, SR stat=45.22 > threshold=31.96 (ARL~60,
+    #   delta=-1.0sigma). Recent drawdown is real: recent_10_mean_r=-0.376
+    #   (late-May/06-08 cluster: -1,-1,-1,-1,+0.39,-1,-1 on the backfill stream).
+    # Canonical deploy floors verified 2026-06-10 vs validated_setups for the
+    # DEPLOYED lane MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08:
+    #   wfe=0.9891 (~2x literature 0.50 floor),
+    #   oos_exp_r=0.2257, expectancy_r=0.2037, OOS/IS=110.8% (0.2257/0.2037) --
+    #   OOS OUTPERFORMS IS, no decay signal,
+    #   p_value=0.000362, fdr_adjusted_p=0.007606 fdr_significant=True,
+    #   N=427, sharpe_ratio=0.1726.
+    # Lane clears every floor used by the L3/L6 WATCH precedents (L3 OVNRNG_100
+    # was WFE 0.52; this lane is ~2x stronger). SR alarm is the only trigger;
+    # full-sample OOS validation is intact. Because the RECENT monitored stream
+    # is genuinely negative (recent_10_mean_r=-0.376, unlike the L6 "expected
+    # noise" case), the recheck trigger is TIGHTENED to a 2-consecutive-negative
+    # rule matching the ORB_VOL_2K / OVNRNG_25 precedents rather than the
+    # plain N>=100 pattern. Four-precedent history per
+    # pre_registered_criteria.md:242: L3 2026-04-12, L4/L6 2026-04-14,
+    # NYSE_OPEN RR1.5 COST_LT12 2026-05-11.
+    (
+        "topstep_50k_mnq_auto",
+        "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
+    ): SrAlarmReview(
+        profile_id="topstep_50k_mnq_auto",
+        strategy_id="MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
+        outcome="watch",
+        reviewed_at="2026-06-10",
+        summary=(
+            "Reviewed WATCH: WFE 0.9891 (~2x literature 0.50 floor) and "
+            "OOS/IS 110.8% (validated_setups oos_exp_r/expectancy_r = "
+            "0.2257/0.2037) -- OOS outperforms IS, no decay signal; "
+            "fdr_significant=True (adj_p 0.007606), p=0.000362, N=427, "
+            "Sharpe 0.173. Clears the L3/L6 watch floors (L3 OVNRNG_100 was "
+            "WFE 0.52; this lane is ~2x stronger). SR alarm is path-real "
+            "(stream N=24, SR 45.22 > thr 31.96) and the recent monitored "
+            "stream is genuinely negative (recent_10_mean_r=-0.376, late-May/"
+            "06-08 cluster), so this is a tight-recheck WATCH, not 'expected "
+            "noise'. Precedent: L3 2026-04-12, L4/L6 2026-04-14, NYSE_OPEN_RR1.5 "
+            "2026-05-11 (pre_registered_criteria.md:242 four-precedent cite)."
+        ),
+        recheck_trigger=(
+            "Re-check after N>=100 monitored trades. Retire if SR remains ALARM "
+            "and (WFE < 0.50 or OOS/IS ratio < 0.40), or if recent_10_mean_r "
+            "stays negative for 2 consecutive checkpoints (recent stream is "
+            "already negative at review time -- tighter than the L6 noise case)."
+        ),
+    ),
 }
 
 
