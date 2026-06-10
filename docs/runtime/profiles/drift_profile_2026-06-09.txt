@@ -1,0 +1,211 @@
+DRIFT PROFILE — 207 checks executed, 202.2s total (slowest first)
+  seconds  cached?     label
+------------------------------------------------------------------------------
+    50.42  ineligible  FAST_LANE PROMOTE queue: no orphan PROMOTEs, no ERROR entries, cache up to date
+    33.37  db          Active native trade-window provenance matches canonical recomputation
+    26.37  db          Active micro-only filters first trade on/after micro launch
+    14.57  ineligible  Drift cache meta cold-recheck (cached PASSes reproduce on cold re-run)
+    11.87  db          Validated_setups C4 claims reproduce from canonical orb_outcomes (MES/MGC)
+    11.32  ineligible  Doc hygiene contracts (stamps, design-only, generated markers)
+     6.57  ineligible  MCP servers answer initialize (sidecar dep-rot guard)
+     5.69  ineligible  Phase 4 SHA migration manifest integrity (every check_107_sha_migrations.yaml entry is evidence-grounded)
+     3.84  ineligible  Fast-lane status roll-up reconstruction parity: docs/runtime/fast_lane_status.yaml must match a fresh scripts/tools/fast_lane_status.py build (Stage 2A.2 connective-tissue)
+     3.28  ineligible  Research scans reading canonical layers + filter/E2 must call a canonical guard (canary harness deliverable #3)
+     3.28  ineligible  Tests forbid canonical production runtime-path literals (ALERT-CONTAM-N2, ralph iter 203)
+     3.25  ineligible  CRG D2: Canonical-import enforcement -- research scripts must not re-implement canonical functions
+     2.79  ineligible  Generated task views preserve strict truth-class boundaries
+     2.64  ineligible  CRG D3: Canonical functions must have at least one import-and-call test (AST-based; CRG tests_for graph proven incomplete)
+     1.96  ineligible  All imports resolve
+     1.72  ineligible  Pre-reg hypothesis files pass Bailey 2013 MinBTL K-budget gate
+     1.24  ineligible  CRG D5: Top-10 bridge nodes (betweenness-centrality chokepoints) must have TESTED_BY edges
+     1.22  ineligible  Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)
+     1.05  hit         DSR reference-universe lock declared (Criterion 5 Amendment 3.5: criterion_5 block complete when claiming DSR-clearance)
+     0.87  ineligible  GARCH dependency importable (`arch` package present)
+     0.85  ineligible  lane_allocation.json lanes[] must pass Chordia gate (verdict + audit freshness)
+     0.78  ineligible  SQL column convention: pipeline tables use 'symbol', trading app tables use 'instrument'
+     0.64  ineligible  Stage-file staleness vs landed commits (advisory; prevents re-litigation)
+     0.63  ineligible  Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)
+     0.58  hit         AM3.3 audit-log/prereg theory_grant parity: chordia_audit_log.yaml theory_grants must match active prereg metadata.theory_grant (Check #162)
+     0.57  ineligible  paper_trades reads exclude shadow rows (VIEW or execution_source guard)
+     0.55  ineligible  Canonical orb_utc_window source (only pipeline/dst.py may define it)
+     0.54  ineligible  Preflight status-token parity (dashboard maps every token to a blocking bucket; no live-arm fail-open)
+     0.52  ineligible  Chordia result MD threshold matches prereg chordia_threshold_basis (theory_citation field-presence trap)
+     0.50  ineligible  Active research code uses pipeline.paths for DB selection
+     0.49  ineligible  CRG D1: Surprising cross-layer connections between pipeline/ and trading_app/ (bypassing canonical surfaces)
+     0.48  db          Active native promotion provenance fields are populated
+     0.48  ineligible  Timezone hygiene
+     0.44  ineligible  Magic-number rationale audit on trading_app/live/ + HWM tracker + pre_session_check (Carver Ch. 4)
+     0.39  ineligible  No hardcoded scratch DB defaults in active code
+     0.38  db          2026 holdout not contaminated (pre-registered strategies sacred)
+     0.35  ineligible  validated_setups writes stay on canonical allowlist
+     0.28  ineligible  family_rr_locks JOIN key completeness (6-column key in every JOIN)
+     0.26  ineligible  Operator-visible formatter helpers must warn on unrecognized types (iso_utc class bug, 2026-05-04)
+     0.25  ineligible  No old session names in active code
+     0.23  db          Active-instrument bars present but daily_features absent (0-of-3 UNBUILT gap)
+     0.22  ineligible  No deprecated C:/db/gold.db in docstring usage examples
+     0.21  db          HTF fields consistent across apertures for each trading_day x symbol
+     0.21  ineligible  Fast-lane trial ledger append-only: docs/runtime/fast_lane_trial_ledger.yaml is the universe-of-trials accounting layer; entries are immutable + monotonic timestamps + holdout sentinel required (Stage
+     0.20  ineligible  No direct lane_allocation.json literals in allocation-consuming source roots outside resolver allowlist (Stage 1b/1c authority inversion)
+     0.19  ineligible  FAST_LANE v5.1 preregs route through runner v5.1 branch (sentinel >= 2026-05-20)
+     0.18  ineligible  E2 entry_model + break-bar features in research/ require e2-lookahead-policy annotation (2026-04-28 class bug)
+     0.18  ineligible  Trading app hardcoded paths
+     0.18  ineligible  C1 kill-switch guards intact at _on_bar and _handle_event ENTRY branch
+     0.17  ineligible  No CRLF in tracked text blobs (defense-in-depth for pre-commit [0b] auto-renormalize)
+     0.16  ineligible  No raw orb_active reads outside asset_configs.py
+     0.16  ineligible  Trading app schema-query consistency
+     0.15  ineligible  Pooled-finding audit files carry per-cell breakdown annotation (RULE 14)
+     0.13  ineligible  @canonical-source annotations point to existing files
+     0.13  ineligible  Amendment 3.4 PROVISIONAL gate (no new mechanism-class-transfer theory_grant until re-audit closes)
+     0.12  db          Stop multiplier ID-column consistency (_S075 <-> stop_multiplier)
+     0.11  ineligible  Fast-lane graveyard digest parity: docs/runtime/fast_lane_graveyard_digest.yaml must match a fresh build from 06_RD_GRAVEYARD.md + STRATEGY_BLUEPRINT.md NO-GO + action-queue.yaml park/kill (Stage 2A.2
+     0.11  ineligible  Naive datetime detection
+     0.10  ineligible  No old fixed-clock session names in Python source
+     0.10  ineligible  Research scripts using 'pnl_r IS NOT NULL' annotate scratch policy (2026-04-27 class bug)
+     0.09  db          Pre-registration file present for post-Phase-0 discovery runs (Criterion 1)
+     0.08  ineligible  Prop contract caps must not leak into self_funded sizing (margin-guard marker present)
+     0.08  ineligible  Action-queue YAML validates against canonical WorkQueue schema: docs/runtime/action-queue.yaml must load via pipeline.work_queue.load_queue() without ValidationError (project_pulse.py / next.py orient
+     0.06  db          HTF level fields match canonical week/month SQL aggregation
+     0.06  ineligible  Referenced paths in CLAUDE.md / .claude/rules/ must exist (canonical-rule pointer integrity)
+     0.05  ineligible  Literature source-grounding integrity (CI-safe manifest<->extract; strict-local PDF pages)
+     0.05  db          orb_outcomes scratch rows have non-NULL pnl_r post Stage-5 canonical fix
+     0.05  db          Active prop profiles carry a current+passing survival proof (Row 05)
+     0.04  ineligible  critical validated_setups readers use canonical deployable-shelf semantics
+     0.04  ineligible  Nested production table write guard
+     0.04  db          Orphaned validated strategies (no outcome data for aperture)
+     0.04  hit         Canary contamination suite green (every guard catches its trap)
+     0.04  ineligible  Hardcoded absolute paths
+     0.04  ineligible  Aperture hardcode (orb_minutes=5) in lane-iterating scoring paths (PR #189 class bug)
+     0.04  ineligible  Shared profile fingerprint helper is canonical
+     0.04  ineligible  Schema-query table name consistency
+     0.04  db          Routed filter required columns populated (catches ghost deployments)
+     0.03  hit         ENTRY_MODELS sync
+     0.03  db          Data continuity (gaps > 7 calendar days in trading days per instrument)
+     0.03  db          Pipeline staleness: orb_outcomes not >7 trading days behind daily_features
+     0.03  db          family_rr_locks coverage (all active families have locked RR)
+     0.03  ineligible  Parked-cells registry completeness (every Pathway B result has matching docs/runtime/parked-cells.yaml entry)
+     0.03  db          Audit columns populated (n_trials, fst_hurdle, DSR)
+     0.03  ineligible  Trading app connection leak detection
+     0.02  ineligible  Code-fingerprint staleness registries pinned (class-of-four floor counts; C11 survival is capital-critical)
+     0.02  ineligible  Fast-lane Phase 5 report-only boundary: research review wording and capital-class writes stay blocked
+     0.02  ineligible  Config filter_type sync
+     0.02  ineligible  DB config usage (configure_connection after connect)
+     0.02  ineligible  Tradovate API URLs use tradovateapi.com (not tradovate.com)
+     0.02  ineligible  Pipeline never imports trading_app (one-way dependency)
+     0.02  db          Doc stats match DB ground truth
+     0.02  ineligible  Literature extracts citing research/output/ carry Mode A/B framing
+     0.02  ineligible  Profile fingerprint covers survival-verdict fields
+     0.02  db          All validated filter_types registered in ALL_FILTERS
+     0.02  ineligible  ACCOUNT_PROFILES entries must declare is_express_funded explicitly (fail-closed default)
+     0.02  ineligible  Routine-TBBO slippage pilot v1 PASS coverage in ROUTINE_TBBO_SLIPPAGE_REGISTRY (deployability inference parity)
+     0.01  db          Recent late-history GARCH feature coverage is intact
+     0.01  ineligible  NQ-mini symbol-substitution: ACCOUNT_PROFILES populated implies live wiring (PR #158 Stage 2 gate)
+     0.01  ineligible  FAST_LANE promote-queue scanner thresholds match TEMPLATE-fast-lane-v5.1.yaml (canonical-inline-copy parity)
+     0.01  db          prop_profiles deployed lanes must exist in validated_setups (active=True profiles only)
+     0.01  db          Uncovered FDR+WF strategies (FDR-validated but no live_config spec)
+     0.01  ineligible  Cherry-pick journal integrity: escalated promote_queue rows have journal entries; entries are append-only monotonic with allowed power tiers
+     0.01  ineligible  strategy-lab MCP must not re-register deprecated get_recent_fitness endpoint
+     0.01  ineligible  Worktree-guard: lease/lock path parity (CLI<->hook canonical-source delegation)
+     0.01  db          Daily features row integrity (one row per aperture per trading_day x symbol)
+     0.01  ineligible  Fast-lane promote queue provenance present: docs/runtime/promote_queue.yaml gated entries must carry structural_hash + k_lineage + n_hat with rho_hat_assumed=0.5, and STATUS_VALUES suppression tokens 
+     0.01  ineligible  Discovery scripts use get_filters_for_grid (not ALL_FILTERS)
+     0.01  ineligible  Non-bars_1m writes in ingest scripts
+     0.01  ineligible  decision-governor doc/template/composer exist, pointers resolve, routing surface threshold-free
+     0.01  ineligible  Connection leak detection
+     0.01  ineligible  Fast-lane state-graph node parity: docs/specs/fast_lane_state_graph.md '## 2. Node Inventory' must match on-disk derived state (Stage 1 of fast-lane connective-tissue plan)
+     0.01  ineligible  Broker adapters route HTTP through canonical BrokerHTTPClient (no direct requests.*)
+     0.01  ineligible  Document authority registry exists and core docs advertise their roles
+     0.01  ineligible  lane_allocation risk_cap_pts honesty invariant (0 < risk_cap_pts <= p90_orb_pts)
+     0.01  ineligible  MarketState read-only SQL guard
+     0.01  ineligible  Cherry-pick ranker HEAVYWEIGHT_T_THRESHOLD matches pre_registered_criteria.md Criterion 4 (canonical-inline-copy parity)
+     0.01  db          No active E2 strategies with look-ahead filter families
+     0.01  ineligible  Verdict-token vocabulary parity (RESEARCH_RULES.md <-> MCP server constants)
+     0.01  ineligible  No broad rglob in drift checks
+     0.01  ineligible  Context-routing registry resolves only to valid domains, profiles, views, and files
+     0.01  ineligible  CRG D4: Canonical-path function size cap (>200 lines = monster-function class)
+     0.00  db          Active validated filters remain canonical-routable for their lane
+     0.00  ineligible  lane_allocation.json displaced[] entries must have valid rejection_gate
+     0.00  ineligible  Dashboard read-only enforcement
+     0.00  ineligible  Dead instruments doc sync (docs match DEAD_ORB_INSTRUMENTS)
+     0.00  ineligible  Cryptography pin holds (FastMCP/Authlib compat)
+     0.00  ineligible  Nested subpackage isolation
+     0.00  ineligible  lane_allocation per-profile JSON must byte-equal legacy when profile_id matches (Stage 1a dual-write parity)
+     0.00  ineligible  Holdout policy declaration consistency (docs <-> canonical source)
+     0.00  ineligible  Data years disclosure (years_tested < 7)
+     0.00  ineligible  Judgment-review hooks: _CAPITAL_PATH_PREFIXES parity (nudge<->soft-block canonical-source delegation)
+     0.00  ineligible  RR resolution paths locked (LIMIT 1 / ROW_NUMBER must JOIN family_rr_locks)
+     0.00  ineligible  lane_allocation.json lanes[] must pass C8 OOS-status gate (PASSED or NULL grandfather)
+     0.00  db          Active micro-only filters run only on real-micro instruments
+     0.00  ineligible  uv.lock exists and is not a skeleton
+     0.00  db          WF coverage for MGC/MES (soft gate)
+     0.00  ineligible  Bridge METHODOLOGY_RULES_APPLIED slugs map to real RULE headings in backtesting-methodology.md (canonical-inline-copy parity)
+     0.00  db          No E0 rows in trading tables
+     0.00  db          No validated strategies below entry-model noise floor (per-strategy null, not global max)
+     0.00  ineligible  Hardcoded 'MGC' SQL literals in generic pipeline code
+     0.00  ineligible  intent-router.py routing table matches auto-skill-routing.md documented skills
+     0.00  ineligible  Graveyard status tokens parity: chatgpt_bundle/06_RD_GRAVEYARD.md `## Status Token Doctrine` block is the canonical source; every status token used in headings must be declared (Stage 2A.2 follow-up C
+     0.00  ineligible  Fast-lane structural hash schema parity: scripts/research/fast_lane_structural_hash.py HASH_SCHEMA_VERSION + HASH_SCHEMA_INPUTS must match `## 9. Hash Schema` YAML in docs/specs/fast_lane_state_graph.
+     0.00  ineligible  Stage-closed code-review nudge: _CAPITAL_PATH_PREFIXES parity (nudge<->close-nudge canonical-source delegation)
+     0.00  ineligible  Variant selection ORDER BY must use expectancy_r (not sharpe_ratio)
+     0.00  ineligible  Filter self-description coverage (every ALL_FILTERS entry has describe())
+     0.00  ineligible  FAST_LANE templates carry doctrine self-labels (v5 deprecated, v5.1 triage+not-validated)
+     0.00  db          Validator pool freshness (frozen discovery_k vs live per-session pool)
+     0.00  ineligible  Canonical-inline-copy registry: every InlineCopyPair has a live parity check + sibling-coverage tests (Layer 2 meta-check)
+     0.00  ineligible  Triage-draft provenance: every drafts/*.yaml with a triage_provenance block declares source_validated_setup_strategy_id
+     0.00  ineligible  Entry price sanity
+     0.00  ineligible  .apply() / .iterrows() in ingest scripts
+     0.00  ineligible  Generated context-routing docs stay in sync with the registry
+     0.00  ineligible  Signal log rotation: _write_signal_record delegates to SignalLogRotator (R4 fix)
+     0.00  ineligible  E2+E3 restricted to CB1 (no CB2+ for stop-market/retrace)
+     0.00  ineligible  Bot dashboard localhost-only host binding
+     0.00  ineligible  Research-derived config values need @entry-models provenance
+     0.00  ineligible  sql_adapter VALID_* sets match outcome_builder grids
+     0.00  ineligible  Preflight launchers pass explicit claim modes
+     0.00  db          No active E3 strategies (soft-retired Feb 2026)
+     0.00  ineligible  CI pytest invocations must unload pytest-timeout plugin (`-p no:timeout`); `--timeout=0` is forbidden (n=4 same-class watchdog-race close, 2026-05-25)
+     0.00  ineligible  SR state reader validates envelope before trust
+     0.00  ineligible  CHECKS list labels are ASCII-only (Windows cp1252 console crash class)
+     0.00  ineligible  AGENTS.md points cold-start agents to the deterministic context router
+     0.00  ineligible  Stale-work radar stays wired into project pulse (deep)
+     0.00  ineligible  Startup docs point non-trivial tasks at the deterministic context router
+     0.00  ineligible  CI `ruff check` (lint) must cover tests/ -- pre-commit lints staged tests but CI did not, letting test-file lint defects reach main green (n=1, 2026-06-08)
+     0.00  ineligible  Import cycle prevention
+     0.00  ineligible  ruff.toml has minimum required rules (I, B, UP)
+     0.00  ineligible  Non-5m strategy IDs include _O{minutes} suffix
+     0.00  ineligible  Phase 4 validator gate functions present (criteria 1, 2, 8, 9; 4 and 5 deferred per Amendments 2.1/2.2)
+     0.00  ineligible  Drift check shared DB connection enforcement
+     0.00  ineligible  Bot dashboard SSE single-worker invariant
+     0.00  ineligible  Project pulse exposes repo identity from canonical authority registry
+     0.00  ineligible  No silent break_ts fallback in outcome_builder (Stage 5 fail-closed lock)
+     0.00  ineligible  SR-monitor pauses on lane_overrides_*.json should be supported by current evidence (2026-05-11 stale-pause class bug)
+     0.00  ineligible  Validation gate existence
+     0.00  ineligible  SR state writer uses derived-state contract envelope
+     0.00  ineligible  pyrightconfig.json exists with basic+ mode
+     0.00  ineligible  Analytical honesty guard (sharpe_ann)
+     0.00  ineligible  Brain-consuming hooks registered in settings.json (no silent dead-hook)
+     0.00  ineligible  System authority map exists and classifies linked truth surfaces
+     0.00  ineligible  Ingest authority notice (ingest_dbn_mgc.py deprecation)
+     0.00  ineligible  .python-version file exists and matches 3.13
+     0.00  ineligible  Phase 7 live audit uses canonical runtime authorities
+     0.00  ineligible  No duplicate gold.db at project root
+     0.00  ineligible  ORB_LABELS matches SESSION_CATALOG dynamic entries
+     0.00  ineligible  db_reader cached connection enforcement
+     0.00  ineligible  compute_single_outcome canonical kwargs present (trading_day/orb_label/orb_minutes/orb_end_utc)
+     0.00  ineligible  trading_app/nested/builder.py absent (Stage 7 dead-code deletion)
+     0.00  ineligible  Session resolver sanity (valid hour/minute, incl. DST transition days)
+     0.00  ineligible  CLAUDE.md size cap
+     0.00  ineligible  Every dynamic session DOW-classified exactly once
+     0.00  ineligible  Live config spec validity (orb_label, entry_model, filter, tier)
+     0.00  ineligible  Every ORB_LABELS session present in session_guard._SESSION_ORDER
+     0.00  ineligible  DST session coverage (all sessions classified)
+     0.00  ineligible  TRADING_RULES.md authority values match code
+     0.00  ineligible  Profile daily_loss_dollars must be below the broker MLL (tier.max_dd)
+     0.00  ineligible  Cost model completeness (COST_SPECS covers all active instruments)
+     0.00  ineligible  Cost model field ranges (commission, spread, slippage, multipliers)
+     0.00  ineligible  DEPLOYABLE_ORB_INSTRUMENTS is a strict subset of ACTIVE_ORB_INSTRUMENTS
+     0.00  ineligible  Every live_funded payout policy's firm must declare max_live_accounts (data, not prose)
+     0.00  ineligible  Fast-lane trial ledger holdout sentinel parity: scripts/research/fast_lane_trial_ledger.py HOLDOUT_SACRED_FROM_SENTINEL must match trading_app.holdout_policy.HOLDOUT_SACRED_FROM.isoformat() (Stage 2A.
+     0.00  ineligible  FAST_LANE pre-flight OOS-power gate constants are present, finite, and grounded in research/oos_power.py POWER_TIERS
+     0.00  ineligible  resample_to_5m + _verify_e3_sub_bar_fill canonical home is trading_app.entry_rules
+     0.00  ineligible  Session guard ordering canonical source retained after ML removal
+     0.00  ineligible  Noise floor gate removed -- no-op since 2026-03-21 canon lock
+==============================================================================

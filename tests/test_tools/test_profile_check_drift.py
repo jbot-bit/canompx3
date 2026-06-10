@@ -63,6 +63,29 @@ def test_run_profile_returns_sorted_machine_readable_timings(monkeypatch, tmp_pa
     assert profile["over_1s_count"] == 1
     assert [item["label"] for item in profile["checks"]] == ["long db check", "short check"]
     assert profile["checks"][0]["requires_db"] is True
+    # Every row carries the cache-eligibility classification.
+    assert profile["checks"][0]["cache_eligibility"] == "db"  # requires_db
+    assert "short check" not in profile_check_drift.check_drift.CHECK_DEPS
+    assert profile["checks"][1]["cache_eligibility"] == "ineligible"  # no declared deps
+    # Footer split-by-lever is present and sums every slow row.
+    assert "slow_sum_by_cache_eligibility" in profile
+    assert abs(sum(profile["slow_sum_by_cache_eligibility"].values()) - profile["slow_sum_seconds"]) < 1e-9
+
+
+def test_cache_eligibility_classifies_via_canonical_registries(monkeypatch) -> None:
+    """The classifier delegates to check_drift's CHECK_DEPS/CHECK_TREE_DEPS — never
+    re-encodes the dep sets (institutional-rigor §4). requires_db always wins."""
+    cd = profile_check_drift.check_drift
+    monkeypatch.setattr(cd, "CHECK_DEPS", {"has_file_deps": ["a.py"]})
+    monkeypatch.setattr(cd, "CHECK_TREE_DEPS", {"has_tree_deps": {"file_deps": [], "tree_deps": []}})
+
+    # requires_db is the hard gate — beats any declared dep set.
+    assert profile_check_drift._cache_eligibility("has_file_deps", True) == "db"
+    # Declared in either registry → eligible.
+    assert profile_check_drift._cache_eligibility("has_file_deps", False) == "eligible"
+    assert profile_check_drift._cache_eligibility("has_tree_deps", False) == "eligible"
+    # No declared dep set → ineligible (default-uncacheable).
+    assert profile_check_drift._cache_eligibility("unknown_label", False) == "ineligible"
 
 
 def test_main_json_emits_parseable_contract(monkeypatch, capsys) -> None:
