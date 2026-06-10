@@ -97,10 +97,16 @@ AUTOMATION_TASKS: tuple[dict[str, str], ...] = (
     },
 )
 _RUNNING_TASK_RESULTS = {267009, 4294967295}
-LIVE_STAGE_PATHS: tuple[str, ...] = (
-    "docs/runtime/stages/2026-05-22-live-bar-ring-chart.md",
-    "docs/runtime/stages/2026-05-26-ring-orphan-startup-sweep.md",
-)
+# Live-stage acceptance gate inputs. Each path must carry a green acceptance
+# block for the strict live-readiness report to pass. Both prior entries
+# (2026-05-22 live-bar-ring-chart, 2026-05-26 ring-orphan-startup-sweep) LANDED
+# and were swept as terminal in 131c2591 ("chore(stages): sweep 54 landed/
+# terminal stage files"); their hardcoded paths were left behind and began
+# failing the gate as UNREADABLE (missing file == not green). Cleared to reflect
+# reality — completed stages are not pending blockers. Re-add a path here only
+# when a NEW live stage must gate launch; an empty tuple is vacuously green by
+# design (no pending live stages == nothing to block on).
+LIVE_STAGE_PATHS: tuple[str, ...] = ()
 
 
 def is_launch_blocking_strict_warning(warning: object) -> bool:
