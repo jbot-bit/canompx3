@@ -51,10 +51,15 @@ class TestParseQuote:
         price, vol = feed.parse_quote({"lastPrice": 100.0})
         assert vol == 1
 
-    def test_zero_volume_becomes_one(self, feed):
-        """Volume of 0 or None should become 1."""
+    def test_explicit_zero_volume_passes_through(self, feed):
+        """Explicit volume 0 must pass through as 0 (NOT coerced to 1).
+
+        Under cumulative semantics (see _cum_to_delta), 0 is a real zero-cumulative
+        reading (pre-open / no trades yet). Coercing 0→1 would corrupt the delta
+        baseline by one contract. Only a MISSING volume field defaults to 1.
+        """
         _, vol = feed.parse_quote({"lastPrice": 100.0, "volume": 0})
-        assert vol == 1
+        assert vol == 0
 
 
 class TestFlush:
@@ -262,3 +267,93 @@ class TestLivenessMonitor:
                 pytest.fail("Watcher did not exit on stale feed within 5s")
 
         assert feed._force_reconnect is True
+
+
+class TestCumulativeToDelta:
+    """Defect A: GatewayQuote.volume is cumulative session volume; the feed must
+    diff it to per-tick deltas before the aggregator (which sums deltas)."""
+
+    def test_first_reading_returns_zero_baseline(self, feed):
+        """The very first cumulative reading has no prior baseline → delta 0."""
+        assert feed._cum_to_delta(12000) == 0
+        assert feed._last_cum_volume == 12000
+
+    def test_consecutive_readings_become_deltas(self, feed):
+        """Cumulative 100 → 130 → 145 must yield deltas 0 → 30 → 15."""
+        assert feed._cum_to_delta(100) == 0
+        assert feed._cum_to_delta(130) == 30
+        assert feed._cum_to_delta(145) == 15
+
+    def test_unchanged_reading_yields_zero(self, feed):
+        """A quote with no new traded volume (same cumulative) → delta 0."""
+        feed._cum_to_delta(500)
+        assert feed._cum_to_delta(500) == 0
+
+    def test_zero_cumulative_baseline_no_off_by_one(self, feed):
+        """A session that opens with cumulative volume 0 must baseline to 0, so the
+        first real reading yields the FULL delta — not delta-1 (the parse_quote 0→1
+        coercion bug the adversarial audit flagged, data_feed.py:93)."""
+        # parse_quote must hand 0 through (not coerce to 1)
+        _, cum0 = feed.parse_quote({"lastPrice": 100.0, "volume": 0})
+        assert cum0 == 0
+        assert feed._cum_to_delta(cum0) == 0  # baseline at 0
+        assert feed._last_cum_volume == 0
+        # First real cumulative reading of 50 → full delta 50 (NOT 49)
+        _, cum50 = feed.parse_quote({"lastPrice": 100.0, "volume": 50})
+        assert feed._cum_to_delta(cum50) == 50
+
+    def test_session_reset_clamps_negative_delta_to_zero(self, feed):
+        """A cumulative reset (1000 → 50) must emit 0 and re-baseline to 50,
+        so the next reading (60) yields a correct delta of 10 — not 10-from-1000."""
+        feed._cum_to_delta(1000)
+        assert feed._cum_to_delta(50) == 0  # reset detected, re-baselined
+        assert feed._last_cum_volume == 50
+        assert feed._cum_to_delta(60) == 10
+
+    @pytest.mark.asyncio
+    async def test_realistic_per_minute_volume_via_async_quote_path(self):
+        """End-to-end through _on_quote: a minute of cumulative quotes must produce a
+        bar whose volume equals the true in-minute increment (last_cum - first_cum),
+        NOT the sum of cumulative readings (which would be billions)."""
+        from unittest.mock import patch
+
+        auth = MagicMock()
+        delivered = []
+
+        async def capture(bar):
+            delivered.append(bar)
+
+        feed = ProjectXDataFeed(auth=auth, on_bar=capture)
+        feed._symbol = "MNQ"
+
+        minute_a = datetime(2026, 6, 10, 14, 0, tzinfo=UTC)
+        minute_b = datetime(2026, 6, 10, 14, 1, tzinfo=UTC)
+
+        # Cumulative session volume climbs 1_000_000 → 1_000_300 within minute A
+        # (300 contracts actually traded), then a quote in minute B closes bar A.
+        cumulative_in_minute_a = [1_000_000, 1_000_100, 1_000_250, 1_000_300]
+        with patch("trading_app.live.projectx.data_feed.datetime") as mock_dt:
+            mock_dt.now.return_value = minute_a
+            mock_dt.side_effect = lambda *a, **k: datetime(*a, **k)
+            for cum in cumulative_in_minute_a:
+                await feed._on_quote([{"lastPrice": 21000.0, "volume": cum}])
+            # First quote in minute B → completes and emits bar A
+            mock_dt.now.return_value = minute_b
+            await feed._on_quote([{"lastPrice": 21001.0, "volume": 1_000_320}])
+
+        assert len(delivered) == 1, "exactly one completed bar expected"
+        bar_a = delivered[0]
+        # First reading was baseline (delta 0); subsequent deltas: 100 + 150 + 50 = 300.
+        # This is the true in-minute traded volume, NOT sum(cumulative) = ~4 million.
+        assert bar_a.volume == 300
+        assert bar_a.volume < 10_000, "volume must be realistic, not cumulative garbage"
+
+    def test_sync_quote_path_no_garbage_volume(self, feed):
+        """Drive the foreign-thread sync handler with cumulative quotes and assert the
+        delta conversion runs (no garbage cumulative value reaches the aggregator)."""
+        # No event loop attached → _apply_tick_state runs inline (fallback path).
+        feed._on_quote_sync([{"lastPrice": 21000.0, "volume": 5_000_000}])  # baseline
+        feed._on_quote_sync([{"lastPrice": 21000.5, "volume": 5_000_120}])  # +120
+        # The aggregator's in-progress bar should hold the delta (120), never 5_000_120.
+        assert feed._agg._current is not None
+        assert feed._agg._current.volume == 120

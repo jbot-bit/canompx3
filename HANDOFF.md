@@ -174,10 +174,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** 4feb53a6 — feat(sr-review): register Tokyo lane WATCH for live launch of topstep_50k_mnq_auto
-- **Files changed:** 2 files
-  - `docs/runtime/stages/2026-06-10-tokyo-sr-watch-review.md`
-  - `trading_app/sr_review_registry.py`
+- **Commit:** 552f756e — fix(live): convert cumulative GatewayQuote.volume to per-tick delta (Defect A)
+- **Files changed:** 3 files
+  - `docs/runtime/stages/2026-06-10-live-volume-cumulative-to-delta.md`
+  - `tests/test_trading_app/test_projectx_feed.py`
+  - `trading_app/live/projectx/data_feed.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

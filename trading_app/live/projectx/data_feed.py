@@ -12,6 +12,7 @@ Auth: JWT passed as access_token_factory to pysignalr.
 
 import asyncio
 import logging
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,16 @@ class ProjectXDataFeed(BrokerFeed):
         self._last_data_at: datetime | None = None
         self._stale_count: int = 0
         self._quote_count: int = 0
+        # Cumulative-volume → per-tick delta conversion (Defect A fix, 2026-06-10).
+        # GatewayQuote.volume is the contract's running session-cumulative total, NOT a
+        # per-quote delta. BarAggregator's contract is "volume arg = per-tick delta", so
+        # we diff consecutive cumulative readings here at the ProjectX boundary before
+        # feeding on_tick. The lock guards _last_cum_volume against the two-thread reality
+        # of this feed (pysignalr fires _on_quote on the loop thread; signalrcore fires
+        # _on_quote_sync on a foreign thread). See
+        # docs/audit/2026-06-10-data-pipeline-gap-report.md Defect A.
+        self._last_cum_volume: int | None = None
+        self._cum_volume_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -78,8 +89,43 @@ class ProjectXDataFeed(BrokerFeed):
             price = quote.get("bestBid") or quote.get("bestAsk")
         if price is None:
             raise ValueError(f"No price in quote: {quote}")
-        vol = quote.get("volume", 1)
-        return float(price), int(vol) if vol else 1
+        # volume MUST distinguish explicit 0 from a missing field. Under cumulative
+        # semantics (see _cum_to_delta), an explicit 0 is a real zero-cumulative reading
+        # (pre-open / no trades yet) and must pass through as 0 so the delta baseline is
+        # correct — coercing 0→1 silently corrupts the first real delta by one contract.
+        # A MISSING volume field (price-only bestBid/bestAsk quote) defaults to 1.
+        vol = quote.get("volume")
+        return float(price), int(vol) if vol is not None else 1
+
+    def _cum_to_delta(self, cum_volume: int) -> int:
+        """Convert a cumulative session-volume reading into a per-tick delta.
+
+        GatewayQuote.volume is the contract's running cumulative total. BarAggregator
+        expects per-tick deltas (it sums them). This diffs consecutive readings so the
+        aggregator's delta contract holds. Thread-safe via _cum_volume_lock.
+
+        Edge cases (institutional-rigor §6 — no silent reset):
+        - First reading (no baseline): set baseline, return 0. We cannot know the
+          in-minute increment for the very first quote, and 0 is honest, not a guess.
+        - delta < 0 (session reset or contract rollover re-bases the cumulative
+          counter): re-baseline to the new reading, return 0, log at WARNING. Never
+          emit negative volume.
+        """
+        with self._cum_volume_lock:
+            if self._last_cum_volume is None:
+                self._last_cum_volume = cum_volume
+                return 0
+            delta = cum_volume - self._last_cum_volume
+            if delta < 0:
+                log.warning(
+                    "Cumulative volume reset detected (%d -> %d) — re-baselining, emitting 0",
+                    self._last_cum_volume,
+                    cum_volume,
+                )
+                self._last_cum_volume = cum_volume
+                return 0
+            self._last_cum_volume = cum_volume
+            return delta
 
     def flush(self, symbol: str = "") -> Bar | None:
         """Force-close current bar at session end."""
@@ -334,7 +380,8 @@ class ProjectXDataFeed(BrokerFeed):
             if not isinstance(quote, dict):
                 continue
             try:
-                price, vol = self.parse_quote(quote)
+                price, cum_vol = self.parse_quote(quote)
+                vol = self._cum_to_delta(cum_vol)
                 now = datetime.now(UTC)
                 self._last_data_at = now
                 self._quote_count += 1
@@ -378,7 +425,10 @@ class ProjectXDataFeed(BrokerFeed):
             if not isinstance(quote, dict):
                 continue
             try:
-                price, vol = self.parse_quote(quote)
+                price, cum_vol = self.parse_quote(quote)
+                # _cum_to_delta is thread-safe (has internal lock) — safe to call on
+                # this foreign signalr thread before the call_soon_threadsafe bridge.
+                vol = self._cum_to_delta(cum_vol)
                 now = datetime.now(UTC)
                 # on_tick is thread-safe (has internal lock)
                 bar = self._agg.on_tick(price, vol, now)
