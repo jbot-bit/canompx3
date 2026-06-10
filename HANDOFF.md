@@ -174,13 +174,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** 7146a6d0 — test(survival): survival-cap sweep Stage 1 - tests + ceiling-reducer extract + audit fix
-- **Files changed:** 5 files
-  - `HANDOFF.md`
-  - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift_survival_cap_sweep_guard.py`
-  - `tests/test_trading_app/test_account_survival.py`
-  - `trading_app/account_survival.py`
+- **Commit:** 56767024 — fix(preflight): clear stale live-stage gate refs to swept terminal stages
+- **Files changed:** 1 files
+  - `scripts/tools/live_readiness_report.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
