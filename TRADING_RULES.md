@@ -14,7 +14,7 @@ verification - absent source => UNSUPPORTED).
 
 ## Glossary
 
-### Sessions (ORB Labels — 12 total, all dynamic/event-based)
+### Sessions (ORB Labels — 13 total, all dynamic/event-based)
 
 All sessions are now dynamic/event-based. Times are resolved per-day from `pipeline/dst.py` SESSION_CATALOG, eliminating DST contamination.
 
@@ -93,12 +93,14 @@ Example (E1): 10pt ORB + 2pt overshoot = 12pt risk, RR2.0 = 24pt target, 12pt st
 | Sharpe | Risk-adjusted return. Above 0.15 = decent. |
 | MaxDD | Maximum drawdown in R. Worst peak-to-trough. |
 | MGC | Micro Gold futures. $10/point, $5.74 RT friction. |
-| MNQ | Micro Nasdaq futures. $2/point, $2.74 RT friction. |
-| MES | Micro S&P 500 futures. $5/point, $3.74 RT friction. |
+| MNQ | Micro Nasdaq futures. $2/point, $2.92 RT friction. |
+| MES | Micro S&P 500 futures. $5/point, $3.92 RT friction. |
 | M2K | Micro Russell 2000 futures. $5/point, $3.24 RT friction. Source: RTY (E-mini Russell) for better coverage. |
 | MCL | Micro Crude Oil futures. NO EDGE (0 validated). |
 | M6E | Micro EUR/USD futures. 12,500 EUR contract. $12,500/point. $3.74 RT friction (~3 pips). Quarterly cycle (H/M/U/Z). Tick: 0.00005 = $0.625/tick. Size filters in pips (M6E_G4/G6/G8). **ORB breakout NO-GO** (0/2064 validated, Feb 2026). Data in DB for other research. |
 | Edge family | Group of strategies with identical trade days. 1 head per family. |
+
+*RT friction $ values are the live `total_friction` from `pipeline/cost_model.py` COST_SPECS (commission_rt + spread_doubled + slippage). Canonical — never cite from memory; query `pipeline.cost_model.COST_SPECS[<sym>].total_friction`. Last reconciled 2026-06-10 (MNQ/MES updated per audit-finding F-4, Apr 2026 commission revision).*
 
 ### Reading a Strategy ID
 `MGC_LONDON_METALS_E3_RR2.0_CB2_ORB_G4` = Micro Gold, London metals open, limit retrace entry, 2:1 target, 2 confirm bars, ORB >= 4pt filter.
