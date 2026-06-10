@@ -174,10 +174,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** c18fb173 — docs(trading-rules): reconcile RT friction + session count vs canonical code
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `TRADING_RULES.md`
+- **Commit:** ebb122ed — @ docs(claude): compress Task Routing / Default Mode / Shell / grounding to fit 12KB cap
+- **Files changed:** 1 files
+  - `CLAUDE.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

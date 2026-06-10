@@ -1048,6 +1048,67 @@ def _max_observed_rolling_drawdown(scenarios: list[DailyScenario], *, horizon_da
     return round(max_dd, 2)
 
 
+@dataclass(frozen=True)
+class _GateEvaluation:
+    """Canonical Criterion 11 gate verdict for one (scenarios, rules, sim-result).
+
+    Single source of truth for "does this configuration survive": both
+    ``evaluate_profile_survival`` and ``sweep_survival_cap`` resolve the gate
+    through ``_evaluate_gate`` so the sweep can NEVER drift from the real
+    evaluation's pass criteria (institutional-rigor § 4 — one definition, never
+    re-encode).
+    """
+
+    gate_pass: bool
+    operational_gate_pass: bool
+    strict_account_gate_pass: bool
+    operational_pass_probability: float
+    effective_dd_budget_dollars: float
+    historical_daily_loss_breach_days: list[str]
+    historical_max_observed_90d_dd_dollars: float
+
+
+def _evaluate_gate(
+    scenarios: list[DailyScenario],
+    rules: SurvivalRules,
+    result: dict,
+    profile: AccountProfile,
+    *,
+    min_survival_probability: float,
+    sizing_parity_ok: bool,
+) -> _GateEvaluation:
+    """Resolve the canonical C11 gate verdict for one simulated configuration.
+
+    Pure extract of the verdict math previously inline in
+    ``evaluate_profile_survival`` (D-3 survival-cap sweep Stage 1). The sizing-
+    parity gate is passed in (not recomputed here) because parity is a per-
+    PROFILE property — it does not vary with the swept contract count, so the
+    sweep evaluates it once and reuses the verdict across all ``n``.
+    """
+    operational_pass_probability = round(result["operational_pass_probability"], 4)
+    effective_dd_budget_dollars = effective_strict_dd_budget(profile, rules)
+    historical_daily_loss_breach_days = _historical_daily_loss_breach_days(scenarios, rules)
+    historical_max_observed_90d_dd_dollars = _max_observed_rolling_drawdown(
+        scenarios,
+        horizon_days=STRICT_DD_HORIZON_DAYS,
+    )
+    operational_gate_pass = operational_pass_probability >= float(min_survival_probability)
+    strict_account_gate_pass = (
+        len(historical_daily_loss_breach_days) == 0
+        and historical_max_observed_90d_dd_dollars <= effective_dd_budget_dollars
+    )
+    gate_pass = operational_gate_pass and strict_account_gate_pass and sizing_parity_ok
+    return _GateEvaluation(
+        gate_pass=gate_pass,
+        operational_gate_pass=operational_gate_pass,
+        strict_account_gate_pass=strict_account_gate_pass,
+        operational_pass_probability=operational_pass_probability,
+        effective_dd_budget_dollars=effective_dd_budget_dollars,
+        historical_daily_loss_breach_days=historical_daily_loss_breach_days,
+        historical_max_observed_90d_dd_dollars=historical_max_observed_90d_dd_dollars,
+    )
+
+
 def _assert_sizing_parity(profile_id: str) -> tuple[bool, str]:
     """D-3 sizing-parity guard for Criterion 11 (D-3 seam Stage 1, 2026-06-07).
 
@@ -1106,18 +1167,6 @@ def evaluate_profile_survival(
     scenarios, metadata = _load_profile_daily_scenarios(resolved_profile_id, as_of_date=as_of_date, db_path=db_path)
     rules = _with_consistency_rule(_build_rules(profile), profile)
     result = simulate_survival(scenarios, rules, horizon_days=horizon_days, n_paths=n_paths, seed=seed)
-    operational_pass_probability = round(result["operational_pass_probability"], 4)
-    effective_dd_budget_dollars = effective_strict_dd_budget(profile, rules)
-    historical_daily_loss_breach_days = _historical_daily_loss_breach_days(scenarios, rules)
-    historical_max_observed_90d_dd_dollars = _max_observed_rolling_drawdown(
-        scenarios,
-        horizon_days=STRICT_DD_HORIZON_DAYS,
-    )
-    operational_gate_pass = operational_pass_probability >= float(min_survival_probability)
-    strict_account_gate_pass = (
-        len(historical_daily_loss_breach_days) == 0
-        and historical_max_observed_90d_dd_dollars <= effective_dd_budget_dollars
-    )
     # D-3 sizing-parity guard (seam Stage 1): the survival sim now sizes like the
     # live engine (vol-scaled, capped). Fail the gate closed only when parity is
     # unprovable — the portfolio can't be built or its equity is non-positive (a
@@ -1125,7 +1174,20 @@ def evaluate_profile_survival(
     sizing_parity_ok, sizing_parity_msg = _assert_sizing_parity(resolved_profile_id)
     if not sizing_parity_ok:
         log.warning("Criterion 11 sizing-parity guard: %s", sizing_parity_msg)
-    gate_pass = operational_gate_pass and strict_account_gate_pass and sizing_parity_ok
+    gate = _evaluate_gate(
+        scenarios,
+        rules,
+        result,
+        profile,
+        min_survival_probability=min_survival_probability,
+        sizing_parity_ok=sizing_parity_ok,
+    )
+    operational_pass_probability = gate.operational_pass_probability
+    effective_dd_budget_dollars = gate.effective_dd_budget_dollars
+    historical_daily_loss_breach_days = gate.historical_daily_loss_breach_days
+    historical_max_observed_90d_dd_dollars = gate.historical_max_observed_90d_dd_dollars
+    strict_account_gate_pass = gate.strict_account_gate_pass
+    gate_pass = gate.gate_pass
 
     summary = SurvivalSummary(
         profile_id=resolved_profile_id,
@@ -1195,6 +1257,210 @@ def evaluate_profile_survival(
         out_path.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
 
     return summary
+
+
+# Maximum contract ceiling the sweep will probe. The sweep is bounded (Bailey-
+# style — never an unbounded search); 1..DEFAULT_SWEEP_CEILING covers the
+# realistic micro-futures lane sizes. Non-binding while DEPLOYED_MAX_CONTRACTS_CLAMP=1.
+DEFAULT_SWEEP_CEILING = 5
+
+
+@dataclass(frozen=True)
+class SurvivalCapSweepResult:
+    """Result of probing contract caps {1..ceiling} against the C11 survival gate.
+
+    ``survival_safe_ceiling`` is the LARGEST contract count, contiguous from 1,
+    for which the gate still PASSes. Fail-closed to 1: if even cap=1 fails, or any
+    cap below the first failure passes non-contiguously, only the contiguous-from-1
+    passing run is honored (a gap means a higher cap that "passes" cannot be
+    trusted — survival is not monotonic in cap once a strict-DD belt trips).
+    """
+
+    profile_id: str
+    ceiling_probed: int
+    survival_safe_ceiling: int
+    sizing_parity_ok: bool
+    sizing_parity_msg: str
+    per_cap: list[dict]  # [{contracts, gate_pass, operational_pass_probability, ...}]
+
+
+def sweep_survival_cap(
+    profile_id: str | None = None,
+    *,
+    ceiling: int = DEFAULT_SWEEP_CEILING,
+    as_of_date: date | None = None,
+    horizon_days: int = 90,
+    n_paths: int = 10_000,
+    seed: int = 0,
+    db_path: Path | None = None,
+    min_survival_probability: float = MIN_SURVIVAL_PROBABILITY,
+    write_state: bool = True,
+) -> SurvivalCapSweepResult:
+    """Probe contract caps {1..ceiling} and persist the survival-safe ceiling.
+
+    On-demand only (NOT folded into ``evaluate_profile_survival`` — it reruns the
+    sim per ``n``, ``ceiling``x the cost). For each ``n`` it rebuilds the SAME
+    historical scenarios under ``SizingContext(max_contracts_by_strategy={sid: n})``
+    and runs the canonical ``simulate_survival`` + ``_evaluate_gate`` — it
+    re-encodes ZERO sim or gate math (institutional-rigor § 4). The result is the
+    largest cap, contiguous from 1, whose gate still PASSes.
+
+    At ``DEPLOYED_MAX_CONTRACTS_CLAMP=1`` this is pure deploy-readiness EVIDENCE —
+    the live order path is clamped to 1 regardless of the swept ceiling. The swept
+    ceiling is persisted into the existing Criterion 11 state envelope so the drift
+    guard can prove any future non-1 live cap traces to a swept-and-passed value.
+    """
+    if ceiling < 1:
+        raise ValueError(f"ceiling must be >= 1, got {ceiling}")
+    if as_of_date is None:
+        as_of_date = date.today()
+
+    resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
+    profile = get_profile(resolved_profile_id)
+    rules = _with_consistency_rule(_build_rules(profile), profile)
+
+    # Sizing-parity is a per-PROFILE property (does the portfolio build with
+    # positive equity) — invariant to the swept cap. Evaluate once, reuse across n.
+    sizing_parity_ok, sizing_parity_msg = _assert_sizing_parity(resolved_profile_id)
+    if not sizing_parity_ok:
+        log.warning("Criterion 11 sizing-parity guard (sweep): %s", sizing_parity_msg)
+
+    lane_defs = get_profile_lane_definitions(resolved_profile_id)
+    instruments = sorted({lane["instrument"] for lane in lane_defs})
+
+    from trading_app.prop_profiles import load_allocation_lanes
+
+    lane_specs = profile.daily_lanes or load_allocation_lanes(resolved_profile_id)
+    effective_stop_by_strategy = {
+        lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier) for lane in lane_specs
+    }
+    _pf = build_profile_portfolio(profile_id=resolved_profile_id)
+    strategy_ids = [s.strategy_id for s in _pf.strategies]
+
+    db = db_path or GOLD_DB_PATH
+    con = duckdb.connect(str(db), read_only=True)
+    configure_connection(con)
+    per_cap: list[dict] = []
+    try:
+        for n in range(1, ceiling + 1):
+            size_model = SizingContext(
+                account_equity=_pf.account_equity,
+                risk_per_trade_pct=_pf.risk_per_trade_pct,
+                account_size=profile.account_size,
+                max_contracts_by_strategy={sid: n for sid in strategy_ids},
+            )
+            scenarios, _meta = _scenarios_for_context(
+                con,
+                profile=profile,
+                lane_defs=lane_defs,
+                instruments=instruments,
+                effective_stop_by_strategy=effective_stop_by_strategy,
+                as_of_date=as_of_date,
+                size_model=size_model,
+            )
+            result = simulate_survival(scenarios, rules, horizon_days=horizon_days, n_paths=n_paths, seed=seed)
+            gate = _evaluate_gate(
+                scenarios,
+                rules,
+                result,
+                profile,
+                min_survival_probability=min_survival_probability,
+                sizing_parity_ok=sizing_parity_ok,
+            )
+            per_cap.append(
+                {
+                    "contracts": n,
+                    "gate_pass": gate.gate_pass,
+                    "operational_gate_pass": gate.operational_gate_pass,
+                    "strict_account_gate_pass": gate.strict_account_gate_pass,
+                    "operational_pass_probability": gate.operational_pass_probability,
+                    "historical_max_observed_90d_dd_dollars": gate.historical_max_observed_90d_dd_dollars,
+                    "effective_dd_budget_dollars": gate.effective_dd_budget_dollars,
+                }
+            )
+    finally:
+        con.close()
+
+    # Largest cap CONTIGUOUS from 1 that passes. Survival is not guaranteed
+    # monotonic in cap once a strict-DD belt trips, so a pass ABOVE a failure
+    # cannot be honored — only the unbroken run from cap=1 counts. If even cap=1
+    # fails, ceiling is 0: a fail-closed signal the operator must see (the profile
+    # cannot survive at ANY size). per_cap is ordered 1..ceiling by construction.
+    survival_safe_ceiling = 0
+    for entry in per_cap:
+        if entry["gate_pass"]:
+            survival_safe_ceiling = entry["contracts"]
+        else:
+            break
+
+    sweep = SurvivalCapSweepResult(
+        profile_id=resolved_profile_id,
+        ceiling_probed=ceiling,
+        survival_safe_ceiling=survival_safe_ceiling,
+        sizing_parity_ok=sizing_parity_ok,
+        sizing_parity_msg=sizing_parity_msg,
+        per_cap=per_cap,
+    )
+
+    if write_state:
+        _persist_sweep_into_c11_envelope(resolved_profile_id, sweep, db_path=db_path)
+
+    return sweep
+
+
+def _persist_sweep_into_c11_envelope(
+    profile_id: str,
+    sweep: SurvivalCapSweepResult,
+    *,
+    db_path: Path | None = None,
+) -> None:
+    """Merge the swept-ceiling result into the existing C11 state envelope.
+
+    Additive: writes a ``survival_cap_sweep`` block into the existing
+    ``account_survival_<profile>.json`` payload, leaving the ``summary`` /
+    ``rules`` / ``metadata`` produced by ``evaluate_profile_survival`` intact. The
+    envelope is RE-STAMPED through ``build_state_envelope`` so its canonical_inputs
+    fingerprints (db_identity, code_fingerprint, profile_fingerprint) cover the
+    moment the sweep was computed — a stale sweep then invalidates exactly like a
+    stale summary. Requires the base report to exist (the sweep is supplementary
+    evidence ON a profile that already has a survival report); raises otherwise so
+    a missing base report is never silently masked.
+    """
+    report_path = get_survival_report_path(profile_id)
+    if not report_path.exists():
+        raise FileNotFoundError(
+            f"cannot persist sweep: base C11 report missing for {profile_id!r} "
+            f"({report_path}). Run evaluate_profile_survival first."
+        )
+    raw = json.loads(report_path.read_text(encoding="utf-8"))
+    payload = raw.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError(f"cannot persist sweep: C11 report for {profile_id!r} has no versioned payload")
+
+    payload = dict(payload)
+    payload["survival_cap_sweep"] = {
+        "ceiling_probed": sweep.ceiling_probed,
+        "survival_safe_ceiling": sweep.survival_safe_ceiling,
+        "sizing_parity_ok": sweep.sizing_parity_ok,
+        "per_cap": sweep.per_cap,
+        "computed_at_utc": datetime.now(UTC).isoformat(),
+    }
+
+    freshness = raw.get("freshness", {})
+    as_of = freshness.get("as_of_date") if isinstance(freshness, dict) else None
+    envelope = build_state_envelope(
+        schema_version=CRITERION11_STATE_SCHEMA_VERSION,
+        state_type=CRITERION11_STATE_TYPE,
+        tool="account_survival",
+        canonical_inputs=_current_survival_canonical_inputs(profile_id, db_path=db_path),
+        freshness={
+            "as_of_date": as_of or str(date.today()),
+            "max_age_days": DEFAULT_REPORT_MAX_AGE_DAYS,
+        },
+        payload=payload,
+        git_head=get_git_head(Path(__file__).resolve().parents[1]),
+    )
+    report_path.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
 
 
 def check_survival_report_gate(

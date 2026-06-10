@@ -7914,6 +7914,137 @@ def check_active_profiles_survival_state_current(con=None) -> list[str]:  # noqa
     return []
 
 
+def _deployed_max_contracts_clamp_literal(root: Path) -> int | None:
+    """AST-read the ``DEPLOYED_MAX_CONTRACTS_CLAMP`` literal from portfolio.py.
+
+    Parses source (not import) — a drift check must not execute production code to
+    learn the clamp. Returns the int literal, or ``None`` if it cannot be resolved
+    (missing file, parse error, non-literal assignment) so the caller fails CLOSED
+    (treat an unresolvable clamp as a potential live cap that needs proof).
+    """
+    portfolio_path = root / "trading_app" / "portfolio.py"
+    try:
+        tree = ast.parse(portfolio_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "DEPLOYED_MAX_CONTRACTS_CLAMP":
+                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, int):
+                        return node.value.value
+                    return None  # non-literal — cannot prove safe, fail closed
+    return None
+
+
+def check_live_contract_cap_traces_to_swept_ceiling() -> list[str]:
+    """BLOCKING (capital gate): a live contract cap > 1 must trace to a persisted,
+    survival-PASSED swept ceiling for every active profile.
+
+    Stage 1 of the survival-cap sweep (D-3). The live order path is gated by
+    ``DEPLOYED_MAX_CONTRACTS_CLAMP`` (trading_app/portfolio.py). While that clamp is
+    1, no lane can size above 1 contract and this check is a NO-OP PASS (there is no
+    non-1 live cap to justify). The moment the clamp is lifted to N>1, this check
+    REQUIRES each active profile to carry a persisted ``survival_cap_sweep`` whose
+    ``survival_safe_ceiling >= N`` — proving the higher size was probed against the
+    Monte-Carlo survival gate and PASSED, not merely asserted.
+
+    FAIL DIRECTION (feedback_capital_guard_fail_direction_matters): every
+    unresolved condition fails CLOSED (BLOCK). A clamp we cannot read, a missing
+    sweep, a stale/unparseable report, or a ceiling below the clamp all BLOCK. A
+    false BLOCK is a safe inconvenience; a false PASS would let real capital size up
+    on unproven survival math.
+    """
+    clamp = _deployed_max_contracts_clamp_literal(PROJECT_ROOT)
+    if clamp is None:
+        return [
+            "  cannot resolve DEPLOYED_MAX_CONTRACTS_CLAMP literal in trading_app/portfolio.py "
+            "(missing/non-literal) — failing closed; a live contract cap cannot be verified."
+        ]
+    if clamp <= 1:
+        # Clamp at 1: the live order path cannot size above a single contract, so no
+        # swept-ceiling proof is required. No-op pass (the common case today).
+        return []
+
+    # Clamp lifted above 1 — every active profile must PROVE the higher cap survives.
+    try:
+        from trading_app.account_survival import read_survival_report_state
+        from trading_app.prop_profiles import get_active_profile_ids
+    except Exception as exc:  # noqa: BLE001
+        return [
+            f"  DEPLOYED_MAX_CONTRACTS_CLAMP={clamp} (>1) but could not import survival/profile "
+            f"modules to verify swept ceilings ({exc}) — failing closed."
+        ]
+
+    try:
+        active_ids = get_active_profile_ids()
+    except Exception as exc:  # noqa: BLE001
+        return [
+            f"  DEPLOYED_MAX_CONTRACTS_CLAMP={clamp} (>1) but could not resolve active profiles "
+            f"({exc}) — failing closed."
+        ]
+
+    violations: list[str] = []
+    for profile_id in active_ids:
+        try:
+            state = read_survival_report_state(profile_id)
+        except Exception as exc:  # noqa: BLE001
+            violations.append(
+                f"  profile {profile_id!r}: survival state unreadable ({type(exc).__name__}: {exc}) "
+                f"while clamp={clamp}>1 — failing closed."
+            )
+            continue
+        if not state.get("valid"):
+            violations.append(
+                f"  profile {profile_id!r}: survival report not valid/current "
+                f"({state.get('reason')}) while clamp={clamp}>1 — re-run the survival sweep."
+            )
+            continue
+        # The sweep block is persisted at payload level as a sibling of `summary`;
+        # read_survival_report_state validates the envelope but only surfaces
+        # summary/rules/metadata, so read the sweep block from the same envelope.
+        sweep_block = _read_sweep_block(profile_id)
+        if not sweep_block:
+            violations.append(
+                f"  profile {profile_id!r}: clamp={clamp}>1 but NO persisted survival_cap_sweep "
+                f"exists — run account_survival.sweep_survival_cap before lifting the clamp."
+            )
+            continue
+        ceiling = sweep_block.get("survival_safe_ceiling")
+        if not isinstance(ceiling, int) or ceiling < clamp:
+            violations.append(
+                f"  profile {profile_id!r}: survival_safe_ceiling={ceiling} < clamp={clamp} — "
+                f"the live cap exceeds the survival-PASSED ceiling. Lower the clamp or re-sweep."
+            )
+    return violations
+
+
+def _read_sweep_block(profile_id: str) -> dict | None:
+    """Read the persisted ``survival_cap_sweep`` payload block for one profile.
+
+    Returns the block dict or ``None`` if absent/unreadable. The canonical
+    ``read_survival_report_state`` validates the envelope but only surfaces
+    ``summary``/``rules``/``metadata``; the sweep is a sibling payload key, so this
+    reads it directly from the same envelope path used by that reader.
+    """
+    import json
+
+    try:
+        from trading_app.account_survival import get_survival_report_path
+
+        report_path = get_survival_report_path(profile_id)
+        if not report_path.exists():
+            return None
+        raw = json.loads(report_path.read_text(encoding="utf-8"))
+        payload = raw.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        block = payload.get("survival_cap_sweep")
+        return block if isinstance(block, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def check_live_funded_firms_declare_max_live_accounts() -> list[str]:
     """Every firm with a ``live_funded`` payout policy must declare the hard
     live-account cap as structured data.
@@ -16515,6 +16646,12 @@ CHECKS = [
         True,
         True,
     ),  # ADVISORY, requires_db
+    (
+        "Live contract cap >1 must trace to a survival-passed swept ceiling (D-3 sweep Stage 1)",
+        check_live_contract_cap_traces_to_swept_ceiling,
+        False,
+        False,
+    ),  # BLOCKING, no_db (AST-reads clamp; only touches DB-derived state when clamp>1)
     (
         "Variant selection ORDER BY must use expectancy_r (not sharpe_ratio)",
         check_variant_selection_metric,
