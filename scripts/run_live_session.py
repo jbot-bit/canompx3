@@ -602,6 +602,18 @@ def main() -> None:
             )
         try:
             asyncio.run(runner.run())
+        except KeyboardInterrupt:
+            # Clean teardown for a CLI Ctrl+C in multi-instrument mode. Mirrors
+            # the proven single-instrument clause (:727-739): swallow the KI and
+            # log one clean line instead of dumping a multi-frame traceback — a
+            # stop is a normal operator action, not a crash. The finally below
+            # still runs (post_session + lock release), so teardown is unchanged.
+            # Teardown only — open positions stay on their server-side broker
+            # bracket. NOTE: the dashboard STOP button sends SIGTERM, which has
+            # no handler in this branch (registered only on the single-instrument
+            # path at :709-723); that graceful path is the stop-file watcher in
+            # data_feed.py. This clause closes the *Ctrl+C* gap specifically.
+            log.info("Session stopped (clean teardown — open positions remain on broker bracket)")
         finally:
             runner.post_session()
             release_instance_lock()

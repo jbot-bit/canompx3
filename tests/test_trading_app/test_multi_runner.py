@@ -240,6 +240,46 @@ class TestProfileInjection:
         assert call_kwargs.get("portfolio") is None
 
 
+class TestMultiInstrumentStopNoTraceback:
+    """A Ctrl+C (KeyboardInterrupt) in multi-instrument mode must tear down
+    cleanly — no traceback propagating out of main(), and the finally cleanup
+    must still run. Mirrors the proven single-instrument clause at
+    run_live_session.py:727-739. Hermetic: no broker / live-data connect."""
+
+    def test_keyboardinterrupt_in_all_mode_no_traceback(self, caplog):
+        import logging
+
+        import scripts.run_live_session as rls
+
+        mock_runner = MagicMock()
+        mock_runner.run = AsyncMock()
+
+        # MultiInstrumentRunner is imported inside the --all branch, so patch it
+        # at its source module (not as an attr of rls).
+        with (
+            patch.object(rls.sys, "argv", ["run_live_session.py", "--all", "--signal-only"]),
+            patch(
+                "trading_app.live.multi_runner.MultiInstrumentRunner",
+                return_value=mock_runner,
+            ),
+            patch.object(rls, "acquire_instance_lock"),
+            patch.object(rls, "release_instance_lock"),
+            patch.object(rls, "_print_mode_banner"),
+            patch.object(rls, "_sweep_startup_orphan_rings"),
+            patch.object(rls.asyncio, "run", side_effect=KeyboardInterrupt),
+        ):
+            with caplog.at_level(logging.INFO):
+                # MUST NOT raise — KeyboardInterrupt has to be swallowed here.
+                rls.main()
+
+        # finally cleanup ran despite the interrupt (fail-closed teardown)
+        mock_runner.post_session.assert_called_once()
+        # a single clean log line, not a multi-frame traceback
+        assert any("stopped" in r.message.lower() or "teardown" in r.message.lower() for r in caplog.records), (
+            f"expected a clean stop log line, got: {[r.message for r in caplog.records]}"
+        )
+
+
 class TestStopFileRaceCondition:
     """Verify stop-file is NOT deleted by individual feeds."""
 
