@@ -382,14 +382,14 @@ Databento .dbn.zst
   → build_daily_features.py → daily_features (34K rows)
   → outcome_builder.py  → orb_outcomes (8.4M rows)
   → strategy_discovery.py → experimental_strategies
-  → strategy_validator.py → validated_setups (11 rows, all MNQ)
-  → build_edge_families.py → edge_families (0 rows — needs rebuild)
+  → strategy_validator.py → validated_setups (871 rows: MNQ 793, MES 48, MGC 13, GC 17)
+  → build_edge_families.py → edge_families (528 rows: MNQ 475, MES 47, MGC 6 — built/verified 2026-06-11)
   # ML meta_label step removed 2026-04-11 (V1/V2/V3 DEAD — see § 5, § 6)
   → portfolio builder    → Portfolio object
   → paper_trader.py      → trade journal
 ```
 
-Row counts verified 2026-03-21. Commands: `docs/ARCHITECTURE.md`.
+Row counts: pipeline-tail (validated_setups, edge_families) verified 2026-06-11; upstream bar/feature counts as of 2026-03-21. Commands: `docs/ARCHITECTURE.md`.
 
 **Rebuild dependencies:** Outcomes depend on daily_features. Discovery depends on outcomes. Validation depends on discovery. Edge families depend on validation. ML depends on outcomes + daily_features. Pipeline is ONE-WAY (pipeline/ → trading_app/, never reversed).
 
@@ -408,7 +408,7 @@ Row counts verified 2026-03-21. Commands: `docs/ARCHITECTURE.md`.
 | Confluence univariate scan | Gate 3 (tested) | 48 BH FDR survivors, 25/25 WF DEPLOYABLE. New-on-new stacking DEAD (0/8 OOS). Deployed+new & veto UNTESTED. | No |
 | 2026 holdout test | Gate 5 (monitoring) | Apr 2026 forward data collecting. Pre-registered strategies deployed. | Time-gated |
 | Simple regime filter (ATR>50pct) | Gate 2 (untested) | Run quartile comparison vs ML. Lower complexity alternative. | Deferred |
-| Edge families rebuild | Infrastructure | Run build_edge_families.py (0 rows currently) | Needed for fitness tracking |
+| Edge families | Infrastructure (DONE) | Built/verified 2026-06-11: 528 families (MNQ 475, MES 47, MGC 6), 0 orphans/0 dead heads. Auto-rebuilt by strategy_validator on each validation. | No |
 
 **⚠ This table goes stale fast. When starting a session, query the actual state rather than trusting these rows.**
 
