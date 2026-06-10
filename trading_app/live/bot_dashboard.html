@@ -2142,8 +2142,13 @@
   }
 
   /* Grow the chart to fill the screen — a trader stares at the chart, it
-     should dominate, not float above dead space. */
-  body:not(:has(#focus-toggle:checked)) #chart-host { min-height: 64vh; }
+     should dominate, not float above dead space. The calc() cap reserves room
+     for the ~28px time-axis strip + the chrome above the cockpit (header,
+     banner, quick-stats ≈ 380px) so the bottom time labels are never pushed
+     past the fold or hidden behind the P&L strip. 64vh still wins on a tall
+     viewport (the trader-dominates intent); the cap only bites when the window
+     is short enough that the axis would otherwise clip. */
+  body:not(:has(#focus-toggle:checked)) #chart-host { min-height: min(64vh, calc(100vh - 380px)); }
 
   /* KILL ALL is the emergency control (research: one-click kill prevents
      revenge trading). Make it unmistakable vs the quiet REFRESH/PREFLIGHT. */
@@ -3050,6 +3055,10 @@
     <div class="chart-cockpit-hd">
       <span class="chart-cockpit-title">Live Chart</span>
       <span id="chart-cockpit-instr" class="chart-cockpit-instr">—</span>
+      <!-- Live/stale heartbeat dot. No dedicated JS: applyHeartbeat() drives
+           every `.hb-dot` via querySelectorAll, so this span colors itself
+           (fresh<2s / alive<5s / stale<15s / dead) off the same SSE feed. -->
+      <span id="chart-hb-dot" class="hb-dot" style="margin-left:8px;" title="Live feed heartbeat"></span>
       <span id="chart-cockpit-orb" class="chart-cockpit-orb"></span>
       <span id="chart-cockpit-orb-rel" class="chart-cockpit-orb"></span>
       <span class="chart-tf-group" role="group" aria-label="Timeframe">
