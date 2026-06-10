@@ -96,11 +96,23 @@ class TestTargetParsing:
         assert op == "worktree"
         assert target == "/c/victim"
 
+    def test_parse_worktree_remove_quoted_target_with_spaces(self) -> None:
+        hook = _load_hook()
+        op, target = hook._parse_destroy_target('git worktree remove "C:/tmp/my tree"')
+        assert op == "worktree"
+        assert target == "C:/tmp/my tree"
+
     def test_parse_branch_delete_target(self) -> None:
         hook = _load_hook()
         op, target = hook._parse_destroy_target("git branch -D feature/x")
         assert op == "branch"
         assert target == "feature/x"
+
+    def test_parse_branch_delete_quoted_target_with_spaces(self) -> None:
+        hook = _load_hook()
+        op, target = hook._parse_destroy_target('git branch -D "feature with space"')
+        assert op == "branch"
+        assert target == "feature with space"
 
     def test_parse_branch_force_delete_capital_d(self) -> None:
         hook = _load_hook()
@@ -210,6 +222,7 @@ class TestFailOpenPolarity:
         """Genuine brain unavailability is the ONLY exit-0-on-uncertainty path."""
         hook = _load_hook()
         monkeypatch.setattr(hook, "_load_fleet_state", lambda: None)
+        monkeypatch.setattr(hook, "_live_unpushed_count", lambda op, t, st: 0)
         monkeypatch.setattr("sys.stdin", StringIO(json.dumps(_event("git worktree remove /c/victim"))))
         with pytest.raises(SystemExit) as exc:
             hook.main()

@@ -63,6 +63,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -91,7 +92,10 @@ def _git_argv(seg: str) -> list[str] | None:
     Skips leading env assignments (FOO=bar git ...) and value-consuming global
     flags (git -C <path> ...). Mirrors the worktree_guard.py tokenizer.
     """
-    toks = seg.strip().split()
+    try:
+        toks = [_strip_wrapping_quotes(tok) for tok in shlex.split(seg.strip(), posix=False)]
+    except ValueError:
+        toks = seg.strip().split()
     if not toks:
         return None
     i = 0
@@ -117,6 +121,12 @@ def _git_argv(seg: str) -> list[str] | None:
             continue
         break
     return rest[j:]
+
+
+def _strip_wrapping_quotes(token: str) -> str:
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in {'"', "'"}:
+        return token[1:-1]
+    return token
 
 
 def _parse_destroy_target(command: str) -> tuple[str | None, str | None]:
