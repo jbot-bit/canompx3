@@ -174,10 +174,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** ce3f547c — START_BOT.bat: auto-refresh stale C11/C12 control state on DEMO launch
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `START_BOT.bat`
+- **Commit:** 73ba5a90 — @ docs(plans): overall cleanup & action plan — live-readiness first
+- **Files changed:** 1 files
+  - `docs/plans/2026-06-10-overall-cleanup-action-plan.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
