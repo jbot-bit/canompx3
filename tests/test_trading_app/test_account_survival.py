@@ -336,6 +336,7 @@ def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots(
             mae_dollars=20.0,
             mfe_dollars=60.0,
             lots=1,
+            risk_points=10.0,  # not sizing-sensitive here (no size_model) — present to satisfy the required field
             contracts=10,
             instrument="MNQ",
         ),
@@ -348,6 +349,7 @@ def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots(
             mae_dollars=15.0,
             mfe_dollars=5.0,
             lots=2,
+            risk_points=10.0,  # not sizing-sensitive here (no size_model) — present to satisfy the required field
             contracts=20,
             instrument="MNQ",
         ),
@@ -1123,6 +1125,7 @@ def test_d3_null_atr_day_falls_back_to_scalar_one_not_fail(monkeypatch):
             mae_dollars=20.0,
             mfe_dollars=60.0,
             lots=1,
+            risk_points=10.0,  # planned entry-to-stop basis the sizer now reads
             contracts=1,
             instrument="MNQ",
         )
@@ -1185,6 +1188,10 @@ def test_load_lane_trade_paths_scales_all_fields_when_size_model_given(monkeypat
             mae_dollars=20.0,
             mfe_dollars=60.0,
             lots=1,
+            # Sizing now reads PLANNED risk_points (entry-to-stop), NOT mae_dollars.
+            # risk_points=10 on MNQ (point_value=2) → with $500k equity @ 2% the sizer
+            # is far above cap=2, so cap binds at n=2 (the binding constraint asserted).
+            risk_points=10.0,
             contracts=1,
             instrument="MNQ",
         )
@@ -1227,10 +1234,11 @@ def test_load_lane_trade_paths_cap1_floors_wide_stop_trade_to_one_not_zero(monke
     import trading_app.account_survival as asv
     from trading_app.account_survival import SizingContext, _load_lane_trade_paths
 
-    # mae_dollars=400 on MNQ (point_value=2) => risk_points=200; with 2% of $50k
-    # = $1000 risk budget / (200pts * $2) = 2.5 -> engine sizer floors to 2... so to
-    # force the n=0 case use a very wide stop: mae=20000 => risk_points=10000 =>
-    # $1000 / (10000*2) = 0.05 -> sizer returns 0.
+    # Sizing reads PLANNED risk_points (entry-to-stop), NOT mae_dollars. A very wide
+    # planned stop: risk_points=10000 on MNQ (point_value=2) => $1000 budget (2% of
+    # $50k) / (10000pts * $2) = 0.05 -> sizer returns n=0, which must floor to 1.
+    # mae_dollars=20000 is kept so the byte-identity assertion (mae_dollars unchanged
+    # at cap=1) still pins that the DD contribution is carried, not zeroed.
     base = [
         asv.TradePath(
             trading_day=date(2026, 1, 2),
@@ -1241,6 +1249,7 @@ def test_load_lane_trade_paths_cap1_floors_wide_stop_trade_to_one_not_zero(monke
             mae_dollars=20000.0,
             mfe_dollars=60.0,
             lots=1,
+            risk_points=10000.0,
             contracts=1,
             instrument="MNQ",
         )
@@ -1273,6 +1282,91 @@ def test_load_lane_trade_paths_cap1_floors_wide_stop_trade_to_one_not_zero(monke
     assert out[0].mfe_dollars == 60.0
 
 
+def test_survival_sizes_on_planned_risk_points_not_realized_mae_value_oracle(monkeypatch):
+    """D-3 VALUE-oracle: prove the survival sim sizes on the SAME planned
+    entry-to-stop basis the live engine uses — NOT realized MAE.
+
+    The drift parity check verifies both files IMPORT the canonical sizer, but a
+    shared sizer fed DIFFERENT inputs still diverges. This drives a representative
+    WINNER (mae_r small) through the REAL ``_load_lane_trade_paths`` sizing loop
+    and asserts the contract count matches the planned-risk-points (engine) basis,
+    NOT the realized-MAE basis. The two bases are chosen to give clearly different,
+    UN-clamped contract counts (high equity, high cap) so a regression to the mae
+    basis flips the assertion. (This is the test the import-parity drift check
+    cannot cover; verified to FAIL on the injected old basis — integrity §7.)
+    """
+    import trading_app.account_survival as asv
+    from trading_app.account_survival import SizingContext, _load_lane_trade_paths, get_cost_spec
+    from trading_app.portfolio import compute_position_size_vol_scaled
+
+    cost = get_cost_spec("MNQ")  # point_value = 2.0
+    equity, risk_pct, vol_scalar = 50_000.0, 2.0, 1.0  # budget = $1,000
+
+    # Representative WINNER: planned stop is 125pts wide (engine basis), but drew
+    # down only mae_r=0.4 of it. Both contract counts are chosen BELOW the XFA cap
+    # (5 for a 50k account) so the clamp does not mask the divergence — the BASIS,
+    # not the cap, decides the count.
+    risk_points_engine = 250.0  # the engine basis: abs(entry - stop)
+    risk_dollars = risk_points_engine * cost.point_value  # 250 * 2 = $500
+    mae_dollars = 0.4 * risk_dollars  # $200 — what the sim stores; mae_r = 0.4
+    risk_points_old_mae = abs(mae_dollars) / cost.point_value  # 100.0 pts (the buggy basis)
+
+    # Sanity: the two bases produce DIFFERENT contract counts, both <= XFA cap (5).
+    n_engine = compute_position_size_vol_scaled(equity, risk_pct, risk_points_engine, cost, vol_scalar)
+    n_old_mae = compute_position_size_vol_scaled(equity, risk_pct, risk_points_old_mae, cost, vol_scalar)
+    assert n_engine == 2, n_engine  # 1000 / (250*2)
+    assert n_old_mae == 5, n_old_mae  # 1000 / (100*2) — 2.5x over-size, capital-unsafe
+    assert n_old_mae > n_engine
+
+    base = [
+        asv.TradePath(
+            trading_day=date(2026, 1, 2),
+            strategy_id="L1",
+            entry_ts=None,
+            exit_ts=None,
+            pnl_dollars=2.0 * risk_dollars,
+            mae_dollars=mae_dollars,
+            mfe_dollars=2.0 * risk_dollars,
+            lots=1,
+            risk_points=risk_points_engine,  # the planned basis the prod constructor carries
+            contracts=1,
+            instrument="MNQ",
+        )
+    ]
+    monkeypatch.setattr(
+        asv,
+        "_load_strategy_snapshot",
+        lambda con, sid: {
+            "instrument": "MNQ",
+            "orb_label": "X",
+            "orb_minutes": 5,
+            "entry_model": "m",
+            "rr_target": 2.0,
+            "confirm_bars": 1,
+            "filter_type": "NO_FILTER",
+            "stop_multiplier": 1.0,
+        },
+    )
+    monkeypatch.setattr(asv, "_build_trade_paths_from_outcomes", lambda *a, **k: list(base))
+    monkeypatch.setattr(asv, "_lane_atr_by_day", lambda *a, **k: {})  # vol_scalar = 1.0
+    monkeypatch.setattr(asv, "_lane_median_atr", lambda *a, **k: {})
+    # Lane cap high so the lane cap never binds; account_size=50000 → XFA cap=5,
+    # and both contract counts (2 and 5) are <= 5, so the BASIS decides contracts.
+    ctx = SizingContext(
+        account_equity=equity, risk_per_trade_pct=risk_pct, account_size=50_000, max_contracts_by_strategy={"L1": 5000}
+    )
+    out = _load_lane_trade_paths(None, "L1", as_of_date=date(2026, 1, 3), size_model=ctx)
+
+    # The production sizing loop must size on the carried planned risk_points
+    # (engine basis), NOT the realized-MAE basis. A regression to the old basis
+    # would make contracts == n_old_mae (1000) and flip this assertion.
+    assert out[0].contracts == n_engine, (
+        f"survival sim sized {out[0].contracts} contracts; expected engine basis {n_engine}, "
+        f"NOT realized-MAE basis {n_old_mae}"
+    )
+    assert out[0].contracts != n_old_mae, "survival sim must NOT size on the realized-MAE basis"
+
+
 def test_load_lane_trade_paths_unchanged_when_size_model_none(monkeypatch):
     import trading_app.account_survival as asv
     from trading_app.account_survival import _load_lane_trade_paths
@@ -1287,6 +1381,7 @@ def test_load_lane_trade_paths_unchanged_when_size_model_none(monkeypatch):
             mae_dollars=20.0,
             mfe_dollars=60.0,
             lots=1,
+            risk_points=10.0,  # carried through unchanged when size_model is None
             contracts=1,
             instrument="MNQ",
         )

@@ -236,6 +236,13 @@ class TradePath:
     mae_dollars: float
     mfe_dollars: float
     lots: int
+    # Planned entry-to-stop distance in points (abs(entry_price - stop_price)) —
+    # the SAME basis the live engine sizes on (execution_engine.py, 8 sites). The
+    # survival sizer MUST size on this, not on realized MAE: mae_dollars = mae_r *
+    # risk_dollars with mae_r <= 1.0 (small for winners), so deriving risk_points
+    # from MAE under-states the stop distance and over-sizes contracts (D-3 fix).
+    # Per-contract price distance — invariant to contract count; NEVER scaled by n.
+    risk_points: float
     contracts: int = 1
     instrument: str = ""
 
@@ -527,6 +534,7 @@ def _build_trade_paths_from_outcomes(
                 mae_dollars=float(mae_r * risk_dollars),
                 mfe_dollars=float(mfe_r * risk_dollars),
                 lots=lots,
+                risk_points=float(risk_points),
                 contracts=contracts_per_trade,
                 instrument=params["instrument"],
             )
@@ -578,7 +586,13 @@ def _load_lane_trade_paths(
     xfa_cap = max_lots_for_xfa(size_model.account_size, size_model.account_equity)
     scaled: list[TradePath] = []
     for t in trades:
-        risk_points = abs(t.mae_dollars) / cost_spec.point_value if cost_spec.point_value else 0.0
+        # Size on the PLANNED entry-to-stop distance the live engine sizes on
+        # (carried on the TradePath from _build_trade_paths_from_outcomes), NOT on
+        # realized MAE. Deriving risk_points from mae_dollars under-states the stop
+        # for winners (mae_r <= 1.0) and over-sizes contracts → too-optimistic
+        # survival PASS (D-3 fix). cost_spec is still bound above and passed to the
+        # sizer below; only the mae-based risk_points derivation is removed.
+        risk_points = t.risk_points
         atr = atr_by_day.get(t.trading_day)
         med = median_by_day.get(t.trading_day)
         if atr and med and atr > 0 and med > 0:

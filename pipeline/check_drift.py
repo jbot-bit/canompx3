@@ -14178,18 +14178,66 @@ def _imports_canonical_sizer(path: Path) -> bool | None:
     return False
 
 
+def _survival_sizing_loop_derives_risk_points_from_mae(survival_path: Path) -> bool | None:
+    """True iff ``_load_lane_trade_paths`` derives risk_points from realized MAE.
+
+    The D-3 sizing bug: the survival sizing loop computed
+    ``risk_points = abs(t.mae_dollars) / cost_spec.point_value`` instead of using
+    the PLANNED entry-to-stop distance the live engine sizes on. Import-parity
+    (``_imports_canonical_sizer``) cannot catch this — both files import the
+    canonical sizer, but feeding it realized MAE over-sizes winners and yields a
+    too-optimistic survival PASS. This static AST guard fails the parity check if
+    the mae-derived basis reappears inside ``_load_lane_trade_paths``.
+
+    Returns None if the file cannot be read/parsed OR the target function cannot
+    be located (fail-closed: the caller treats None as a parity violation rather
+    than a silent pass). Detection: any ``BinOp(op=Div)`` within the function
+    whose dividend sub-tree references an attribute access ``<x>.mae_dollars``.
+    The shape (``abs(t.mae_dollars) / cost_spec.point_value``) nests the
+    ``mae_dollars`` attribute inside an ``abs(...)`` call on the Div's left, so we
+    walk the whole left sub-tree for the attribute rather than matching one rigid
+    expression — robust to ``abs()``/parenthesisation changes, capital-safe
+    direction (it never false-passes a real mae basis).
+    """
+    try:
+        source = survival_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    func = next(
+        (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_load_lane_trade_paths"),
+        None,
+    )
+    if func is None:
+        return None
+    for node in ast.walk(func):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            for sub in ast.walk(node.left):
+                if isinstance(sub, ast.Attribute) and sub.attr == "mae_dollars":
+                    return True
+    return False
+
+
 def check_survival_engine_sizer_parity(
     survival_path: Path | None = None,
     engine_path: Path | None = None,
 ) -> list[str]:
-    """Bind the survival sim and the live engine to ONE canonical sizer.
+    """Bind the survival sim and the live engine to ONE canonical sizer, fed the
+    SAME basis.
 
     Both ``trading_app/account_survival.py`` (the C11 survival gate) and
     ``trading_app/execution_engine.py`` (the live order path) must import
-    ``compute_position_size_vol_scaled`` from ``trading_app.portfolio``. If either
-    re-encodes its own sizing, the gate's drawdown proof silently diverges from
-    what the engine actually trades. Fails closed when a file is missing /
-    unparseable, or when either path does not import the canonical sizer.
+    ``compute_position_size_vol_scaled`` from ``trading_app.portfolio`` (IMPORT
+    parity), AND the survival sizing loop must NOT re-derive risk_points from
+    realized MAE (VALUE-basis parity). Import parity alone is insufficient: a
+    shared sizer fed divergent inputs still diverges — the exact D-3 bug, where
+    the sim sized on ``abs(mae_dollars)/point_value`` and over-sized winners,
+    yielding a too-optimistic survival PASS. Fails closed when a file is missing /
+    unparseable, when either path does not import the canonical sizer, or when the
+    mae-derived basis is detected.
 
     Args are injectable for mutation-proofing (integrity-guardian §7); production
     defaults to the real module paths.
@@ -14210,6 +14258,20 @@ def check_survival_engine_sizer_parity(
                 f"{_CANONICAL_SIZER_MODULE} — the survival sim and live engine "
                 "would size from divergent (re-encoded) logic"
             )
+
+    mae_basis = _survival_sizing_loop_derives_risk_points_from_mae(survival_path)
+    if mae_basis is None:
+        violations.append(
+            f"account_survival: cannot locate/parse _load_lane_trade_paths in {survival_path} — "
+            "value-basis parity UNPROVABLE (fail closed)"
+        )
+    elif mae_basis is True:
+        violations.append(
+            "account_survival: _load_lane_trade_paths derives risk_points from realized "
+            "mae_dollars — the survival sim must size on the PLANNED entry-to-stop distance "
+            "(TradePath.risk_points), the same basis the live engine uses. The mae basis "
+            "over-sizes winners and yields a too-optimistic survival PASS (D-3 bug)."
+        )
     return violations
 
 
