@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: 2026-06-06T00:00:00+10:00
+updated_at: 2026-06-08T00:00:00+10:00
 items:
   - id: remote_control_task_reregister_2026_05_30
     title: Re-register ClaudeRemoteControl_canompx3 scheduled task (host auto-start gone)
@@ -1176,7 +1176,7 @@ items:
   - id: codex_wsl_mcp_config_audit_2026_06_07
     title: Codex WSL-portable MCP config + fail-closed audit script
     class: ops
-    status: open
+    status: ready
     priority: P3
     close_before_new_work: false
     owner_hint: codex
@@ -1214,7 +1214,7 @@ items:
   - id: codex_agent_ops_eval_flywheel_2026_06_07
     title: Agent-ops eval flywheel — grade agent BEHAVIOR (routing/grounding/live-safety), not model IQ
     class: ops
-    status: open
+    status: ready
     priority: P3
     close_before_new_work: false
     owner_hint: codex
