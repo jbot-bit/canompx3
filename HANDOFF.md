@@ -174,12 +174,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-10
-- **Commit:** d16dbb78 — fix(refresh_data): derive build boundary from canonical trading-day window, not calendar today-1
-- **Files changed:** 4 files
+- **Commit:** ce3f547c — START_BOT.bat: auto-refresh stale C11/C12 control state on DEMO launch
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-10-refresh-data-canonical-trading-day-boundary.md`
-  - `scripts/tools/refresh_data.py`
-  - `tests/test_tools/test_refresh_data.py`
+  - `START_BOT.bat`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

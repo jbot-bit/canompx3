@@ -144,6 +144,28 @@ if /i "%BOT_MODE_FLAGS%"=="--live" (
     echo.
 )
 
+:: Step 3c: For a DEMO launch, auto-heal stale C11/C12 control state. The demo
+:: orchestrator's own preflight (trading_app/live/preflight.py) treats a C11/C12
+:: db-identity mismatch as a HARD FAIL with no demo downgrade-to-WARN, so a stale
+:: cache (e.g. after a merge or a daily_features rebuild changes the gold.db
+:: identity hash) blocks the demo entirely. This mirrors the LIVE block at [3b/5]
+:: but is FAIL-OPEN: a refresh failure warns and continues (demo routes paper
+:: orders only — the orchestrator's preflight remains the real gate). The refresh
+:: is selective: without --force, refresh_control_state only recomputes the
+:: criterion that is actually invalid/mismatched, so a clean demo is a near no-op
+:: and pays no MC-sim cost. SIGNAL launches skip this block (C11/C12 are SKIPPED
+:: for signal-only).
+if /i "%BOT_MODE_FLAGS%"=="--demo" (
+    echo [3c/5] Refreshing DEMO control state: profile=%ACTIVE_PROFILE%
+    .venv\Scripts\python.exe -m scripts.tools.refresh_control_state --profile %ACTIVE_PROFILE%
+    if errorlevel 1 (
+        echo.
+        echo [WARN] DEMO control-state refresh reported invalid C11/C12 after refresh.
+        echo        Continuing — demo routes paper orders only; the orchestrator preflight is the real gate.
+    )
+    echo.
+)
+
 :: Step 4: Launch orchestrator (trading engine) in a separate console window.
 :: This is the process that connects to the broker, watches bars, evaluates entries,
 :: and writes bot_state.json. Without it the dashboard reads stale state.
