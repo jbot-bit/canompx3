@@ -182,9 +182,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** 31c53729 — @ chore(stages): retire prop-firm EV stage file — Stages 1-4 complete
+- **Commit:** a494db89 — fix(docs): correct MNQ friction % in RESEARCH_RULES (5.5% → 29.2%)
 - **Files changed:** 1 files
-  - `docs/runtime/stages/2026-06-11-prop-firm-ev-scorecard-stage2.md`
+  - `RESEARCH_RULES.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
