@@ -182,14 +182,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** 7d81c389 — chore(ralph): update audit ledger and state for iters 225-227
-- **Files changed:** 6 files
-  - `HANDOFF.md`
-  - `docs/ralph-loop/deferred-findings.md`
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
-  - `docs/ralph-loop/ralph-loop-plan.md`
+- **Commit:** e788992d — fix(tests): update mock signatures for account_id param (Stage 2 caller discipline)
+- **Files changed:** 1 files
+  - `tests/test_trading_app/test_bot_dashboard.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
