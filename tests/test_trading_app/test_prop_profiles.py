@@ -1217,3 +1217,80 @@ class TestResolveAllocationJson:
         result = pp.resolve_allocation_json("p1")
         assert result.source == "legacy"
         assert result.path == legacy_path
+
+
+# ============================================================================
+# Stage 3a — AccountProfile.account_contracts (per-account contract source)
+# ============================================================================
+
+
+class TestAccountContracts:
+    """Per-account contract map: account_id-keyed (NOT positional), fail-safe
+    resolver, fail-closed construction validation."""
+
+    @staticmethod
+    def _profile(**kw) -> AccountProfile:
+        base = dict(profile_id="t", firm="topstep", account_size=50000, is_express_funded=True)
+        base.update(kw)
+        return AccountProfile(**base)
+
+    def test_default_is_empty_and_resolves_uniform_one(self):
+        # Default () == pre-Stage-3a {aid: 1} hardcode, byte-identical.
+        p = self._profile()
+        assert p.account_contracts == ()
+        assert p.resolve_account_contracts([101, 202, 303]) == {101: 1, 202: 1, 303: 1}
+
+    def test_resolver_returns_declared_counts_and_falls_back_to_one(self):
+        p = self._profile(account_contracts=((202, 3), (303, 2)))
+        # 101 not listed -> 1 (fail-safe); 202/303 get declared counts.
+        assert p.resolve_account_contracts([101, 202, 303]) == {101: 1, 202: 3, 303: 2}
+
+    def test_resolver_is_account_id_keyed_not_positional_C1(self):
+        # C1 regression guard: the SAME profile, with the live account list in a
+        # DIFFERENT order (mimicking preflight._select_primary_and_shadow_accounts
+        # front-loading --account-id), must bind each contract count to the SAME
+        # physical account_id — never to a positional index.
+        p = self._profile(account_contracts=((202, 3),))
+        order_a = p.resolve_account_contracts([101, 202])  # 101 first
+        order_b = p.resolve_account_contracts([202, 101])  # 202 front-loaded
+        assert order_a == {101: 1, 202: 3}
+        assert order_b == {202: 3, 101: 1}
+        # Account 202 keeps 3 contracts regardless of position; 101 stays 1.
+        assert order_a[202] == order_b[202] == 3
+        assert order_a[101] == order_b[101] == 1
+
+    def test_resolver_ignores_stale_unmatched_account_id(self):
+        # A declared account_id not in the live set contributes nothing — it can
+        # never attach a count to the WRONG account (fail-safe).
+        p = self._profile(account_contracts=((999, 5),))
+        assert p.resolve_account_contracts([101, 202]) == {101: 1, 202: 1}
+
+    def test_construction_rejects_zero_contracts(self):
+        with pytest.raises(ValueError, match=r"account_contracts\[202\]=0 must be int >= 1"):
+            self._profile(account_contracts=((202, 0),))
+
+    def test_construction_rejects_negative_contracts(self):
+        with pytest.raises(ValueError, match=r"must be int >= 1"):
+            self._profile(account_contracts=((202, -1),))
+
+    def test_construction_rejects_bool_account_id(self):
+        # bool is a subclass of int; True == 1 would silently key the map.
+        with pytest.raises(ValueError, match="account_id must be int"):
+            self._profile(account_contracts=((True, 2),))
+
+    def test_construction_rejects_bool_contracts(self):
+        with pytest.raises(ValueError, match="must be int >= 1"):
+            self._profile(account_contracts=((202, True),))
+
+    def test_construction_rejects_duplicate_account_id(self):
+        with pytest.raises(ValueError, match="duplicate account_id 202"):
+            self._profile(account_contracts=((202, 1), (202, 3)))
+
+    def test_construction_rejects_malformed_pair(self):
+        with pytest.raises(ValueError, match="must be .*account_id, contracts.* pairs"):
+            self._profile(account_contracts=((202, 3, 99),))
+
+    def test_no_shipped_profile_sets_account_contracts_yet(self):
+        # Stage 3a lands plumbing only; live arming is gated. Confirm the default
+        # remains unset across the real profile set (byte-identical guarantee).
+        assert all(p.account_contracts == () for p in ACCOUNT_PROFILES.values())

@@ -151,8 +151,24 @@ class AccountProfile:
     # edits cannot silently change executed exposure.
     execution_symbol_map: Mapping[str, str] | None = None
     execution_qty_divisor: Mapping[str, int] | None = None
+    # Stage 3a — per-account contract source (the first independent multi-account
+    # seam). A tuple of (broker_account_id, contracts) pairs. Keyed by the broker
+    # int account_id, NOT by selection position: preflight._select_primary_and_
+    # shadow_accounts reorders the account list to front-load --account-id, so a
+    # positional map would silently misassign contracts to the wrong physical
+    # account. Default () = every live account trades 1 contract (byte-identical
+    # to the pre-Stage-3a {aid: 1} hardcode at session_orchestrator.py). Because
+    # real broker account_ids are only known at session start, this is OPTIONAL
+    # and resolve_account_contracts() falls back to 1 for any account not listed
+    # (fail-safe — a stale/typo'd id never matches a live account, so it can never
+    # attach a count to the wrong account). Feeds RiskManager.configure_accounts()
+    # unchanged; a non-uniform map is what makes the Stage 2 per-account belts
+    # diverge. contracts >= 1 and unique account_ids enforced in __post_init__.
+    # @canonical-source docs/specs/per_account_contracts.md
+    account_contracts: tuple[tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
+        self._validate_account_contracts()
         sym_map = self.execution_symbol_map
         qty_div = self.execution_qty_divisor
         if (sym_map is None) != (qty_div is None):
@@ -190,6 +206,48 @@ class AccountProfile:
                 raise ValueError(
                     f"profile {self.profile_id!r}: execution_qty_divisor [{src!r}]={divisor!r} must be int >= 1."
                 )
+
+    def _validate_account_contracts(self) -> None:
+        """Fail-closed shape check for account_contracts (Stage 3a).
+
+        A malformed per-account contract map is a construction error, not a
+        silently-tolerated state: contracts must be int >= 1 (a 0/negative count
+        would zero the per-account modeled-dollar ratio in RiskManager) and
+        account_ids must be unique (a duplicate key would make the map ambiguous).
+        """
+        seen: set[int] = set()
+        for pair in self.account_contracts:
+            if not (isinstance(pair, tuple) and len(pair) == 2):
+                raise ValueError(
+                    f"profile {self.profile_id!r}: account_contracts entries must be "
+                    f"(account_id, contracts) pairs, got {pair!r}."
+                )
+            aid, contracts = pair
+            if not isinstance(aid, int) or isinstance(aid, bool):
+                raise ValueError(f"profile {self.profile_id!r}: account_contracts account_id must be int, got {aid!r}.")
+            if not isinstance(contracts, int) or isinstance(contracts, bool) or contracts < 1:
+                raise ValueError(
+                    f"profile {self.profile_id!r}: account_contracts[{aid}]={contracts!r} must be int >= 1."
+                )
+            if aid in seen:
+                raise ValueError(f"profile {self.profile_id!r}: account_contracts has duplicate account_id {aid}.")
+            seen.add(aid)
+
+    def resolve_account_contracts(self, account_ids: list[int]) -> dict[int, int]:
+        """Resolve the per-account contract map for a live session (Stage 3a).
+
+        For each broker account_id in the live set (primary + shadows), return its
+        declared contract count, falling back to 1 for any account not listed in
+        ``account_contracts``. The result is the ``dict[int, int]`` shape that
+        ``RiskManager.configure_accounts()`` already consumes.
+
+        Account-ID-keyed (NOT positional) so the mapping is invariant to the
+        preflight reorder that front-loads ``--account-id``
+        (preflight._select_primary_and_shadow_accounts). An empty ``account_contracts``
+        yields a uniform ``{aid: 1}`` — byte-identical to the pre-Stage-3a hardcode.
+        """
+        declared = dict(self.account_contracts)
+        return {int(aid): declared.get(int(aid), 1) for aid in account_ids}
 
 
 def resolve_execution_symbol(profile: AccountProfile, strategy_symbol: str) -> tuple[str, int]:

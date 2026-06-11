@@ -7524,6 +7524,98 @@ def check_daily_loss_dollars_below_mll() -> list[str]:
     return violations
 
 
+def check_account_contracts_feasibility() -> list[str]:
+    """Per-account contract maps (Stage 3a) must be shape-valid and the divergent
+    belt for any ``contracts > 1`` account must remain reachable.
+
+    Two invariants:
+
+    1. **Shape + positivity.** Every ``account_contracts`` pair is
+       ``(int account_id, int contracts)`` with ``contracts >= 1`` and unique
+       account_ids. (``AccountProfile.__post_init__`` already raises on a bad map
+       at construction; this is the static drift backstop so a regression that
+       weakens that validation still fails loud here.)
+
+    2. **Feasibility (M1).** When an account sizes ``contracts > 1`` it scales the
+       per-trade dollar risk by ``contracts`` while the ``daily_loss_dollars``
+       belt and the broker MLL (``tier.max_dd``) are FIXED. A single scaled
+       worst-trade must not blow past the belt (else the belt cannot bind before
+       the MLL — the divergence isn't survivable by the belt meant to guard it).
+       The cheap static proxy for a single-contract worst-trade is the profile's
+       own ``max_risk_per_trade`` dollar cap. We assert
+       ``contracts * max_risk_per_trade <= daily_loss_dollars`` (when both are set)
+       and ``contracts * max_risk_per_trade < tier.max_dd`` always. The deep proof
+       (modeled DD at scale) is the per-account C11 survival re-run — this check is
+       the loud, fast config-feasibility floor, not the survival gate.
+
+    Broker account_ids are discovered at session start, not static config, so this
+    check asserts shape + positivity + feasibility — NOT membership in a specific
+    live account set (the resolver fails safe on unlisted accounts).
+
+    @canonical-source: docs/specs/per_account_contracts.md, trading_app/prop_profiles.py
+    """
+    violations: list[str] = []
+    try:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
+    except Exception as e:  # pragma: no cover - import guard
+        return [f"  cannot import prop_profiles: {type(e).__name__}: {e}"]
+
+    for pid, prof in ACCOUNT_PROFILES.items():
+        pairs = getattr(prof, "account_contracts", ()) or ()
+        if not pairs:
+            continue
+        seen: set[int] = set()
+        for pair in pairs:
+            if not (isinstance(pair, tuple) and len(pair) == 2):
+                violations.append(
+                    f"  ACCOUNT_PROFILES[{pid!r}]: account_contracts entry {pair!r} must be "
+                    f"an (account_id, contracts) pair."
+                )
+                continue
+            aid, contracts = pair
+            if not isinstance(aid, int) or isinstance(aid, bool):
+                violations.append(f"  ACCOUNT_PROFILES[{pid!r}]: account_contracts account_id {aid!r} must be int.")
+                continue
+            if not isinstance(contracts, int) or isinstance(contracts, bool) or contracts < 1:
+                violations.append(
+                    f"  ACCOUNT_PROFILES[{pid!r}]: account_contracts[{aid}]={contracts!r} must be int >= 1."
+                )
+                continue
+            if aid in seen:
+                violations.append(f"  ACCOUNT_PROFILES[{pid!r}]: account_contracts has duplicate account_id {aid}.")
+                continue
+            seen.add(aid)
+
+            if contracts <= 1:
+                continue  # uniform-1 accounts carry no divergent-belt feasibility risk
+            per_trade = getattr(prof, "max_risk_per_trade", None)
+            belt = getattr(prof, "daily_loss_dollars", None)
+            try:
+                tier = get_account_tier(prof.firm, prof.account_size)
+            except Exception as e:
+                violations.append(
+                    f"  ACCOUNT_PROFILES[{pid!r}]: cannot resolve tier for feasibility check: {type(e).__name__}: {e}"
+                )
+                continue
+            if per_trade is not None:
+                scaled = contracts * per_trade
+                if scaled >= tier.max_dd:
+                    violations.append(
+                        f"  ACCOUNT_PROFILES[{pid!r}]: account {aid} sizes {contracts} contracts × "
+                        f"max_risk_per_trade=${per_trade:.0f} = ${scaled:.0f} >= broker MLL "
+                        f"(tier.max_dd=${tier.max_dd:.0f}). A single scaled worst-trade can breach the "
+                        f"MLL — this divergence is not survivable; lower contracts or max_risk_per_trade."
+                    )
+                if belt is not None and scaled > belt:
+                    violations.append(
+                        f"  ACCOUNT_PROFILES[{pid!r}]: account {aid} sizes {contracts} contracts × "
+                        f"max_risk_per_trade=${per_trade:.0f} = ${scaled:.0f} > daily_loss_dollars belt "
+                        f"=${belt:.0f}. One scaled worst-trade overshoots the belt — it cannot bind before "
+                        f"the per-trade loss lands; raise daily_loss_dollars or lower contracts."
+                    )
+    return violations
+
+
 def check_prop_caps_do_not_leak_into_self_funded() -> list[str]:
     """Marker guard for the self-funded sizing doctrine.
 
@@ -16973,6 +17065,12 @@ CHECKS = [
         "Profile daily_loss_dollars must be below the broker MLL (tier.max_dd)",
         check_daily_loss_dollars_below_mll,
         False,
+        False,
+    ),
+    (
+        "Per-account contract maps must be shape-valid and divergent belts feasible (Stage 3a)",
+        check_account_contracts_feasibility,
+        False,  # blocking — an infeasible per-account belt is a silent capital-guard failure
         False,
     ),
     (

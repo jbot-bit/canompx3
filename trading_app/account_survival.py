@@ -1426,6 +1426,154 @@ def sweep_survival_cap(
     return sweep
 
 
+@dataclass(frozen=True)
+class PerAccountSurvivalResult:
+    """Per-account C11 survival verdicts for a non-uniform account_contracts map.
+
+    Stage 3a — before a non-uniform per-account contract map may arm a live cap
+    > 1, each account's divergent belt must be proven safe at its OWN contract
+    scale. ``per_account`` carries one verdict dict per live account_id; verdicts
+    are computed once per DISTINCT contract count (the gate is a function of the
+    contract scale, not the account_id) and fanned back out, so accounts sharing a
+    count share a verdict. Read-only EVIDENCE: this does NOT persist and does NOT
+    lift ``DEPLOYED_MAX_CONTRACTS_CLAMP`` — the live order path stays clamped at 1
+    until the operator GOes on the evidence.
+    """
+
+    profile_id: str
+    account_contracts: dict[int, int]
+    per_account: list[dict]  # [{account_id, contracts, gate_pass, operational_pass_probability, ...}]
+    all_pass: bool
+    sizing_parity_ok: bool
+    sizing_parity_msg: str
+    horizon_days: int = 90
+    n_paths: int = 10_000
+    seed: int = 0
+    min_survival_probability: float = MIN_SURVIVAL_PROBABILITY
+    as_of_date: str = ""
+
+
+def evaluate_per_account_survival(
+    profile_id: str | None,
+    account_contracts: dict[int, int],
+    *,
+    as_of_date: date | None = None,
+    horizon_days: int = 90,
+    n_paths: int = 10_000,
+    seed: int = 0,
+    db_path: Path | None = None,
+    min_survival_probability: float = MIN_SURVIVAL_PROBABILITY,
+) -> PerAccountSurvivalResult:
+    """Run C11 survival for each account in a per-account contract map (Stage 3a).
+
+    For a non-uniform ``account_contracts`` (``{account_id: contracts}``), each
+    account trades the SAME lanes at a DIFFERENT contract count, so its modeled
+    drawdown — and therefore its Stage-2 daily-loss belt — diverges. This proves
+    each divergent belt is survivable BEFORE any clamp lift could arm it live.
+
+    Delegates entirely to the canonical chain ``_scenarios_for_context`` ->
+    ``simulate_survival`` -> ``_evaluate_gate`` (the same machinery
+    ``sweep_survival_cap`` uses), keyed on the DISTINCT contract counts present in
+    the map — re-encoding ZERO sim or gate math (institutional-rigor § 4). The
+    contract scale enters via ``SizingContext`` (NOT the vestigial
+    ``SurvivalRules.contracts_per_trade_micro``).
+
+    Read-only: no state is persisted; ``DEPLOYED_MAX_CONTRACTS_CLAMP`` is untouched.
+    """
+    if not account_contracts:
+        raise ValueError("evaluate_per_account_survival: account_contracts must be non-empty")
+    for aid, n in account_contracts.items():
+        if not isinstance(n, int) or n < 1:
+            raise ValueError(f"evaluate_per_account_survival: account_contracts[{aid}]={n!r} must be int >= 1")
+    if as_of_date is None:
+        as_of_date = date.today()
+
+    resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
+    profile = get_profile(resolved_profile_id)
+    rules = _with_consistency_rule(_build_rules(profile), profile)
+
+    # Sizing-parity is a per-PROFILE property (does the portfolio build with
+    # positive equity) — invariant to the contract count. Evaluate once, reuse.
+    sizing_parity_ok, sizing_parity_msg = _assert_sizing_parity(resolved_profile_id)
+    if not sizing_parity_ok:
+        log.warning("Criterion 11 sizing-parity guard (per-account): %s", sizing_parity_msg)
+
+    lane_defs = get_profile_lane_definitions(resolved_profile_id)
+    instruments = sorted({lane["instrument"] for lane in lane_defs})
+
+    from trading_app.prop_profiles import load_allocation_lanes
+
+    lane_specs = profile.daily_lanes or load_allocation_lanes(resolved_profile_id)
+    effective_stop_by_strategy = {
+        lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier) for lane in lane_specs
+    }
+    _pf = build_profile_portfolio(profile_id=resolved_profile_id)
+    strategy_ids = [s.strategy_id for s in _pf.strategies]
+
+    db = db_path or GOLD_DB_PATH
+    con = duckdb.connect(str(db), read_only=True)
+    configure_connection(con)
+    # Compute one verdict per DISTINCT contract count, then fan out to accounts.
+    verdict_by_count: dict[int, dict] = {}
+    try:
+        for n in sorted(set(account_contracts.values())):
+            size_model = SizingContext(
+                account_equity=_pf.account_equity,
+                risk_per_trade_pct=_pf.risk_per_trade_pct,
+                account_size=profile.account_size,
+                max_contracts_by_strategy={sid: n for sid in strategy_ids},
+            )
+            scenarios, _meta = _scenarios_for_context(
+                con,
+                profile=profile,
+                lane_defs=lane_defs,
+                instruments=instruments,
+                effective_stop_by_strategy=effective_stop_by_strategy,
+                as_of_date=as_of_date,
+                size_model=size_model,
+            )
+            result = simulate_survival(scenarios, rules, horizon_days=horizon_days, n_paths=n_paths, seed=seed)
+            gate = _evaluate_gate(
+                scenarios,
+                rules,
+                result,
+                profile,
+                min_survival_probability=min_survival_probability,
+                sizing_parity_ok=sizing_parity_ok,
+            )
+            verdict_by_count[n] = {
+                "contracts": n,
+                "gate_pass": gate.gate_pass,
+                "operational_gate_pass": gate.operational_gate_pass,
+                "strict_account_gate_pass": gate.strict_account_gate_pass,
+                "operational_pass_probability": gate.operational_pass_probability,
+                "historical_max_observed_90d_dd_dollars": gate.historical_max_observed_90d_dd_dollars,
+                "effective_dd_budget_dollars": gate.effective_dd_budget_dollars,
+            }
+    finally:
+        con.close()
+
+    per_account: list[dict] = []
+    for aid in sorted(account_contracts):
+        n = account_contracts[aid]
+        per_account.append({"account_id": aid, **verdict_by_count[n]})
+    all_pass = all(v["gate_pass"] for v in per_account)
+
+    return PerAccountSurvivalResult(
+        profile_id=resolved_profile_id,
+        account_contracts=dict(account_contracts),
+        per_account=per_account,
+        all_pass=all_pass,
+        sizing_parity_ok=sizing_parity_ok,
+        sizing_parity_msg=sizing_parity_msg,
+        horizon_days=horizon_days,
+        n_paths=n_paths,
+        seed=seed,
+        min_survival_probability=float(min_survival_probability),
+        as_of_date=str(as_of_date),
+    )
+
+
 def _persist_sweep_into_c11_envelope(
     profile_id: str,
     sweep: SurvivalCapSweepResult,

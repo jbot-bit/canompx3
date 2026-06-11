@@ -679,19 +679,27 @@ class SessionOrchestrator:
                 self.order_router = primary_router
 
             # Stage 2 — per-account daily-loss belts. Each account gets its own
-            # MODELED dollar belt in RiskManager so it can halt independently. The
-            # contract map is uniform 1:1 today (CopyOrderRouter mirrors the
-            # primary's position to every shadow), so every account charges the
-            # same modeled dollars and halts together — correct for copies=1 and
-            # for the mirror case. Stage 3 replaces the uniform 1 with each
-            # account's real contract count (different lanes/sizing per account),
-            # at which point the belts diverge. Built here (account ids known);
-            # configure_accounts is CALLED after crash-recovery restore below so
-            # the restored primary dollars seed the primary belt in one shot.
-            # Only the multi-account (shadow) path arms per-account belts — the
-            # single-account router keeps the scalar belt (byte-identical).
+            # MODELED dollar belt in RiskManager so it can halt independently.
+            # Stage 3a — the contract map is now sourced PER ACCOUNT from the
+            # canonical profile (AccountProfile.account_contracts, keyed by broker
+            # account_id) instead of a uniform 1:1 hardcode. An unset/empty
+            # account_contracts resolves to {aid: 1} — byte-identical to the
+            # pre-Stage-3a CopyOrderRouter 1:1 mirror, so copies=1 and the mirror
+            # case are unchanged. A non-uniform map is what makes these belts
+            # DIVERGE (e.g. a 3-contract account latches before a 1-contract one
+            # on the same primary exit). account_profile is resolved above (:634);
+            # a None profile (raw-portfolio session) keeps the uniform {aid: 1}.
+            # Built here (account ids known); configure_accounts is CALLED after
+            # crash-recovery restore below so the restored primary dollars seed the
+            # primary belt in one shot. Only the multi-account (shadow) path arms
+            # per-account belts — the single-account router keeps the scalar belt.
             if shadow_account_ids:
-                self._account_contract_map = {aid: 1 for aid in self.order_router.all_account_ids}
+                if account_profile is not None:
+                    self._account_contract_map = account_profile.resolve_account_contracts(
+                        list(self.order_router.all_account_ids)
+                    )
+                else:
+                    self._account_contract_map = {aid: 1 for aid in self.order_router.all_account_ids}
                 self._primary_account_id = account_id
             else:
                 self._account_contract_map = {}
