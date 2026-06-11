@@ -2071,9 +2071,6 @@ async def api_accounts():
             for lane in p_lanes:
                 meta = _strategy_meta(lane.strategy_id)
                 session_time = _get_session_time_brisbane(lane.orb_label)
-            for lane in p_lanes:
-                meta = _strategy_meta(lane.strategy_id)
-                session_time = _get_session_time_brisbane(lane.orb_label)
                 rr_target = meta.get("rr_target")
                 rr_label = f"RR{rr_target:g}" if isinstance(rr_target, float) else None
                 setup_parts = [

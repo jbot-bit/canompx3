@@ -182,11 +182,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** eb646a35 — fix(docs): sync stale bundle RESEARCH_RULES friction tables (MNQ/MES post-F-4)
-- **Files changed:** 3 files
+- **Commit:** 2cb215a0 — @ Remove dead lane-summary loop in /api/accounts
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `chatgpt-project-kit/RESEARCH_RULES.md`
-  - `chatgpt_bundle/RESEARCH_RULES.md`
+  - `trading_app/live/bot_dashboard.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
