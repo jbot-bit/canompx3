@@ -70,3 +70,35 @@ def test_phase_1_quick_uses_bounded_pytest_and_drift_health_smoke(monkeypatch):
 
     health_cmd = next(cmd for cmd in calls if "pipeline.health_check" in cmd)
     assert "--quick" in health_cmd
+
+
+def test_phase_1_reports_need_db_instead_of_zero_integrity_failures(monkeypatch, capsys):
+    def fake_run_tool(cmd, timeout=300):
+        joined = " ".join(str(part) for part in cmd)
+        if "-m pytest" in joined:
+            return 0, "6 passed in 1.23s\n", ""
+        if "py_compile pipeline/check_drift.py" in joined:
+            return 0, "", ""
+        if "pipeline.health_check" in joined:
+            return 0, "[OK]\n", ""
+        if "audit_integrity.py" in joined:
+            return 2, "NEED_DB canonical gold.db unavailable\n", ""
+        if "audit_behavioral.py" in joined:
+            return 0, "BEHAVIORAL AUDIT PASSED: all 7 checks clean\n", ""
+        if "trading_app.paper_trader" in joined:
+            return 0, "", ""
+        return 0, "", ""
+
+    monkeypatch.setattr(phase_1_automated, "_run_tool", fake_run_tool)
+    monkeypatch.setattr(
+        phase_1_automated, "_pytest_basetemp", lambda: phase_1_automated.PROJECT_ROOT / ".git" / "pytest-tmp" / "test"
+    )
+    monkeypatch.setattr(sys, "argv", ["phase_1_automated.py", "--quick"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        phase_1_automated.main()
+
+    output = capsys.readouterr().out
+    assert excinfo.value.code == 1
+    assert "NEED_DB" in output
+    assert "0 check(s) failed" not in output

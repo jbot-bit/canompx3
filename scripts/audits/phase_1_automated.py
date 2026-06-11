@@ -116,6 +116,13 @@ def _parse_drift_counts(combined: str) -> tuple[int, int, int]:
     return 0, 0, 0
 
 
+def _is_need_db_output(combined: str) -> bool:
+    lowered = combined.lower()
+    return "need_db" in lowered or (
+        "cannot open database" in lowered and ("does not exist" in lowered or "read-only mode" in lowered)
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run Phase 1 automated audit checks")
     parser.add_argument(
@@ -227,6 +234,18 @@ def main():
         match = re.search(r"all (\d+) checks clean", combined)
         check_count = match.group(1) if match else "?"
         audit.check_passed(f"Integrity: {check_count} enforcing checks clean")
+    elif _is_need_db_output(combined):
+        audit.check_failed("Integrity: NEED_DB (canonical gold.db unavailable; 0 checks executed)")
+        tail = "\n".join(combined.splitlines()[-5:])
+        print(f"         {tail}")
+        audit.add_finding(
+            Severity.CRITICAL,
+            "SMOKE_TEST_FAILURE",
+            claimed="DB-backed integrity checks executed",
+            actual="NEED_DB: canonical gold.db unavailable; no DB-backed integrity evidence produced",
+            evidence=f"python scripts/tools/audit_integrity.py -> exit {rc}",
+            fix_type="REBUILD_NEEDED",
+        )
     else:
         # Count violations
         v_count = combined.count("FAILED")

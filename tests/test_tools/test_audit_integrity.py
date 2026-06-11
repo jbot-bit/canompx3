@@ -91,6 +91,21 @@ def test_script_path_bootstraps_project_root_without_pytest_path() -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_main_reports_need_db_when_canonical_db_unavailable(tmp_path, monkeypatch, capsys) -> None:
+    """Missing canonical DB must be explicit, not a fake zero-violation result."""
+    missing_db = tmp_path / "missing-gold.db"
+
+    monkeypatch.setattr(audit_integrity, "GOLD_DB_PATH", missing_db)
+    with pytest.raises(SystemExit) as excinfo:
+        audit_integrity.main()
+
+    combined = capsys.readouterr().out
+    assert excinfo.value.code == 2
+    assert "NEED_DB" in combined
+    assert "AUDIT EXECUTION FAILED" in combined
+    assert "INTEGRITY AUDIT PASSED" not in combined
+
+
 @contextmanager
 def _make_con(tmp_path, schemas=ALL_SCHEMAS, inserts=""):
     """Create temp DuckDB and yield connection (auto-closes on exit)."""

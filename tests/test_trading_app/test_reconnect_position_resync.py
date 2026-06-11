@@ -54,11 +54,14 @@ async def test_untracked_broker_position_kills_and_flattens() -> None:
     during the disconnect window leaves the broker holding a position we never
     tracked. Resuming blind would be capital-unsafe; we close it.
     """
-    orch = _orch_with_broker_open([{"contract_id": "MGCJ6", "side": "long", "size": 1, "avg_price": 2350.0}])
+    broker_open = [{"contract_id": "MGCJ6", "side": "long", "size": 1, "avg_price": 2350.0}]
+    orch = _orch_with_broker_open(broker_open)
+    orch._flatten_broker_positions = AsyncMock(return_value=True)
     assert orch._positions.active_positions() == []  # local tracker is flat
     await orch._reconcile_positions_on_reconnect(reconnect_count=2)
     assert orch._kill_switch_fired is True, "untracked broker position must fire kill switch"
-    orch._emergency_flatten.assert_awaited_once()
+    orch._flatten_broker_positions.assert_awaited_once_with(broker_open)
+    orch._emergency_flatten.assert_not_awaited()
 
 
 async def test_held_position_across_reconnect_resumes_without_flatten() -> None:

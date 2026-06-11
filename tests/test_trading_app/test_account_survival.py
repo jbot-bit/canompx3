@@ -31,6 +31,14 @@ from trading_app.account_survival import (
 from trading_app.prop_profiles import get_profile
 
 
+def _require_canonical_gold_db() -> None:
+    """Skip measured live-DB pins when the canonical DB is not provisioned."""
+    import trading_app.account_survival as asv
+
+    if not asv.GOLD_DB_PATH.exists():
+        pytest.skip(f"NEED_DB canonical gold.db unavailable at {asv.GOLD_DB_PATH}")
+
+
 def _rules(
     *,
     dd_type: str = "eod_trailing",
@@ -1442,6 +1450,7 @@ def test_profile_scenarios_pass_size_model_but_daily_pnl_does_not(monkeypatch):
     correlation/allocation entry (_load_lane_daily_pnl) stays raw (size_model None)."""
     import trading_app.account_survival as asv
 
+    _require_canonical_gold_db()
     captured = []
     real = asv._load_lane_trade_paths
 
@@ -1472,6 +1481,7 @@ def test_load_lane_daily_pnl_passes_no_size_model(monkeypatch):
     import trading_app.account_survival as asv
     from trading_app.prop_profiles import get_profile_lane_definitions
 
+    _require_canonical_gold_db()
     captured = []
     real = asv._load_lane_trade_paths
 
@@ -1524,6 +1534,7 @@ def _d3_scenarios_at_cap(cap: int):
     import trading_app.account_survival as asv
     from trading_app.prop_profiles import get_profile_lane_definitions, load_allocation_lanes
 
+    _require_canonical_gold_db()
     profile = asv.get_profile(_D3_PID)
     lane_defs = get_profile_lane_definitions(_D3_PID)
     instruments = sorted({ln["instrument"] for ln in lane_defs})
