@@ -1166,6 +1166,50 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             "$3K DD = 46% at 1ct. Keep inactive pending explicit activation review."
         ),
     ),
+    # --- C11-TEST: Tradeify Select 150K (dormant — survival-sim validation only) ---
+    "tradeify_select_150k": AccountProfile(
+        profile_id="tradeify_select_150k",
+        firm="tradeify",  # reuses dd_type="eod_trailing" spec + 150K tier; NO firm-spec edit
+        account_size=150_000,
+        is_express_funded=True,  # Tradeify funded — XFA-shaped wrapper; also waives telemetry-maturity gate
+        copies=1,  # single-account C11 test; sim ignores .copies — 1 is honest (5 would imply 5 live accts)
+        stop_multiplier=0.75,
+        max_slots=15,
+        active=False,  # DORMANT — C11-test only; prop_portfolio.py:674 skips inactive
+        allowed_sessions=frozenset(
+            {
+                "US_DATA_1000",
+                "COMEX_SETTLE",
+                "NYSE_CLOSE",
+                "CME_REOPEN",
+                "SINGAPORE_OPEN",
+                "EUROPE_FLOW",
+                "US_DATA_830",
+                "NYSE_OPEN",
+            }
+        ),
+        allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
+        # Explicit lanes (NOT ()): () falls back to load_allocation_lanes(profile_id),
+        # which reads a lane_allocation/tradeify_select_150k.json that does NOT exist ->
+        # fail-closed () -> empty scenario set -> trivial survival=1.0 PASS. Mirror the
+        # 100K_type_b shelf so the sim exercises a real trade distribution.
+        daily_lanes=(
+            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8
+            ),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
+        ),
+        payout_policy_id="tradeify_select_funded",
+        notes=(
+            "C11-test profile for Tradeify Select 150K (EOD-trailing, $4,500 DD tier). "
+            "copies=1 single-account validation; lanes mirror tradeify_100k_type_b "
+            "(max_orb_size_pts tuned on the 100K shelf — re-check at activation). "
+            "Dormant pending C11 PASS + explicit operator GO."
+        ),
+    ),
     # =========================================================================
     # Phase 2d: Rithmic scaling (Bulenox — durable, no forced conversion)
     # =========================================================================
