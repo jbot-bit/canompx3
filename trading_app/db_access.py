@@ -22,6 +22,19 @@ APPROVED_SNAPSHOT_TABLES: tuple[str, ...] = (
     "validated_setups",
     "edge_families",
 )
+# Canonical-core tables prove this is a real market-data DB and not a husk.
+# Their presence (and rows) is the sole authority for the OK/EMPTY/DEGRADED gate.
+# `validated_setups` and `edge_families` are research-derived — they can be
+# legitimately empty on a freshly-built DB (strategy_fitness treats an unbuilt
+# edge_families as a normal "run build_edge_families" diagnosis, not an error),
+# so their emptiness must never gate OK. `bars_1m` is the rawest husk
+# discriminator but is deliberately outside the snapshot surface; the core subset
+# is sufficient because any DB with daily_features + orb_outcomes populated
+# necessarily has bars_1m, and a husk has neither core table.
+CANONICAL_CORE_TABLES: tuple[str, ...] = ("daily_features", "orb_outcomes")
+# A real gold.db is multi-GB; a worktree husk is ~12 KB. Size is a supplementary
+# husk hint only — table state is the sole gate.
+HUSK_SIZE_BYTES_HINT = 64 * 1024
 DEFAULT_SNAPSHOT_ROOT = CANONICAL_RUNTIME_ROOT / "data" / "snapshots" / "gold_db"
 DEPRECATED_SCRATCH_DB = Path("C:/db/gold.db")
 MANIFEST_VERSION = 1
@@ -149,6 +162,45 @@ def _table_freshness(con: duckdb.DuckDBPyConnection, table: str) -> dict[str, An
     return payload
 
 
+def _classify_table_health(tables: dict[str, dict[str, Any]]) -> str:
+    """Derive a fail-closed status from per-table {exists, row_count} state.
+
+    Single source of truth for both db_health() and db_freshness() so the two
+    can never drift apart (institutional-rigor § 4 — never re-encode logic).
+
+    Tiers key on the canonical-core subset (CANONICAL_CORE_TABLES); research-
+    derived tables (validated_setups / edge_families) being empty NEVER blocks OK
+    (they are legitimately unbuilt on a real DB — GAP 1 in the design pass).
+
+    - EMPTY    — BOTH canonical-core tables absent (a husk: no market data at all).
+    - DEGRADED — canonical-core partially present (one missing, or present with
+                 row_count == 0). Honest "not a husk, but not fully usable".
+    - OK       — every canonical-core table exists with row_count > 0.
+
+    Status is gated SOLELY by canonical-core. Research-derived tables
+    (validated_setups / edge_families) being absent/empty NEVER changes the
+    status — they are legitimately unbuilt on a real DB, and the whole point of
+    GAP 1 in the design pass is that a healthy-core DB with no derived tables is
+    NORMAL, not degraded. Their state is still surfaced in the horizon/tables map
+    for the caller; it just does not gate this status word.
+    """
+
+    def _has_rows(table: str) -> bool:
+        info = tables.get(table) or {}
+        return bool(info.get("exists")) and int(info.get("row_count", 0) or 0) > 0
+
+    def _exists(table: str) -> bool:
+        return bool((tables.get(table) or {}).get("exists"))
+
+    if not any(_exists(t) for t in CANONICAL_CORE_TABLES):
+        return "EMPTY"
+
+    if not all(_has_rows(t) for t in CANONICAL_CORE_TABLES):
+        return "DEGRADED"
+
+    return "OK"
+
+
 def db_freshness(db_path: Path | None = None) -> dict[str, Any]:
     """Return row-count and horizon information for approved DB tables."""
     path = Path(db_path) if db_path is not None else GOLD_DB_PATH
@@ -171,7 +223,7 @@ def db_freshness(db_path: Path | None = None) -> dict[str, Any]:
             "error": str(exc),
         }
 
-    return {"status": "OK", "db_path": str(path), "tables": tables}
+    return {"status": _classify_table_health(tables), "db_path": str(path), "tables": tables}
 
 
 def db_health(db_path: Path | None = None) -> dict[str, Any]:
@@ -214,7 +266,18 @@ def db_health(db_path: Path | None = None) -> dict[str, Any]:
         payload.update({"status": "ERROR", "open_error": str(exc)})
         return payload
 
-    payload["status"] = "OK"
+    status = _classify_table_health(payload["horizon"])
+    payload["status"] = status
+
+    # Husk diagnostic: an empty DB (or a suspiciously tiny file) is almost
+    # always a per-worktree husk shadowing the real shared canonical DB. Name
+    # the canonical path so the operator can point DUCKDB_PATH at it. GOLD_DB_PATH
+    # is the canonical resolver (pipeline.paths) — never inline a path string.
+    tiny_file = payload["size_bytes"] is not None and payload["size_bytes"] <= HUSK_SIZE_BYTES_HINT
+    if status == "EMPTY" or tiny_file:
+        payload["husk_suspected"] = True
+        payload["expected_canonical_db"] = str(GOLD_DB_PATH)
+
     return payload
 
 

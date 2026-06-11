@@ -182,9 +182,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** e788992d — fix(tests): update mock signatures for account_id param (Stage 2 caller discipline)
-- **Files changed:** 1 files
-  - `tests/test_trading_app/test_bot_dashboard.py`
+- **Commit:** 1803603b — @ fix(mcp): get_db_health/db_freshness fail-closed on empty/husk gold.db
+- **Files changed:** 5 files
+  - `HANDOFF.md`
+  - `docs/runtime/action-queue.yaml`
+  - `docs/runtime/stages/2026-06-11-mcp-db-health-fail-closed.md`
+  - `tests/test_trading_app/test_mcp_server.py`
+  - `trading_app/db_access.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

@@ -206,11 +206,16 @@ class TestAiResearchPacket:
 
 
 def _make_health_db(path):
+    """Build a DB with both canonical-core tables populated → classifies OK."""
     con = duckdb.connect(str(path))
     con.execute("CREATE TABLE daily_features (trading_day DATE, symbol VARCHAR)")
     con.execute("INSERT INTO daily_features VALUES ('2026-05-29', 'MNQ')")
+    con.execute("CREATE TABLE orb_outcomes (trading_day DATE, symbol VARCHAR)")
+    con.execute("INSERT INTO orb_outcomes VALUES ('2026-05-29', 'MNQ')")
     con.execute("CREATE TABLE validated_setups (strategy_id VARCHAR, instrument VARCHAR)")
     con.execute("INSERT INTO validated_setups VALUES ('S1', 'MNQ')")
+    con.execute("CREATE TABLE edge_families (family_id VARCHAR)")
+    con.execute("INSERT INTO edge_families VALUES ('F1')")
     con.close()
 
 
@@ -236,7 +241,63 @@ class TestDbOperationalTools:
         assert result["read_only_open_ok"] is False
         assert "missing" in result["open_error"].lower()
 
-    def test_db_freshness_reports_missing_tables_without_silent_success(self, tmp_path):
+    def test_db_health_reports_empty_on_husk_db(self, tmp_path):
+        """A husk DB (opens fine, no canonical tables) must fail closed as EMPTY."""
+        db_path = tmp_path / "gold.db"
+        # Create an empty DuckDB file with NO canonical tables (the worktree husk).
+        duckdb.connect(str(db_path)).close()
+
+        result = _get_db_health(db_path=db_path)
+
+        assert result["status"] == "EMPTY"
+        assert result["husk_suspected"] is True
+        assert result["expected_canonical_db"]
+        # Opened fine — the DB is not corrupt, just empty (not ERROR/MISSING).
+        assert result["read_only_open_ok"] is True
+        assert result["exists"] is True
+
+    def test_db_health_reports_degraded_on_partial_core(self, tmp_path):
+        """daily_features present but orb_outcomes absent → canonical-core partial → DEGRADED."""
+        db_path = tmp_path / "gold.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("CREATE TABLE daily_features (trading_day DATE, symbol VARCHAR)")
+        con.execute("INSERT INTO daily_features VALUES ('2026-05-29', 'MNQ')")
+        con.close()
+
+        result = _get_db_health(db_path=db_path)
+
+        assert result["status"] == "DEGRADED"
+        assert result["horizon"]["daily_features"]["exists"] is True
+        assert result["horizon"]["orb_outcomes"]["exists"] is False
+
+    def test_db_health_ok_when_core_present_even_if_derived_empty(self, tmp_path):
+        """GAP-1 regression guard: research-derived emptiness must NOT block OK.
+
+        daily_features + orb_outcomes populated, validated_setups + edge_families
+        absent → still OK, because derived tables are legitimately unbuilt on a
+        real DB. Without this guard the false-DEGRADED bug could silently return.
+        """
+        db_path = tmp_path / "gold.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("CREATE TABLE daily_features (trading_day DATE, symbol VARCHAR)")
+        con.execute("INSERT INTO daily_features VALUES ('2026-05-29', 'MNQ')")
+        con.execute("CREATE TABLE orb_outcomes (trading_day DATE, symbol VARCHAR)")
+        con.execute("INSERT INTO orb_outcomes VALUES ('2026-05-29', 'MNQ')")
+        con.close()
+
+        result = _get_db_health(db_path=db_path)
+
+        assert result["status"] == "OK"
+        assert result["horizon"]["validated_setups"]["exists"] is False
+        assert result["horizon"]["edge_families"]["exists"] is False
+
+    def test_db_freshness_reports_degraded_on_missing_core_table(self, tmp_path):
+        """db_freshness must NOT silently report OK when a canonical-core table is missing.
+
+        Renamed from test_db_freshness_reports_missing_tables_without_silent_success:
+        the old name promised no silent success but asserted OK. Only daily_features
+        is built here (orb_outcomes absent = core partial) → DEGRADED, matching the name.
+        """
         db_path = tmp_path / "gold.db"
         con = duckdb.connect(str(db_path))
         con.execute("CREATE TABLE daily_features (trading_day DATE, symbol VARCHAR)")
@@ -245,7 +306,7 @@ class TestDbOperationalTools:
 
         result = _get_db_freshness(db_path=db_path)
 
-        assert result["status"] == "OK"
+        assert result["status"] == "DEGRADED"
         assert result["tables"]["daily_features"]["exists"] is True
         assert result["tables"]["daily_features"]["row_count"] == 1
         assert result["tables"]["orb_outcomes"]["exists"] is False

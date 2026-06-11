@@ -1395,6 +1395,47 @@ items:
   - id: mcp_db_health_fail_closed_on_husk_2026_06_11
     title: gold-db MCP get_db_health reports status:OK on an empty worktree-husk DB (fail-OPEN)
     class: ops
+    status: closed
+    priority: P2
+    close_before_new_work: false
+    owner_hint: joshd
+    last_verified_at: 2026-06-11
+    freshness_sla_days: 21
+    next_action: |
+      CLOSED (2026-06-11). Fixed in trading_app/db_access.py (NOT mcp_server.py —
+      mcp_server:214/219 delegate to db_access.db_health/db_freshness). Added a shared
+      pure helper `_classify_table_health(tables)` — single source of truth for BOTH
+      functions — that derives a fail-closed status from per-table {exists,row_count}:
+        - EMPTY    = both canonical-core tables (daily_features+orb_outcomes) absent
+                     (a husk); adds husk_suspected:true + expected_canonical_db
+                     (= pipeline.paths.GOLD_DB_PATH).
+        - DEGRADED = canonical-core partially present (one missing / row_count==0).
+        - OK       = both canonical-core tables exist with rows.
+      Status is gated SOLELY by canonical-core; research-derived tables
+      (validated_setups/edge_families) being empty NEVER blocks OK (GAP 1 from the
+      adversarial pass — gating on them would falsely DEGRADE a healthy DB). db_freshness
+      got the same classifier; its misnamed test (..._without_silent_success, which
+      asserted OK on a core-partial DB) was renamed + fixed to assert DEGRADED.
+      Verified: 29/29 test_mcp_server green incl. 3 new + GAP-1 regression guard; live
+      real DB → OK, hermetic husk → EMPTY+husk_suspected. Zero-code mitigation also
+      applied: this worktree's 12 KB husk gold.db deleted so the resolver falls through
+      to the shared 7.6 GB canonical DB.
+      SCOPE NOTE: this fixed REPORTING only. The RESOLVER still lands on a husk when one
+      exists — see follow-up paths_resolver_skips_husk_sized_gold_db.
+    exit_criteria: |
+      get_db_health returns a non-OK status on an empty/husk DB (fail-closed), with a
+      companion test injecting an empty DB; drift + tests green. DONE.
+    blocked_by: []
+    decision_refs: []
+    evidence_refs:
+      - docs/runtime/stages/2026-06-11-mcp-db-health-fail-closed.md
+      - docs/audit/results/2026-06-11-qwen-overlay-claims-reaudit.md
+      - trading_app/db_access.py
+      - tests/test_trading_app/test_mcp_server.py
+
+  - id: paths_resolver_skips_husk_sized_gold_db
+    title: pipeline.paths resolver should skip a husk-sized local gold.db in favor of the shared canonical DB
+    class: ops
     status: open
     priority: P2
     close_before_new_work: false
@@ -1402,19 +1443,26 @@ items:
     last_verified_at: 2026-06-11
     freshness_sla_days: 21
     next_action: |
-      Live get_db_health from a worktree returned status:"OK" while daily_features /
-      orb_outcomes / validated_setups were all exists:false, row_count:0 (size 12 KB
-      husk). This false-PASS broke get_strategy_fitness AND made check_drift report 23
-      DB-dependent "violations" until DUCKDB_PATH was pointed at the real main-checkout
-      gold.db. Fix in trading_app/mcp_server.py: return DEGRADED/EMPTY (not OK) when
-      canonical tables are absent/empty, and flag husk-DB resolution naming the expected
-      canonical path. DESIGN-first (capital-adjacent MCP surface). Stage file:
-      docs/runtime/stages/2026-06-11-mcp-db-health-fail-closed.md.
+      FOLLOW-UP to mcp_db_health_fail_closed_on_husk_2026_06_11 (which fixed REPORTING
+      only). pipeline/paths._default_canonical_db (paths.py:75) returns the local
+      worktree gold.db whenever local_db.exists() — so a 12 KB empty HUSK shadows the
+      real shared 7.6 GB common-root DB, and any process connecting via GOLD_DB_PATH
+      lands on the husk (broke get_strategy_fitness + 23 false drift violations this
+      session; only worked around by deleting the husk / pointing DUCKDB_PATH).
+      PROPOSED: skip a husk-sized local gold.db (tables absent OR size <= ~64 KB) and
+      fall through to _discover_git_common_root's shared DB. This CURES the symptom the
+      health fix only REPORTS.
+      WHY ITS OWN ENTRY: paths.py is a canonical-source module (Tier B per
+      autonomy-contract) gated by drift checks #37/#62 — needs its own design pass +
+      stage, NOT a tack-on. Decide the husk predicate carefully (size threshold vs
+      table-probe; a table-probe means opening the DB inside the resolver, which the
+      resolver currently does not do — blast radius on import-time GOLD_DB_PATH).
     exit_criteria: |
-      get_db_health returns a non-OK status on an empty/husk DB (fail-closed), with a
-      companion test injecting an empty DB; drift + tests green.
+      Resolver skips a husk-sized/empty local gold.db and uses the shared canonical DB;
+      drift #37/#62 still pass; companion test injects a husk + asserts fall-through.
     blocked_by: []
     decision_refs: []
     evidence_refs:
+      - pipeline/paths.py
+      - trading_app/db_access.py
       - docs/runtime/stages/2026-06-11-mcp-db-health-fail-closed.md
-      - docs/audit/results/2026-06-11-qwen-overlay-claims-reaudit.md
