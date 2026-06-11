@@ -182,12 +182,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** 4cfb12d5 — docs(pulse): clear backlog — mark debt parked, queue real-exposure items, refresh C11/C12
-- **Files changed:** 4 files
+- **Commit:** 7d81c389 — chore(ralph): update audit ledger and state for iters 225-227
+- **Files changed:** 6 files
   - `HANDOFF.md`
-  - `docs/runtime/action-queue.yaml`
-  - `docs/runtime/debt-ledger.md`
-  - `docs/runtime/fast_lane_graveyard_digest.yaml`
+  - `docs/ralph-loop/deferred-findings.md`
+  - `docs/ralph-loop/ralph-ledger.json`
+  - `docs/ralph-loop/ralph-loop-audit.md`
+  - `docs/ralph-loop/ralph-loop-history.md`
+  - `docs/ralph-loop/ralph-loop-plan.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

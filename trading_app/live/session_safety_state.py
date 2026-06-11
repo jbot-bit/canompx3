@@ -43,7 +43,12 @@ class SessionSafetyState:
         self.blocked_strategies: dict[str, str] = {}  # strategy_id → reason
         self.shadow_failures: dict[str, str] = {}  # account_id → failure description
         self.daily_pnl_r: float = 0.0  # intraday P&L for daily loss circuit breaker
-        self.daily_pnl_dollars: float = 0.0  # intraday realized $ for dollar daily-loss breaker
+        self.daily_pnl_dollars: float = 0.0  # intraday realized $ for dollar daily-loss breaker (PRIMARY)
+        # Stage 2 — per-account MODELED realized $ for the per-account daily-loss
+        # belts (account_id → dollars). Empty for single-account / signal-only
+        # sessions (the scalar above is the only belt). JSON keys are strings;
+        # the orchestrator re-keys to int when restoring into RiskManager.
+        self.account_pnl_dollars: dict[str, float] = {}
         self.trading_day: str = ""  # ISO date — daily_pnl_r/dollars only valid if matches current day
         self.cooldown_until: str = ""  # ISO datetime — mandatory pause after equity halt (self-funded)
         # R3: last time a feed connection was stable for >= ORCHESTRATOR_STABLE_RUN_SECS.
@@ -92,6 +97,9 @@ class SessionSafetyState:
             self.shadow_failures = dict(data.get("shadow_failures", {}))
             self.daily_pnl_r = float(data.get("daily_pnl_r", 0.0))
             self.daily_pnl_dollars = float(data.get("daily_pnl_dollars", 0.0))
+            # Stage 2 — per-account belts (string-keyed in JSON). Coerce values
+            # to float; tolerate a missing key (pre-Stage-2 state files) as {}.
+            self.account_pnl_dollars = {str(k): float(v) for k, v in dict(data.get("account_pnl_dollars", {})).items()}
             self.trading_day = str(data.get("trading_day", ""))
             self.cooldown_until = str(data.get("cooldown_until", ""))
             self.last_connected_at = str(data.get("last_connected_at", ""))
@@ -123,6 +131,7 @@ class SessionSafetyState:
             "shadow_failures": self.shadow_failures,
             "daily_pnl_r": round(self.daily_pnl_r, 4),
             "daily_pnl_dollars": round(self.daily_pnl_dollars, 2),
+            "account_pnl_dollars": {k: round(v, 2) for k, v in self.account_pnl_dollars.items()},
             "trading_day": self.trading_day,
             "cooldown_until": self.cooldown_until,
             "last_connected_at": self.last_connected_at,

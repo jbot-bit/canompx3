@@ -193,6 +193,207 @@ class TestDollarCircuitBreaker:
 
 
 # ============================================================================
+# Per-Account Daily-Loss Belts (Stage 2) — MODELED account-keyed dollar belts
+# ============================================================================
+
+
+class TestPerAccountDailyLossBelts:
+    """Account-keyed MODELED daily-loss belts (configure_accounts).
+
+    Each configured account accrues its OWN modeled dollars (primary pnl_dollars
+    scaled by its contract ratio) and halts independently. The single-account /
+    unconfigured path stays byte-identical to TestDollarCircuitBreaker above.
+    """
+
+    # --- byte-identical: unconfigured path is exactly the scalar belt ----------
+
+    def test_unconfigured_is_scalar_path_byte_identical(self):
+        # Without configure_accounts, the per-account branch is never taken:
+        # behaviour must match the pre-Stage-2 scalar dollar belt exactly.
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(-1.0, pnl_dollars=-300.0)
+        assert not rm.is_halted()
+        allowed, _, _ = rm.can_enter("s1", "US_DATA_830", [], -1.0)
+        assert allowed
+        rm.on_trade_exit(-1.0, pnl_dollars=-200.0)  # cum -$500
+        assert rm.is_halted()
+        allowed, reason, _ = rm.can_enter("s1", "US_DATA_830", [], -1.0)
+        assert not allowed and "circuit_breaker" in reason
+        # No per-account state surfaces when unconfigured.
+        assert "accounts" not in rm.get_status()
+        assert rm.export_account_pnl_dollars() == {}
+
+    # --- INDEPENDENT halt: different contracts → one halts, one keeps trading ---
+
+    def test_independent_halt_different_contracts(self):
+        # Primary trades 1 contract; shadow trades 3. The shadow's modeled loss
+        # is 3x the primary's. A primary loss that puts the SHADOW past -$450 but
+        # leaves the PRIMARY under it must halt ONLY the shadow.
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.configure_accounts({101: 1, 202: 3}, primary_account_id=101)
+        # Primary loses -$200 → shadow modeled -$600 (3x). Shadow breaches, primary not.
+        rm.on_trade_exit(-1.0, pnl_dollars=-200.0)
+        assert rm.account_pnl_dollars(101) == -200.0
+        assert rm.account_pnl_dollars(202) == -600.0
+        assert not rm.is_account_halted(101)  # primary -$200 < cap
+        assert rm.is_account_halted(202)  # shadow -$600 >= cap → halted
+        # can_enter: primary still allowed, shadow rejected.
+        allowed_p, _, _ = rm.can_enter("s1", "US_DATA_830", [], -1.0, account_id=101)
+        allowed_s, reason_s, _ = rm.can_enter("s1", "US_DATA_830", [], -1.0, account_id=202)
+        assert allowed_p
+        assert not allowed_s and "account 202" in reason_s
+
+    # --- MIRROR (uniform contracts) → all halt together (copies=1/mirror) -------
+
+    def test_mirror_uniform_contracts_halt_together(self):
+        # Today's CopyOrderRouter mirrors 1:1 — every account trades the same
+        # contract count. Modeled dollars are identical, so all belts halt on the
+        # SAME trade. This is the documented copies=2-both-halt-together semantic.
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.configure_accounts({101: 1, 202: 1, 303: 1}, primary_account_id=101)
+        rm.on_trade_exit(-1.0, pnl_dollars=-300.0)
+        assert not any(rm.is_account_halted(a) for a in (101, 202, 303))
+        rm.on_trade_exit(-1.0, pnl_dollars=-200.0)  # each cum -$500
+        assert all(rm.is_account_halted(a) for a in (101, 202, 303))
+
+    def test_primary_belt_mirrors_scalar(self):
+        # The primary belt must track the scalar daily_pnl_dollars exactly so the
+        # primary-account semantics are unchanged from the scalar belt.
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.configure_accounts({101: 1, 202: 5}, primary_account_id=101)
+        rm.on_trade_exit(-1.0, pnl_dollars=-120.0)
+        assert rm.daily_pnl_dollars == -120.0
+        assert rm.account_pnl_dollars(101) == -120.0  # primary == scalar
+
+    # --- can_enter default routing: account_id=None → primary belt --------------
+
+    def test_can_enter_none_account_defaults_to_primary(self):
+        # pnl_dollars is ALREADY the primary's realized dollars at its own
+        # contract count — the primary's ratio is always 1.0. A shadow trading
+        # FEWER contracts (ratio < 1) loses proportionally less. So a -$500
+        # primary loss halts the primary while the half-size shadow (-$250) does
+        # not. can_enter with no account_id must check the PRIMARY belt.
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.configure_accounts({101: 2, 202: 1}, primary_account_id=101)
+        rm.on_trade_exit(-1.0, pnl_dollars=-500.0)  # primary -$500, shadow -$250
+        assert rm.is_account_halted(101)
+        assert not rm.is_account_halted(202)
+        allowed, reason, _ = rm.can_enter("s1", "US_DATA_830", [], -1.0)  # no account_id
+        assert not allowed and "circuit_breaker" in reason
+
+    # --- crash recovery: per-account belts restored from persisted dollars -------
+
+    def test_crash_recovery_restores_each_account_belt(self):
+        # A restart restores each account's OWN modeled dollars (not just the
+        # primary), so a mid-day crash re-derives each account's halt.
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.daily_pnl_dollars = -200.0  # primary scalar restored by orchestrator
+        rm.configure_accounts(
+            {101: 1, 202: 3},
+            primary_account_id=101,
+            restored_pnl_dollars={101: -200.0, 202: -600.0},
+        )
+        # Shadow was already past its cap before the crash → still halted on restore.
+        assert not rm.is_account_halted(101)
+        assert rm.is_account_halted(202)
+        assert rm.account_pnl_dollars(202) == -600.0
+
+    def test_crash_recovery_pre_stage2_file_seeds_shadows_from_scalar(self):
+        # @audit-finding 2026-06-11 evidence-auditor CONDITIONAL: a same-day crash
+        # restart with a PRE-Stage-2 state file (only the primary scalar persisted,
+        # no per-account map) must NOT leave a breached shadow unhalted. With no
+        # restored_pnl_dollars but a non-zero scalar, EVERY belt seeds from the
+        # scalar (safe direction: over-halt, never false-PASS).
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.daily_pnl_dollars = -500.0  # primary scalar restored; cap is -$450
+        rm.configure_accounts({101: 1, 202: 3}, primary_account_id=101)  # no restore map
+        # Both the primary AND the shadow are seeded at -$500 and halted —
+        # the shadow is NOT silently flat-started.
+        assert rm.is_account_halted(101)
+        assert rm.is_account_halted(202)
+        assert rm.account_pnl_dollars(202) == -500.0
+
+    def test_crash_recovery_fresh_day_shadows_flat(self):
+        # No restore, scalar 0.0 (fresh day) → shadows flat, nothing halted.
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.configure_accounts({101: 1, 202: 3}, primary_account_id=101)
+        assert rm.account_pnl_dollars(101) == 0.0
+        assert rm.account_pnl_dollars(202) == 0.0
+        assert not rm.is_account_halted(202)
+
+    def test_crash_recovery_drops_unknown_account(self):
+        # A roster change across restart: a restored account no longer in the map
+        # is ignored (fail-safe — cannot bind a belt that no longer exists).
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.configure_accounts(
+            {101: 1},
+            primary_account_id=101,
+            restored_pnl_dollars={101: -100.0, 999: -800.0},  # 999 gone
+        )
+        assert rm.account_pnl_dollars(101) == -100.0
+        assert 999 not in rm.export_account_pnl_dollars()
+
+    # --- daily_reset clears belts but keeps the roster --------------------------
+
+    def test_daily_reset_clears_belts_keeps_roster(self):
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.configure_accounts({101: 1, 202: 3}, primary_account_id=101)
+        rm.on_trade_exit(-1.0, pnl_dollars=-200.0)
+        assert rm.is_account_halted(202)
+        rm.daily_reset(date(2024, 1, 6))
+        # Belts zeroed, halts cleared, BUT the account roster persists across days.
+        assert rm.account_pnl_dollars(202) == 0.0
+        assert not rm.is_account_halted(202)
+        assert set(rm.export_account_pnl_dollars()) == {101, 202}
+
+    # --- fail-closed configuration ---------------------------------------------
+
+    def test_configure_rejects_primary_not_in_map(self):
+        rm = RiskManager(RiskLimits(max_daily_loss_dollars=450.0))
+        with pytest.raises(ValueError, match="not in"):
+            rm.configure_accounts({202: 1, 303: 1}, primary_account_id=101)
+
+    def test_configure_rejects_nonpositive_primary_contracts(self):
+        rm = RiskManager(RiskLimits(max_daily_loss_dollars=450.0))
+        with pytest.raises(ValueError, match="must be > 0"):
+            rm.configure_accounts({101: 0, 202: 3}, primary_account_id=101)
+
+    # --- profit days never halt any belt ---------------------------------------
+
+    def test_profit_does_not_halt_any_account(self):
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.configure_accounts({101: 1, 202: 10}, primary_account_id=101)
+        rm.on_trade_exit(2.0, pnl_dollars=500.0)  # big win, 10x shadow
+        assert not rm.is_account_halted(101)
+        assert not rm.is_account_halted(202)
+        assert rm.account_pnl_dollars(202) == 5000.0
+
+    # --- status surfaces per-account belts when configured ----------------------
+
+    def test_status_surfaces_accounts_when_configured(self):
+        rm = RiskManager(RiskLimits(max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.configure_accounts({101: 1, 202: 3}, primary_account_id=101)
+        rm.on_trade_exit(-1.0, pnl_dollars=-200.0)
+        status = rm.get_status()
+        assert status["primary_account_id"] == 101
+        assert status["accounts"]["202"]["pnl_dollars"] == -600.0
+        assert status["accounts"]["202"]["halted"] is True
+        assert status["accounts"]["101"]["contracts"] == 1
+
+
+# ============================================================================
 # Max Concurrent Tests
 # ============================================================================
 

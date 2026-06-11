@@ -644,6 +644,10 @@ class SessionOrchestrator:
         if signal_only:
             self.order_router = None
             self.positions = None
+            # Stage 2 — no broker accounts in signal-only; per-account belts off
+            # (the scalar dollar belt still accrues as a preview, unchanged).
+            self._account_contract_map = {}
+            self._primary_account_id = None
             log.info("Signal-only mode: order router skipped")
         else:
             if account_id is None or account_id == 0:
@@ -673,6 +677,25 @@ class SessionOrchestrator:
                 )
             else:
                 self.order_router = primary_router
+
+            # Stage 2 — per-account daily-loss belts. Each account gets its own
+            # MODELED dollar belt in RiskManager so it can halt independently. The
+            # contract map is uniform 1:1 today (CopyOrderRouter mirrors the
+            # primary's position to every shadow), so every account charges the
+            # same modeled dollars and halts together — correct for copies=1 and
+            # for the mirror case. Stage 3 replaces the uniform 1 with each
+            # account's real contract count (different lanes/sizing per account),
+            # at which point the belts diverge. Built here (account ids known);
+            # configure_accounts is CALLED after crash-recovery restore below so
+            # the restored primary dollars seed the primary belt in one shot.
+            # Only the multi-account (shadow) path arms per-account belts — the
+            # single-account router keeps the scalar belt (byte-identical).
+            if shadow_account_ids:
+                self._account_contract_map = {aid: 1 for aid in self.order_router.all_account_ids}
+                self._primary_account_id = account_id
+            else:
+                self._account_contract_map = {}
+                self._primary_account_id = None
 
             self.positions = self._positions_cls(auth=self.auth)
             self._notifications_broken = False
@@ -789,6 +812,23 @@ class SessionOrchestrator:
                 self._safety_state.daily_pnl_r,
                 self._safety_state.daily_pnl_dollars,
                 _saved_day,
+            )
+
+        # Stage 2 — arm per-account belts AFTER the crash-recovery restore so the
+        # restored dollars seed the belts in one shot. Empty map (single-account /
+        # signal-only) → no-op, scalar belt unchanged. Done here (not at router
+        # build) so configure_accounts sees the restored P&L and re-derives a
+        # same-day halt PER ACCOUNT. Only pass restored per-account dollars when
+        # the saved state is for TODAY (same day-gate as the scalar restore
+        # above); a stale day means flat belts.
+        if self._account_contract_map and self._primary_account_id is not None:
+            restored_account_dollars: dict[int, float] | None = None
+            if _saved_day == str(self.trading_day) and self._safety_state.account_pnl_dollars:
+                restored_account_dollars = {int(k): v for k, v in self._safety_state.account_pnl_dollars.items()}
+            self.risk_mgr.configure_accounts(
+                self._account_contract_map,
+                self._primary_account_id,
+                restored_pnl_dollars=restored_account_dollars,
             )
 
         # DD PROTECTION — TWO LAYERS
@@ -2214,6 +2254,12 @@ class SessionOrchestrator:
         # Persist daily P&L for crash recovery (daily loss circuit breaker)
         self._safety_state.daily_pnl_r = self.engine.daily_pnl_r
         self._safety_state.daily_pnl_dollars = self.engine.daily_pnl_dollars
+        # Stage 2 — persist per-account modeled belts (string-keyed for JSON).
+        # Empty for single-account / signal-only (export returns {}), so the
+        # persisted shape is unchanged for those sessions.
+        self._safety_state.account_pnl_dollars = {
+            str(aid): dollars for aid, dollars in self.risk_mgr.export_account_pnl_dollars().items()
+        }
         self._safety_state.trading_day = str(self.trading_day)
         self._safety_state.save()
 

@@ -52,6 +52,25 @@ class TestSessionSafetyState:
         assert state2.blocked_strategies == {"STRAT_1": "orphan", "STRAT_2": "stuck exit"}
         assert state2.shadow_failures == {"12345": "submit: TimeoutError"}
 
+    def test_account_pnl_dollars_round_trip(self, state_dir: Path) -> None:
+        # Stage 2 — per-account modeled belts persist and restore (string keys in
+        # JSON, float values). A pre-Stage-2 file with no such key loads as {}.
+        state1 = SessionSafetyState("profile_test", "MNQ")
+        state1.daily_pnl_dollars = -200.0
+        state1.account_pnl_dollars = {"101": -200.0, "202": -600.0}
+        state1.trading_day = "2026-06-11"
+        state1.save()
+
+        state2 = SessionSafetyState("profile_test", "MNQ")
+        assert state2.account_pnl_dollars == {"101": -200.0, "202": -600.0}
+        assert state2.daily_pnl_dollars == -200.0
+
+    def test_account_pnl_dollars_defaults_empty(self, state_dir: Path) -> None:
+        # No per-account belts (single-account / signal-only) → empty, and a clean
+        # start has no account map.
+        state = SessionSafetyState("profile_test", "MNQ")
+        assert state.account_pnl_dollars == {}
+
     def test_load_drops_legacy_sr_alarm_blocks(self, state_dir: Path) -> None:
         """Pre-2026-04-14 files persisted SR-ALARM blocks. Loading such a
         file must drop those entries (they're re-derived from the SR review
