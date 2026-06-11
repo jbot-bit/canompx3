@@ -726,8 +726,23 @@ class ExecutionEngine:
                     strategy.strategy_id,
                 )
                 continue
-            # Build full row: daily_features (correct orb_minutes) + ORB runtime data
-            om_row = self._daily_features_rows.get(strategy.orb_minutes, self._daily_features_rows.get(5))
+            # Build full row: daily_features (correct orb_minutes) + ORB runtime data.
+            # Fail-closed against cross-aperture substitution: if OTHER apertures
+            # have rows but this strategy's own aperture does NOT, skip + log —
+            # never arm an O15 lane on the O5 row (silent wrong-aperture features if
+            # O15 freshness lapses). When NO features are present at all (empty dict,
+            # the legacy "ORB-runtime-only" path), om_row stays None and downstream
+            # None-guards handle it exactly as before — that is not a substitution.
+            om_row = self._daily_features_rows.get(strategy.orb_minutes)
+            if om_row is None and self._daily_features_rows:
+                logger.error(
+                    "No daily_features row for orb_minutes=%d (%s) — skipping (fail-closed, "
+                    "no cross-aperture fallback). Available apertures: %s",
+                    strategy.orb_minutes,
+                    strategy.strategy_id,
+                    sorted(self._daily_features_rows.keys()),
+                )
+                continue
             row = {}
             if om_row is not None:
                 row.update(om_row)

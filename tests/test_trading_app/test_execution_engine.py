@@ -1062,6 +1062,66 @@ class TestZeroRiskRejections:
         assert len(engine.completed_trades) == 1
 
 
+class TestMissingApertureFeatureRow:
+    """A strategy whose orb_minutes aperture has no daily_features row must NOT
+    arm on a cross-aperture (O5) substitute — fail-closed skip + error log.
+
+    Guards Qwen Claim 2 (O15->O5 silent feature fallback) — execution_engine
+    must not arm an O15 lane on O5 features if the O15 row is ever absent.
+    """
+
+    def test_o15_strategy_not_armed_when_only_o5_row_present(self, caplog):
+        """O15 strategy + daily_features_rows={5: row} (O15 absent) -> skipped, logged."""
+        import logging
+
+        strategy = _make_strategy(
+            orb_minutes=15,
+            confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER_O15",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        # Only the O5 row is supplied; the O15 aperture row is absent.
+        engine.on_trading_day_start(date(2024, 1, 5), daily_features_rows={5: {}})
+
+        # O15 ORB window for US_DATA_830 is 13:30-13:45 UTC (15m). Build it.
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
+        for i in range(15):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+
+        # Break bar at window end (13:45) + follow-up bar (would be the E1 entry bar).
+        with caplog.at_level(logging.ERROR, logger="trading_app.execution_engine"):
+            all_events = list(engine.on_bar(_bar(ts_base + timedelta(minutes=15), 2704, 2710, 2703, 2706)))
+            all_events.extend(engine.on_bar(_bar(ts_base + timedelta(minutes=16), 2708, 2715, 2707, 2712)))
+
+        # Fail-closed: no ENTRY, no armed trade.
+        entry_events = [e for e in all_events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 0
+        assert len(engine.active_trades) == 0
+
+        # And it must be loud, not silent: an ERROR naming the missing aperture.
+        err_text = " ".join(r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR)
+        assert "15" in err_text and "daily_features" in err_text.lower()
+
+    def test_o5_strategy_still_arms_when_o5_row_present(self):
+        """Control: the fix must NOT regress the normal O5 path."""
+        strategy = _make_strategy(
+            orb_minutes=5,
+            confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        engine.on_trading_day_start(date(2024, 1, 5), daily_features_rows={5: {}})
+
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
+        for i in range(5):
+            engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
+        engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
+        next_events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712))
+
+        entry_events = [e for e in next_events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 1
+
+
 class TestCLI:
     def test_import(self):
         """Module imports without error."""
