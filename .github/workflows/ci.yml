@@ -112,9 +112,11 @@ jobs:
       # `--timeout=0` still loads the plugin and arms the watchdog thread,
       # leaving the race surface intact. Removing the plugin from the run
       # completely eliminates the thread, the watchdog, and the race.
-      # Per-step `timeout-minutes: 10` already provides genuine hang
-      # protection at the GH-Actions layer. Local dev keeps the pyproject
-      # 120s default for faster feedback.
+      # Per-step `timeout-minutes` provides genuine hang protection at the
+      # GH-Actions layer. Most shards stay at 10m; the broad pipeline-core
+      # shard has 1,300+ tests and hit the 10m Actions kill at 63% on
+      # PR #373, so it carries a larger explicit budget. Local dev keeps
+      # the pyproject 120s default for faster feedback.
       # 2026-05-25 n=4 class-close after `--timeout=0` CLI fix did not close.
       # Enforced by `check_ci_pytest_no_timeout_plugin` drift check.
 
@@ -177,7 +179,7 @@ jobs:
           --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (pipeline core)
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: >
           uv run pytest tests/test_pipeline -q -p no:timeout
           --ignore=tests/test_pipeline/test_check_drift.py
