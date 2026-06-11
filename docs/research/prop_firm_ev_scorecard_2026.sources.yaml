@@ -1,0 +1,336 @@
+schema_version: 1
+prepared: "2026-06-11"
+scope: "Research-only prop-firm EV scorecard. No live deployment, broker routing, allocation, profile, or database mutation."
+evidence_labels:
+  MEASURED: "Directly supported by official firm documentation or current local repo source."
+  MEASURED-CONFLICT: "Two or more official firm surfaces conflict; do not average or choose without purchase-dashboard or written support confirmation."
+  INFERRED: "Logical consequence of official rules, local state-machine modelling, or canompx3 risk policy."
+  UNSUPPORTED: "Not present in official sources reviewed for this v1."
+methodology_sources:
+  local_research_rules:
+    - "RESEARCH_RULES.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    - "docs/institutional/literature/carver_2015_ch11_portfolios.md"
+  repo_consistency_sources:
+    - "trading_app/prop_profiles.py"
+    - "trading_app/prop_firm_policies.py"
+firm_scorecards:
+  - firm: "Topstep"
+    plan: "Express Funded Account (XFA), active canompx3 sleeve is 50K MNQ"
+    verdict: "WATCH"
+    ev_band: "fee/cap constrained"
+    state_machine:
+      evidence_label: "MEASURED"
+      states:
+        - "Trading Combine"
+        - "Express Funded Account"
+        - "XFA payout cycles"
+        - "forced or optional Live Funded Account call-up risk"
+      transition_notes:
+        - "Up to five active XFAs are allowed."
+        - "A Live Funded Account call-up closes all active XFAs."
+        - "ProjectX API automation is not allowed in the Live Funded Account."
+    fees:
+      evidence_label: "MEASURED"
+      fields:
+        activation_fee: "Activation fee applies after passing; official help page does not specify dollar amount on reviewed XFA page."
+        monthly_subscription_after_pass: "No monthly subscription after passing the Trading Combine."
+        api_fee: "TopstepX API access is $29/month, or $14.50/month for Topstep traders with the cited discount code."
+      unsupported_fields:
+        - "Current official Trading Combine purchase price by tier was not captured in this v1."
+    payout:
+      evidence_label: "MEASURED"
+      fields:
+        split: "90/10"
+        minimum_request: "$125"
+        standard_xfa_caps: "50K $2,000; 100K $3,000; 150K $5,000."
+        consistency_xfa_caps: "50K $3,000; 100K $4,000; 150K $6,000."
+        lfa_cap: "Uncapped on the reviewed payout policy."
+        xfa_payout_effect: "After an approved payout, Maximum Loss Limit resets to zero permanently."
+    transition:
+      evidence_label: "MEASURED"
+      fields:
+        xfa_count: "Up to five active XFAs."
+        lfa_call_up: "All XFAs close when the trader is called up to Live Funded Account."
+        lfa_funds: "20% of combined XFA balances available, 80% reserve, capped at account size."
+        lfa_decline: "Official LFA page says the trader cannot decline and remain in XFA."
+    automation:
+      evidence_label: "MEASURED"
+      fields:
+        xfa: "Automated strategies allowed subject to Topstep conditions."
+        lfa: "Automated strategies allowed, but ProjectX API is prohibited."
+        hosting: "TopstepX API page says trading must be from a personal device; VPS, VPN, and remote servers are prohibited."
+    copy_rules:
+      evidence_label: "MEASURED"
+      fields:
+        copier_limit: "Trade copier allowed up to $750K combined account size."
+        prohibited: "Hedging and coordinated trading are prohibited."
+    drawdown:
+      evidence_label: "MEASURED"
+      fields:
+        xfa_profile_repo: "Local profile marks Topstep as EOD trailing."
+        lfa_daily_loss: "LFA daily loss limits by size: 50K $2,000; 100K $3,000; 150K $4,500."
+    c11_inputs:
+      evidence_label: "INFERRED"
+      fields:
+        account_size: "50K sleeve should be evaluated separately from 100K and 150K because payout caps differ by tier."
+        payout_cap: "$2,000 Standard XFA cap for 50K."
+        max_loss_limit_effect: "Payout resets Maximum Loss Limit to zero permanently."
+        automation_gate: "XFA ProjectX automation may not extrapolate to LFA."
+        hosting_gate: "Personal-device-only API restriction must be modelled as operational fragility."
+        simulator_status: "No C11 pass/fail claim in this scorecard."
+    correlated_tail_risk:
+      evidence_label: "INFERRED"
+      fields:
+        orb_risk: "Shared ORB timing across multiple XFAs creates correlated loss and call-up risk."
+        non_additivity: "Do not sum XFA caps as independent payout capacity without correlation and same-firm transition modelling."
+    source_urls:
+      - "https://help.topstep.com/en/articles/8284215-express-funded-account-parameters"
+      - "https://help.topstep.com/en/articles/10657969-live-funded-account-parameters"
+      - "https://help.topstep.com/en/articles/11187768-topstepx-api-access"
+      - "https://help.topstep.com/en/articles/8284233-topstep-payout-policy"
+    evidence_label: "MEASURED"
+    unsupported_fields:
+      - "Current official Trading Combine purchase price by tier."
+      - "Written approval status for canompx3 automation workflow."
+
+  - firm: "Tradeify"
+    plan: "Select 150K -> Select Flex funded"
+    verdict: "BUY-LATER"
+    ev_band: "positive candidate with compliance gate"
+    state_machine:
+      evidence_label: "MEASURED"
+      states:
+        - "Select evaluation"
+        - "Select Flex funded"
+        - "payout cycles"
+        - "Elite or live path"
+      transition_notes:
+        - "Select accounts can scale to multiple funded accounts, subject to the firm's account limits."
+        - "Bot use is conditioned on sole ownership and exclusive use within Tradeify."
+    fees:
+      evidence_label: "MEASURED-CONFLICT"
+      fields:
+        help_pricing_reference: "Select 150K $369; reset $239."
+        public_plan_page: "Select 150K currently displays $251, with reset $239."
+        activation_fee: "No activation fee shown in reviewed official Select and pricing pages."
+        market_data: "Free for non-professional traders; professional traders may owe $300/month."
+      unsupported_fields:
+        - "Purchase-dashboard final checkout price."
+    payout:
+      evidence_label: "MEASURED"
+      fields:
+        split: "90/10"
+        select_flex_150k_cap: "Official Select page states 150K Select Flex cap is $5,000."
+        winning_days: "Select Flex payout policy uses five winning days."
+        funded_consistency: "Official Select page says consistency is removed in funded phase."
+    transition:
+      evidence_label: "MEASURED"
+      fields:
+        eval_to_funded: "Select evaluation to Select Flex funded."
+        funded_count: "Official Select page says the trader can have multiple Select accounts up to five funded accounts."
+        live_path: "Elite/live path exists but was not fully modelled in v1."
+    automation:
+      evidence_label: "MEASURED"
+      fields:
+        bots_allowed: "Bots are allowed when solely owned and designed by the trader."
+        exclusive_use_gate: "Guidelines say automated trading systems must be used exclusively within Tradeify."
+        prohibited: "No HFT, no micro-scalping behavior, and compliance review may require live video or source disclosure."
+    copy_rules:
+      evidence_label: "MEASURED"
+      fields:
+        own_accounts: "Tradovate group trading is allowed only between accounts the trader owns or manages."
+        third_party_copiers: "Allowed at trader risk; third-party software issues remain trader responsibility."
+    drawdown:
+      evidence_label: "MEASURED"
+      fields:
+        select_150k: "EOD trailing max drawdown $4,500; no daily loss limit on reviewed Select page."
+        consistency: "40% consistency in evaluation; removed in funded phase."
+    c11_inputs:
+      evidence_label: "INFERRED"
+      fields:
+        account_size: "$150,000"
+        profit_target: "$9,000"
+        max_loss_limit: "$4,500 EOD trailing"
+        max_contracts: "12 mini or 120 micro."
+        payout_cap: "$5,000 Select Flex 150K."
+        compliance_gate: "The canompx3 bot cannot run the same automated system outside Tradeify if the official exclusivity clause applies to the whole system."
+        simulator_status: "No C11 pass/fail claim in this scorecard."
+    correlated_tail_risk:
+      evidence_label: "INFERRED"
+      fields:
+        orb_risk: "A 150K account can carry larger notional exposure; ORB tail losses remain correlated with same strategy on other firms."
+        exclusivity_risk: "If Tradeify treats the bot as a whole-system exclusive asset, cross-firm bot lanes would be a compliance breach."
+    source_urls:
+      - "https://help.tradeify.co/en/articles/12853921-select-evaluation-accounts"
+      - "https://help.tradeify.co/en/articles/10468318-guidelines-for-traders"
+      - "https://help.tradeify.co/en/articles/13196343-tradovate-order-entry-copy-trading"
+      - "https://help.tradeify.co/en/articles/10495897-rules-trailing-max-drawdowns"
+      - "https://help.tradeify.co/en/articles/14369021-tradeify-pricing-reference"
+      - "https://help.tradeify.co/en/articles/12853966-select-flex-and-select-daily-payout-policies"
+      - "https://tradeify.co/select-plan"
+    evidence_label: "MEASURED-CONFLICT"
+    unsupported_fields:
+      - "Dashboard checkout price."
+      - "Written clarification whether exclusivity applies to the entire canompx3 bot codebase or only Tradeify-routed lanes."
+      - "Elite/live path economics."
+
+  - firm: "MyFundedFutures"
+    plan: "Flex 50K"
+    verdict: "WATCH"
+    ev_band: "fee/cap constrained"
+    state_machine:
+      evidence_label: "MEASURED"
+      states:
+        - "evaluation"
+        - "sim-funded"
+        - "payout cycles"
+        - "live transition or merge"
+        - "cooldown after live breach"
+      transition_notes:
+        - "Live transition can occur after five consecutive approved payouts, a $100K simulated cap, or risk review."
+        - "Sim-funded and live accounts cannot be traded at the same time."
+    fees:
+      evidence_label: "MEASURED"
+      fields:
+        evaluation_fee: "$153 for Flex 50K on the reviewed official simplified evaluation page."
+        activation_fee: "$0."
+        live_costs: "Live account costs can include CME professional data, commissions, and platform license or subscription deductions from live balance."
+    payout:
+      evidence_label: "MEASURED"
+      fields:
+        split: "80/20"
+        max_request: "50% of profits, capped at $2,000 per request in sim-funded Flex 50K."
+        min_request: "$500 net profit between payouts."
+        max_sim_payouts: "5."
+        winning_days: "5 winning days of at least $150."
+        live_min_request: "$250 on reviewed Flex 50K live terms."
+    transition:
+      evidence_label: "MEASURED"
+      fields:
+        eval_limit: "Up to 10 evaluations."
+        sim_funded_limit: "Official simplified page says max 5 sim-funded for only 25K/50K, but also says effective March 24, 50K Flex max is 3 unless grandfathered."
+        live_transition: "Risk manager may invite/transition to live; live cannot be rejected under official live funded page."
+        live_merge: "Multiple sim-funded accounts are dormant or merged when live is issued."
+        cooldown: "After live breach, 21-day cooldown prevents sim-funded trading, new evals, resets, or additions."
+    automation:
+      evidence_label: "MEASURED"
+      fields:
+        allowed: "Automated strategies are allowed if they do not exploit favorable sim fills or violate live exchange behavior."
+        prohibited: "HFT, multi-limit manipulation, illiquid/gapped trading, bracket/slippage exploitation, and Tier 1 economic-data trading in Fair Play restricted windows."
+    copy_rules:
+      evidence_label: "MEASURED"
+      fields:
+        across_mffu: "Copy trading across MFFU accounts is allowed."
+        prohibited: "Copying other traders, collaborative identical/opposite strategies, and hedging are prohibited."
+    drawdown:
+      evidence_label: "MEASURED"
+      fields:
+        eval: "$2,000 EOD maximum loss limit; no mandatory daily loss limit on reviewed Flex 50K page."
+        sim: "$2,000 EOD maximum loss limit; optional $1,000 daily soft pause."
+        mll_after_first_payout: "Maximum loss limit moves to $100 after first payout."
+    c11_inputs:
+      evidence_label: "INFERRED"
+      fields:
+        account_size: "$50,000"
+        profit_target: "$3,000"
+        max_loss_limit: "$2,000 EOD"
+        payout_cap: "$2,000 per sim request; 5 max sim payouts."
+        max_contracts: "3 mini or 30 micro, with funded scaling ladder."
+        news_gate: "Tier 1 economic-data window must be excluded or blocked."
+        simulator_status: "No C11 pass/fail claim in this scorecard."
+    correlated_tail_risk:
+      evidence_label: "INFERRED"
+      fields:
+        orb_risk: "Copying the same ORB strategy across MFFU accounts is operationally allowed but tail-correlated."
+        live_merge_risk: "Sim account count is not a durable independent payout surface once live transition/merge happens."
+    source_urls:
+      - "https://help.myfundedfutures.com/en/articles/15072271-flex-plan-50-000-a-comprehensive-guide"
+      - "https://help.myfundedfutures.com/en/articles/11802636-traders-evaluation-simplified"
+      - "https://help.myfundedfutures.com/en/articles/10771500-copy-trading-at-myfundedfutures"
+      - "https://help.myfundedfutures.com/en/articles/8444599-fair-play-and-prohibited-trading-practices"
+      - "https://help.myfundedfutures.com/en/articles/10101257-understanding-live-funded-account-at-myfunded-futures"
+    evidence_label: "MEASURED"
+    unsupported_fields:
+      - "Whether canompx3 current ORB windows overlap any active MFFU Tier 1 Fair Play restricted window."
+      - "Live invite terms for this user."
+
+  - firm: "Bulenox"
+    plan: "50K EOD Qualification -> Master"
+    verdict: "NO-BUY"
+    ev_band: "fee/cap constrained"
+    state_machine:
+      evidence_label: "MEASURED"
+      states:
+        - "qualification"
+        - "Master"
+        - "three-payout window"
+        - "funded consolidation or refusal closeout"
+      transition_notes:
+        - "After three successful Master payouts, Risk Management may transition the trader to Funded."
+        - "All active Master accounts are consolidated into one Funded account."
+        - "If the trader does not consent to transition, the Master account is closed and no reward payout is made."
+    fees:
+      evidence_label: "MEASURED"
+      fields:
+        master_activation_fee: "$148 for 50K Option 2 EOD Master."
+        reset_fee: "$78 non-billing-date Qualification reset."
+        professional_data_fee: "$116/month if classified professional."
+        non_professional_data: "Included in reviewed Qualification page."
+    payout:
+      evidence_label: "MEASURED"
+      fields:
+        split: "First $10,000 no commission, then 90/10."
+        cadence: "Weekly Wednesday payouts."
+        minimum_request: "$1,000."
+        first_three_caps: "50K cap is $1,500 for each of first three payouts."
+        after_third: "No maximum payout stated on Master page, subject to Funded transition risk."
+        consistency: "40% consistency applies to every payout."
+    transition:
+      evidence_label: "MEASURED"
+      fields:
+        master_limit: "Up to 11 active Masters, with initial staging of 3."
+        funded_after_three: "Risk Management may transition after 3 successful Master payouts."
+        funded_balance_cap: "50K funded balance cap is $5,000."
+        consolidation: "All active Masters are consolidated into one Funded account."
+    automation:
+      evidence_label: "MEASURED"
+      fields:
+        qualification: "Trade copiers, algorithms, strategies, and bots are not forbidden on the reviewed Qualification page."
+        responsibility: "Bulenox takes no responsibility for trade copier or automation issues."
+    copy_rules:
+      evidence_label: "MEASURED"
+      fields:
+        rithmic: "One Rithmic user ID is used for Master accounts."
+        account_count: "Unlimited Qualifications; up to 11 Masters."
+    drawdown:
+      evidence_label: "MEASURED"
+      fields:
+        option_2: "EOD drawdown stops moving at initial balance plus $100 after Qualification and Master."
+        tda_50k: "$2,500 trailing drawdown amount."
+        daily_loss_limit_50k: "$1,100 until removed after max drawdown reaches starting balance."
+    c11_inputs:
+      evidence_label: "INFERRED"
+      fields:
+        account_size: "$50,000"
+        trailing_drawdown: "$2,500 EOD"
+        daily_loss_limit: "$1,100 until removal condition is met."
+        first_three_payout_caps: "$1,500 each."
+        safety_reserve: "$2,600 for 50K."
+        consistency: "40% per payout."
+        simulator_status: "No C11 pass/fail claim in this scorecard."
+    correlated_tail_risk:
+      evidence_label: "INFERRED"
+      fields:
+        orb_risk: "A three-account staged Master setup would be highly correlated if all accounts run the same ORB lane."
+        consolidation_risk: "The old 11-Master scaling thesis breaks after three successful payouts because active Masters can be consolidated into one Funded account."
+    source_urls:
+      - "https://bulenox.com/help/qualification-account/"
+      - "https://bulenox.com/help/master-account/"
+      - "https://bulenox.com/help/funded-account/"
+    evidence_label: "MEASURED"
+    unsupported_fields:
+      - "Current 50K Qualification purchase price."
+      - "Written automation approval for canompx3."
+      - "Rithmic conformance status for this workspace."
