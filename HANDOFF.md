@@ -6,6 +6,14 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Codex Session - daily bug scan survival sweep guard tightened (2026-06-11)
+- **Tool:** Codex.
+- **Grounding packet:** `python scripts/tools/daily_bug_scan.py --since 2026-06-09T23:00:40.749Z --base-ref origin/main --include-local-head --max-commits 5 --format json` returned verification mode `static_only` (`no repo-managed interpreter detected`), detached `HEAD` `81234156`, and five candidate commits. Actionable bug came from candidate `7f6e52fad1e045536ca4c8142b95bbcb26857133` (`wip(survival)...UNTESTED`).
+- **Finding fixed:** The new `survival_cap_sweep` evidence persisted only `survival_safe_ceiling`/`per_cap`, while the new blocking drift guard trusted that ceiling alone. A weaker ad hoc sweep (`horizon_days`, `n_paths`, `min_survival_probability`, `seed`) could therefore justify lifting `DEPLOYED_MAX_CONTRACTS_CLAMP` above 1 without proving the canonical C11 gate.
+- **What changed:** `trading_app/account_survival.py` now persists the sweep's governing config (`horizon_days`, `n_paths`, `seed`, `min_survival_probability`, `as_of_date`) into the `survival_cap_sweep` block. `pipeline/check_drift.py` now fail-closes when that block is missing canonical C11 settings before it accepts `survival_safe_ceiling`.
+- **Verification:** `python -m pytest tests/test_pipeline/test_check_drift_survival_cap_sweep_guard.py tests/test_trading_app/test_account_survival.py -q` passed `62/62`; `python -m py_compile trading_app/account_survival.py pipeline/check_drift.py` passed; `git diff --check` passed.
+- **State:** Local edits only in `pipeline/check_drift.py`, `trading_app/account_survival.py`, and the two focused test files. No commit/push. Daily bug scan scope remained limited to the emitted candidate SHAs.
+
 ## Codex Session — Claude parity layer made executable (2026-06-07)
 - **Tool:** Codex.
 - **What changed:** Filled the Codex-vs-Claude capability gap without mutating Claude-owned files. Added Codex-owned parity routing for Claude commands/rules/agents/hooks/skills via `.codex/AGENTS.md`, `.codex/HOOKS.md`, and `canompx3-claude-parity` skill/wrapper. Updated `.codex/COMMANDS.md`, `.codex/RULES.md`, `.codex/WORKFLOWS.md`, and skill READMEs.
@@ -174,10 +182,15 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** e0927a37 — fix(live): clean teardown on Ctrl+C in multi-instrument mode (#5)
-- **Files changed:** 2 files
-  - `scripts/run_live_session.py`
-  - `tests/test_trading_app/test_multi_runner.py`
+- **Commit:** 9eeeef5f — fix(worktree): auto-reconcile phantom-cwd husks on launch
+- **Files changed:** 7 files
+  - `START_WORKTREE.bat`
+  - `docs/runtime/stages/2026-06-11-phantom-cwd-worktree-launch-fix.md`
+  - `scripts/tools/new_session.sh`
+  - `scripts/tools/worktree_launch_preflight.py`
+  - `scripts/tools/worktree_manager.py`
+  - `tests/test_tools/test_worktree_launch_preflight.py`
+  - `tests/test_tools/test_worktree_manager.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
