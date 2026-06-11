@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Full history required for SHA-pinned drift checks
           # (e.g. check_107 SHA migration manifest uses `git show <sha>:<path>`).
@@ -260,7 +260,7 @@ jobs:
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Full history for parity with `checks` job — drift checks called
           # from research/cron scripts also need SHA-pinned history.
