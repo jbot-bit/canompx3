@@ -182,15 +182,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** 9eeeef5f — fix(worktree): auto-reconcile phantom-cwd husks on launch
-- **Files changed:** 7 files
+- **Commit:** 0e1f47df — fix(review): code-review B+ action items — live account_id assert + stale-branch warnings + integration test
+- **Files changed:** 4 files
   - `START_WORKTREE.bat`
-  - `docs/runtime/stages/2026-06-11-phantom-cwd-worktree-launch-fix.md`
   - `scripts/tools/new_session.sh`
-  - `scripts/tools/worktree_launch_preflight.py`
-  - `scripts/tools/worktree_manager.py`
-  - `tests/test_tools/test_worktree_launch_preflight.py`
-  - `tests/test_tools/test_worktree_manager.py`
+  - `tests/test_live/test_dashboard_account_selection.py`
+  - `trading_app/live/bot_dashboard.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
