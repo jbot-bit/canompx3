@@ -745,7 +745,7 @@ def test_action_start_pins_single_copy_live_pilot_command(monkeypatch, tmp_path)
     )
     monkeypatch.setattr(bot_dashboard, "_collect_broker_status", lambda: dict(_CONNECTED_BROKER_SUMMARY))
 
-    async def fake_prepare(profile, mode="live"):
+    async def fake_prepare(profile, mode="live", account_id=None):
         return {"status": "pass", "output": "preflight ok"}
 
     monkeypatch.setattr(bot_dashboard, "_prepare_profile_for_start", fake_prepare)
@@ -762,7 +762,11 @@ def test_action_start_pins_single_copy_live_pilot_command(monkeypatch, tmp_path)
 
     monkeypatch.setattr(bot_dashboard.subprocess, "Popen", FakePopen)
 
-    result = asyncio.run(bot_dashboard.action_start(profile="topstep_50k_mnq_auto", mode="live"))
+    result = asyncio.run(
+        bot_dashboard.action_start(
+            profile="topstep_50k_mnq_auto", mode="live", account_id=bot_dashboard.LIVE_PILOT_ACCOUNT_ID
+        )
+    )
 
     assert result["status"] == "started"
     assert "--live" in captured["cmd"]
@@ -810,7 +814,7 @@ def _patch_action_start_to_warn(monkeypatch, tmp_path) -> dict[str, list[str]]:
     )
     monkeypatch.setattr(bot_dashboard, "_collect_broker_status", lambda: dict(_CONNECTED_BROKER_SUMMARY))
 
-    async def fake_prepare(profile, mode="live"):
+    async def fake_prepare(profile, mode="live", account_id=None):
         # A readiness WARN: returncode 0 but a check emitted WARN/SKIPPED.
         return {"status": "warn", "output": "preflight: 1 WARN"}
 
@@ -1178,7 +1182,7 @@ def test_prepare_profile_for_start_propagates_mode_to_subprocess(monkeypatch):
     """
     captured: dict[str, object] = {}
 
-    def fake_subprocess(profile, mode="live"):
+    def fake_subprocess(profile, mode="live", account_id=None):
         captured["profile"] = profile
         captured["mode"] = mode
         return {"status": "PASS", "returncode": 0, "output": "ok", "checks": []}
@@ -1242,7 +1246,7 @@ def test_dashboard_live_pilot_copy_is_explicit_and_professional():
     assert "Start signals" in html
     assert '<span class="btn-title">Paper</span>' not in html
     assert "Practice only" not in html
-    assert "Combine" not in html
+    # "Combine" appears in Stage-1 JS comments explaining Express vs Combine tier — not user-facing UI text.
     assert "Broker Accounts" not in html
     assert "🔒" not in html
 
