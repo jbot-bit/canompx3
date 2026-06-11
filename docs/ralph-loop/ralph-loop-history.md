@@ -5,6 +5,40 @@
 
 ---
 
+## Iteration 226 — 2026-06-11
+- Phase: audit-only
+- Classification: audit-only
+- Target: trading_app/live/circuit_breaker.py (capital-path kill controls, scope override, LOW centrality per index but high-risk by function)
+- Cluster: 0 findings — all potential findings refuted or ACCEPTABLE
+- Finding: Full Seven Sins scan + domain checks + Ralph extensions. 4 candidate findings investigated:
+  (1) Concurrent probe race — REFUTED: event dispatch is sequential in session_orchestrator, no concurrent callers possible.
+  (2) Dead guard at should_allow_request():30-31 (`_opened_at is None` unreachable when is_open=True) — ACCEPTABLE: defensively fail-closed, removing adds risk with zero benefit.
+  (3) Redundant explicit kwargs at session_orchestrator.py:342 — ACCEPTABLE: explicit is correct style for capital paths.
+  (4) State not persisted across restart — ACCEPTABLE: per-session in-memory guard; reset on restart is correct design.
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed — verified throughout), § 5 (evidence over assertion — all findings traced)
+- Action: Audit-only. No production edits. 11/11 tests pass. Baseline drift 150/0 pass.
+- Blast radius: 0 files changed
+- Verification gate: fast
+- Verification: PASS — 11/11 circuit_breaker tests pass, 150/0 drift --fast, ruff clean
+- Commit: NONE (audit-only)
+
+---
+
+## Iteration 225 — 2026-06-11
+- Phase: fix (prior-session commit 526c2814; bookkeeping completed this session)
+- Classification: [mechanical]
+- Target: trading_app/db_manager.py (stale re-audit iter 180, critical centrality, 13 importers)
+- Cluster: 2 findings fixed (canonical_violation × 2)
+- Finding: DM-225-01 — `instrument TEXT DEFAULT 'MNQ'` in paper_trades DDL (lying instrument default, S3/canonical violation). DM-225-02 — verify_trading_app_schema missing 7 EHR migration columns in expected_cols (schema-parity gap, S3/canonical violation).
+- Doctrine cited: institutional-rigor.md § 5 (no dead/lying fields), § 10 (canonical sources), integrity-guardian.md § 3 (fail-closed)
+- Action: Both fixes confirmed present in commit 526c2814 (2026-06-04). Zero new findings. 13/13 tests pass.
+- Blast radius: 0 new files changed (fixes already committed)
+- Verification gate: fast
+- Verification: PASS — fast drift 150/0, ruff clean, 13/13 tests
+- Commit: 526c2814 (prior session)
+
+---
+
 ## Iteration 224 — 2026-05-31
 - Phase: fix
 - Classification: [mechanical]
@@ -2532,3 +2566,18 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file (builder.py), annotation-only
 - Verification: PASS — 66/66 test_eligibility_builder.py; 168 drift checks PASS; ruff PASS
 - Commit: 8d5f3b00
+
+---
+
+## Iteration 227 — 2026-06-11
+- Phase: audit-only
+- Classification: N/A (no fix)
+- Target: trading_app/live/session_orchestrator.py:2684/:2981/:2411/:2430 (CB integration seams)
+- Cluster: 0 fixable; 1 LOW deferred, 2 ACCEPTABLE, 1 pre-existing test
+- Finding: CB seams at :2684/:2981/:2411/:2430 correctly integrated. HTTP-level `_circuit_breaker` not reset at rollover (self-heals via 30s probe). Engine-level `_consecutive_engine_errors` correctly reset at rollover. Pre-existing test failure in `test_run_starts_watchdog_task` (CancelledError on notify teardown, 48/49 pass) not introduced this iteration.
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed); institutional-rigor.md § 6 (no silent failures)
+- Action: audit-only — no production code changes
+- Blast radius: 0 files
+- Verification gate: fast
+- Verification: PASS (baseline only — no fix to verify)
+- Commit: NONE

@@ -3,132 +3,117 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 224
+## Last iteration: 227
 
-## RALPH AUDIT — Iteration 224 (COMPLETED)
-## Date: 2026-05-31
-## Infrastructure Gates: fast drift PASS (exit 0, --skip-crg-advisory); ruff PASS
-## Scope: trading_app/conditional_overlays.py — first full scan (medium centrality, 2 importers: lifecycle_state.py, session_orchestrator.py)
-
----
-
-## Full-File Audit Results
-
-### trading_app/conditional_overlays.py — SCANNED (first full scan)
-
-**Seven Sins Scan — iteration 224:**
-- S1 (Silent failure): `except Exception as exc` at line 397 in `read_overlay_states` — captures exception as `reason`, surfaces to caller as `valid=False, reason=str(exc)`. Not silent. CLEAN.
-- S2 (Fail-open): No health check paths. `read_overlay_states` marks overlays `valid=False` on all failure paths. `RoleResolver.get_overlay_context` returns `{}` when state not available/valid (fail-closed). CLEAN.
-- S3 (Canonical violation): CO-224-01 FIXED — `holdout_frozen_from="2026-01-01"` at line 82 inlined the `HOLDOUT_SACRED_FROM` date. Fixed: `HOLDOUT_SACRED_FROM.isoformat()`. `instrument="MGC"` at line 62 — ACCEPTABLE pattern 1 (instrument-specific research spec object, not a canonical enumeration). `GOLD_DB_PATH` from `pipeline.paths`. CLEAN.
-- S4 (Impact unawareness): `tests/test_trading_app/test_conditional_overlays.py` has 6 tests, all PASS. No behavior change. CLEAN.
-- S5 (Evidence over assertion): All claims verified by grep + execution. CLEAN.
-- S6 (Spec compliance): No spec violations. CLEAN.
-- S7 (Metadata trust): `holdout_frozen_from` is metadata provenance in state JSON, not a logic gate. Field derivation now canonical. CLEAN.
-
-**Domain-specific checks:**
-- ORB window timing: No `break_ts`, `orb_end`, or hardcoded times. CLEAN.
-- Session hardcoding: Sessions in `PR48_MGC_CONT_EXEC_V1.sessions` tuple are spec-level declarations for a named research overlay, not a canonical SESSION_CATALOG enumeration. ACCEPTABLE pattern 1.
-- E0 fill-on-touch: No `close_outside`/`closed_outside` references. CLEAN.
-- Holdout date: CO-224-01 FIXED — no remaining `"2026-01-01"` literal. CLEAN.
-- DST contamination: No fixed clock times. CLEAN.
-- DB path: `GOLD_DB_PATH` from `pipeline.paths` (line 17). CLEAN.
-- Cost inline: No cost specs — overlay/role resolution module. CLEAN.
-- Instrument hardcoding: `"MGC"` at line 62 — ACCEPTABLE pattern 1 (named single-instrument research spec).
-
-**Ralph-specific extensions scan:**
-- Async safety: No async code. CLEAN.
-- State persistence gap: `refresh_overlay_state` writes JSON atomically via `write_text`. No in-memory-only state. CLEAN.
-- Contract drift: `read_overlay_states` and `RoleResolver.get_overlay_context` public API unchanged. CLEAN.
-- Look-ahead bias: Not applicable (overlay role resolution, not feature computation). CLEAN.
-
-**ACCEPTABLE findings:**
-1. `instrument="MGC"` at line 62 in `PR48_MGC_CONT_EXEC_V1`: instrument-specific named research spec — ACCEPTABLE pattern 1.
-2. `date.today()` in `RoleResolver.__init__` (line 449): repo-wide pattern; Brisbane = UTC+10 no DST so OS date matches trading day; module's `_current_trading_day()` is available but the pattern is established across `trading_app/` — ACCEPTABLE pattern 1+3.
-
-**Finding fixed:**
-
-- CO-224-01 [LOW] — canonical_violation: `holdout_frozen_from="2026-01-01"` at line 82 inlined the `HOLDOUT_SACRED_FROM` date as a string literal. Fix: imported `HOLDOUT_SACRED_FROM` from `trading_app.holdout_policy`; replaced literal with `HOLDOUT_SACRED_FROM.isoformat()`. Zero behavior change — field is metadata provenance only, not a logic gate. Commit: 1e84a4a0.
-
----
-
-## RALPH AUDIT — Iteration 223 (COMPLETED)
-## Date: 2026-05-31
-## Infrastructure Gates: fast drift PASS (exit 0, --skip-crg-advisory); ruff PASS
-## Scope: pipeline/ingest_dbn_mgc.py — stale re-audit (high centrality, 9 importers, findings=1 stale from iter 136)
+## RALPH AUDIT — Iteration 227 (COMPLETED)
+## Date: 2026-06-11
+## Infrastructure Gates: fast drift PASS (150/0, --fast); ruff PASS
+## Scope: trading_app/live/session_orchestrator.py — circuit_breaker integration seams :2684/:2981/:2411/:2430
 
 ---
 
 ## Full-File Audit Results
 
-### pipeline/ingest_dbn_mgc.py — SCANNED (stale re-audit, iter 136 → 223)
+### trading_app/live/session_orchestrator.py — SCANNED (stale re-audit, last iter 214)
 
-**Prior findings verified fixed:**
-- DF-12 (iter 136): JSONDecodeError on corrupt checkpoint line — fixed in `ccb44343`. `except json.JSONDecodeError` at line 128-133 present, logs to stderr, continues. VERIFIED.
-- iter-219 SYMBOL DRY: `SYMBOL = "MGC"` constant extracted at line 58; used at lines 779, 859, 940, 942. All 6 literals replaced. VERIFIED.
+**Hash check:** stored=6e96afbb1c0fd16a, current=6e96afbb1c0fd16a — SCAN_NEEDED (findings=5 from ledger).
 
-**Seven Sins Scan — iteration 223:**
-- S1 (Silent failure): `except Exception: pass` at lines 582-584 in `_close_con()` atexit handler — defensive cleanup only, `con` closed on all normal paths (line 948). `except Exception as e` at lines 807-812 and 880-885 — both do ROLLBACK + `logger.warning` + `traceback.print_exc()` + `sys.exit(1)`. Fail-closed, logged. CLEAN.
-- S2 (Fail-open): All validation gates call `sys.exit(1)` on failure. No health-check-returns-True pattern. CLEAN.
-- S3 (Canonical violation): `SYMBOL = "MGC"` at line 58 — deprecated single-instrument script, constant only used inside `main()` SQL (lines 779, 859, 940, 942). No importer uses `SYMBOL`. `DB_PATH = GOLD_DB_PATH` from `pipeline.paths`. ACCEPTABLE rule 2.
-- S4 (Impact unawareness): No tests directly for this module (0 selected). Utility functions tested indirectly via ingest_dbn.py test suite. No behavior changes this iteration. CLEAN.
-- S5 (Evidence over assertion): All claims verified by read + grep + import trace. CLEAN.
-- S6 (Spec compliance): No spec violations. CLEAN.
-- S7 (Metadata trust): No docstring-as-truth violations. `logger.warning` used for FATAL messages (style inconsistency — FATAL severity is logged at WARNING level) but `sys.exit(1)` follows immediately in every case. No correctness impact. CLEAN.
+**Note on prior ledger `findings=5`:** iter 214 findings appear to have been addressed. No open findings in deferred ledger for this file. Fresh audit conducted.
+
+**Seven Sins Scan — iteration 227:**
+- S1 (Silent failure): Many `except Exception as e` clauses — all reviewed. All either log+notify+re-raise or have documented best-effort `# noqa: BLE001` justifications (dashboard snapshot, bracket cancel). CLEAN for capital-path code. `except Exception: pass` at :1436-1437 has `# noqa: BLE001 — Dashboard state is best-effort — never kill the trading loop` — acceptable.
+- S2 (Fail-open): CB check at :2684 blocks entries when open (fail-closed). Exit path at :2981 logs CRITICAL and proceeds — intentional (cannot leave positions open). `_confirmed_flat_at_broker()` at :3385-3411 returns False on generic exception (fail-closed). CLEAN.
+- S3 (Canonical violation): No hardcoded instrument literals, session times, cost specs, DB paths, holdout dates. CLEAN.
+- S4 (Impact awareness): Tests exist (`test_orchestrator_circuit_wiring.py` 7/7 PASS, `test_session_orchestrator.py` 48/49 — 1 pre-existing failure). CLEAN for new code.
+- S5 (Evidence over assertion): All findings traced via PREMISE→TRACE→EVIDENCE. CLEAN.
+- S6 (Spec compliance): No spec violations found. CLEAN.
+- S7 (Metadata trust): Comments on CB design accurate vs code. CLEAN.
 
 **Domain-specific checks:**
-- ORB window timing: No `break_ts`, `orb_end`, or hardcoded times. CLEAN.
+- ORB window timing: No hardcoded times. `orb_utc_window()` used correctly via `LiveORBBuilder`. CLEAN.
 - Session hardcoding: No session literals. CLEAN.
-- E0 fill-on-touch: `close_outside`/`closed_outside` absent. CLEAN.
-- Holdout date: No `date(2026` literals. CLEAN.
-- DST contamination: No fixed UTC offsets. CLEAN.
-- DB path: `GOLD_DB_PATH` from `pipeline.paths` (line 39, `DB_PATH = GOLD_DB_PATH`). CLEAN.
-- Cost inline: No cost specs — pure ingestion module. CLEAN.
-- Instrument hardcoding: `SYMBOL = "MGC"` — ACCEPTABLE rule 2 (deprecated script, single-instrument by design).
+- E0 fill-on-touch: No `close_outside`/`closed_outside`. CLEAN.
+- Holdout date: No `date(2026...` literals. CLEAN.
+- DST contamination: No fixed clock times. CLEAN.
+- DB path: `GOLD_DB_PATH` used (no direct hardcoded paths). CLEAN.
+- Cost inline: `cost_spec.point_value` from injected spec. CLEAN.
 
 **Ralph-specific extensions scan:**
-- Async safety: No async code. CLEAN.
-- State persistence gap: `CheckpointManager` writes JSONL on every state change — no in-memory-only state loss on crash. CLEAN.
-- Contract drift: All imported functions (`choose_front_contract`, `validate_chunk`, `validate_timestamp_utc`, `check_merge_integrity`, `check_pk_safety`, `compute_trading_days`, `run_final_gates`, `CheckpointManager`, `GC_OUTRIGHT_PATTERN`) have stable signatures verified by 9 active importers. CLEAN.
-- Look-ahead bias: Ingestion pipeline, no feature computation. CLEAN.
+- Async safety: `time.sleep(0.5)` at :2392 is in a retry backoff inside `_retry_fill_poller` — not in the main event loop. `asyncio.sleep` used in async context. CLEAN.
+- State persistence gap: `_kill_switch_fired`, `_close_time_forced`, `_blocked_strategies` all persisted via `_safety_state.save()` on mutation. `_circuit_breaker` is intentionally in-memory (correct for per-session HTTP probe). CLEAN.
+- Contract drift: CB integration via `auth.failure_hook = self._circuit_breaker` wired at init (:343); all callers confirmed matching. CLEAN.
+- Look-ahead bias: Not applicable (live execution). CLEAN.
 
-**Blast radius analysis:**
-- 9 importers: `pipeline/ingest_dbn.py`, `pipeline/ingest_dbn_daily.py`, `pipeline/audit_bars_coverage.py`, `pipeline/ingest_statistics.py`, `scripts/ingestion/ingest_mes.py`, `scripts/ingestion/ingest_mnq_fast.py`, plus 3 research scripts.
-- All importers use utility functions only — none import `SYMBOL`, `DB_PATH`, `DBN_PATH`, `CHECKPOINT_DIR`, or `MINIMUM_START_DATE` (script-level constants used only in `main()`).
+**Candidate findings investigated:**
 
-**ACCEPTABLE findings (3 patterns):**
-1. `except Exception: pass` at line 582-584 in `_close_con()` atexit handler — best-effort cleanup, defensive. ACCEPTABLE rule 2.
-2. `SYMBOL = "MGC"` at line 58 — deprecated single-instrument script constant, zero blast radius outside `main()`. ACCEPTABLE rule 2.
-3. `logger.warning` used for FATAL-level messages (style, no correctness impact). ACCEPTABLE rule 3.
+**SO-227-01: `_circuit_breaker` not reset at daily rollover (LOW, DEFERRED)**
+- PREMISE: `_check_trading_day_rollover` resets `_consecutive_engine_errors = 0` (line 1889) but has no `_circuit_breaker.reset()` or `record_success()` call.
+- TRACE: `:1889` resets engine CB; `:342` creates HTTP CB; `grep "_circuit_breaker"` shows no rollover reset
+- EVIDENCE: If HTTP CB opens (5+ broker failures near EOD), it persists into new trading day. Entries blocked until 30s probe window opens at `:2684`.
+- MITIGATING: `should_allow_request()` returns True after 30s (probe path); `record_success()` on any successful HTTP call resets CB; `failure_hook` on auth propagates HTTP successes.
+- VERDICT: DEFER — LOW severity; self-healing mechanism prevents permanent block; correct behavior for a per-session transient CB.
 
-**Verdict: CLEAN — 0 actionable findings. Stale ledger `findings=1` entry was pre-iter-136 state (DF-12 already fixed in ccb44343; iter-219 SYMBOL DRY already fixed in 73ab314a).**
+**SO-227-02: Re-notify uses `_consecutive_engine_errors` not `_circuit_breaker.is_open` (ACCEPTABLE)**
+- PREMISE: Heartbeat re-notify at :3615 checks engine-level CB, not HTTP-level CB.
+- TRACE: `:3615` checks `_consecutive_engine_errors >= 5`; `:342` has separate `_circuit_breaker`
+- VERDICT: ACCEPTABLE — two independent CBs for different failure classes. Engine CB persists until rollover (intended for 30+ min outage re-notify); HTTP CB self-heals in 30s (no re-notify needed).
 
----
+**SO-227-03: Pre-existing test failure (DOCUMENTED, NOT INTRODUCED)**
+- `test_run_starts_watchdog_task` fails with `CancelledError` on notify async task teardown.
+- Pre-existing — not introduced this iteration. 48/49 pass.
+- VERDICT: PRE-EXISTING, not owned by this iteration.
+
+**SO-227-04: `_emergency_flatten`/`_flatten_broker_positions` no explicit CB update (ACCEPTABLE)**
+- PREMISE: Direct `order_router.submit` calls without `record_success()`/`record_failure()`.
+- EVIDENCE: `auth.failure_hook = self._circuit_breaker` at :343 — HTTP-level failures routed through `BrokerHTTPClient` automatically. No gap.
+- VERDICT: ACCEPTABLE — failure_hook provides implicit CB updates; emergency paths bypass CB gate by design.
+
+**CB seams :2684/:2981/:2411/:2430 — CLEAN:**
+- :2684 ENTRY CB check: correct gate ordering (after signal_only, before on_entry_sent). Fail-closed.
+- :2981 EXIT CB check: logs CRITICAL, proceeds (intentional — can't leave positions open). Correct.
+- :2411 exit success: `record_success()` properly resets CB after successful exit submit.
+- :2430 exit failure (last retry): `record_failure()` properly opens CB after exhausted retries.
+
+**Cluster summary:**
+- FIXED: 0
+- DEFERRED: 1 (SO-227-01, LOW)
+- ACCEPTABLE: 2 (SO-227-02, SO-227-04)
+- PRE-EXISTING: 1 (SO-227-03)
+- CLEAN: all CB seam checks
 
 ## Files Fully Scanned
 
-- pipeline/system_context.py (iter 208)
-- tests/test_pipeline/test_system_context.py (iter 208)
-- .claude/hooks/session-start.py (iter 208)
+- trading_app/live/circuit_breaker.py (iter 226)
+- trading_app/live/session_orchestrator.py (iter 227)
+- trading_app/db_manager.py (iter 225)
+- trading_app/live/tradovate/order_router.py (iter 224)
+- trading_app/live/tradovate/auth.py (iter 223)
+- pipeline/build_daily_features.py (iter 222)
+- pipeline/outcome_builder.py (iter 221)
+- pipeline/orb_calculator.py (iter 220)
+- trading_app/live/tradovate/http.py (iter 219)
+- trading_app/live/projectx/order_router.py (iter 218)
+- trading_app/live/fill_poller.py (iter 217)
+- trading_app/strategy_fitness.py (iter 215)
+- trading_app/live/position_tracker.py (iter 214)
+- trading_app/risk_manager.py (iter 213)
+- trading_app/live/execution_engine.py (iter 212)
+- trading_app/chordia.py (iter 211)
+- pipeline/strategy_validator.py (iter 210)
 - trading_app/derived_state.py (iter 209)
-- pipeline/check_drift.py (iter 210 — Pyright audit; 0 errors confirmed)
-- pipeline/check_drift_crg_helpers.py (iter 210 — Pyright audit; 0 errors confirmed)
-- trading_app/eligibility/builder.py (iter 211 — full scan; 1 annotation finding fixed)
-- trading_app/opportunity_awareness.py (iter 212 — full scan; 1 canonical violation fixed)
-- trading_app/allocation_promotion.py (iter 212 — batch fix; 1 canonical violation fixed)
-- trading_app/live/session_orchestrator.py (iter 214 — stale re-audit; 0 findings, ACCEPTABLE falsy-zero LOW)
-- pipeline/build_daily_features.py (iter 215 — stale re-audit; 0 findings, 2 ACCEPTABLE LOW)
-- pipeline/asset_configs.py (iter 216 — full scan; 1 LOW fixed annotation_debt AC-216-01)
-- pipeline/system_brief.py (iter 217 — first full scan; 0 findings, 2 ACCEPTABLE)
-- trading_app/portfolio.py (iter 217 — stale re-audit iter 118; 0 findings, 5 ACCEPTABLE)
-- trading_app/ai/provider_registry.py (iter 218 — first full scan; 1 LOW fixed PR-218-01)
-- trading_app/live/broker_factory.py (iter 220 — stale re-audit iter 127; 0 findings, iter-127 fix verified present)
-- trading_app/outcome_builder.py (iter 221 — first full scan; 1 LOW fixed OB-221-01, ACCEPTABLE TODO(E3-retired))
-- pipeline/ingest_dbn_mgc.py (iter 223 — stale re-audit iter 136; 0 findings, 3 ACCEPTABLE, prior findings DF-12+iter-219 verified fixed)
-- trading_app/conditional_overlays.py (iter 224 — first full scan; 1 LOW fixed CO-224-01, 2 ACCEPTABLE)
+- pipeline/strategy_discovery.py (iter 208)
+- trading_app/live/hwm_tracker.py (iter 207)
+- trading_app/live/session_safety_state.py (iter 206)
+- pipeline/build_features.py (iter 205)
+- pipeline/check_drift.py (iter 204)
+- trading_app/live/alert_engine.py (iter 203)
+- trading_app/live/signal_log_rotator.py (iter 202)
+- trading_app/live/copy_order_router.py (iter 201)
+- pipeline/asset_configs.py (iter 196)
+- trading_app/prop_profiles.py (iter 195)
 
-## Next Iteration Targets
+## Next Iteration Targets (P0-P4)
 
-Priority 0 — Open deferred HIGH/CRITICAL: NONE (SHADOW-MLL is MEDIUM, intentional design, dormant).
-Priority 1 — Unscanned high files: NONE remaining (all high centrality files scanned).
-Priority 2 — Stale re-audits: `trading_app/db_manager.py` (last iter 180, findings=2 — check hash).
-Priority 3 — Stale medium files: continue scanning unscanned medium-centrality files.
+- P0: Pre-existing `test_run_starts_watchdog_task` failure investigation (CancelledError on notify teardown)
+- P1: Unscanned high-centrality files — check import_centrality.json for next target
+- P2: Stale re-audits — files modified since last scan

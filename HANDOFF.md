@@ -182,14 +182,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** 0ce0b03a — Auto-sweep stale worktree husks at create-time + close .beat.*.tmp leak
-- **Files changed:** 6 files
-  - `.claude/hooks/session-start.py`
-  - `.claude/hooks/tests/test_session_heartbeat.py`
-  - `START_WORKTREE.bat`
-  - `scripts/tools/new_session.sh`
-  - `scripts/tools/worktree_manager.py`
-  - `tests/test_tools/test_worktree_manager.py`
+- **Commit:** 6a438e1d — fix(tests): add missing _quote_persister=None to build_orchestrator fixture
+- **Files changed:** 2 files
+  - `HANDOFF.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
