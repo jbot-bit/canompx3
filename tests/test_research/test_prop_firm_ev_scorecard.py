@@ -30,6 +30,7 @@ from research.prop_firm_ev_formula import (
 )
 from research.prop_firm_ev_scorecard import SurvivalAdapterRecord
 from research.prop_firm_state_machine import FirmStateMachine, load_state_machines
+from trading_app.account_survival import SurvivalSummary
 
 # NumericEv / NoNumericEv / NoNumericEvReason / compute_n_eff / combine_ev /
 # DEFAULT_REPORT_PATH are exercised below; the imports above are the public surface.
@@ -37,6 +38,83 @@ from research.prop_firm_state_machine import FirmStateMachine, load_state_machin
 # A small path count keeps the survival engine fast; the verdict (NoNumericEv) is
 # independent of n_paths under current ground truth (no leg is path-count-sensitive).
 _FAST_PATHS = 500
+
+
+def _deployed_survival_record(profile_id: str) -> SurvivalAdapterRecord:
+    fixtures = {
+        "topstep_50k_mnq_auto": ("topstep", "trailing_intraday"),
+        "tradeify_50k": ("tradeify", "trailing_eod"),
+        "bulenox_50k": ("bulenox", "trailing_eod"),
+    }
+    firm, dd_type = fixtures[profile_id]
+    return SurvivalAdapterRecord(
+        profile_id=profile_id,
+        firm=firm,
+        account_size=50_000,
+        dd_type=dd_type,
+        survival_prob=0.80,
+        dd_survival_prob=0.90,
+        reach_payout_prob=None,
+        reach_is_coarse=False,
+        profit_target=None,
+        target_reason="no_profit_target_encoded",
+        target_source="hermetic-test-fixture",
+        resolved_profile_id=profile_id,
+        profile_id_aliased=False,
+        sizing_parity_warning=False,
+        notes=(),
+    )
+
+
+@pytest.fixture(autouse=True)
+def hermetic_survival_adapter(monkeypatch):
+    """Keep EV combiner tests independent of canonical gold.db availability."""
+    import research.prop_firm_ev_formula as formula
+
+    def fake_adapter(profile_id: str, **_kwargs) -> SurvivalAdapterRecord:
+        return _deployed_survival_record(profile_id)
+
+    monkeypatch.setattr(formula, "evaluate_survival_adapter", fake_adapter)
+
+
+def _survival_summary(profile_id: str) -> SurvivalSummary:
+    return SurvivalSummary(
+        profile_id=profile_id,
+        generated_at_utc="2026-06-11T00:00:00Z",
+        as_of_date="2026-06-10",
+        horizon_days=90,
+        n_paths=_FAST_PATHS,
+        seed=0,
+        source_days=10,
+        source_start="2026-05-01",
+        source_end="2026-06-10",
+        dd_survival_probability=0.90,
+        operational_pass_probability=0.80,
+        consistency_pass_probability=None,
+        trailing_dd_breach_probability=0.10,
+        daily_loss_breach_probability=0.0,
+        scaling_breach_probability=0.0,
+        consistency_breach_probability=0.0,
+        scaling_feasible=True,
+        intraday_approximated=False,
+        path_model="hermetic-test-fixture",
+        min_operational_pass_probability=0.70,
+        gate_pass=True,
+        strict_account_gate_pass=True,
+        effective_dd_budget_dollars=1_800.0,
+        historical_daily_loss_breach_days=[],
+        historical_daily_loss_breach_count=0,
+        historical_max_observed_90d_dd_dollars=1_000.0,
+        p50_final_balance=500.0,
+        p05_final_balance=-500.0,
+        p95_final_balance=1_500.0,
+        p50_total_pnl=500.0,
+        p05_total_pnl=-500.0,
+        p95_total_pnl=1_500.0,
+        p50_max_dd=500.0,
+        p95_max_dd=1_000.0,
+        median_best_day=100.0,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -392,16 +470,14 @@ def test_survival_invoked_write_state_false(monkeypatch):
     import research.prop_firm_ev_scorecard as scorecard
 
     captured = {}
-    real = scorecard.evaluate_profile_survival
 
     def spy(profile_id, **kwargs):
         captured["write_state"] = kwargs.get("write_state")
-        return real(profile_id, **kwargs)
+        return _survival_summary(profile_id)
 
     monkeypatch.setattr(scorecard, "evaluate_profile_survival", spy)
-    from research.prop_firm_ev_formula import evaluate_firm_ev
 
-    evaluate_firm_ev("topstep_50k_mnq_auto", n_paths=_FAST_PATHS, seed=0)
+    scorecard.evaluate_survival_adapter("topstep_50k_mnq_auto", n_paths=_FAST_PATHS, seed=0)
     assert captured["write_state"] is False
 
 

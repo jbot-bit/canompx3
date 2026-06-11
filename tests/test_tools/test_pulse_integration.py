@@ -209,6 +209,6 @@ class TestPulseIntegration:
         """Text output should be concise enough to read in 10 seconds."""
         r = _run_pulse("--fast", "--no-cache")
         lines = r.stdout.strip().splitlines()
-        # Keep enough headroom for a few extra high-signal sections without
-        # letting the pulse sprawl into a wall of text.
-        assert len(lines) <= 65, f"Output too long for a pulse ({len(lines)} lines). Should be <=65."
+        # Keep enough headroom for live-control and queue sections without
+        # letting the pulse sprawl into an unscannable wall of text.
+        assert len(lines) <= 120, f"Output too long for a pulse ({len(lines)} lines). Should be <=120."
