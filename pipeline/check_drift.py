@@ -4516,11 +4516,15 @@ def check_trading_rules_authority() -> list[str]:
         if E2_SLIPPAGE_TICKS != 1:
             violations.append(f"  E2_SLIPPAGE_TICKS = {E2_SLIPPAGE_TICKS}, expected 1")
 
-        # 6. MGC cost model total friction (TRADING_RULES: $5.74/RT)
-        if "MGC" in COST_SPECS:
-            mgc_friction = COST_SPECS["MGC"].total_friction
-            if abs(mgc_friction - 5.74) > 0.01:
-                violations.append(f"  MGC total_friction = {mgc_friction}, TRADING_RULES says $5.74")
+        # 6. Cost model total friction (TRADING_RULES canonical RT, post-F-4).
+        #    Assert all three live micros — MGC-only left MNQ/MES fail-open, which
+        #    let the stale pre-F-4 $2.74/$3.74 figures persist in RESEARCH_RULES.md.
+        canonical_friction = {"MGC": 5.74, "MNQ": 2.92, "MES": 3.92}
+        for inst, expected in canonical_friction.items():
+            if inst in COST_SPECS:
+                friction = COST_SPECS[inst].total_friction
+                if abs(friction - expected) > 0.01:
+                    violations.append(f"  {inst} total_friction = {friction}, TRADING_RULES says ${expected:.2f}")
 
         # 7. Early exit thresholds: values must be None or positive int.
         # T80 disabled 2026-03-18 (OOS validation NO-GO). All values are None.

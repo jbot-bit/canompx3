@@ -849,6 +849,34 @@ class TestTradingRulesAuthority:
         violations = check_drift.check_trading_rules_authority()
         assert len(violations) == 0
 
+    def test_catches_wrong_mnq_friction(self, monkeypatch):
+        """MNQ total_friction drifting off canonical $2.92 must trip a violation."""
+        import dataclasses
+
+        from pipeline import cost_model
+
+        bad_specs = dict(cost_model.COST_SPECS)
+        # Pre-F-4 stale value: commission_rt $1.24 -> friction $2.74 (was the
+        # value baked into RESEARCH_RULES.md before the Rithmic commission fix).
+        bad_specs["MNQ"] = dataclasses.replace(bad_specs["MNQ"], commission_rt=1.24)
+        monkeypatch.setattr(cost_model, "COST_SPECS", bad_specs)
+
+        violations = check_drift.check_trading_rules_authority()
+        assert any("MNQ total_friction" in v for v in violations), violations
+
+    def test_catches_wrong_mes_friction(self, monkeypatch):
+        """MES total_friction drifting off canonical $3.92 must trip a violation."""
+        import dataclasses
+
+        from pipeline import cost_model
+
+        bad_specs = dict(cost_model.COST_SPECS)
+        bad_specs["MES"] = dataclasses.replace(bad_specs["MES"], commission_rt=1.24)
+        monkeypatch.setattr(cost_model, "COST_SPECS", bad_specs)
+
+        violations = check_drift.check_trading_rules_authority()
+        assert any("MES total_friction" in v for v in violations), violations
+
 
 # ── Deprecated ML/session guard seam after ML removal ─────────────────
 
