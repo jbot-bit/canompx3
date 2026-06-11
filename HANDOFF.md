@@ -182,12 +182,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** 0e1f47df — fix(review): code-review B+ action items — live account_id assert + stale-branch warnings + integration test
-- **Files changed:** 4 files
+- **Commit:** 0ce0b03a — Auto-sweep stale worktree husks at create-time + close .beat.*.tmp leak
+- **Files changed:** 6 files
+  - `.claude/hooks/session-start.py`
+  - `.claude/hooks/tests/test_session_heartbeat.py`
   - `START_WORKTREE.bat`
   - `scripts/tools/new_session.sh`
-  - `tests/test_live/test_dashboard_account_selection.py`
-  - `trading_app/live/bot_dashboard.py`
+  - `scripts/tools/worktree_manager.py`
+  - `tests/test_tools/test_worktree_manager.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

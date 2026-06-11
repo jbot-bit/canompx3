@@ -296,6 +296,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._bar_persister = MagicMock()
     orch._bar_persister.append.return_value = None
     orch._bar_persister.flush_to_db.return_value = 0
+    orch._quote_persister = None  # spread capture disabled in tests
     # bar_count is an `int` property on the real BarPersister (len(self._bars));
     # a bare MagicMock returns a Mock here, which post_session() str-formats into
     # the shutdown_trace file and mis-evaluates `bars_captured == 0`, driving the
