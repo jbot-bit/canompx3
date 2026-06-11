@@ -22,7 +22,19 @@ _SQL_IN = ", ".join(f"'{s}'" for s in ACTIVE_INSTRUMENTS)
 
 
 def _connect():
+    if not GOLD_DB_PATH.exists():
+        raise FileNotFoundError(f"canonical gold.db unavailable at {GOLD_DB_PATH}")
     return duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+
+
+def _exit_need_db(exc: Exception) -> None:
+    print("\n" + "=" * 70)
+    print("AUDIT EXECUTION FAILED: NEED_DB canonical gold.db unavailable")
+    print(f"DB path: {GOLD_DB_PATH}")
+    print(f"Error: {exc}")
+    print("No DB-backed integrity checks were executed; this is not live/readiness evidence.")
+    print("=" * 70)
+    sys.exit(2)
 
 
 def check_outcome_coverage(con) -> list[str]:
@@ -274,7 +286,11 @@ def main():
     print("INTEGRITY AUDIT — EVERYTHING MUST BE HONEST")
     print("=" * 70)
 
-    con = _connect()
+    try:
+        con = _connect()
+    except (duckdb.IOException, FileNotFoundError) as exc:
+        _exit_need_db(exc)
+
     all_violations = []
 
     try:
