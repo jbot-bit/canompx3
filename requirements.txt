@@ -137,7 +137,7 @@ narwhals==2.17.0
     #   plotly
 nodeenv==1.10.0
     # via pyright
-numpy==2.4.2
+numpy==2.4.6
     # via
     #   arch
     #   canompx3
