@@ -46,31 +46,17 @@
       "avg_orb_pts": 79.9,
       "p90_orb_pts": 143.2,
       "risk_cap_pts": 107.4
-    },
-    {
-      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
-      "instrument": "MNQ",
-      "orb_label": "TOKYO_OPEN",
-      "orb_minutes": 5,
-      "rr_target": 1.5,
-      "filter_type": "COST_LT08",
-      "annual_r": 24.3,
-      "trailing_expr": 0.171,
-      "trailing_n": 154,
-      "trailing_wr": 0.494,
-      "months_negative": 1,
-      "session_regime": "HOT",
-      "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.0456), ExpR=+0.1710, N=154",
-      "chordia_verdict": "PASS_PROTOCOL_A",
-      "chordia_audit_age_days": 7,
-      "c8_oos_status": null,
-      "avg_orb_pts": 25.7,
-      "p90_orb_pts": 44.2,
-      "risk_cap_pts": 33.15
     }
   ],
   "paused": [
+    {
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
+      "status": "PAUSE",
+      "reason": "SR ALARM (recent_10_mean_r=-0.376, late-May/06-08 cluster) — dropped from deployed set for overnight live launch, operator decision 2026-06-11. Re-add after SR returns CONTINUE or per sr_review_registry recheck_trigger.",
+      "chordia_verdict": "PASS_PROTOCOL_A",
+      "chordia_audit_age_days": 7,
+      "c8_oos_status": null
+    },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT15_S075",
       "status": "PAUSE",
