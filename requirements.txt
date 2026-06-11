@@ -56,7 +56,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
     #   pytest
 coverage==7.13.4
     # via pytest-cov
-cyclonedx-python-lib==11.6.0
+cyclonedx-python-lib==11.10.0
     # via pip-audit
 databento==0.72.0
     # via canompx3
