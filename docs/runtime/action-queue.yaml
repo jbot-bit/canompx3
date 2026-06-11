@@ -1249,3 +1249,145 @@ items:
       Sibling of codex_wsl_mcp_config_audit_2026_06_07. Higher effort than the
       MCP-audit item (20 cases + grader) — kept as a deliberate backlog item, not
       a quick win.
+
+  # --- Pulse-backlog reconciliation entries (2026-06-11, joshd) ---
+  # Added so project_pulse stops re-flagging these as unactioned/unqueued.
+  # Parked items = intentionally deferred, not lost. Open items = tracked real work.
+
+  - id: d3_sizing_seam_stage1_plan_route_2026_06_11
+    title: D-3 Sizing-Seam Stage 1 Implementation Plan — queue coverage for active design plan
+    class: ops
+    status: parked
+    priority: P3
+    close_before_new_work: false
+    owner_hint: cross-tool
+    last_verified_at: 2026-06-11
+    freshness_sla_days: 30
+    next_action: |
+      Routes the active plan docs/plans/active/2026-06/2026-06-07-d3-sizing-seam-stage1.md
+      into the queue so plan_reconciliation stops flagging it. The D-3 sizing
+      architecture already CONVERGED on origin/main (Fork B canonical; survival-cap
+      sweep tests landed `7728f538`). This plan file is the design record for that
+      shipped work. Parked: revisit only if a new D-3 sizing-seam stage opens, else
+      archive the plan.
+    exit_criteria: |
+      Either the plan is archived out of docs/plans/active/, or a new D-3 stage
+      reopens it with a fresh implementation scope.
+    blocked_by: []
+    decision_refs: []
+    evidence_refs:
+      - docs/plans/active/2026-06/2026-06-07-d3-sizing-seam-stage1.md
+
+  - id: drift_check_timeout_over_60s_2026_06_11
+    title: Drift check timed out (>60s) — bound drift-gate runtime
+    class: ops
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: joshd
+    last_verified_at: 2026-06-11
+    freshness_sla_days: 14
+    next_action: |
+      project_pulse reports the drift check times out (>60s). Real cost is the
+      FAST_LANE promote-queue scan + DB checks (profiled in a prior session). Stage
+      2/3 of the drift-gate reduction (attack DB cost) is NOT started. Design-first;
+      do not --fast-skip capital checks. Tracked, deferred to a dedicated pass.
+    exit_criteria: |
+      Drift gate completes under the pulse timeout on a warm checkout without
+      skipping any of the 38 capital checks.
+    blocked_by: []
+    decision_refs: []
+    evidence_refs:
+      - pipeline/check_drift.py
+
+  - id: stale_execution_attribution_2deployed_lanes_2026_06_11
+    title: 2 deployed lanes have stale execution attribution (topstep_50k_mnq_auto)
+    class: ops
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: joshd
+    last_verified_at: 2026-06-11
+    freshness_sla_days: 14
+    next_action: |
+      MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 and MNQ_US_DATA_1000_E2 have stale
+      execution attribution. Refresh via:
+      python -m trading_app.paper_trade_logger --profile topstep_50k_mnq_auto --sync.
+      Deferred from this hygiene pass (operator chose cheap-clears-only); ties to the
+      -$677 live forensic — diagnose attribution there, do not blind-sync.
+    exit_criteria: |
+      Both lanes show fresh execution attribution, OR the -$677 forensic explains
+      and reconciles the stale state.
+    blocked_by: []
+    decision_refs: []
+    evidence_refs:
+      - trading_app/paper_trade_logger.py
+
+  - id: tokyo_open_sr_alarm_live_readiness_watch_2026_06_11
+    title: Live-readiness blocker — MNQ_TOKYO_OPEN SR alarm (already WATCH-reviewed)
+    class: ops
+    status: parked
+    priority: P3
+    close_before_new_work: false
+    owner_hint: joshd
+    last_verified_at: 2026-06-11
+    freshness_sla_days: 30
+    next_action: |
+      The single live-readiness blocker is the MNQ_TOKYO_OPEN_E2 SR alarm. This is
+      the KNOWN, CLOSED WATCH (commit 4feb53a6) — do NOT re-litigate. It surfaces as
+      a live-readiness item only because it is an active-lane alarm in WATCH state.
+      Parked: no action unless the SR statistic worsens past the watch envelope.
+    exit_criteria: |
+      SR alarm clears on its own, OR the watch envelope is breached (then escalate
+      per the SR-monitor doctrine, not by re-opening the closed 4feb53a6 review).
+    blocked_by: []
+    decision_refs: []
+    evidence_refs:
+      - docs/runtime/stages/2026-06-10-tokyo-sr-watch-review.md
+
+  - id: automation_health_daily_refresh_failed_2026_06_11
+    title: Automation health ACTION_REQUIRED — CanonMPX_DailyRefresh=FAILED
+    class: ops
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: joshd
+    last_verified_at: 2026-06-11
+    freshness_sla_days: 14
+    next_action: |
+      Scheduled task CanonMPX_DailyRefresh (and TopstepTelemetry signal task) report
+      FAILED in automation_health. Diagnose via:
+      python scripts/tools/live_readiness_report.py --profile topstep_50k_mnq_auto.
+      Likely tied to the EOD-backfill self-lock on gold.db (separate baton) — confirm
+      before re-registering. Deferred to a dedicated ops pass.
+    exit_criteria: |
+      Both scheduled tasks report healthy on their next run, with root cause named
+      (not just a re-register band-aid).
+    blocked_by: []
+    decision_refs: []
+    evidence_refs:
+      - scripts/tools/live_readiness_report.py
+
+  - id: stale_work_22_branches_at_risk_2026_06_11
+    title: 22 branches with at-risk work (unpushed / orphaned / blob-trap)
+    class: ops
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: joshd
+    last_verified_at: 2026-06-11
+    freshness_sla_days: 14
+    next_action: |
+      stale_work_radar reports 22 branches with at-risk work; top = worktree-d3-sizing
+      -seam-stage1 (112 unpushed commits). Triage via a DRY-RUN drain:
+      pwsh scripts/tools/drain_worktrees.ps1 (reports DRAIN/CAPITAL/DIVERGED, pushes
+      nothing). MOST are stale (behind 100-403 = dead). Decide per-branch WITH operator;
+      do NOT bulk-merge. Deferred from this pass (operator chose cheap-clears-only).
+    exit_criteria: |
+      Each at-risk branch is either drained home, intentionally reaped, or recorded as
+      a deliberate keep — radar count reflects only live work.
+    blocked_by: []
+    decision_refs: []
+    evidence_refs:
+      - scripts/tools/stale_work_radar.py
+      - scripts/tools/drain_worktrees.ps1

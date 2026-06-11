@@ -1,6 +1,6 @@
 do_not_hand_edit: true
 schema_version: 1
-built_at_utc: '2026-05-28T20:37:46Z'
+built_at_utc: '2026-06-11T05:27:25Z'
 source_files:
 - chatgpt_bundle/06_RD_GRAVEYARD.md
 - docs/STRATEGY_BLUEPRINT.md
@@ -359,4 +359,16 @@ entries:
   status: PARKED
   hash_kind: class
   structural_hash: e599265fce7dd75a
+  lane_inputs: {}
+- source_path: docs/runtime/action-queue.yaml
+  title: d3_sizing_seam_stage1_plan_route_2026_06_11
+  status: PARKED
+  hash_kind: class
+  structural_hash: 9e17e4a4cad940a1
+  lane_inputs: {}
+- source_path: docs/runtime/action-queue.yaml
+  title: tokyo_open_sr_alarm_live_readiness_watch_2026_06_11
+  status: PARKED
+  hash_kind: class
+  structural_hash: 95773d22bb71aed4
   lane_inputs: {}

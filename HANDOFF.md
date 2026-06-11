@@ -182,10 +182,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** 6a438e1d — fix(tests): add missing _quote_persister=None to build_orchestrator fixture
-- **Files changed:** 2 files
+- **Commit:** 4cfb12d5 — docs(pulse): clear backlog — mark debt parked, queue real-exposure items, refresh C11/C12
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `docs/runtime/action-queue.yaml`
+  - `docs/runtime/debt-ledger.md`
+  - `docs/runtime/fast_lane_graveyard_digest.yaml`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
