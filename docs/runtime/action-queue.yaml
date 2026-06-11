@@ -1391,3 +1391,30 @@ items:
     evidence_refs:
       - scripts/tools/stale_work_radar.py
       - scripts/tools/drain_worktrees.ps1
+
+  - id: mcp_db_health_fail_closed_on_husk_2026_06_11
+    title: gold-db MCP get_db_health reports status:OK on an empty worktree-husk DB (fail-OPEN)
+    class: ops
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: joshd
+    last_verified_at: 2026-06-11
+    freshness_sla_days: 21
+    next_action: |
+      Live get_db_health from a worktree returned status:"OK" while daily_features /
+      orb_outcomes / validated_setups were all exists:false, row_count:0 (size 12 KB
+      husk). This false-PASS broke get_strategy_fitness AND made check_drift report 23
+      DB-dependent "violations" until DUCKDB_PATH was pointed at the real main-checkout
+      gold.db. Fix in trading_app/mcp_server.py: return DEGRADED/EMPTY (not OK) when
+      canonical tables are absent/empty, and flag husk-DB resolution naming the expected
+      canonical path. DESIGN-first (capital-adjacent MCP surface). Stage file:
+      docs/runtime/stages/2026-06-11-mcp-db-health-fail-closed.md.
+    exit_criteria: |
+      get_db_health returns a non-OK status on an empty/husk DB (fail-closed), with a
+      companion test injecting an empty DB; drift + tests green.
+    blocked_by: []
+    decision_refs: []
+    evidence_refs:
+      - docs/runtime/stages/2026-06-11-mcp-db-health-fail-closed.md
+      - docs/audit/results/2026-06-11-qwen-overlay-claims-reaudit.md
