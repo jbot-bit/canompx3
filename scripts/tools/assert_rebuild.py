@@ -49,7 +49,11 @@ EXPECTED_DAILY_FEATURES_COLUMNS = _STATIC_COLUMN_COUNT + (len(ORB_LABELS) * _ORB
 # Strategy count drop threshold — WARNING if active count < this fraction of previous
 STRATEGY_DROP_THRESHOLD = 0.70
 
-APERTURES = ACTIVE_ORB_MINUTES  # only assert active apertures (O15/O30 dead)
+APERTURES = ACTIVE_ORB_MINUTES  # O5-only: the full-orb_outcomes-coverage set
+# (refresh_data rebuilds O5 outcomes only). NOT the deployable-aperture set — a
+# deployed O15 lane reads daily_features (built for all VALID_ORB_MINUTES), not
+# O15 orb_outcomes. A5 stays O5-scoped on purpose; see ACTIVE_ORB_MINUTES in
+# pipeline/build_daily_features.py.
 
 
 # ---------------------------------------------------------------------------

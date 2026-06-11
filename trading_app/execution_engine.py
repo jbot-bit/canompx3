@@ -269,8 +269,18 @@ class ExecutionEngine:
         if equity <= 0 or risk_points <= 0:
             return 0  # Fail-closed: invalid equity/risk → reject entry
 
-        # Vol sizing uses 5m row — ATR is instrument-level, not aperture-specific
-        row = self._daily_features_rows.get(5) or {}
+        # Vol sizing reads ATR, which is instrument-level (a 20-day daily ATR,
+        # identical across every aperture row for the day — see
+        # build_daily_features.py post-pass). Prefer the O5 row but fall back to
+        # ANY available aperture row so a non-O5 portfolio (e.g. a deployed
+        # O15-only lane) still vol-targets instead of silently degrading to
+        # scalar=1.0. This is aperture-INVARIANT lookup, not cross-aperture
+        # substitution: ATR carries the same value regardless of which aperture
+        # row supplies it.
+        row = self._daily_features_rows.get(5)
+        if row is None and self._daily_features_rows:
+            row = next(iter(self._daily_features_rows.values()))
+        row = row or {}
         atr_20 = row.get("atr_20") or 0.0
         median_atr_20 = row.get("median_atr_20") or 0.0
         if atr_20 > 0 and median_atr_20 > 0:

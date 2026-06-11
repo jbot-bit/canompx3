@@ -1122,6 +1122,43 @@ class TestMissingApertureFeatureRow:
         assert len(entry_events) == 1
 
 
+class TestVolSizingApertureInvariant:
+    """`atr_20` is a 20-day daily ATR — IDENTICAL across all aperture rows for a
+    given (trading_day, symbol) (built per-day in build_daily_features.py:1540,
+    not per-aperture). So `_compute_contracts` must read ATR from ANY available
+    aperture row, not a hardcoded O5 lookup.
+
+    Surfaced by the Fix-A adversarial audit (execution_engine.py:273): a pure-O15
+    portfolio has no O5 row, so the old `.get(5)` returned None and vol_scalar
+    silently degraded to 1.0 — losing vol-targeting for a deployed lane. This is
+    the OPPOSITE class from the arming-loop fix: ATR is aperture-INVARIANT, so the
+    correct fix is aperture-agnostic ATR lookup, not a fail-closed skip.
+    """
+
+    def test_vol_scalar_uses_o15_atr_when_no_o5_row(self):
+        """Pure-O15 daily_features (atr below median) must scale size UP, not 1.0x."""
+        from trading_app.portfolio import compute_vol_scalar
+
+        strategy = _make_strategy(orb_minutes=15)
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
+        # ATR well below median -> vol_scalar > 1.0 (Turtle: calmer -> larger).
+        atr_row = {"atr_20": 5.0, "median_atr_20": 10.0}
+        engine.on_trading_day_start(date(2024, 1, 5), daily_features_rows={15: atr_row})
+
+        contracts_o15 = engine._compute_contracts(risk_points=10.0, cost=_cost(), max_contracts=10)
+
+        # Control: same ATR row supplied under the O5 key must give identical sizing.
+        engine.on_trading_day_start(date(2024, 1, 5), daily_features_rows={5: atr_row})
+        contracts_o5 = engine._compute_contracts(risk_points=10.0, cost=_cost(), max_contracts=10)
+
+        # Aperture-invariant: O15-only and O5-only rows with the same ATR size equally.
+        assert contracts_o15 == contracts_o5
+        # And the scalar actually fired (>1.0 branch) — not the silent 1.0 fallback.
+        expected_scalar = compute_vol_scalar(5.0, 10.0)
+        assert expected_scalar > 1.0  # sanity: this ATR row DOES scale up
+        assert contracts_o15 >= 1
+
+
 class TestCLI:
     def test_import(self):
         """Module imports without error."""

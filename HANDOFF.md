@@ -182,10 +182,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** f0f7b63c — Remove dead lane-summary loop in /api/accounts
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `trading_app/live/bot_dashboard.py`
+- **Commit:** 72966313 — fix(execution): vol-sizing reads ATR aperture-agnostically (Qwen plumbing Fix A audit-fix + Fix B comments)
+- **Files changed:** Qwen plumbing Fix A (arming + vol-sizing) + Fix B (stale comments) + Fix C (T80 NO-GO) rebased onto origin/main
+  - `trading_app/execution_engine.py`
+  - `tests/test_trading_app/test_execution_engine.py`
+  - `pipeline/build_daily_features.py`
+  - `scripts/tools/assert_rebuild.py`
+  - `TRADING_RULES.md`
+  - `docs/runtime/stages/2026-06-11-fix-a-o15-fail-closed-arm-guard.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

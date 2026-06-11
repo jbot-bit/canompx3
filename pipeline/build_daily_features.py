@@ -108,7 +108,17 @@ SESSION_WINDOWS = {
 # Valid ORB durations in minutes (all apertures that exist in DB schema)
 VALID_ORB_MINUTES = [5, 15, 30]
 
-# Apertures actively maintained for trading — O15/O30 dead per Mar 2026 pipeline audit
+# Apertures for which we maintain FULL orb_outcomes coverage (the staleness /
+# rebuild-assertion set used by assert_rebuild A5 and pipeline_status). This is
+# O5-only by design: refresh_data rebuilds O5 outcomes only. It is NOT "the only
+# aperture we trade" — daily_features is always built for ALL of
+# VALID_ORB_MINUTES (refresh_data loops every aperture; Check 77 pins 3 rows per
+# date), and live arming derives its apertures from the deployed lanes themselves
+# (session_orchestrator builds a daily_features row per unique strategy
+# orb_minutes), NOT from this constant. A deployed O15 lane (e.g. US_DATA_1000)
+# is live today with this constant = [5]. VALID_ORB_MINUTES is the real
+# forward-lane envelope — a future lane at any aperture in that set works without
+# touching this constant.
 ACTIVE_ORB_MINUTES = [5]
 
 # Sessions that have compression z-score and tier columns in daily_features.
