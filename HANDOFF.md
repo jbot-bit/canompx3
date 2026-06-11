@@ -182,7 +182,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** 2cb215a0 — @ Remove dead lane-summary loop in /api/accounts
+- **Commit:** f0f7b63c — Remove dead lane-summary loop in /api/accounts
 - **Files changed:** 2 files
   - `HANDOFF.md`
   - `trading_app/live/bot_dashboard.py`
