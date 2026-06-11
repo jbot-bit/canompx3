@@ -329,7 +329,7 @@ tzdata==2025.3
     #   canompx3
     #   exchange-calendars
     #   pandas
-urllib3==2.6.3
+urllib3==2.7.0
     # via requests
 uvicorn==0.41.0
     # via canompx3
