@@ -3808,10 +3808,20 @@ async function toggleLane(strategyId, enabled) {
 }
 
 /* ── Account Selector ───────────────── */
+// True once the operator has EXPLICITLY chosen an account (dropdown change, card
+// click, or a valid selection restored from a prior session's localStorage).
+// False while selectedAccountId holds only a cold tradeable[0] auto-assign — that
+// case must surface a confirm naming the account before LIVE can arm (audit
+// Finding 1: never silently arm real orders on an un-chosen account).
+let accountExplicitlyChosen = false;
 function initAccountSelector() {
-  try { selectedAccountId = parseInt(localStorage.getItem("orb_selected_acct")) || null; } catch (_) {}
+  try {
+    const stored = parseInt(localStorage.getItem("orb_selected_acct"));
+    if (stored) { selectedAccountId = stored; accountExplicitlyChosen = true; }
+  } catch (_) {}
   $("acct-select").addEventListener("change", (e) => {
     selectedAccountId = parseInt(e.target.value) || null;
+    accountExplicitlyChosen = selectedAccountId != null;
     try { localStorage.setItem("orb_selected_acct", String(selectedAccountId || "")); } catch (_) {}
     if (lastEquityData) updateMetricsFromEquity(lastEquityData);
   });
@@ -3977,13 +3987,27 @@ function renderAccounts(accounts) {
             '<span class="go-live-hint">Topstep account &middot; MNQ &middot; 1 copy &middot; real orders</span>';
           const goLiveBtn = wrap.querySelector("button");
           const goLiveRing = wrap.querySelector(".go-live-ring");
-          if (liveBlocked) {
+          // Gate the LIVE button on BOTH the existing readiness block AND a
+          // tradeable broker account being selected via the EXISTING dashboard
+          // selector (#acct-select / clickable cards → selectedAccountId). No new
+          // selector here — we reuse the canonical one. The hint surfaces the
+          // selected account + a C11-tier note when it's not the Express account.
+          const acctBlock = liveBlocked
+            || (!selectedAccountIsTradeable() ? "Select a tradeable broker account first." : "");
+          if (acctBlock) {
             goLiveBtn.disabled = true;
-            goLiveBtn.title = liveBlocked;
+            goLiveBtn.title = acctBlock;
             wrap.classList.add("blocked");
-            wrap.querySelector(".go-live-hint").textContent = `Blocked: ${liveBlocked}`;
+            wrap.querySelector(".go-live-hint").textContent = `Blocked: ${acctBlock}`;
+          } else {
+            const sa = lastEquityData
+              ? getTradeableAccounts(lastEquityData).find(a => a.id === selectedAccountId)
+              : null;
+            const tierNote = selectedAccountIsFunded() ? "Express (funded)" : "⚠ non-Express · C11 is Express-tier";
+            wrap.querySelector(".go-live-hint").textContent =
+              `${sa ? (sa.name || "account") : "account"} · ${tierNote} · ${LIVE_PILOT_INSTRUMENT} · real orders`;
+            window.attachHoldToFireLive(goLiveBtn, goLiveRing, wrap, acct);
           }
-          else { window.attachHoldToFireLive(goLiveBtn, goLiveRing, wrap, acct); }
           card.appendChild(wrap);
         }
       }
@@ -4187,6 +4211,8 @@ function updateLiveCta() {
     disabledReason = "Live pilot has no active lanes.";
   } else if (!lastOperatorState) {
     disabledReason = "Checking live gates...";
+  } else if (!selectedAccountIsTradeable()) {
+    disabledReason = "No tradeable broker account selected — pick one in the account selector.";
   } else {
     disabledReason = blockedActionReason("start_live");
   }
@@ -5584,10 +5610,13 @@ function getSelectedAccount(data) {
   if (selectedAccountId) {
     const match = tradeable.find(a => a.id === selectedAccountId);
     if (match) return match;
-    // Selected account went non-tradeable (blown/restricted) — warn and fallback
+    // Selected account went non-tradeable (blown/restricted) — warn and fallback.
+    // This is a FORCED re-assign, not an operator choice → clear the explicit flag
+    // so LIVE must be re-confirmed against the substituted account (audit Finding 1).
     const fallbackName = tradeable[0].name || tradeable[0].broker_display || `Account ${tradeable[0].id}`;
     showEquityError(`Account ${selectedAccountId} no longer tradeable — switched to ${fallbackName}`);
     selectedAccountId = tradeable[0].id;
+    accountExplicitlyChosen = false;
     try { localStorage.setItem("orb_selected_acct", String(selectedAccountId)); } catch (_) {}
   }
   return tradeable[0];
@@ -5646,9 +5675,13 @@ function renderAccountSelector(data) {
     if (a.id === selectedAccountId) opt.selected = true;
     sel.appendChild(opt);
   }
-  // Auto-select first if none selected
+  // Auto-select first if none selected. This is a convenience default for the
+  // equity/metrics view — NOT an operator choice, so leave accountExplicitlyChosen
+  // false. The LIVE gate will require an explicit confirm naming this account
+  // before arming real orders (audit Finding 1: no silent arm on an un-chosen acct).
   if (!selectedAccountId && tradeable.length > 0) {
     selectedAccountId = tradeable[0].id;
+    accountExplicitlyChosen = false;
     sel.value = String(selectedAccountId);
     try { localStorage.setItem("orb_selected_acct", String(selectedAccountId)); } catch (_) {}
   }
@@ -5688,6 +5721,7 @@ function renderBrokerAccounts(data) {
         card.style.cursor = "pointer";
         card.addEventListener("click", () => {
           selectedAccountId = a.id;
+          accountExplicitlyChosen = true;  // operator clicked a card → explicit choice
           $("acct-select").value = String(a.id);
           try { localStorage.setItem("orb_selected_acct", String(a.id)); } catch (_) {}
           if (lastEquityData) { renderBrokerAccounts(lastEquityData); updateMetricsFromEquity(lastEquityData); }
@@ -5758,12 +5792,19 @@ async function launchSession(pid, firm, instr, mode, opts) {
   // Skip the JS confirm() prompt when the caller has already done its own
   // physical-gesture confirmation (e.g. hold-to-confirm on GO LIVE).
   const skipConfirm = opts && opts.skipConfirm === true;
+  // Broker account selected via the existing dashboard selector (selectedAccountId,
+  // live only). Threaded as ?account_id so the SAME id reaches preflight AND launch
+  // via the one backend builder _live_pilot_cli_args → engine check [13] parity.
+  // Omitted → backend fallback. The id comes from the selector, never a FE hardcode.
+  const accountId = opts && opts.accountId != null ? opts.accountId : null;
   if (!skipConfirm && !confirm(`Start ${lbl[mode]}?\n\n${firm} | ${instr}\n${pid}${warn}`)) return;
   const toastTone = mode === "live" ? "error" : "busy";
   showToast(`${lbl[mode]} starting`, `Running readiness checks for ${pid}...`, toastTone, {id: "launch"});
   showActivity(`${lbl[mode]} Start`, `Auto-running readiness checks for ${pid} before launch...`, mode === "live" ? "error" : "info");
   try {
-    const d = await (await fetch(`/api/action/start?${new URLSearchParams({profile: pid, mode})}`, {method: "POST"})).json();
+    const startParams = {profile: pid, mode};
+    if (mode === "live" && accountId != null) startParams.account_id = accountId;
+    const d = await (await fetch(`/api/action/start?${new URLSearchParams(startParams)}`, {method: "POST"})).json();
     const tone = ["blocked", "handoff_wait"].includes(d.status) ? "warning" : d.status === "started" ? "success" : "info";
     const detail = d.output ? `${d.message || d.status || "No response"}\n\n${d.output}` : (d.message || d.status || "No response");
     showActivity(`${lbl[mode]} ${String(d.status || "").toUpperCase()}`, detail, tone);
@@ -5796,6 +5837,25 @@ window.startSignalForSelected = function() {
   launchSession(acct.profile_id, acct.firm, instr, "signal");
 };
 
+// Is the operator's selected account (selectedAccountId, the EXISTING dashboard
+// selector + clickable cards) currently tradeable per the live equity feed?
+// Used to gate the GO LIVE button so we never arm on a stale/blown account.
+function selectedAccountIsTradeable() {
+  if (selectedAccountId == null) return false;
+  const tradeable = lastEquityData ? getTradeableAccounts(lastEquityData) : [];
+  return tradeable.some(a => a.id === selectedAccountId);
+}
+
+// Funded (Express, XFA) vs Combine (evaluation) from the account name prefix.
+// TopStep self-labels EXPRESS-V2-… vs 50KTC-V2-…. C11 for topstep_50k_mnq_auto
+// is validated on the Express tier (gate #1) — a Combine selection gets a
+// disclosure that its drawdown structure differs.
+function selectedAccountIsFunded() {
+  if (selectedAccountId == null || !lastEquityData) return false;
+  const acct = getTradeableAccounts(lastEquityData).find(a => a.id === selectedAccountId);
+  return acct ? /express/i.test(acct.name || "") : false;
+}
+
 // Hold-to-confirm GO LIVE — pointer-based so it works on mouse AND touch.
 // 2-second hold fills the conic ring; release before fill = cancel.
 window.attachHoldToFireLive = function(button, ring, wrap, acct) {
@@ -5809,7 +5869,36 @@ window.attachHoldToFireLive = function(button, ring, wrap, acct) {
     if (p >= 100 && !fired) {
       fired = true;
       cancel();
-      launchSession(LIVE_PILOT_PROFILE, acct.firm, LIVE_PILOT_INSTRUMENT, "live", {skipConfirm: true});
+      // Hard guard: never arm LIVE unless the operator's selected account
+      // (selectedAccountId, the existing dashboard selector) is currently
+      // tradeable per the live equity feed. Blocks arming on a stale/blown/
+      // unselected account — the routing bug this feature exists to prevent.
+      if (!selectedAccountIsTradeable()) {
+        showToast("LIVE blocked", "No tradeable broker account selected — pick one in the account selector first.", "warning");
+        return;
+      }
+      // Audit Finding 1: if the account was AUTO-selected (tradeable[0] default or
+      // a forced fallback), not explicitly chosen by the operator, require an
+      // explicit confirm NAMING the account before arming real orders — so LIVE is
+      // never armed on an account the operator didn't consciously pick.
+      if (!accountExplicitlyChosen) {
+        const sa = lastEquityData
+          ? getTradeableAccounts(lastEquityData).find(a => a.id === selectedAccountId)
+          : null;
+        const nm = sa ? (sa.name || `Account ${selectedAccountId}`) : `Account ${selectedAccountId}`;
+        if (!confirm(`No account was explicitly selected — defaulting to:\n\n${nm}\n\nThis is the account REAL ORDERS will route to. Confirm it is correct, or cancel and pick the intended account.`)) {
+          return;
+        }
+        accountExplicitlyChosen = true;  // operator just confirmed it
+      }
+      // Combine (non-Express) selection: C11 is validated on the Express tier.
+      // Surface it as a disclosure at the moment of arming (not a silent block).
+      if (!selectedAccountIsFunded() &&
+          !confirm("This account is NOT the Express (funded) tier.\n\nC11 survival proof for topstep_50k_mnq_auto was validated on Express — this account has a different drawdown structure.\n\nArm LIVE on it anyway?")) {
+        return;
+      }
+      launchSession(LIVE_PILOT_PROFILE, acct.firm, LIVE_PILOT_INSTRUMENT, "live",
+                    {skipConfirm: true, accountId: selectedAccountId});
       return;
     }
     raf = requestAnimationFrame(tick);
@@ -6036,6 +6125,7 @@ function renderConnections(connections) {
           if (a.status === "tradeable") {
             acctCard.addEventListener("click", () => {
               selectedAccountId = a.id;
+              accountExplicitlyChosen = true;  // operator clicked a card → explicit choice
               $("acct-select").value = String(a.id);
               try { localStorage.setItem("orb_selected_acct", String(a.id)); } catch (_) {}
               if (lastEquityData) { updateMetricsFromEquity(lastEquityData); }

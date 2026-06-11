@@ -67,12 +67,21 @@ HANDOFF_STALE_AFTER_S = 1800
 LIVE_PILOT_PROFILE = "topstep_50k_mnq_auto"
 LIVE_PILOT_INSTRUMENT = "MNQ"
 LIVE_PILOT_COPIES = 1
-# Dashboard live launches must match the explicit-account CLI preflight.
-# Rationale: 23055112 = 50K Trading Combine (50KTC-V2). Repointed off Express
-# (21944866) 2026-06-10 per operator to route START LIVE at the evaluation
-# account. Both are Topstep 50K ($2000 trailing-DD) so the C11 survival proof
-# for topstep_50k_mnq_auto holds for either. Proper dashboard selector staged
-# (docs/runtime/stages/2026-06-10-dashboard-live-account-selection.md).
+# Last-resort fallback broker account when NO selection is passed (zero-arg path).
+# The NORMAL path is the EXISTING dashboard account selector (#acct-select topbar
+# dropdown + clickable broker-account cards → selectedAccountId in the front-end),
+# which threads the operator's chosen account through
+# _live_pilot_cli_args(profile, account_id) into BOTH preflight and launch.
+# topstep_50k_mnq_auto's C11 survival proof is validated on the Express tier
+# (21944866; is_express_funded — gate #1 in the stage doc
+# 2026-06-10-dashboard-live-account-selection.md), so a Combine selection gets a
+# UI disclosure. This constant is kept (not deleted) only so a caller that passes
+# no account_id still emits a valid --account-id; it is NOT the operator-facing
+# default.
+# Rationale: 23055112 = 50K Trading Combine (50KTC-V2) — the original hardcoded
+# pilot account, retained as the zero-arg fallback. The operator-facing default is
+# Express (21944866) via the dashboard selector; this fallback only fires when a
+# caller omits account_id entirely.
 LIVE_PILOT_ACCOUNT_ID = 23055112
 
 
@@ -454,6 +463,10 @@ _handoff_state: dict[str, object] = {
     "status": "idle",
     "target_profile": None,
     "target_mode": None,
+    # Broker account-id the operator selected for the pending (post-restart)
+    # launch. Without this, a kill→handoff-restart leg would silently revert to
+    # LIVE_PILOT_ACCOUNT_ID — re-introducing blocker #13 on the restart path.
+    "target_account": None,
     "requested_at": None,
     "message": "",
 }
@@ -509,6 +522,10 @@ def _session_snapshot() -> dict[str, object]:
     heartbeat_age_s = _heartbeat_age_s(state)
     account_name = str(state.get("account_name") or "")
     profile = account_name.removeprefix("profile_") if account_name.startswith("profile_") else None
+    # Broker account-id the running session is trading on, as written by the
+    # engine (bot_state.build_state_snapshot). Surfaced so the dashboard SHOWS
+    # which account is live and kill/flatten can target it (watch-out #9).
+    live_account_id = state.get("account_id")
     with _bg_lock:
         tracked = _bg_processes.get("session")
         tracked_alive = isinstance(tracked, subprocess.Popen) and tracked.poll() is None
@@ -518,6 +535,7 @@ def _session_snapshot() -> dict[str, object]:
         "raw_mode": raw_mode,
         "heartbeat_age_s": heartbeat_age_s,
         "profile": profile,
+        "live_account_id": live_account_id,
         "tracked_alive": tracked_alive,
     }
 
@@ -561,13 +579,14 @@ def _clear_handoff() -> None:
                 "status": "idle",
                 "target_profile": None,
                 "target_mode": None,
+                "target_account": None,
                 "requested_at": None,
                 "message": "",
             }
         )
 
 
-def _set_handoff(profile: str, mode: str, message: str) -> None:
+def _set_handoff(profile: str, mode: str, message: str, account_id: int | None = None) -> None:
     with _state_lock:
         _handoff_state.update(
             {
@@ -575,6 +594,7 @@ def _set_handoff(profile: str, mode: str, message: str) -> None:
                 "status": "stopping",
                 "target_profile": profile,
                 "target_mode": mode,
+                "target_account": account_id,
                 "requested_at": datetime.now(UTC).isoformat(timespec="seconds"),
                 "message": message,
             }
@@ -593,6 +613,7 @@ def _handoff_snapshot(
             return {"active": False, "status": "idle", "reason": "", "action": None}
         target_profile = str(_handoff_state.get("target_profile") or "")
         target_mode = str(_handoff_state.get("target_mode") or "")
+        target_account = _handoff_state.get("target_account")
 
     session = _session_snapshot()
     refresh = _refresh_snapshot()
@@ -658,6 +679,7 @@ def _handoff_snapshot(
         "status": status,
         "target_profile": target_profile,
         "target_mode": target_mode,
+        "target_account": target_account,
         "requested_at": requested_at,
         "reason": reason,
         "action": action,
@@ -751,8 +773,18 @@ def _cache_preflight_entry(profile: str, cache_entry: dict[str, object]) -> None
         _preflight_cache[profile] = cache_entry
 
 
-def _live_pilot_cli_args(profile: str) -> list[str]:
-    """Return server-side live pilot routing args for the funded MNQ pilot."""
+def _live_pilot_cli_args(profile: str, account_id: int | None = None) -> list[str]:
+    """Return server-side live pilot routing args for the funded MNQ pilot.
+
+    ``account_id`` is the operator's dashboard selection (the existing
+    #acct-select / clickable-card selector → selectedAccountId). When None,
+    falls back to ``LIVE_PILOT_ACCOUNT_ID`` so the zero-arg path is unchanged.
+    This is the
+    SINGLE injection point for the account-id: both the preflight subprocess
+    (_run_preflight_subprocess) and the launch Popen (action_start) route
+    through here, which guarantees preflight↔launch parity by construction
+    (engine check [13] fails if they disagree — see START_BOT.bat:184-187).
+    """
     if profile != LIVE_PILOT_PROFILE:
         return []
     return [
@@ -761,11 +793,11 @@ def _live_pilot_cli_args(profile: str) -> list[str]:
         "--copies",
         str(LIVE_PILOT_COPIES),
         "--account-id",
-        str(LIVE_PILOT_ACCOUNT_ID),
+        str(account_id if account_id is not None else LIVE_PILOT_ACCOUNT_ID),
     ]
 
 
-def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, object]:
+def _run_preflight_subprocess(profile: str, mode: str = "live", account_id: int | None = None) -> dict[str, object]:
     cmd = [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"]
     # Match preflight mode to the requested session mode so signal-only's
     # auto-pass on the telemetry-maturity gate (run_live_session.py:369-378)
@@ -776,7 +808,8 @@ def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, obj
     elif mode == "live":
         cmd.append("--live")
         cmd.append("--strict-zero-warn")
-        cmd.extend(_live_pilot_cli_args(profile))
+        # Same builder, same account_id the launch will use → check [13] parity.
+        cmd.extend(_live_pilot_cli_args(profile, account_id))
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -835,7 +868,9 @@ def _combine_prepare_output(control: dict[str, object], preflight: dict[str, obj
     return "\n\n".join(parts).strip()
 
 
-async def _prepare_profile_for_start(profile: str, mode: str = "live") -> dict[str, object]:
+async def _prepare_profile_for_start(
+    profile: str, mode: str = "live", account_id: int | None = None
+) -> dict[str, object]:
     import asyncio
 
     try:
@@ -865,7 +900,7 @@ async def _prepare_profile_for_start(profile: str, mode: str = "live") -> dict[s
         }
 
     try:
-        preflight = await asyncio.to_thread(_run_preflight_subprocess, profile, mode)
+        preflight = await asyncio.to_thread(_run_preflight_subprocess, profile, mode, account_id)
     except subprocess.TimeoutExpired:
         cache_entry = {
             "status": "timeout",
@@ -2790,7 +2825,7 @@ async def action_refresh_status():
 
 
 @app.post("/api/action/start")
-async def action_start(profile: str | None = None, mode: str = "signal"):
+async def action_start(profile: str | None = None, mode: str = "signal", account_id: int | None = None):
     """Launch trading session from the dashboard.
 
     Args:
@@ -2799,6 +2834,15 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
                  Falls back to _resolve_profile() if not provided.
         mode: Execution mode — "signal" (default), "demo", or "live".
               Live mode uses --auto-confirm (safety gate is in the UI).
+        account_id: Broker account the operator selected in the existing
+                 dashboard selector (#acct-select / clickable cards, live mode
+                 only). None → the LIVE_PILOT_ACCOUNT_ID default. Threaded
+                 through the SAME
+                 _live_pilot_cli_args builder used by preflight, so the account
+                 PREFLIGHT checks and the account the bot LAUNCHES on are the
+                 same id (engine check [13] parity). Bad/stale ids are hard-failed
+                 downstream by preflight._select_primary_and_shadow_accounts and
+                 the error text surfaced to the UI — never silently substituted.
 
     Output goes to logs/session.log (not a pipe — live sessions run for hours
     and would deadlock on a 64KB pipe buffer within minutes).
@@ -2831,7 +2875,9 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
         same_profile = session["profile"] == profile
         if same_mode and same_profile:
             return {"status": "running", "message": "Requested session is already running"}
-        _set_handoff(profile, mode, f"Stopping current session before switching to {mode.upper()}.")
+        # Carry the selected account into the handoff so the post-restart launch
+        # uses the operator's chosen account, not LIVE_PILOT_ACCOUNT_ID (finding #3).
+        _set_handoff(profile, mode, f"Stopping current session before switching to {mode.upper()}.", account_id)
         await action_kill()
         return {
             "status": "handoff_started",
@@ -2842,6 +2888,10 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
     if handoff["active"]:
         target_profile = str(handoff.get("target_profile") or "")
         target_mode = str(handoff.get("target_mode") or "")
+        # Recover the account the operator chose on the pre-restart leg if the FE
+        # re-issue didn't carry it forward (backend stays authoritative; finding #3).
+        if account_id is None and handoff.get("target_account") is not None:
+            account_id = int(handoff["target_account"])  # type: ignore[arg-type]
         if target_profile and target_mode and (profile != target_profile or mode != target_mode):
             return {
                 "status": "blocked",
@@ -2868,7 +2918,7 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
             "connection_readiness": connection,
         }
 
-    prepared = await _prepare_profile_for_start(profile, mode)
+    prepared = await _prepare_profile_for_start(profile, mode, account_id)
     prep_status = str(prepared.get("status") or "error")
     # Live launches restore strict-zero-warn parity with the retired
     # scripts/tools/start_topstep_live_pilot.py launcher (which ran readiness
@@ -2918,7 +2968,8 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
             mode_label = "DEMO"
         else:  # live
             cmd.extend(["--live", "--auto-confirm"])
-            cmd.extend(_live_pilot_cli_args(profile))
+            # Same builder, same account_id the preflight used → check [13] parity.
+            cmd.extend(_live_pilot_cli_args(profile, account_id))
             mode_label = "LIVE"
 
         log_file = None
@@ -2934,6 +2985,16 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
             )
             _bg_processes["session"] = proc
             _bg_processes["_session_logfile"] = log_file  # type: ignore[assignment]
+            # The broker account this LIVE session launched on is persisted by the
+            # engine itself into bot_state.json (bot_state.build_state_snapshot
+            # account_id), which _session_snapshot surfaces — so the running
+            # dashboard SHOWS the live account and kill/flatten targets it
+            # (watch-out #9). No dashboard-side cache: the engine is the single
+            # source of truth (institutional-rigor §10). We echo the resolved id
+            # in the response only for the immediate launch ack.
+            launched_account = (
+                (account_id if account_id is not None else LIVE_PILOT_ACCOUNT_ID) if mode == "live" else None
+            )
             _clear_handoff()
             return {
                 "status": "started",
@@ -2943,6 +3004,7 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
                 "pid": proc.pid,
                 "profile": profile,
                 "mode": mode,
+                "account_id": launched_account,
             }
         except Exception as e:
             if log_file is not None:

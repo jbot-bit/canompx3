@@ -52,31 +52,19 @@ set ACTIVE_PROFILE=topstep_50k_mnq_auto
 ::   START_BOT.bat live       -> LIVE (REAL MONEY). run_live_session still runs
 ::                               the full 14-gate preflight + CONFIRM before any
 ::                               order; --live arms capital.
-:: If a mode arg was passed (scripting / shortcut), honor it directly and skip
-:: the menu. A bare double-click (no arg) shows an interactive menu so the
-:: operator never has to remember CLI flags.
+:: Startup is no-menu (operator 2026-06-11): a bare double-click just boots the
+:: bot in SIGNAL + brings up the dashboard. MODE (signal/demo/LIVE) AND the broker
+:: ACCOUNT (Express vs Combine) are chosen in the dashboard UI — the LIVE button +
+:: account selector are the sole interactive arming path. This removes the old
+:: 1/2/3 menu AND the .bat-direct-LIVE path that bypassed the account selector
+:: (live-launch blocker #13). An explicit mode ARG is still honored for
+:: scripting/shortcuts (e.g. `START_BOT.bat live`), but is NOT the normal flow.
 set BOT_MODE_FLAGS=
 if /i "%~1"=="signal" set BOT_MODE_FLAGS=--signal-only
 if /i "%~1"=="demo"   set BOT_MODE_FLAGS=--demo
 if /i "%~1"=="live"   set BOT_MODE_FLAGS=--live
 if /i "%~1"=="--live" set BOT_MODE_FLAGS=--live
-
-:: Note: the choice-evaluation `if`s live OUTSIDE the parenthesized prompt block
-:: on purpose. Inside a single ( ... ) block %MODE_CHOICE% expands at PARSE time
-:: (before `set /p` runs), so it would always read empty — the classic batch
-:: delayed-expansion trap. Evaluating after the block closes reads the real input.
-if not defined BOT_MODE_FLAGS (
-    echo.
-    echo   Select launch mode:
-    echo     [1] SIGNAL  - no orders, just alerts ^(default^)
-    echo     [2] DEMO    - paper broker
-    echo     [3] LIVE    - REAL MONEY ^(14-gate preflight + CONFIRM still required^)
-    echo.
-    set /p MODE_CHOICE="  Enter 1, 2, or 3 [1]: "
-)
-if "%MODE_CHOICE%"=="2" set BOT_MODE_FLAGS=--demo
-if "%MODE_CHOICE%"=="3" set BOT_MODE_FLAGS=--live
-:: Default any unrecognized / empty choice to signal-only (safest).
+:: Bare double-click (no arg) → SIGNAL + dashboard. LIVE is armed from the UI.
 if not defined BOT_MODE_FLAGS set BOT_MODE_FLAGS=--signal-only
 
 :: Step 1: Clean up stale lock + stop files (don't kill python — other terminals may be running)
@@ -122,8 +110,8 @@ echo.
 :: arm guard (bot_dashboard.action_start), which blocks a real-money launch on
 :: ANY advisory (WARN/SKIPPED) check. --strict-zero-warn ports that exact rule
 :: (via the canonical run_live_session preflight) to this path. Routing flags
-:: mirror _live_pilot_cli_args (MNQ, 1 copy, account 23055112 = 50K Combine). Signal/demo
-:: launches skip this block (no live orders -> advisory checks stay advisory).
+:: mirror _live_pilot_cli_args (MNQ, 1 copy, account 21944866 = EXPRESS default).
+:: Signal/demo launches skip this block (no live orders -> advisory checks stay advisory).
 if /i "%BOT_MODE_FLAGS%"=="--live" (
     echo [3b/5] Refreshing LIVE control state: profile=%ACTIVE_PROFILE%
     .venv\Scripts\python.exe -m scripts.tools.refresh_control_state --profile %ACTIVE_PROFILE%
@@ -134,7 +122,7 @@ if /i "%BOT_MODE_FLAGS%"=="--live" (
         exit /b 1
     )
     echo [3b/5] Running LIVE strict preflight: profile=%ACTIVE_PROFILE%
-    .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% --instrument MNQ --copies 1 --account-id 23055112 --live --preflight --strict-zero-warn
+    .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% --instrument MNQ --copies 1 --account-id 21944866 --live --preflight --strict-zero-warn
     if errorlevel 1 (
         echo.
         echo [BLOCKED] LIVE preflight failed or has advisory WARN/SKIPPED checks. Fix before real-money launch.
@@ -183,8 +171,17 @@ if /i "%BOT_MODE_FLAGS%"=="--live" set WIN_STATE=
 :: and the dashboard's _live_pilot_cli_args pass. Without --account-id the engine
 :: re-runs its own boot preflight, sees 2 broker accounts, and FAILS check [13]
 :: ("no --account-id would default to accounts[0]") -> never arms. Mirror line 137.
+:: Account = 21944866 (EXPRESS) — topstep_50k_mnq_auto's C11 survival proof is
+:: validated on this tier (is_express_funded). INVARIANT (audit Finding 2): this
+:: explicit-arg `START_BOT.bat live` escape hatch ALWAYS routes Express and does
+:: NOT consult the dashboard selection — it is for scripted/recovery launches only.
+:: The NORMAL flow leaves this menu in SIGNAL and arms LIVE from the dashboard
+:: account selector (#acct-select / clickable cards -> selectedAccountId), which
+:: threads the chosen account through the SAME _live_pilot_cli_args builder so the
+:: dashboard's preflight and launch bind one id ([13] parity). If you ever want
+:: the .bat escape hatch to trade Combine, change this id deliberately.
 set LIVE_ROUTING=
-if /i "%BOT_MODE_FLAGS%"=="--live" set LIVE_ROUTING=--instrument MNQ --copies 1 --account-id 23055112
+if /i "%BOT_MODE_FLAGS%"=="--live" set LIVE_ROUTING=--instrument MNQ --copies 1 --account-id 21944866
 start "ORB Orchestrator (%ACTIVE_PROFILE%)" %WIN_STATE% cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS% %LIVE_ROUTING%"
 
 :: Step 5: Launch dashboard + open browser in this (main) console.
