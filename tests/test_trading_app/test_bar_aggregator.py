@@ -168,6 +168,32 @@ def test_tick_negative_volume_rejected():
     assert result is None
 
 
+def test_tick_cumulative_feed_volume_rejected():
+    """A raw cumulative session total (billion-scale) emitted as a per-tick delta
+    is rejected — the 2026-06 MNQ corruption class. Regression guard: this junk
+    must NEVER accumulate into a bar that lands in canonical bars_1m.
+    """
+    agg = BarAggregator()
+    # The exact corruption magnitude observed in bars_1m (maxvol 1.63B).
+    result = agg.on_tick(price=29785.25, volume=1_632_277_639, ts=_ts(0, 5))
+    assert result is None
+    # The bad tick must not have opened a bar with the junk volume.
+    assert agg._current is None
+    assert agg._bad_tick_count >= 1
+
+
+def test_tick_high_but_legitimate_volume_accepted():
+    """A large but plausible micro-futures tick volume (well under the cap) is
+    accepted — the cap must never reject a real tick. Largest clean 1-min BAR
+    ever observed is ~216k; a single tick of 50k is comfortably legitimate.
+    """
+    agg = BarAggregator()
+    agg.on_tick(price=2000.0, volume=50_000, ts=_ts(0, 5))
+    assert agg._current is not None
+    assert agg._current.volume == 50_000
+    assert agg._bad_tick_count == 0
+
+
 def test_tick_spike_rejected():
     """Price 10x last known → rejected as spike."""
     agg = BarAggregator()

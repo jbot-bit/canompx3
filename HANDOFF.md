@@ -181,15 +181,11 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-11
-- **Commit:** 72966313 — fix(execution): vol-sizing reads ATR aperture-agnostically (Qwen plumbing Fix A audit-fix + Fix B comments)
-- **Files changed:** Qwen plumbing Fix A (arming + vol-sizing) + Fix B (stale comments) + Fix C (T80 NO-GO) rebased onto origin/main
-  - `trading_app/execution_engine.py`
-  - `tests/test_trading_app/test_execution_engine.py`
-  - `pipeline/build_daily_features.py`
-  - `scripts/tools/assert_rebuild.py`
-  - `TRADING_RULES.md`
-  - `docs/runtime/stages/2026-06-11-fix-a-o15-fail-closed-arm-guard.md`
+- **Date:** 2026-06-12
+- **Commit:** 56fc5c59 — Drop Tokyo lane from topstep_50k_mnq_auto (SR ALARM) — both allocation files
+- **Files changed:** 2 files
+  - `docs/runtime/lane_allocation.json`
+  - `docs/runtime/lane_allocation/topstep_50k_mnq_auto.json`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

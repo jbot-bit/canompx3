@@ -55,6 +55,17 @@ class Bar:
 _SPIKE_MULTIPLIER = 5.0
 # Alert after N consecutive bad bars
 _BAD_BAR_ALERT_THRESHOLD = 3
+# Upper per-tick volume sanity bound. A single micro-futures tick delta is tiny;
+# the largest clean 1-minute BAR volume ever observed across all instruments is
+# ~216k (ZT), so a single tick is far below that. This ceiling is ~5x that bar
+# max and ~1000x a plausible single-tick delta — generous enough never to reject
+# a legitimate tick, while rejecting the billion-scale junk that a cumulative-vs-
+# delta feed bug produces. Defense-in-depth below ProjectX _cum_to_delta (Defect A,
+# 2026-06-10): the aggregator is the feed-agnostic sink every path funnels through,
+# so a raw cumulative reading from ANY feed can never again reach canonical bars_1m
+# as per-tick volume. See docs/runtime/stages/2026-06-12-mnq-live-bar-volume-
+# corruption-repair.md (1037 corrupt MNQ bars, maxvol 1.63B, repaired 2026-06-12).
+_MAX_TICK_VOLUME = 1_000_000
 
 
 class BarAggregator:
@@ -126,6 +137,20 @@ class BarAggregator:
         if volume < 0:
             self._bad_tick_count += 1
             log.warning("BAD TICK: negative volume: %d (total bad: %d)", volume, self._bad_tick_count)
+            return False
+
+        if volume > _MAX_TICK_VOLUME:
+            # A single per-tick volume above this ceiling is impossible for micro
+            # futures — it means a feed emitted a raw cumulative session total as a
+            # per-tick delta (the 2026-06 MNQ corruption class). Reject so the junk
+            # never accumulates into a bar and lands in canonical bars_1m.
+            self._bad_tick_count += 1
+            log.warning(
+                "BAD TICK: volume %d exceeds sane per-tick cap %d (cumulative-feed bug?) (total bad: %d)",
+                volume,
+                _MAX_TICK_VOLUME,
+                self._bad_tick_count,
+            )
             return False
 
         # Spike filter: 5x last known price is clearly corrupt data
