@@ -90,6 +90,7 @@ if "%DECISION%"=="NEW" (
     if errorlevel 1 (
         :: Branch may already exist (e.g. the dead worktree's branch). Retry
         :: attaching to it WITHOUT -b, mirroring create_worktree:381-385.
+        echo   WARNING: branch '!BRANCH!' already exists -- reattaching to it (not a fresh origin/main checkout)
         git worktree add "!WTPATH!" "!BRANCH!"
         if errorlevel 1 (
             echo [ERROR] git worktree add failed.

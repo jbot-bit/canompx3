@@ -2968,6 +2968,14 @@ async def action_start(profile: str | None = None, mode: str = "signal", account
             mode_label = "DEMO"
         else:  # live
             cmd.extend(["--live", "--auto-confirm"])
+            # Guard: live launches must carry an explicit account — the Combine
+            # fallback (LIVE_PILOT_ACCOUNT_ID) must never fire silently on a
+            # real-money path. The FE confirm() guard and the preflight block
+            # both rely on account_id being set before reaching here.
+            assert account_id is not None, (
+                "live-mode launch reached action_start with account_id=None; "
+                "the dashboard selector or handoff carry must have dropped the id"
+            )
             # Same builder, same account_id the preflight used → check [13] parity.
             cmd.extend(_live_pilot_cli_args(profile, account_id))
             mode_label = "LIVE"

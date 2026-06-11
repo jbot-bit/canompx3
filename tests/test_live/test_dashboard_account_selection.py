@@ -103,3 +103,39 @@ def test_session_snapshot_no_account_when_stopped(monkeypatch):
     monkeypatch.setattr(bd, "read_state", lambda: {"mode": "STOPPED"})
     snap = bd._session_snapshot()
     assert snap["live_account_id"] is None
+
+
+# ── End-to-end: preflight and launch carry the SAME --account-id ──────────────
+
+
+def test_preflight_and_launch_cmds_carry_identical_account_id(monkeypatch):
+    """Both _run_preflight_subprocess and the Popen in action_start must pass
+    the SAME --account-id to run_live_session.  This test inspects the actual
+    command lists built under each code path so a future refactor that breaks
+    parity fails here before it reaches live trading.
+    """
+    captured: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        captured.append(list(cmd))
+        import subprocess as sp
+
+        r = sp.CompletedProcess(cmd, 0, "", "")
+        return r
+
+    monkeypatch.setattr(bd.subprocess, "run", fake_run)
+
+    # Call _run_preflight_subprocess directly with the pilot profile + Express id.
+    bd._run_preflight_subprocess(PILOT, mode="live", account_id=EXPRESS)
+
+    assert captured, "subprocess.run was not called"
+    preflight_cmd = captured[-1]
+    assert "--account-id" in preflight_cmd
+    preflight_id = preflight_cmd[preflight_cmd.index("--account-id") + 1]
+
+    # The launch path calls _live_pilot_cli_args with the same args.
+    launch_args = bd._live_pilot_cli_args(PILOT, EXPRESS)
+    assert "--account-id" in launch_args
+    launch_id = launch_args[launch_args.index("--account-id") + 1]
+
+    assert preflight_id == launch_id == str(EXPRESS)

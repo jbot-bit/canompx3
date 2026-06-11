@@ -39,6 +39,7 @@ git fetch origin --quiet
 # it WITHOUT -b, mirroring create_worktree:381-385. Guard with || so the first
 # attempt's non-zero does not abort under `set -e`.
 if ! git worktree add -b "$BRANCH" "$WT_PATH" origin/main 2>/dev/null; then
+    echo "WARNING: branch '$BRANCH' already exists — reattaching worktree to it (not a fresh origin/main checkout)" >&2
     git worktree add "$WT_PATH" "$BRANCH"
 fi
 
