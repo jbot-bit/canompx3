@@ -192,7 +192,7 @@ All sessions are now event-based with per-day time resolution from `pipeline/dst
 | M2K | $0.50/tick | $3.24 | 12.96% |
 | MCL | $1.00/tick | $5.24 | varies |
 
-**Friction is why small ORBs lose.** A 2pt MGC ORB has 42% of its risk eaten by friction before the trade starts. This is the STRUCTURAL reason ORB size filtering works — it's not a statistical artifact, it's arithmetic.
+**Friction is why small ORBs lose.** A 2pt MGC ORB has 28.7% of its risk eaten by friction before the trade starts ($5.74 friction ÷ $20 risk). This is the STRUCTURAL reason ORB size filtering works — it's not a statistical artifact, it's arithmetic.
 
 ### Gold-Specific Knowledge
 - Gold trends intraday more than it mean-reverts. The ONLY confirmed edges in this project are momentum breakouts with size filters.

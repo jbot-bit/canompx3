@@ -182,9 +182,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** a494db89 — fix(docs): correct MNQ friction % in RESEARCH_RULES (5.5% → 29.2%)
-- **Files changed:** 1 files
-  - `RESEARCH_RULES.md`
+- **Commit:** eb646a35 — fix(docs): sync stale bundle RESEARCH_RULES friction tables (MNQ/MES post-F-4)
+- **Files changed:** 3 files
+  - `HANDOFF.md`
+  - `chatgpt-project-kit/RESEARCH_RULES.md`
+  - `chatgpt_bundle/RESEARCH_RULES.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

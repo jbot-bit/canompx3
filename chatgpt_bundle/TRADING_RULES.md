@@ -354,7 +354,7 @@ Cross-instrument stress test (`scripts/tools/stress_test.py`) tested 11 top edge
 
 The pattern across ALL instruments: strip the ORB size filter → edge dies. Small ORBs lose, large ORBs win. CB, RR, and entry model are second-order refinements. The size filter IS the strategy.
 
-**Mechanism:** Friction as % of risk. A 2pt ORB has 42% friction (MGC). A 6pt ORB has 14%. Small ORBs don't have enough room for price to move beyond friction + noise. Large ORBs give the breakout space to work. This is arithmetic, not statistics — it persists as long as cost structure exists.
+**Mechanism:** Friction as % of risk. A 2pt ORB has 28.7% friction (MGC). A 6pt ORB has 9.6%. Small ORBs don't have enough room for price to move beyond friction + noise. Large ORBs give the breakout space to work. This is arithmetic, not statistics — it persists as long as cost structure exists.
 
 **Implication:** Stop chasing parameter combos. The G5+/G6+ gates are not "nice to have" — they ARE the strategy. Future research should focus on optimal size thresholds per session per instrument, not on CB/RR/EM tuning.
 
