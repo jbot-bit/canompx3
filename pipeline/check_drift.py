@@ -8010,6 +8010,10 @@ def check_live_contract_cap_traces_to_swept_ceiling() -> list[str]:
                 f"exists — run account_survival.sweep_survival_cap before lifting the clamp."
             )
             continue
+        config_violation = _validate_sweep_block_config(profile_id, sweep_block)
+        if config_violation is not None:
+            violations.append(config_violation)
+            continue
         ceiling = sweep_block.get("survival_safe_ceiling")
         if not isinstance(ceiling, int) or ceiling < clamp:
             violations.append(
@@ -8017,6 +8021,32 @@ def check_live_contract_cap_traces_to_swept_ceiling() -> list[str]:
                 f"the live cap exceeds the survival-PASSED ceiling. Lower the clamp or re-sweep."
             )
     return violations
+
+
+def _validate_sweep_block_config(profile_id: str, sweep_block: dict) -> str | None:
+    """Require the persisted sweep to prove the canonical C11 gate, not a weaker run.
+
+    A swept ceiling is deploy-readiness evidence for lifting the live cap. If the
+    persisted block omits or weakens the governing simulation settings, a one-off
+    ad hoc run (shorter horizon, fewer paths, or a lower min pass probability)
+    could incorrectly justify real-capital size-up. Fail closed unless the block
+    explicitly records the canonical C11 gate configuration.
+    """
+    expected: dict[str, object] = {
+        "horizon_days": 90,
+        "n_paths": 10_000,
+        "seed": 0,
+        "min_survival_probability": 0.70,
+    }
+    for key, want in expected.items():
+        got = sweep_block.get(key)
+        if got != want:
+            return (
+                f"  profile {profile_id!r}: survival_cap_sweep {key}={got!r} is not canonical "
+                f"({want!r}) — re-run account_survival.sweep_survival_cap with the default C11 gate "
+                f"before lifting the clamp."
+            )
+    return None
 
 
 def _read_sweep_block(profile_id: str) -> dict | None:

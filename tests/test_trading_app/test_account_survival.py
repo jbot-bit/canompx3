@@ -1693,7 +1693,10 @@ def test_evaluate_gate_fails_when_sizing_parity_false():
     ]
     result = asv.simulate_survival(scenarios, rules, horizon_days=1, n_paths=64, seed=0)
     gate = asv._evaluate_gate(
-        scenarios, rules, result, profile,
+        scenarios,
+        rules,
+        result,
+        profile,
         min_survival_probability=asv.MIN_SURVIVAL_PROBABILITY,
         sizing_parity_ok=False,
     )
@@ -1733,6 +1736,11 @@ def test_persist_sweep_round_trips_into_existing_c11_envelope(tmp_path, monkeypa
     block = raw["payload"]["survival_cap_sweep"]
     assert block["survival_safe_ceiling"] == 2
     assert block["ceiling_probed"] == 3
+    assert block["horizon_days"] == 90
+    assert block["n_paths"] == 10_000
+    assert block["seed"] == 0
+    assert block["min_survival_probability"] == 0.70
+    assert block["as_of_date"] == ""
     # Original summary untouched.
     assert raw["payload"]["summary"]["operational_pass_probability"] == 0.99
 
@@ -1743,8 +1751,12 @@ def test_persist_sweep_raises_when_base_report_missing(tmp_path, monkeypatch):
 
     monkeypatch.setattr(asv, "STATE_DIR", tmp_path)
     sweep = asv.SurvivalCapSweepResult(
-        profile_id="topstep_50k_mnq_auto", ceiling_probed=1, survival_safe_ceiling=1,
-        sizing_parity_ok=True, sizing_parity_msg="ok", per_cap=[{"contracts": 1, "gate_pass": True}],
+        profile_id="topstep_50k_mnq_auto",
+        ceiling_probed=1,
+        survival_safe_ceiling=1,
+        sizing_parity_ok=True,
+        sizing_parity_msg="ok",
+        per_cap=[{"contracts": 1, "gate_pass": True}],
     )
     with pytest.raises(FileNotFoundError):
         asv._persist_sweep_into_c11_envelope("topstep_50k_mnq_auto", sweep)

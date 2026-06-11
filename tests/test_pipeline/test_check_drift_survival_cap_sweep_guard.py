@@ -28,6 +28,10 @@ def _envelope_with_sweep(ceiling: int | None) -> dict:
             "ceiling_probed": max(ceiling, 1),
             "survival_safe_ceiling": ceiling,
             "sizing_parity_ok": True,
+            "horizon_days": 90,
+            "n_paths": 10_000,
+            "seed": 0,
+            "min_survival_probability": 0.70,
             "per_cap": [],
         }
     return {
@@ -106,6 +110,17 @@ def test_clamp_above_1_with_ceiling_at_or_above_clamp_passes(monkeypatch, one_ac
     monkeypatch.setattr(cd, "_deployed_max_contracts_clamp_literal", lambda _root: 2)
     one_active_profile(_envelope_with_sweep(3), valid=True)
     assert cd.check_live_contract_cap_traces_to_swept_ceiling() == []
+
+
+def test_clamp_above_1_with_noncanonical_sweep_config_blocks(monkeypatch, one_active_profile):
+    """A weaker ad hoc sweep must not justify a live clamp lift."""
+    monkeypatch.setattr(cd, "_deployed_max_contracts_clamp_literal", lambda _root: 2)
+    env = _envelope_with_sweep(3)
+    env["payload"]["survival_cap_sweep"]["min_survival_probability"] = 0.50
+    one_active_profile(env, valid=True)
+    violations = cd.check_live_contract_cap_traces_to_swept_ceiling()
+    assert len(violations) == 1
+    assert "min_survival_probability=0.5 is not canonical" in violations[0]
 
 
 def test_clamp_above_1_with_invalid_report_blocks(monkeypatch, one_active_profile):

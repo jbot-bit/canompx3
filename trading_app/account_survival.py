@@ -1300,6 +1300,11 @@ class SurvivalCapSweepResult:
     sizing_parity_ok: bool
     sizing_parity_msg: str
     per_cap: list[dict]  # [{contracts, gate_pass, operational_pass_probability, ...}]
+    horizon_days: int = 90
+    n_paths: int = 10_000
+    seed: int = 0
+    min_survival_probability: float = MIN_SURVIVAL_PROBABILITY
+    as_of_date: str = ""
 
 
 def sweep_survival_cap(
@@ -1408,6 +1413,11 @@ def sweep_survival_cap(
         sizing_parity_ok=sizing_parity_ok,
         sizing_parity_msg=sizing_parity_msg,
         per_cap=per_cap,
+        horizon_days=horizon_days,
+        n_paths=n_paths,
+        seed=seed,
+        min_survival_probability=float(min_survival_probability),
+        as_of_date=str(as_of_date),
     )
 
     if write_state:
@@ -1450,6 +1460,11 @@ def _persist_sweep_into_c11_envelope(
         "ceiling_probed": sweep.ceiling_probed,
         "survival_safe_ceiling": sweep.survival_safe_ceiling,
         "sizing_parity_ok": sweep.sizing_parity_ok,
+        "horizon_days": sweep.horizon_days,
+        "n_paths": sweep.n_paths,
+        "seed": sweep.seed,
+        "min_survival_probability": sweep.min_survival_probability,
+        "as_of_date": sweep.as_of_date,
         "per_cap": sweep.per_cap,
         "computed_at_utc": datetime.now(UTC).isoformat(),
     }
