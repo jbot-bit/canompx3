@@ -78,9 +78,7 @@ def test_material_lines_skip_untracked():
 
 def test_material_lines_rename_gates_on_renamed_to_path():
     # Rename of a real source file IS material; rename-TO a churn file is not.
-    assert wc.material_porcelain_lines("R  old.py -> trading_app/new.py\n") == [
-        "R  old.py -> trading_app/new.py"
-    ]
+    assert wc.material_porcelain_lines("R  old.py -> trading_app/new.py\n") == ["R  old.py -> trading_app/new.py"]
     assert wc.material_porcelain_lines("R  old.md -> HANDOFF.md\n") == []
 
 

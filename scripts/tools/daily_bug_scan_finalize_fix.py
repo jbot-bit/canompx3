@@ -54,9 +54,7 @@ def _run(
         timeout=timeout,
     )
     if check and result.returncode != 0:
-        raise RuntimeError(
-            f"{' '.join(args)} failed ({result.returncode}): {(result.stderr or result.stdout).strip()}"
-        )
+        raise RuntimeError(f"{' '.join(args)} failed ({result.returncode}): {(result.stderr or result.stdout).strip()}")
     return result
 
 

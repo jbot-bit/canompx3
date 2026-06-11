@@ -82,14 +82,20 @@ def test_diverged_checked_before_capital():
     """DIVERGED must be classified BEFORE CAPITAL, else stale branches mislabel.
 
     A branch behind main can't FF-push; its capital-ness is moot. The classifier
-    must `continue` on DIVERGED before computing capital hits.
+    must `continue` on the divergence guard before computing capital hits.
+
+    The divergence class is recorded via the ``if ($behind -ne 0)`` guard, which
+    sub-splits into REDUNDANT/STRANDED and ``continue``s. We anchor on that guard
+    (the stable behavioral seam) rather than a specific accumulator literal, which
+    the -Audit/-ReapRedundant refactor (aa8de117) renamed.
     """
     txt = _script_text()
-    diverged_idx = txt.find('$plan.DIVERGED +=')
-    cap_idx = txt.find('$capHits = Get-CapitalHits $b')
-    assert diverged_idx != -1 and cap_idx != -1
+    diverged_idx = txt.find("if ($behind -ne 0)")
+    cap_idx = txt.find("$capHits = Get-CapitalHits $b")
+    assert diverged_idx != -1, "divergence guard (if ($behind -ne 0)) missing"
+    assert cap_idx != -1, "capital-hit computation ($capHits = Get-CapitalHits $b) missing"
     assert diverged_idx < cap_idx, (
-        "DIVERGED classification must precede CAPITAL hit computation "
+        "divergence guard must precede CAPITAL hit computation "
         "(else stale branches flood CAPITAL with main's own changes)"
     )
 
@@ -101,10 +107,7 @@ def test_never_force_pushes():
     (which legitimately says "never --force"). A push line with --force/-f fails.
     """
     txt = _script_text()
-    push_lines = [
-        ln for ln in txt.splitlines()
-        if "push" in ln and "git" in ln and not ln.strip().startswith("#")
-    ]
+    push_lines = [ln for ln in txt.splitlines() if "push" in ln and "git" in ln and not ln.strip().startswith("#")]
     for ln in push_lines:
         assert "--force" not in ln and " -f" not in ln, f"force-push found: {ln.strip()}"
     assert "push origin --delete" not in txt, "drain_worktrees must not delete remote branches"
