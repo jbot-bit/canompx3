@@ -182,17 +182,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** a550e1ce — Stage 3a-i: per-account contract source (AccountProfile.account_contracts)
-- **Files changed:** 9 files
-  - `docs/runtime/stages/2026-06-11-per-account-contracts-stage3a-i.md`
-  - `docs/specs/per_account_contracts.md`
-  - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift_account_contracts.py`
-  - `tests/test_trading_app/test_account_survival_per_account.py`
-  - `tests/test_trading_app/test_prop_profiles.py`
-  - `trading_app/account_survival.py`
-  - `trading_app/live/session_orchestrator.py`
-  - `trading_app/prop_profiles.py`
+- **Commit:** 31c53729 — @ chore(stages): retire prop-firm EV stage file — Stages 1-4 complete
+- **Files changed:** 1 files
+  - `docs/runtime/stages/2026-06-11-prop-firm-ev-scorecard-stage2.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

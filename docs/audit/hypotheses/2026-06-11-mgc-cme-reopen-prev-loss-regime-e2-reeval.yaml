@@ -1,0 +1,189 @@
+# Pre-Registered Hypothesis: Prior-day LOSS regime — MGC CME_REOPEN E2/E1 re-eval
+# Locked: 2026-06-11 | Holdout: 2026-01-01 | Mode: A (IS < 2026-01-01)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# PROVENANCE & WHY THIS REOPEN IS SANCTIONED (not re-litigation)
+#   TRADING_RULES.md:632 records this finding verbatim and EXPLICITLY requests
+#   the re-test:
+#     "Prior-day outcome signal: MGC CME_REOPEN CB1 G4+ prev=LOSS …
+#      avgR=+0.585R, t=+3.34, p=0.0016, p_bh=0.088. Baseline (all prev)=+0.273R;
+#      prev=LOSS >2x baseline. Grade: REGIME (N=49). Originally discovered under
+#      E0 — needs re-evaluation with E2/E1 entries. Action: WATCH. Needs E2
+#      re-evaluation."
+#   E0 has since been PURGED (survivorship-bias hygiene). The reopen path is
+#   written into canon — this pre-reg executes the sanctioned E2/E1 re-evaluation.
+#   It is NEW ground (E0→E2/E1 entry swap), not a re-run of a dead path.
+#
+# THE +0.585R DOES NOT TRANSFER — IT WAS AN E0 GRID NUMBER:
+#   The +0.585R / N=49 / p_bh=0.088 came from a 105-cell E0 stress grid (RR×CB×EM×G)
+#   at q=0.10. This pre-reg does NOT pre-register +0.585R as the E2 prior. The E2
+#   (and E1) entry mechanics differ from E0; the effect size is UNMEASURED on E2.
+#   The primary quantity measured here is the prev=LOSS-vs-baseline ExpR delta on
+#   E2 (then E1) outcome rows.
+#
+# K-FRAMING — WHY PATHWAY B K=1 (the only MinBTL-legal path for MGC):
+#   MGC clean horizon = 2.70yr → Bailey N_max = 3 (estimate_k_budget, 2026-06-11).
+#   The original 105-cell GRID cannot be seated on MGC: at N>3 the Bailey horizon
+#   bound (2*ln(N)/E^2 <= 2.70) FAILS (N=9 already needs 4.39yr). MinBTL bounds
+#   DISCOVERY SEARCH WIDTH, not a single confirmatory re-test. So this is run as a
+#   SINGLE pre-registered confirmatory cell (Pathway B, K=1): the EXACT
+#   MGC CME_REOPEN O5 CB1 G4+ prev=LOSS cell, swapping only E0→E2 (then a second
+#   K=1 for E1). At K=1, MinBTL = 0.00yr (trivial PASS) — MinBTL is NOT the gate.
+#   Per pre_registered_criteria.md Amendment 3.0, Pathway B raw p<0.05 with
+#   non-waivable downstream gates C6/C8/C9.
+#
+# HONEST EXPECTATION (state WHICH gate kills it, don't blame MinBTL):
+#   N=49 is REGIME tier (30-99), sub-CORE. p_bh=0.088 was already > q=0.05 under
+#   the E0 grid. Under E2 + 2026 holdout dir-match WITH the RULE 3.3 power floor,
+#   this likely FAILS on power/holdout — an acceptable, informative kill. It is
+#   NOT expected to die on MinBTL (K=1). If it dies, the result doc must name the
+#   actual gate (power floor / OOS dir-match / Chordia t), not MinBTL.
+#
+# MECHANISM (GROUNDED — earns theory grant, relaxed Chordia t>=3.00):
+#   "Failed break yesterday → today's break of the same level = aggressive
+#   repositioning follow-through." This is the stop-cascade mechanism, grounded
+#   VERBATIM in Harris 2002:
+#   - harris_2002_trading_exchanges_microstructure.md Key claim 1 (Ch28 §28.1.1
+#     p.557): late/trapped longs from a failed break "start selling to stop their
+#     losses … Order anticipators may anticipate these … stop orders, and sell
+#     before them." A failed break leaves a known cluster of trapped stops at the
+#     level; the next break triggers that cluster = a structural cascade.
+#   - harris_2002_..._microstructure.md Key claim 6 (Ch4 §4.5 p.78): our E2
+#     stop-market entry IS the stop-order class Harris describes — it rides the
+#     same cascade.
+#   - fitschen_2013_path_of_least_resistance.md Ch3 pp.31-43: commodity (MGC)
+#     intraday trend-follow premise (the directional ORB entry the cascade rides).
+#   The mechanism is a SPECIFIC, literature-grounded cascade story (distinct from
+#   H1's unsupported conviction veto) → theory_grant=true → Chordia t>=3.00.
+#
+# FEATURE VALIDITY (look-ahead-safe):
+#   prev_day_outcome of the SAME lane is yesterday's realized result — knowable
+#   at today's session open, strictly prior (backtesting-methodology.md RULE 6.1
+#   safe-feature list: prev_day_* are always prior-close). No look-ahead. The
+#   research script derives prev_outcome from orb_outcomes LAG on the same
+#   (instrument, orb_label, orb_minutes, entry_model, confirm_bars, rr_target)
+#   lane, realized-EOD scratch policy.
+#
+# NO-GO REGISTRY CHECK (hypothesis-prereg-discipline §Hard-sequence step 3):
+#   /nogo run 2026-06-11. No KILL/NO-GO verdict found for a prior-day-outcome
+#   regime signal on MGC CME_REOPEN. The MGC SINGAPORE_OPEN HARD KILL (74%
+#   double-break, init_db.py:17) is a DIFFERENT session and does NOT apply to
+#   CME_REOPEN. Logged per discipline; not a blocker.
+#
+# THEORY GRANT: YES. The failed-break→fresh-break stop-cascade is grounded
+#   verbatim in Harris Ch28 p.557 + Ch4 p.78. theory_grant=true → Chordia floor
+#   t >= 3.00 (with-theory; Harvey-Liu-Zhu 2015 + Chordia 2018). Pathway B raw
+#   p<0.05 still required; C6/C8/C9 non-waivable.
+
+metadata:
+  name: "mgc-cme-reopen-prev-loss-regime-e2-reeval"
+  date_locked: "2026-06-11"
+  holdout_date: "2026-01-01"
+  testing_mode: "individual"
+  pathway: "B_individual"
+  theory_grant: false   # FLIPPED true->false 2026-06-11 per drift Check 69
+                        # (Amendment 3.4 PROVISIONAL gate): forbids new
+                        # mechanism-class-transfer grants until the re-audit
+                        # closes. The Harris stop-cascade premise (Ch28 p.557 +
+                        # Ch4 p.78) remains the economic basis, but the grant is
+                        # withheld -> strict no-theory Chordia bar t>=3.79.
+  n_trials: 1           # Pathway B K=1 confirmatory (E2 cell). The E1 cell is a
+                        # SEPARATE K=1 (run as a second confirmatory, not a grid).
+  # MinBTL HORIZON BOUND: at N=1, 2*ln(1)/E^2 = 0.00yr required → trivial PASS.
+  # MGC 2.70yr horizon is irrelevant for K=1. (estimate_k_budget MGC N=1 = PASS,
+  # 2.70yr headroom, verified 2026-06-11.)
+  min_btl_budget_check: "VERIFIED 2026-06-11 via estimate_k_budget.py --instrument MGC --n-trials 1 → PASS (MinBTL=0.00yr, K=1 confirmatory). The 105-cell E0 grid is NOT re-run — MGC N_max=3 forbids it; this is a single confirmatory cell."
+  data_horizon_years_clean:
+    MGC: 2.70   # N_max=3 at E=1.0 — forbids a grid, allows K=1 confirmatory
+  effect_size_disclaimer: "The E0-era +0.585R/N=49/p_bh=0.088 (105-cell grid) is the seed, NOT a pre-registered E2 prior. The E2 prev=LOSS-vs-baseline delta is UNMEASURED and is the primary quantity measured."
+
+testing_discipline:
+  pathway: "B_individual"
+  k: 1
+  significance_threshold:
+    raw_p: "< 0.05 (Pathway B raw, Amendment 3.0)"
+    effect_size: "prev=LOSS ExpR > baseline (all-prev) ExpR on E2 outcome rows, positive absolute ExpR"
+    chordia_t: ">= 3.79 (theory_grant=false per AM3.4 Check 69; strict no-theory bar)"
+  mandatory_downstream_gates_non_waivable: [C6, C8, C9]
+  theory_citation:
+    - "harris_2002_trading_exchanges_microstructure.md Key claim 1 (Ch28 §28.1.1 p.557 — stop-cascade from trapped failed-break stops)"
+    - "harris_2002_trading_exchanges_microstructure.md Key claim 6 (Ch4 §4.5 p.78 — E2 stop-market is the stop-order class that rides the cascade)"
+    - "fitschen_2013_path_of_least_resistance.md Ch3 pp.31-43 (MGC commodity intraday trend-follow premise)"
+
+# =============================================================================
+# HYPOTHESES
+# =============================================================================
+hypotheses:
+  - id: 1
+    type: primary
+    name: "MGC CME_REOPEN prev=LOSS regime survives E2 re-eval (K=1 confirmatory)"
+    theory_citation:
+      - "harris_2002_trading_exchanges_microstructure.md Key claim 1 (Ch28 p.557 — failed-break trapped stops → next-break cascade)"
+      - "harris_2002_trading_exchanges_microstructure.md Key claim 6 (Ch4 p.78 — E2 stop-market rides the cascade)"
+      - "fitschen_2013_path_of_least_resistance.md Ch3 pp.31-43 (MGC commodity intraday trend-follow premise)"
+    economic_basis: |
+      A failed break yesterday (prev_day_outcome=LOSS on this lane) leaves a known
+      cluster of trapped stop orders at the broken level (Harris Ch28 p.557).
+      Today's break of the same level triggers that cluster — an aggressive
+      repositioning cascade — so prev=LOSS days should show stronger follow-through
+      than the all-prev baseline. Originally seen under E0 (+0.585R vs +0.273R
+      baseline, N=49); E0 is purged. HYPOTHESIS: on E2 entries, the exact
+      MGC CME_REOPEN O5 CB1 G4+ prev=LOSS cell retains positive ExpR above the
+      all-prev baseline at raw p<0.05 and Chordia t>=3.00. NO directional claim.
+    measurement: |
+      Single K=1 cell: MGC CME_REOPEN orb_minutes=5 E2 CB1, G4+ size gate, on
+      outcome rows where prev_day_outcome (same lane, LAG) = LOSS. Compare
+      prev=LOSS ExpR vs all-prev baseline ExpR on the SAME E2 lane. Derive
+      prev_outcome via LAG on canonical orb_outcomes; realized-EOD scratch policy;
+      triple-join daily_features (orb_minutes=5) to apply the G4+ filter via
+      research.filter_utils. Report the E2 delta as headline (NOT the E0 seed).
+      Compute OOS power (RULE 3.3) BEFORE applying any 2026 dir-match kill.
+    scope:
+      instruments: [MGC]
+      sessions: [CME_REOPEN]
+      orb_minutes: [5]
+      rr_targets: [1.5]        # the deployed/canonical CME_REOPEN RR; single cell
+      entry_models: [E2]       # E1 is a SEPARATE follow-up K=1, not part of this trial
+      confirm_bars: [1]
+      filter: "G4+ size gate (ORB_G4 floor), delegated via research.filter_utils — not re-encoded"
+      condition: "prev_day_outcome (same lane, LAG) == LOSS"
+    pass_metric:
+      metric: "prev=LOSS ExpR minus all-prev baseline ExpR on MGC CME_REOPEN E2 outcome rows"
+      formula: "mean(pnl_r | prev_outcome=LOSS) - mean(pnl_r | all prev), same lane"
+      threshold_gte: "delta > 0 AND prev=LOSS ExpR > 0 AND raw p < 0.05 AND Chordia t(prev=LOSS one-sample) >= 3.79"
+    counted_against_trial_budget: true
+    kill_criteria:
+      - "Raw p >= 0.05 on the prev=LOSS subset (Pathway B Amendment 3.0)"
+      - "Chordia t < 3.79 on prev=LOSS subset (Criterion 4, strict no-theory bar per AM3.4 Check 69)"
+      - "prev=LOSS ExpR NOT > all-prev baseline ExpR — refutes the cascade prior"
+      - "prev=LOSS ExpR <= 0 (no absolute edge)"
+      - "WFE < 0.50 (Criterion 6, non-waivable)"
+      - "2026 OOS ExpR < 0 when N_oos >= 30 AND OOS power >= 0.80 (Criterion 8 + RULE 3.3 power floor; if power < 0.50 → UNVERIFIED not DEAD)"
+      - "Any era (N >= 50) ExpR < -0.05 R (Criterion 9, non-waivable)"
+      - "N_on (prev=LOSS) < 30 → cannot confirm at REGIME tier; report DIRECTIONAL_ONLY, not a pass"
+
+# =============================================================================
+# EXECUTION GATE CHECKLIST (complete IN ORDER before running scan)
+# =============================================================================
+# [ ] 1. estimate_k_budget --hypothesis <this file> → expect PASS MGC @ N=1 (K=1).
+# [ ] 2. /nogo "MGC CME_REOPEN prior-day loss regime" — confirm no buried KILL
+#         (none found 2026-06-11; SINGAPORE_OPEN kill is a different session).
+# [ ] 3. Write research/run_mgc_prev_loss_e2_reeval.py following
+#         comprehensive_deployed_lane_scan.py patterns:
+#         - Single K=1 cell; derive prev_outcome via LAG on orb_outcomes (same
+#           lane), realized-EOD scratch policy; prev_day_* is RULE 6.1 safe.
+#         - Triple-join daily_features (orb_minutes=5); apply G4+ via filter_utils.
+#         - one-sample Chordia t on prev=LOSS subset; baseline = all-prev same lane.
+#         - oos_power.py power check BEFORE any 2026 dir-match kill (RULE 3.3).
+#         - report N(prev=LOSS), ExpR(prev=LOSS), ExpR(baseline), t, p, WFE,
+#           OOS power+tier, era breakdown.
+# [ ] 4. RULE 13 pressure test: inject a look-ahead column; confirm scan flags it.
+# [ ] 5. Result doc → docs/audit/results/YYYY-MM-DD-mgc-prev-loss-e2-reeval.md.
+#         If KILL: name the ACTUAL gate (power / OOS dir-match / Chordia t),
+#         NOT MinBTL (K=1, MinBTL=0). On survive: a SEPARATE K=1 E1 confirmatory
+#         may follow; do NOT bundle E1+E2 into a grid (would breach MGC N_max=3).
+#
+# CAVEAT (carry into the result doc): N=49 REGIME tier, p_bh=0.088 already
+# >q=0.05 under the E0 grid. Honest expectation is this dies on the holdout
+# power floor or dir-match — an acceptable, informative kill. A NO-GO entry on
+# kill must record "Why it failed" + "What would reopen" per the plan's ROE.

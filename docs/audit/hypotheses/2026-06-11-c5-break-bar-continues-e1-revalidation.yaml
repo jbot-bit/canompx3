@@ -1,0 +1,204 @@
+# Pre-Registered Hypothesis: C5 break-bar-continues conviction filter on E1
+# Locked: 2026-06-11 | Holdout: 2026-01-01 | Mode: A (IS < 2026-01-01)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# PROVENANCE & WHAT IS GENUINELY NEW
+#   TRADING_RULES.md:639 records C5 ("entry bar continues filter") as PROMISING,
+#   UNWIRED: "True avg +0.360R vs False -0.113R at TOKYO_OPEN (delta +0.473R,
+#   N=64/78). Not yet wired as pre-trade filter." That delta was measured at
+#   TOKYO_OPEN under the E0/E2 era as a standalone True-vs-False split.
+#
+#   The break-bar-continues signal has NEVER been measured or validated on E1.
+#   Canonical metadata on the filter (trading_app/config.py:2640-2643
+#   BreakBarContinuesFilter): VALIDATED_FOR = empty, LAST_REVALIDATED = None,
+#   CONFIDENCE_TIER = PLAUSIBLE. This pre-reg measures the standalone continuation
+#   signal on E1 entries for the first time. It is NEW ground, not a re-run.
+#
+# WHY E1 ONLY (look-ahead safety — VERIFIED, not assumed):
+#   The filter reads orb_{label}_break_bar_continues, which is known only at the
+#   break bar's CLOSE (close-outside-ORB definition; pipeline/build_daily_features.py
+#   detect_break close-cross). E1 (trading_app/entry_rules.py:269-298) enters at
+#   the OPEN of the bar STRICTLY AFTER the confirm/break bar
+#   (next_bars: ts_utc > confirm_bar_ts). Therefore entry_ts > break_bar_close_ts
+#   ALWAYS for E1 — the continuation feature is fully resolved before entry.
+#   STRUCTURAL guarantee, not a sampled subset.
+#
+#   E2 is BANNED (look-ahead): E2 stop-market fires on the first bar whose RANGE
+#   touches the ORB boundary (wick/mid-bar), which can precede the break-bar close.
+#   Canonical gate: trading_app/config.py E2_EXCLUDED_FILTER_SUBSTRINGS '_CONT'
+#   via _e2_look_ahead_reason; the 41.3% entry_ts<break_ts contamination class
+#   (docs/postmortems/2026-04-21-e2-break-bar-lookahead.md;
+#   backtesting-methodology.md §6.3). This pre-reg does NOT test E2.
+#
+# THE +0.473R DOES NOT TRANSFER — FIRST STEP IS RE-MEASURE ON E1:
+#   The TOKYO_OPEN +0.473R was an E0/E2-era outcome-row split. E1 takes the
+#   next-bar-open regardless of break-bar close, so the E1 effect size is
+#   UNMEASURED. This pre-reg does NOT pre-register +0.473R as the E1 prior. The
+#   primary measurement IS the True/False ExpR delta on E1 outcome rows. The
+#   TOKYO_OPEN E0/E2 number is cited only as the seed that motivated the test.
+#
+# STANDALONE-FILTER SCOPE NOTE (corrects a common misread):
+#   "BRK_CONT" is NOT a standalone key in trading_app.config.ALL_FILTERS. Only
+#   the size×continuation composites are registered (ORB_G4_CONT / G5_CONT /
+#   G6_CONT / G8_CONT, built by _make_break_quality_composites). The standalone
+#   base object _BREAK_BAR_CONTINUES (filter_type="BRK_CONT") exists but is not
+#   registered. This pre-reg tests the STANDALONE continuation signal (matching
+#   the original standalone +0.473R measurement). The research script MUST
+#   instantiate BreakBarContinuesFilter and delegate signal evaluation through
+#   research.filter_utils (RESEARCH_RULES discovery-layer-discipline + canonical
+#   delegation) — it may NOT re-encode the matches_df logic.
+#
+# NO-GO REGISTRY CHECK (hypothesis-prereg-discipline §Hard-sequence step 3):
+#   /nogo run 2026-06-11. Nearest verdict: STRATEGY_BLUEPRINT.md §5 "Pre-velocity
+#   edge (binary aligned-vs-opposed)" = DEAD (cross-session descriptive K=89,
+#   0 BH-FDR survivors). Reopen criterion quoted verbatim: "New mechanism class
+#   — Fitschen continuation at hourly+ timescales (different from 5-bar pre-ORB)
+#   or microstructure-feature alternatives." C5 is a BREAK-BAR feature (the break
+#   bar's own close direction), NOT a 5-bar pre-ORB pre-velocity feature — a
+#   distinct mechanism class, so it is NOT re-litigating that NO-GO. It is logged
+#   here per discipline, not as a blocker.
+#
+# MECHANISM (premise grounded; the conviction-veto itself is NOT theory-granted):
+#   Fitschen 2013 Ch3 pp.31-43 grounds the CORE ORB intraday-trend-follow premise
+#   for equity-index + commodity classes (fitschen_2013_path_of_least_resistance.md
+#   §"Ch 3"). Harris 2002 Ch4 p.78 + Ch28 p.557 (harris_2002_..._microstructure.md
+#   Key claims 1 & 6) ground the stop-cascade that a breakout rides. BUT neither
+#   source grounds "break-bar closes back inside = predictive skip" as a
+#   conviction veto: a failed/reverted break is a failed cascade, and no extract
+#   states a failed cascade PREDICTS the next outcome. Per the Fitschen extract's
+#   own usage rules (a price-action rejection filter is not in Ch6's taxonomy),
+#   this is an UNSUPPORTED mechanism → no theory grant → strict Chordia t>=3.79.
+#
+# THEORY GRANT: NO. The continuation-conviction veto is an UNSUPPORTED mechanism
+#   (premise is grounded; the predictive veto is not). theory_grant=false →
+#   Chordia floor t >= 3.79 (strict no-theory; Chordia et al 2018 empirical bound).
+
+metadata:
+  name: "c5-break-bar-continues-e1-revalidation"
+  date_locked: "2026-06-11"
+  holdout_date: "2026-01-01"
+  testing_mode: "family"
+  pathway: "A_family"
+  theory_grant: false   # UNSUPPORTED conviction-veto mechanism; premise grounded
+                        # (Fitschen Ch3) but the predictive skip is not. Strict
+                        # no-theory Chordia bar t>=3.79.
+  total_expected_trials: 15
+  # MinBTL HORIZON BOUND (Bailey 2013, the binding constraint — NOT the 300 cap):
+  #   2*ln(N)/E[max_N]^2 <= clean_years. N=15 needs 2*ln(15)=5.42yr at E=1.0.
+  #   MNQ/MES have 6.65yr (N_max=27) → PASS. MGC has 2.70yr (N_max=3) → EXCLUDED.
+  #   Verify inline before run: estimate_k_budget.py --instrument MNQ --n-trials 15
+  data_horizon_years_clean:
+    MNQ: 6.65   # N_max=27 at E=1.0
+    MES: 6.65   # N_max=27
+  min_btl_budget_check: "TO VERIFY before run via scripts/tools/estimate_k_budget.py --hypothesis <this file>. Expect PASS for MNQ+MES at N=15 (need 5.42yr, have 6.65yr). MGC EXCLUDED (2.70yr horizon, N_max=3) — see mgc_exclusion."
+  mgc_exclusion: "MGC is OUT OF SCOPE. At 2.70yr clean its Bailey horizon ceiling is N_max=3 — too small for a continuation family across sessions×RR. A standalone MGC continuation test would need its own Pathway-B K=1 pre-reg. Do NOT smuggle MGC cells in to inflate N."
+  effect_size_disclaimer: "The TOKYO_OPEN +0.473R (E0/E2 era, N=64/78) is the seed, NOT a pre-registered E1 prior. The E1 True/False delta is UNMEASURED and is the primary quantity this study measures."
+
+# =============================================================================
+# VARIABLE SPACE
+# =============================================================================
+# Standalone break-bar-continues conviction filter (require_continues=True takes
+# the trade; the rejection-wick days are skipped) applied to E1 entries.
+# Sessions: equity-index (MNQ/MES) ORB sessions with adequate pre-holdout N where
+#   the continuation signal is meaningful. TOKYO_OPEN included (seed session);
+#   EUROPE_FLOW + NYSE_OPEN added as the other high-volume MNQ/MES ORB sessions.
+# Instruments: MNQ, MES only (MGC excluded by Bailey horizon).
+# Entry model: E1 ONLY (look-ahead-safe by construction; E2 banned).
+# Aperture: 5 min only (control K; 15/30 deferred to a follow-up pre-reg).
+# RR targets: 1.0, 1.5, 2.0.
+
+variable_space:
+  instruments: [MNQ, MES]
+  sessions: [TOKYO_OPEN, EUROPE_FLOW, NYSE_OPEN]
+  orb_minutes: [5]
+  rr_targets: [1.0, 1.5, 2.0]
+  entry_models: [E1]
+  confirm_bars: [1]
+  filter: "standalone BreakBarContinuesFilter(require_continues=True), instantiated + delegated via research.filter_utils — NOT pulled from ALL_FILTERS (not registered standalone)"
+  # K_family accounting (total_expected_trials=15, within MNQ/MES N_max=27):
+  #   2 instruments × 3 sessions × 3 RR (with-filter cell vs unfiltered baseline
+  #   per RULE 2 Pass-1/Pass-2) but the baseline is the control, not a trial:
+  #   the 15 counted trials are the filtered cells where the conviction edge is
+  #   the hypothesis. 2×3×3 = 18 enumerated, but TOKYO_OPEN×{some RR} may have
+  #   N<deployable; expected evaluable ≈ 15. If evaluable > 15, re-run K-budget.
+
+# =============================================================================
+# HYPOTHESES
+# =============================================================================
+hypotheses:
+  - id: 1
+    type: primary
+    name: "Break-bar continuation predicts higher E1 ExpR (conviction filter) — MNQ/MES"
+    # theory_citation OMITTED — theory_grant:false. The premise (Fitschen Ch3) is
+    # discussed in economic_basis for provenance, but the predictive conviction
+    # veto is UNSUPPORTED, so no theory grant and no citation field (Amendment 3.3:
+    # has_theory = theory_grant bool; citation presence is provenance only).
+    economic_basis: |
+      Premise (grounded, Fitschen 2013 Ch3 pp.31-43): ORB breaks are intraday
+      trend-follow entries on equity-index classes. Conviction prior (UNSUPPORTED
+      as a predictive veto): a break bar that closes in the break direction
+      (green for longs / red for shorts) shows follow-through conviction; a
+      rejection wick (close back toward/into the ORB) signals a weak break. The
+      standalone TOKYO_OPEN E0/E2 split (+0.360R True vs -0.113R False, N=64/78)
+      motivated the test but does NOT transfer to E1. HYPOTHESIS: on E1 entries,
+      days where the break bar continues achieve higher ExpR than days where it
+      does not, on MNQ/MES sessions, at q<0.05 BH-FDR and Chordia t>=3.79.
+      NO directional (long-vs-short) claim — the break sets direction; the filter
+      conditions take-vs-skip.
+    measurement: |
+      For each (instrument, session, RR) E1 cell: RULE 2 Pass-1 measures the
+      standalone True-vs-False ExpR delta on the full E1 universe; Pass-2 (if a
+      deployed size gate exists on the lane) measures residual edge after the
+      gate. Edge = ExpR(continues=True) > ExpR(continues=False), BH-FDR
+      significant at K_family, Chordia t>=3.79, with positive standalone ExpR on
+      the True subset. Report the E1 delta as the headline (NOT the E0/E2 seed).
+    scope:
+      instruments: [MNQ, MES]
+      sessions: [TOKYO_OPEN, EUROPE_FLOW, NYSE_OPEN]
+      rr_targets: [1.0, 1.5, 2.0]
+      orb_minutes: [5]
+      entry_models: [E1]
+      confirm_bars: [1]
+    pass_metric:
+      metric: "ExpR delta (continues=True minus continues=False) on E1 outcome rows"
+      formula: "mean(pnl_r | break_bar_continues=True) - mean(pnl_r | break_bar_continues=False)"
+      threshold_gte: "delta > 0 AND True-subset ExpR > 0 AND Chordia t(True-subset one-sample) >= 3.79 AND BH-FDR q<0.05 at K_family"
+    counted_against_trial_budget: true
+    kill_criteria:
+      - "BH-FDR q=0.05 FAILS at K_family framing (Criterion 3)"
+      - "Chordia t < 3.79 on the continues=True subset (Criterion 4 — no theory grant)"
+      - "ExpR(continues=True) NOT > ExpR(continues=False) — refutes the conviction prior"
+      - "ExpR(continues=True) <= 0 (no standalone edge even when filter fires)"
+      - "WFE < 0.50 (Criterion 6)"
+      - "2026 OOS ExpR < 0 when N_oos >= 30 AND OOS power >= 0.80 (Criterion 8 + RULE 3.3 power floor)"
+      - "Any era (N >= 50) ExpR < -0.05 R (Criterion 9)"
+      - "Fire rate < 5% or > 95% (extreme_fire — exclude cell)"
+      - "Look-ahead detected: any E1 cell where entry_ts <= break_bar_close_ts (would void the safety guarantee — must be ZERO; RULE 6.3)"
+
+# =============================================================================
+# EXECUTION GATE CHECKLIST (complete IN ORDER before running scan)
+# =============================================================================
+# [ ] 1. estimate_k_budget --hypothesis <this file> → expect PASS MNQ+MES @ N=15.
+# [ ] 2. /nogo "break bar continues conviction filter E1" — confirm no buried KILL
+#         beyond the pre-velocity DEAD already referenced above.
+# [ ] 3. Write research/run_c5_e1_revalidation.py following
+#         comprehensive_deployed_lane_scan.py patterns:
+#         - Instantiate BreakBarContinuesFilter(require_continues=True); delegate
+#           via research.filter_utils.filter_signal — do NOT re-encode matches_df.
+#         - E1-only outcome rows; assert entry_ts > break_bar_close_ts on EVERY
+#           row (the look-ahead guard; any violation aborts the cell).
+#         - RULE 1.2 validity gates; triple-join daily_features (orb_minutes=5).
+#         - RULE 2 Pass-1 (unfiltered True/False split) + Pass-2 (post-deployed-gate).
+#         - bh_fdr_multi_framing() for K_family + K_lane.
+#         - oos_power.py power check BEFORE any OOS/dir_match kill (RULE 3.3).
+#         - report N, fire_rate, t, ExpR(True/False), WFE, OOS power, dir_match.
+# [ ] 4. RULE 13 pressure test: inject a known look-ahead column; confirm the scan
+#         flags it. ESPECIALLY assert the entry_ts>break_close guard fires on a
+#         synthetic E2-style early-entry row.
+# [ ] 5. Result doc → docs/audit/results/YYYY-MM-DD-c5-break-bar-continues-e1.md.
+#         Report the E1 delta as headline; cite the E0/E2 seed only as provenance.
+#
+# CAVEAT (carry into the result doc): E1 is the conservative/secondary entry model;
+# most of the validated book is E2. Even a clean PASS here must quantify whether
+# improving E1 moves real portfolio P&L before any wiring discussion. A clean KILL
+# is an acceptable, informative outcome.
