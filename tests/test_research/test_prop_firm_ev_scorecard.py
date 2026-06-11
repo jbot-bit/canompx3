@@ -66,15 +66,18 @@ def _deployed_survival_record(profile_id: str) -> SurvivalAdapterRecord:
     )
 
 
-@pytest.fixture(autouse=True)
-def hermetic_survival_adapter(monkeypatch):
+@pytest.fixture(scope="module", autouse=True)
+def hermetic_survival_adapter():
     """Keep EV combiner tests independent of canonical gold.db availability."""
     import research.prop_firm_ev_formula as formula
 
     def fake_adapter(profile_id: str, **_kwargs) -> SurvivalAdapterRecord:
         return _deployed_survival_record(profile_id)
 
-    monkeypatch.setattr(formula, "evaluate_survival_adapter", fake_adapter)
+    patch = pytest.MonkeyPatch()
+    patch.setattr(formula, "evaluate_survival_adapter", fake_adapter)
+    yield
+    patch.undo()
 
 
 def _survival_summary(profile_id: str) -> SurvivalSummary:
