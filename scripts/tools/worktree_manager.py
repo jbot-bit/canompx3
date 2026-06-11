@@ -201,6 +201,183 @@ def prune_worktrees(root: Path = PROJECT_ROOT) -> None:
     _run_git("worktree", "prune", cwd=root)
 
 
+# --------------------------------------------------------------------------- #
+# Phantom-cwd (husk) reconciliation — auto-heal a force-removed worktree dir
+# --------------------------------------------------------------------------- #
+# When a worktree is force-removed, its directory + leftover files survive but
+# `.git` is gone and the path leaves `git worktree list` — a "husk". The
+# launcher must not reuse a husk (every non-cd shell command snaps back to the
+# dead cwd, MCP breaks). These helpers detect husks and auto-clean/re-path them.
+# All registration truth delegates to the canonical `list_worktrees()`.
+
+# Scaffold names derived from the SAME constants `_ensure_scaffold` creates, so
+# the scratch-only allowlist cannot drift from what a managed worktree actually
+# contains. A husk holding ONLY these (or *.png) is provably scaffold/scratch.
+_SCRATCH_NAMES: frozenset[str] = frozenset(
+    {
+        WORKTREE_META,
+        LOCAL_WORKTREE_META,
+        ".git",
+        ".claude",
+        ".playwright-mcp",
+        ".agents",
+        ".codex",
+        ".cloudflared",
+        ".canompx3-runtime",
+        ".claudeignore",
+        ".code-review-graph",
+        ".code-review-graphignore",
+        *SYMLINK_TARGETS,
+        *HARDLINK_FILES,
+        *JUNCTION_DIRS,
+    }
+)
+
+
+def _canonical_main_root() -> Path:
+    """The real main checkout — `git rev-parse --git-common-dir`'s parent.
+
+    Inside a worktree, PROJECT_ROOT resolves to the worktree's own dir, so a
+    sibling glob built from it matches nothing. The git-common-dir always points
+    at the main repo's `.git`; its parent is the canonical reap/reconcile base.
+    Fallback: PROJECT_ROOT.
+    """
+    result = _run_git("rev-parse", "--git-common-dir")
+    if result.returncode == 0 and result.stdout.strip():
+        common = Path(result.stdout.strip())
+        if not common.is_absolute():
+            common = (PROJECT_ROOT / common).resolve()
+        return common.parent
+    return PROJECT_ROOT
+
+
+def _norm(path: Path) -> str:
+    """normcase+resolve for cross-platform path compare; OSError -> normcase."""
+    try:
+        return os.path.normcase(str(path.resolve()))
+    except OSError:
+        return os.path.normcase(str(path))
+
+
+def is_registered_worktree(path: Path, root: Path | None = None) -> bool:
+    """True iff `path` is an active git worktree per the canonical list.
+
+    Fail-closed: a `list_worktrees` RuntimeError -> False (treated as
+    unregistered, so a husk path is recreated clean, never silently reused).
+    """
+    base = root if root is not None else _canonical_main_root()
+    try:
+        registered = {_norm(Path(wt.path)) for wt in list_worktrees(base)}
+    except RuntimeError:
+        return False
+    return _norm(path) in registered
+
+
+def _is_scratch_only(path: Path) -> bool:
+    """True iff every entry is in _SCRATCH_NAMES or a *.png file.
+
+    Any real source file/dir (pipeline/, *.py, ...) -> False. This is the
+    work-preservation gate: `git worktree remove --force` leaves the full tree
+    on disk, so a husk with real source may hold uncommitted work and must
+    NEVER be auto-deleted. OSError -> False (fail-closed).
+    """
+    try:
+        entries = list(path.iterdir())
+    except OSError:
+        return False
+    for entry in entries:
+        if entry.name in _SCRATCH_NAMES:
+            continue
+        if entry.is_file() and entry.suffix == ".png":
+            continue
+        return False
+    return True
+
+
+def is_safe_graveyard(path: Path, root: Path | None = None) -> bool:
+    """True only for a scaffold/empty husk safe to auto-reap.
+
+    exists ∧ is_dir ∧ NOT registered ∧ no `.git` (file or dir) ∧ scratch-only.
+    """
+    try:
+        if not path.is_dir():
+            return False
+    except OSError:
+        return False
+    if (path / ".git").exists():
+        return False
+    if is_registered_worktree(path, root=root):
+        return False
+    return _is_scratch_only(path)
+
+
+def _uniquify(path: Path) -> Path:
+    """First free `<base>-N` (1..999), else `<base>-reconciled`."""
+    for n in range(1, 1000):
+        candidate = path.parent / f"{path.name}-{n}"
+        if not candidate.exists():
+            return candidate
+    return path.parent / f"{path.name}-reconciled"
+
+
+def reconcile_launch_path(path: Path, root: Path | None = None) -> tuple[Path, str]:
+    """Auto-heal the EXACT launch path (never a glob). Returns (final_path, action).
+
+    REGISTERED -> active worktree, use as-is.
+    ABSENT     -> does not exist, use as-is (launcher creates it).
+    CLEANED    -> safe husk, rmtree'd, original path reusable.
+    REPATHED   -> unsafe/has-source husk OR rmtree failed -> _uniquify(path),
+                  original left untouched (work-loss guard).
+    """
+    if is_registered_worktree(path, root=root):
+        return path, "REGISTERED"
+    if not path.exists():
+        return path, "ABSENT"
+    if is_safe_graveyard(path, root=root):
+        try:
+            shutil.rmtree(path)
+            if not path.exists():
+                return path, "CLEANED"
+        except OSError:
+            pass
+        return _uniquify(path), "REPATHED"
+    return _uniquify(path), "REPATHED"
+
+
+def reap_graveyards(root: Path | None = None, execute: bool = False) -> tuple[list[Path], list[tuple[Path, str]]]:
+    """Sweep `<main>-*` siblings for safe husks. Returns (acted, skipped).
+
+    execute=False (default): deletes NOTHING; `acted` is the would-remove list.
+    execute=True: rmtree only the is_safe_graveyard set; failures -> skipped.
+    Skips self, registered worktrees, and full-tree husks (flagged MANUAL —
+    they may hold uncommitted work).
+    """
+    base = _canonical_main_root() if root is None else root
+    self_norm = _norm(base)
+    acted: list[Path] = []
+    skipped: list[tuple[Path, str]] = []
+    for sibling in sorted(base.parent.glob(f"{base.name}-*")):
+        if not sibling.is_dir():
+            continue
+        if _norm(sibling) == self_norm:
+            continue
+        if is_registered_worktree(sibling, root=base):
+            skipped.append((sibling, "REGISTERED"))
+            continue
+        if not is_safe_graveyard(sibling, root=base):
+            skipped.append((sibling, "MANUAL"))
+            continue
+        if not execute:
+            acted.append(sibling)
+            continue
+        try:
+            shutil.rmtree(sibling)
+            acted.append(sibling)
+        except OSError:
+            skipped.append((sibling, "MANUAL"))
+    return acted, skipped
+
+
 def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -629,6 +806,39 @@ def cmd_ship(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reconcile_launch_path(args: argparse.Namespace) -> int:
+    path = Path(args.path)
+    final_path, action = reconcile_launch_path(path)
+    if args.json:
+        print(json.dumps({"final_path": str(final_path), "action": action}))
+    else:
+        # KEY=VALUE lines mirror worktree_launch_preflight's .bat-parseable contract.
+        print(f"FINALPATH={final_path}")
+        print(f"ACTION={action}")
+    return 0
+
+
+def cmd_reap_graveyards(args: argparse.Namespace) -> int:
+    acted, skipped = reap_graveyards(execute=args.execute)
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "execute": args.execute,
+                    "acted": [str(p) for p in acted],
+                    "skipped": [{"path": str(p), "reason": reason} for p, reason in skipped],
+                }
+            )
+        )
+        return 0
+    prefix = "REMOVED" if args.execute else "WOULD-REMOVE"
+    for path in acted:
+        print(f"{prefix}: {path}")
+    for path, reason in skipped:
+        print(f"SKIP-{reason}: {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Managed git worktree helper for canompx3")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -663,6 +873,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_prune = sub.add_parser("prune", help="Prune stale worktree metadata")
     p_prune.set_defaults(func=cmd_prune)
+
+    p_reconcile = sub.add_parser(
+        "reconcile-launch-path", help="Auto-heal a husk (force-removed) launch path before launch"
+    )
+    p_reconcile.add_argument("--path", required=True, help="Candidate launch path to reconcile")
+    p_reconcile.add_argument("--json", action="store_true", help="Print machine-readable result")
+    p_reconcile.set_defaults(func=cmd_reconcile_launch_path)
+
+    p_reap = sub.add_parser("reap-graveyards", help="Sweep sibling husk dirs (default: preview only)")
+    p_reap.add_argument("--execute", action="store_true", help="Actually remove safe husks (default previews)")
+    p_reap.add_argument("--json", action="store_true", help="Print machine-readable result")
+    p_reap.set_defaults(func=cmd_reap_graveyards)
 
     p_close = sub.add_parser("close", help="Close and remove a managed worktree")
     p_close.add_argument("--path", default=None, help="Explicit worktree path")

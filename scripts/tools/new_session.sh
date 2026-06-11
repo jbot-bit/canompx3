@@ -21,8 +21,26 @@ REPO_PARENT="$(dirname "$REPO_ROOT")"
 REPO_NAME="$(basename "$REPO_ROOT")"
 WT_PATH="${REPO_PARENT}/${REPO_NAME}-${DESCRIPTOR}"
 
+# Auto-heal a phantom-cwd husk at this path: a force-removed worktree leaves the
+# dir behind (no .git, not in `git worktree list`). reconcile-launch-path rmtrees
+# a provably scratch-only husk (CLEANED) or re-paths one that may hold uncommitted
+# work (REPATHED) — so we never launch into a dead folder. set -e is active, so
+# capture without aborting on a benign non-zero, then re-read FINALPATH/ACTION.
+RECONCILE_OUT="$(python "$(dirname "$0")/worktree_manager.py" reconcile-launch-path --path "$WT_PATH" 2>/dev/null || true)"
+while IFS='=' read -r _key _val; do
+    case "$_key" in
+        FINALPATH) [ -n "$_val" ] && WT_PATH="$_val" ;;
+        ACTION) echo "Reconcile: $_val" ;;
+    esac
+done <<< "$RECONCILE_OUT"
+
 git fetch origin --quiet
-git worktree add -b "$BRANCH" "$WT_PATH" origin/main
+# Branch may already exist (e.g. the dead worktree's branch). Retry attaching to
+# it WITHOUT -b, mirroring create_worktree:381-385. Guard with || so the first
+# attempt's non-zero does not abort under `set -e`.
+if ! git worktree add -b "$BRANCH" "$WT_PATH" origin/main 2>/dev/null; then
+    git worktree add "$WT_PATH" "$BRANCH"
+fi
 
 # Per-worktree venv isolation (Stage 1, 2026-06-03).
 # Each worktree gets its OWN .venv so a peer's `uv sync` can never strip this

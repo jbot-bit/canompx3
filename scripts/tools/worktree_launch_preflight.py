@@ -28,6 +28,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import worktree_manager  # same dir; no import cycle (manager does not import preflight)
+
 NEW = "NEW"
 REUSE_CLEAN = "REUSE_CLEAN"
 REFUSE_HOT = "REFUSE_HOT"
@@ -124,6 +126,13 @@ def _lease_hot(wt: Path) -> bool:
 def classify(wt: Path) -> str:
     """NEW / REUSE_CLEAN / REFUSE_HOT for a candidate worktree path."""
     if not wt.exists():
+        return NEW
+    # A husk (force-removed worktree: dir survives, `.git` + registration gone)
+    # must NOT be reused — launching into it snaps every non-cd command back to
+    # the dead cwd and breaks MCP. Treat unregistered-but-present as NEW so the
+    # launcher recreates clean (after reconcile_launch_path heals the path).
+    # Fail-closed: any git error inside is_registered_worktree -> not registered.
+    if not worktree_manager.is_registered_worktree(wt):
         return NEW
     if _is_dirty(wt) or _lease_hot(wt):
         return REFUSE_HOT

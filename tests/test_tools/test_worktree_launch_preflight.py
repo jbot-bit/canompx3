@@ -49,24 +49,45 @@ def test_classify_new_when_missing(tmp_path):
     assert wlp.classify(missing) == wlp.NEW
 
 
+def test_classify_new_for_unregistered_graveyard(tmp_path):
+    # A husk (dir present, no .git, not a registered worktree) classifies NEW so
+    # the launcher recreates clean instead of launching into a dead folder.
+    wt = tmp_path / "husk"
+    wt.mkdir()
+    with patch.object(wlp.worktree_manager, "is_registered_worktree", return_value=False):
+        assert wlp.classify(wt) == wlp.NEW
+
+
 def test_classify_reuse_clean(tmp_path):
     wt = tmp_path / "clean"
     wt.mkdir()
-    with patch.object(wlp, "_is_dirty", return_value=False), patch.object(wlp, "_lease_hot", return_value=False):
+    with (
+        patch.object(wlp.worktree_manager, "is_registered_worktree", return_value=True),
+        patch.object(wlp, "_is_dirty", return_value=False),
+        patch.object(wlp, "_lease_hot", return_value=False),
+    ):
         assert wlp.classify(wt) == wlp.REUSE_CLEAN
 
 
 def test_classify_refuse_when_dirty(tmp_path):
     wt = tmp_path / "dirty"
     wt.mkdir()
-    with patch.object(wlp, "_is_dirty", return_value=True), patch.object(wlp, "_lease_hot", return_value=False):
+    with (
+        patch.object(wlp.worktree_manager, "is_registered_worktree", return_value=True),
+        patch.object(wlp, "_is_dirty", return_value=True),
+        patch.object(wlp, "_lease_hot", return_value=False),
+    ):
         assert wlp.classify(wt) == wlp.REFUSE_HOT
 
 
 def test_classify_refuse_when_lease_hot(tmp_path):
     wt = tmp_path / "hot"
     wt.mkdir()
-    with patch.object(wlp, "_is_dirty", return_value=False), patch.object(wlp, "_lease_hot", return_value=True):
+    with (
+        patch.object(wlp.worktree_manager, "is_registered_worktree", return_value=True),
+        patch.object(wlp, "_is_dirty", return_value=False),
+        patch.object(wlp, "_lease_hot", return_value=True),
+    ):
         assert wlp.classify(wt) == wlp.REFUSE_HOT
 
 

@@ -76,11 +76,25 @@ if "%DECISION%"=="REFUSE_HOT" (
 
 :: --- NEW: create the worktree off origin/main ------------------------------
 if "%DECISION%"=="NEW" (
+    :: Auto-heal a phantom-cwd husk at this path: a force-removed worktree
+    :: leaves the dir (no .git, not in `git worktree list`). reconcile-launch-path
+    :: rmtrees a provably scratch-only husk (CLEANED) or re-paths one that may
+    :: hold uncommitted work (REPATHED) — never launches into a dead folder.
+    for /f "usebackq tokens=1,* delims==" %%k in (`python "%~dp0scripts\tools\worktree_manager.py" reconcile-launch-path --path "!WTPATH!"`) do (
+        if "%%k"=="FINALPATH" set WTPATH=%%l
+        if "%%k"=="ACTION" set RECONCILE=%%l
+    )
+    echo   Reconcile:  !RECONCILE!
     git fetch origin --quiet
     git worktree add -b "!BRANCH!" "!WTPATH!" origin/main
     if errorlevel 1 (
-        echo [ERROR] git worktree add failed.
-        endlocal & exit /b 4
+        :: Branch may already exist (e.g. the dead worktree's branch). Retry
+        :: attaching to it WITHOUT -b, mirroring create_worktree:381-385.
+        git worktree add "!WTPATH!" "!BRANCH!"
+        if errorlevel 1 (
+            echo [ERROR] git worktree add failed.
+            endlocal & exit /b 4
+        )
     )
     :: Per-worktree venv isolation (Stage 1, 2026-06-03). Each worktree gets its
     :: OWN .venv so a peer's `uv sync` can never strip this tree's dev group.

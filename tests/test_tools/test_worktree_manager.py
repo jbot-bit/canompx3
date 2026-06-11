@@ -351,3 +351,178 @@ class TestWorkflowOperations:
         assert result["name"] == "foo"
         assert result["branch"] == "wt-codex-foo"
         close_mock.assert_called_once_with(wt, force=False, drop_branch=True)
+
+
+class TestPhantomCwdReconcile:
+    """Husk (force-removed worktree dir) detection + auto-heal.
+
+    All filesystem work is under tmp_path; both list_worktrees and
+    _canonical_main_root are patched so tests never touch the real lease or the
+    developer's real sibling worktrees.
+    """
+
+    @staticmethod
+    def _scratch_husk(path: Path) -> Path:
+        """A scaffold/scratch-only husk: meta + .claude + a chart PNG, NO .git."""
+        path.mkdir(parents=True)
+        (path / worktree_manager.WORKTREE_META).write_text("{}", encoding="utf-8")
+        (path / ".claude").mkdir()
+        (path / "chart.png").write_bytes(b"\x89PNG")
+        return path
+
+    @staticmethod
+    def _source_husk(path: Path) -> Path:
+        """A full-tree husk that may hold uncommitted work: real source, NO .git."""
+        path.mkdir(parents=True)
+        (path / "foo.py").write_text("x = 1\n", encoding="utf-8")
+        (path / "pipeline").mkdir()
+        return path
+
+    # -- _canonical_main_root ------------------------------------------------ #
+    def test_canonical_main_root_is_git_common_dir_parent(self, tmp_path: Path) -> None:
+        common = tmp_path / "canompx3" / ".git"
+        common.mkdir(parents=True)
+
+        def fake_run_git(*args: str, cwd: Path = worktree_manager.PROJECT_ROOT) -> subprocess.CompletedProcess[str]:
+            assert args == ("rev-parse", "--git-common-dir")
+            return subprocess.CompletedProcess(args, 0, str(common) + "\n", "")
+
+        with patch.object(worktree_manager, "_run_git", side_effect=fake_run_git):
+            assert worktree_manager._canonical_main_root() == common.parent
+
+    # -- is_registered_worktree ---------------------------------------------- #
+    def test_is_registered_true_when_in_list(self, tmp_path: Path) -> None:
+        wt = tmp_path / "canompx3-foo"
+        wt.mkdir()
+        active = [worktree_manager.WorktreeInfo(path=str(wt))]
+        with patch.object(worktree_manager, "list_worktrees", return_value=active):
+            assert worktree_manager.is_registered_worktree(wt, root=tmp_path) is True
+
+    def test_is_registered_false_when_absent_from_list(self, tmp_path: Path) -> None:
+        wt = tmp_path / "canompx3-husk"
+        wt.mkdir()
+        with patch.object(worktree_manager, "list_worktrees", return_value=[]):
+            assert worktree_manager.is_registered_worktree(wt, root=tmp_path) is False
+
+    def test_is_registered_failclosed_on_runtimeerror(self, tmp_path: Path) -> None:
+        wt = tmp_path / "canompx3-x"
+        wt.mkdir()
+        with patch.object(worktree_manager, "list_worktrees", side_effect=RuntimeError("git boom")):
+            assert worktree_manager.is_registered_worktree(wt, root=tmp_path) is False
+
+    # -- _is_scratch_only ---------------------------------------------------- #
+    def test_is_scratch_only_true_for_scaffold(self, tmp_path: Path) -> None:
+        husk = self._scratch_husk(tmp_path / "husk")
+        assert worktree_manager._is_scratch_only(husk) is True
+
+    def test_is_scratch_only_false_for_source_file(self, tmp_path: Path) -> None:
+        husk = tmp_path / "husk"
+        husk.mkdir()
+        (husk / "foo.py").write_text("x = 1\n", encoding="utf-8")
+        assert worktree_manager._is_scratch_only(husk) is False
+
+    def test_is_scratch_only_false_for_source_dir(self, tmp_path: Path) -> None:
+        husk = tmp_path / "husk"
+        husk.mkdir()
+        (husk / "pipeline").mkdir()
+        assert worktree_manager._is_scratch_only(husk) is False
+
+    # -- is_safe_graveyard --------------------------------------------------- #
+    def test_safe_graveyard_true_for_unregistered_scratch_husk(self, tmp_path: Path) -> None:
+        husk = self._scratch_husk(tmp_path / "canompx3-husk")
+        with patch.object(worktree_manager, "list_worktrees", return_value=[]):
+            assert worktree_manager.is_safe_graveyard(husk, root=tmp_path) is True
+
+    def test_safe_graveyard_false_when_dotgit_file_present(self, tmp_path: Path) -> None:
+        husk = self._scratch_husk(tmp_path / "canompx3-live")
+        (husk / ".git").write_text("gitdir: ...\n", encoding="utf-8")  # worktree .git is a FILE
+        with patch.object(worktree_manager, "list_worktrees", return_value=[]):
+            assert worktree_manager.is_safe_graveyard(husk, root=tmp_path) is False
+
+    def test_safe_graveyard_false_when_registered(self, tmp_path: Path) -> None:
+        husk = self._scratch_husk(tmp_path / "canompx3-reg")
+        active = [worktree_manager.WorktreeInfo(path=str(husk))]
+        with patch.object(worktree_manager, "list_worktrees", return_value=active):
+            assert worktree_manager.is_safe_graveyard(husk, root=tmp_path) is False
+
+    def test_safe_graveyard_false_when_has_source(self, tmp_path: Path) -> None:
+        husk = self._source_husk(tmp_path / "canompx3-work")
+        with patch.object(worktree_manager, "list_worktrees", return_value=[]):
+            assert worktree_manager.is_safe_graveyard(husk, root=tmp_path) is False
+
+    # -- reconcile_launch_path ----------------------------------------------- #
+    def test_reconcile_registered(self, tmp_path: Path) -> None:
+        wt = tmp_path / "canompx3-foo"
+        wt.mkdir()
+        active = [worktree_manager.WorktreeInfo(path=str(wt))]
+        with patch.object(worktree_manager, "list_worktrees", return_value=active):
+            final, action = worktree_manager.reconcile_launch_path(wt, root=tmp_path)
+        assert action == "REGISTERED"
+        assert final == wt
+
+    def test_reconcile_absent(self, tmp_path: Path) -> None:
+        wt = tmp_path / "canompx3-new"
+        with patch.object(worktree_manager, "list_worktrees", return_value=[]):
+            final, action = worktree_manager.reconcile_launch_path(wt, root=tmp_path)
+        assert action == "ABSENT"
+        assert final == wt
+
+    def test_reconcile_cleaned_for_scratch_husk(self, tmp_path: Path) -> None:
+        husk = self._scratch_husk(tmp_path / "canompx3-husk")
+        with patch.object(worktree_manager, "list_worktrees", return_value=[]):
+            final, action = worktree_manager.reconcile_launch_path(husk, root=tmp_path)
+        assert action == "CLEANED"
+        assert final == husk
+        assert not husk.exists()  # safe husk removed; path reusable
+
+    def test_reconcile_repathed_preserves_source_husk(self, tmp_path: Path) -> None:
+        husk = self._source_husk(tmp_path / "canompx3-work")
+        with patch.object(worktree_manager, "list_worktrees", return_value=[]):
+            final, action = worktree_manager.reconcile_launch_path(husk, root=tmp_path)
+        assert action == "REPATHED"
+        assert final != husk
+        assert husk.exists()  # work-loss guard: original untouched
+        assert (husk / "foo.py").exists()
+
+    def test_reconcile_repathed_when_rmtree_fails(self, tmp_path: Path) -> None:
+        husk = self._scratch_husk(tmp_path / "canompx3-locked")
+        with (
+            patch.object(worktree_manager, "list_worktrees", return_value=[]),
+            patch.object(worktree_manager.shutil, "rmtree", side_effect=OSError("locked")),
+        ):
+            final, action = worktree_manager.reconcile_launch_path(husk, root=tmp_path)
+        assert action == "REPATHED"
+        assert final != husk
+        assert husk.exists()  # rmtree failed -> original preserved
+
+    # -- reap_graveyards ----------------------------------------------------- #
+    def test_reap_preview_removes_nothing(self, tmp_path: Path) -> None:
+        main = tmp_path / "canompx3"
+        main.mkdir()
+        safe = self._scratch_husk(tmp_path / "canompx3-husk")
+        work = self._source_husk(tmp_path / "canompx3-work")
+        with (
+            patch.object(worktree_manager, "_canonical_main_root", return_value=main),
+            patch.object(worktree_manager, "list_worktrees", return_value=[]),
+        ):
+            acted, skipped = worktree_manager.reap_graveyards(execute=False)
+        assert safe in acted
+        assert (work, "MANUAL") in skipped
+        assert safe.exists() and work.exists()  # preview deletes NOTHING
+
+    def test_reap_execute_removes_only_safe_husk(self, tmp_path: Path) -> None:
+        main = tmp_path / "canompx3"
+        main.mkdir()
+        safe = self._scratch_husk(tmp_path / "canompx3-husk")
+        work = self._source_husk(tmp_path / "canompx3-work")
+        registered = self._scratch_husk(tmp_path / "canompx3-reg")
+        active = [worktree_manager.WorktreeInfo(path=str(registered))]
+        with (
+            patch.object(worktree_manager, "_canonical_main_root", return_value=main),
+            patch.object(worktree_manager, "list_worktrees", return_value=active),
+        ):
+            acted, skipped = worktree_manager.reap_graveyards(execute=True)
+        assert safe in acted and not safe.exists()  # safe husk removed
+        assert (work, "MANUAL") in skipped and work.exists()  # work preserved
+        assert (registered, "REGISTERED") in skipped and registered.exists()
+        assert main.exists()  # never touches the canonical root itself
