@@ -182,13 +182,17 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-11
-- **Commit:** 1803603b — @ fix(mcp): get_db_health/db_freshness fail-closed on empty/husk gold.db
-- **Files changed:** 5 files
-  - `HANDOFF.md`
-  - `docs/runtime/action-queue.yaml`
-  - `docs/runtime/stages/2026-06-11-mcp-db-health-fail-closed.md`
-  - `tests/test_trading_app/test_mcp_server.py`
-  - `trading_app/db_access.py`
+- **Commit:** a550e1ce — Stage 3a-i: per-account contract source (AccountProfile.account_contracts)
+- **Files changed:** 9 files
+  - `docs/runtime/stages/2026-06-11-per-account-contracts-stage3a-i.md`
+  - `docs/specs/per_account_contracts.md`
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift_account_contracts.py`
+  - `tests/test_trading_app/test_account_survival_per_account.py`
+  - `tests/test_trading_app/test_prop_profiles.py`
+  - `trading_app/account_survival.py`
+  - `trading_app/live/session_orchestrator.py`
+  - `trading_app/prop_profiles.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
