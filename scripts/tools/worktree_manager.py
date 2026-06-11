@@ -259,16 +259,37 @@ def _norm(path: Path) -> str:
         return os.path.normcase(str(path))
 
 
-def is_registered_worktree(path: Path, root: Path | None = None) -> bool:
-    """True iff `path` is an active git worktree per the canonical list.
+def _registered_set(root: Path | None = None) -> set[str] | None:
+    """Normed paths of all active worktrees, or None on git failure.
 
-    Fail-closed: a `list_worktrees` RuntimeError -> False (treated as
-    unregistered, so a husk path is recreated clean, never silently reused).
+    Computing this ONCE and passing it to the per-path helpers turns an
+    O(siblings) burst of `git worktree list` subprocess spawns into a single
+    call — the difference between ~34 and 1 git invocations when sweeping a
+    parent dir full of siblings (matters on Windows, where process spawn is
+    expensive and this runs on the SessionStart hot path).
+    Fail-closed: RuntimeError -> None, so callers treat every path as
+    unregistered (a husk is recreated clean, never silently reused).
     """
     base = root if root is not None else _canonical_main_root()
     try:
-        registered = {_norm(Path(wt.path)) for wt in list_worktrees(base)}
+        return {_norm(Path(wt.path)) for wt in list_worktrees(base)}
     except RuntimeError:
+        return None
+
+
+def is_registered_worktree(path: Path, root: Path | None = None, registered: set[str] | None = None) -> bool:
+    """True iff `path` is an active git worktree per the canonical list.
+
+    `registered` (optional): a pre-computed normed-path set from
+    `_registered_set()`. When supplied, NO git call is made — the sweep path
+    computes it once and threads it down. When None, this resolves it itself
+    (the single-path callers' behavior is unchanged).
+    Fail-closed: an unresolvable list -> False (treated as unregistered, so a
+    husk path is recreated clean, never silently reused).
+    """
+    if registered is None:
+        registered = _registered_set(root)
+    if registered is None:
         return False
     return _norm(path) in registered
 
@@ -294,10 +315,12 @@ def _is_scratch_only(path: Path) -> bool:
     return True
 
 
-def is_safe_graveyard(path: Path, root: Path | None = None) -> bool:
+def is_safe_graveyard(path: Path, root: Path | None = None, registered: set[str] | None = None) -> bool:
     """True only for a scaffold/empty husk safe to auto-reap.
 
     exists ∧ is_dir ∧ NOT registered ∧ no `.git` (file or dir) ∧ scratch-only.
+    `registered` (optional): pre-computed set threaded through to
+    `is_registered_worktree` to avoid a per-call git spawn (see _registered_set).
     """
     try:
         if not path.is_dir():
@@ -306,7 +329,7 @@ def is_safe_graveyard(path: Path, root: Path | None = None) -> bool:
         return False
     if (path / ".git").exists():
         return False
-    if is_registered_worktree(path, root=root):
+    if is_registered_worktree(path, root=root, registered=registered):
         return False
     return _is_scratch_only(path)
 
@@ -354,6 +377,8 @@ def reap_graveyards(root: Path | None = None, execute: bool = False) -> tuple[li
     """
     base = _canonical_main_root() if root is None else root
     self_norm = _norm(base)
+    # Resolve the worktree registry ONCE, not per-sibling (see _registered_set).
+    registered = _registered_set(base)
     acted: list[Path] = []
     skipped: list[tuple[Path, str]] = []
     for sibling in sorted(base.parent.glob(f"{base.name}-*")):
@@ -361,10 +386,10 @@ def reap_graveyards(root: Path | None = None, execute: bool = False) -> tuple[li
             continue
         if _norm(sibling) == self_norm:
             continue
-        if is_registered_worktree(sibling, root=base):
+        if is_registered_worktree(sibling, root=base, registered=registered):
             skipped.append((sibling, "REGISTERED"))
             continue
-        if not is_safe_graveyard(sibling, root=base):
+        if not is_safe_graveyard(sibling, root=base, registered=registered):
             skipped.append((sibling, "MANUAL"))
             continue
         if not execute:

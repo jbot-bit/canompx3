@@ -410,6 +410,33 @@ class TestPhantomCwdReconcile:
         with patch.object(worktree_manager, "list_worktrees", side_effect=RuntimeError("git boom")):
             assert worktree_manager.is_registered_worktree(wt, root=tmp_path) is False
 
+    def test_precomputed_registered_set_skips_git(self, tmp_path: Path) -> None:
+        """Passing a precomputed `registered` set makes NO git call — this is the
+        cheap-sweep path that turns ~2N `git worktree list` spawns into 1."""
+        wt = tmp_path / "canompx3-foo"
+        wt.mkdir()
+        reg = {worktree_manager._norm(wt)}
+        with patch.object(worktree_manager, "list_worktrees", side_effect=AssertionError("git called")):
+            assert worktree_manager.is_registered_worktree(wt, registered=reg) is True
+            assert worktree_manager.is_registered_worktree(tmp_path / "canompx3-bar", registered=reg) is False
+
+    def test_reap_resolves_registry_once(self, tmp_path: Path) -> None:
+        """reap_graveyards must call list_worktrees exactly ONCE regardless of how
+        many siblings it scans (the per-sibling-git regression guard)."""
+        base = tmp_path / "canompx3"
+        base.mkdir()
+        for i in range(4):
+            self._scratch_husk(tmp_path / f"canompx3-husk{i}")
+        calls = {"n": 0}
+
+        def counting(*a, **k):
+            calls["n"] += 1
+            return []
+
+        with patch.object(worktree_manager, "list_worktrees", side_effect=counting):
+            worktree_manager.reap_graveyards(root=base, execute=False)
+        assert calls["n"] == 1, f"expected 1 git call, got {calls['n']}"
+
     # -- _is_scratch_only ---------------------------------------------------- #
     def test_is_scratch_only_true_for_scaffold(self, tmp_path: Path) -> None:
         husk = self._scratch_husk(tmp_path / "husk")

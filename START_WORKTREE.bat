@@ -85,6 +85,12 @@ if "%DECISION%"=="NEW" (
         if "%%k"=="ACTION" set RECONCILE=%%l
     )
     echo   Reconcile:  !RECONCILE!
+    :: Auto-sweep OTHER stale husks while we're here. reconcile-launch-path above
+    :: only heals THIS path; husks left elsewhere by past `worktree remove --force`
+    :: accumulate as parent-dir noise. reap-graveyards rmtrees only provably
+    :: scratch-only husks (registered worktrees + source-bearing husks are skipped,
+    :: so uncommitted work is never at risk). Cheap (one git call). Best-effort.
+    python "%~dp0scripts\tools\worktree_manager.py" reap-graveyards --execute >nul 2>&1
     git fetch origin --quiet
     git worktree add -b "!BRANCH!" "!WTPATH!" origin/main
     if errorlevel 1 (

@@ -34,6 +34,14 @@ while IFS='=' read -r _key _val; do
     esac
 done <<< "$RECONCILE_OUT"
 
+# Auto-sweep OTHER stale husks while we're here. reconcile-launch-path above only
+# heals THIS launch path; husks left at other paths by past `worktree remove
+# --force` accumulate as parent-dir noise. reap-graveyards rmtrees only provably
+# scratch-only husks (registered worktrees + any husk holding real source are
+# skipped, so uncommitted work is never at risk). Cheap (one git call). Worktree
+# create is the right seam to clean — no per-session-start cost. Best-effort.
+python "$(dirname "$0")/worktree_manager.py" reap-graveyards --execute 2>/dev/null || true
+
 git fetch origin --quiet
 # Branch may already exist (e.g. the dead worktree's branch). Retry attaching to
 # it WITHOUT -b, mirroring create_worktree:381-385. Guard with || so the first

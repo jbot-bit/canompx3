@@ -903,6 +903,23 @@ def _live_heartbeat_lines(my_session_id: str = "", now_epoch: float | None = Non
     if now_epoch is None:
         now_epoch = time.time()
 
+    # Orphan partial-write temps: a `*.beat.*.tmp` is the staging name for an
+    # atomic beat write. One older than the prune window means the rename never
+    # completed (crashed/killed mid-write) — the real `.beat` was never produced,
+    # so the temp is dead litter. The `*.beat` glob above never matches these, so
+    # they leak indefinitely without this separate sweep. Age-gated by the SAME
+    # prune window so a temp from a write happening right now is left untouched.
+    # Best-effort: ignore every IO error (fail-open, never wedge startup).
+    try:
+        for _tmp in beat_dir.glob("*.beat.*.tmp"):
+            try:
+                if now_epoch - _tmp.stat().st_mtime > _HEARTBEAT_PRUNE_SECS:
+                    _tmp.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
     rc_pwd, current_path = _git(["rev-parse", "--show-toplevel"])
     current_norm = (
         _canon_path(current_path.strip()) if rc_pwd == 0 and current_path.strip() else None

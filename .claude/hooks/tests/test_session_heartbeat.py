@@ -116,6 +116,34 @@ def test_ancient_beat_pruned_on_read(ss_mod, tmp_path):
     assert not p.exists()
 
 
+def test_stale_orphan_tmp_swept(ss_mod, tmp_path):
+    """A `*.beat.*.tmp` older than the prune window is a crashed atomic-write
+    leftover; the `*.beat` glob never sees it, so a separate sweep removes it."""
+    common = tmp_path / "gitdir"
+    beats = common / ss_mod._HEARTBEAT_DIRNAME
+    beats.mkdir(parents=True)
+    tree = str(tmp_path / "work")
+    stale = beats / "AAA.beat.123.tmp"
+    stale.write_text("x", encoding="utf-8")
+    old = time.time() - (ss_mod._HEARTBEAT_PRUNE_SECS + 600)
+    os.utime(stale, (old, old))
+    _read(ss_mod, "ME", common, tree)
+    assert not stale.exists()
+
+
+def test_fresh_orphan_tmp_kept(ss_mod, tmp_path):
+    """An in-flight `*.beat.*.tmp` (just written, mid-rename) must NOT be swept —
+    the age gate is what makes the sweep safe against a concurrent writer."""
+    common = tmp_path / "gitdir"
+    beats = common / ss_mod._HEARTBEAT_DIRNAME
+    beats.mkdir(parents=True)
+    tree = str(tmp_path / "work")
+    fresh = beats / "BBB.beat.456.tmp"
+    fresh.write_text("x", encoding="utf-8")  # mtime ~= now
+    _read(ss_mod, "ME", common, tree)
+    assert fresh.exists()
+
+
 def test_malformed_beat_ignored_no_crash(ss_mod, tmp_path):
     common = tmp_path / "gitdir"
     beats = common / ss_mod._HEARTBEAT_DIRNAME
