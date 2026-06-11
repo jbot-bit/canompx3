@@ -187,10 +187,10 @@ def test_read_existing_risk_caps_failsoft_on_corrupt(tmp_path):
 
 def test_canonical_profile_loader_returns_capped_values():
     """The real topstep_50k_mnq_auto must resolve to the capped values that
-    clear C11 (37.35 / 107.4 / 33.15), proving the JSON edit reached the loader
+    clear C11 (37.35 / 107.4), proving the JSON edit reached the loader
     that both the gate and the live engine consume.
     """
     defs = {d["strategy_id"]: d["max_orb_size_pts"] for d in get_profile_lane_definitions("topstep_50k_mnq_auto")}
     assert defs["MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"] == 37.35
     assert defs["MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15"] == 107.4
-    assert defs["MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08"] == 33.15
+    assert "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08" not in defs
