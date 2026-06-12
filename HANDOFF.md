@@ -212,14 +212,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** b174a790 — [mechanical] Ralph hardening: blocking adversarial push-gate + self-improving drift-check flywheel
-- **Files changed:** 6 files
-  - `.claude/agents/ralph-loop.md`
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `scripts/tools/ralph.sh`
-  - `scripts/tools/ralph_build_ledger.py`
-  - `scripts/tools/ralph_review.sh`
-  - `tests/test_tools/test_ralph_build_ledger.py`
+- **Commit:** 60243241 — @ fix(survival): route account_survival read connects through retry wrapper
+- **Files changed:** 5 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/2026-06-13-route-survival-sim-connects.md`
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift.py`
+  - `trading_app/account_survival.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
