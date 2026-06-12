@@ -20,6 +20,8 @@
 #   --output-dir DIR  Override artifact output directory
 #   --json            Also write JSON artifacts
 #   --review          Run post-batch review automatically after batch
+#   --push            (opt-in) Push Ralph commits ONLY if --review passed (exit 0)
+#                       and HEAD has Ralph commits. REVERT verdict → push skipped.
 #   --fail-on-findings  Exit 1 if any findings produced
 #
 # Exit codes:
@@ -65,6 +67,7 @@ SCOPE=""
 OUTPUT_DIR=""
 JSON=false
 AUTO_REVIEW=false
+AUTO_PUSH=false
 FAIL_ON_FINDINGS=false
 SUBCOMMAND="${1:-help}"
 shift 2>/dev/null || true
@@ -78,6 +81,7 @@ while [[ $# -gt 0 ]]; do
         --output-dir)   OUTPUT_DIR="$2"; shift 2 ;;
         --json)         JSON=true; shift ;;
         --review)       AUTO_REVIEW=true; shift ;;
+        --push)         AUTO_PUSH=true; shift ;;
         --fail-on-findings) FAIL_ON_FINDINGS=true; shift ;;
         -h|--help)      SUBCOMMAND="help"; shift ;;
         *)              echo "Unknown flag: $1"; exit 2 ;;
@@ -233,10 +237,38 @@ case "$SUBCOMMAND" in
         exit_code=0
         bash "$HEADLESS" "$ITERATIONS" "$SCOPE_ARG" || exit_code=$?
 
+        review_exit=0
         if $AUTO_REVIEW; then
             echo ""
             echo "Ralph: post-batch review"
-            bash "$REVIEW" "$ITERATIONS"
+            # Capture exit so a REVERT verdict (ralph_review.sh exit 1) does not
+            # abort this script under `set -e` — the push-gate below reads it.
+            bash "$REVIEW" "$ITERATIONS" || review_exit=$?
+        fi
+
+        # ── Gated push (opt-in: --push, default OFF) ─────────────────
+        # Pushes Ralph commits to origin ONLY when the adversarial review
+        # passed (exit 0) AND HEAD actually contains Ralph commits. A REVERT
+        # on a [HIGH]/[CRITICAL] commit makes review exit non-zero → push is
+        # skipped → the bad fix stays local for the operator. Doctrine:
+        # .claude/rules/adversarial-audit-gate.md. Push idiom: pr_open.sh.
+        if $AUTO_PUSH; then
+            echo ""
+            echo "Ralph: gated push"
+            if ! $AUTO_REVIEW; then
+                echo "  SKIP — --push requires --review (push must be review-gated)."
+            elif [[ $review_exit -ne 0 ]]; then
+                echo "  SKIP — review exited $review_exit (REVERT/error). Bad fix stays local; read the review log."
+            elif [[ -z "$(git log "@{upstream}"..HEAD --grep="Ralph Loop" --format="%H" 2>/dev/null)" ]]; then
+                echo "  SKIP — no Ralph Loop commits ahead of upstream. Nothing to push."
+            else
+                CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+                echo "  Review PASS + Ralph commits present — pushing $CURRENT_BRANCH"
+                if ! git push origin "$CURRENT_BRANCH"; then
+                    echo "  ERROR: git push failed" >&2
+                    exit 1
+                fi
+            fi
         fi
 
         if $JSON; then
@@ -300,7 +332,7 @@ case "$SUBCOMMAND" in
         ;;
 
     help|-h|--help|"")
-        head -32 "${BASH_SOURCE[0]}" | tail -30
+        sed -n '2,36p' "${BASH_SOURCE[0]}"
         exit 0
         ;;
 

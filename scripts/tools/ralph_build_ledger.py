@@ -273,9 +273,17 @@ def compute_files_audited(iterations: list[dict], project_root: Path) -> dict:
             if f not in files:
                 files[f] = {"audit_count": 0, "last_iter": 0, "findings": 0}
             files[f]["audit_count"] += 1
-            files[f]["last_iter"] = max(files[f]["last_iter"], it["iter"])
-            if it["verdict"] in ("FIXED", "ACCEPT", "PENDING"):
-                files[f]["findings"] += 1
+            # `findings` must reflect ONLY the file's MOST-RECENT-iteration
+            # verdict, not a running sum across all iterations. The ralph-loop
+            # agent gates CACHE_HIT on `findings == 0` (ralph-loop.md:154-155):
+            # a file fixed in iter N and clean since must read 0 so it can be
+            # skipped. A running sum left every once-fixed file permanently
+            # non-zero, defeating the cache. Take the verdict at the highest
+            # iter seen so far for this file; ties keep the later-listed entry
+            # (iterations are sorted ascending before this call).
+            if it["iter"] >= files[f]["last_iter"]:
+                files[f]["last_iter"] = it["iter"]
+                files[f]["findings"] = 1 if it["verdict"] in ("FIXED", "PENDING") else 0
 
     # Enrich with current file hash + git SHA for cache-skip logic
     for rel_path, stats in files.items():

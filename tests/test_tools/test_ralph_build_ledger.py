@@ -84,6 +84,81 @@ def test_compute_files_audited_missing_file_gives_empty_hash(tmp_path: Path) -> 
     assert result[rel]["git_sha"] == ""  # no git repo in tmp_path
 
 
+# ── compute_files_audited: findings reflects ONLY most-recent verdict ──
+# Root-cause regression guard for the CACHE_HIT bug. The agent
+# (ralph-loop.md:154-155) gates CACHE_HIT on findings == 0. A file FIXED in
+# an early iter and CLEAN since must read 0, not a running sum.
+
+_FIXED_THEN_CLEAN_HISTORY = """\
+## Iteration 5 — 2026-03-10
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/account_survival.py:213
+- Finding: hardcoded canonical violation — raw duckdb connect
+- Action: routed through db_connect retry wrapper
+- Blast radius: 1 file
+- Verification: PASS
+- Commit: deadbeef
+
+## Iteration 9 — 2026-03-12
+- Phase: audit-only
+- Classification: [judgment]
+- Target: trading_app/account_survival.py
+- Finding: clean — 0 findings
+- Action: audit only, no issues
+- Blast radius: 1 file
+- Verification: PASS
+- Commit: NONE
+"""
+
+
+def test_findings_zero_after_fixed_then_clean_reaudit() -> None:
+    # iter 5 FIXED the file; iter 9 re-audited and found it clean. The
+    # most-recent verdict is CLEAN → findings must be 0 (CACHE_HIT eligible),
+    # NOT 1 (the running-sum bug left it permanently non-zero).
+    iterations = parse_iterations(_FIXED_THEN_CLEAN_HISTORY)
+    result = compute_files_audited(iterations, Path("."))
+    entry = result["trading_app/account_survival.py"]
+    assert entry["audit_count"] == 2  # both iters still counted for audit history
+    assert entry["last_iter"] == 9
+    assert entry["findings"] == 0  # most-recent verdict CLEAN → cacheable
+
+
+def test_findings_one_when_most_recent_is_fixed() -> None:
+    # A single FIXED iteration (no later clean re-audit) keeps findings == 1
+    # so the next staleness trigger re-scans to confirm the fix held.
+    rel = "pipeline/foo.py"
+    iterations = parse_iterations(_MINIMAL_HISTORY.format(rel_path=rel))
+    result = compute_files_audited(iterations, Path("."))
+    assert result[rel]["findings"] == 1
+
+
+def test_findings_not_running_sum_across_iterations() -> None:
+    # Two FIXED iterations on the same file must NOT accumulate to 2 — the
+    # field is a most-recent-verdict flag (0/1), never a count.
+    two_fixes = """\
+## Iteration 3 — 2026-03-09
+- Phase: fix
+- Classification: [judgment]
+- Target: pipeline/foo.py:10
+- Finding: hardcoded instrument list
+- Verification: PASS
+- Commit: aaa1111
+
+## Iteration 7 — 2026-03-11
+- Phase: fix
+- Classification: [judgment]
+- Target: pipeline/foo.py:20
+- Finding: another hardcoded canonical violation
+- Verification: PASS
+- Commit: bbb2222
+"""
+    iterations = parse_iterations(two_fixes)
+    result = compute_files_audited(iterations, Path("."))
+    assert result["pipeline/foo.py"]["findings"] == 1  # not 2
+    assert result["pipeline/foo.py"]["audit_count"] == 2
+
+
 # ── compute_known_acceptable_patterns ─────────────────────────────────
 
 _ACCEPTABLE_HISTORY = """\

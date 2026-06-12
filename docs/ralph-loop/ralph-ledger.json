@@ -1,6 +1,6 @@
 {
   "total_iterations": 216,
-  "last_updated": "2026-06-11",
+  "last_updated": "2026-06-13",
   "consecutive_low_only": 9,
   "last_high_finding_iter": 217,
   "findings_by_type": {
@@ -146,91 +146,91 @@
     "trading_app/live/session_orchestrator.py": {
       "audit_count": 11,
       "last_iter": 227,
-      "findings": 5,
-      "file_hash": "6e96afbb1c0fd16a",
-      "git_sha": "7955d5ad"
+      "findings": 0,
+      "file_hash": "fee657d5c719bdd6",
+      "git_sha": "da2c0ad4"
     },
     "execution_engine.py": {
       "audit_count": 6,
       "last_iter": 24,
-      "findings": 4,
+      "findings": 1,
       "file_hash": "",
       "git_sha": ""
     },
     "pipeline/build_daily_features.py": {
       "audit_count": 6,
       "last_iter": 215,
-      "findings": 4,
-      "file_hash": "52c7af68419ee2bc",
-      "git_sha": "c0aac515"
+      "findings": 0,
+      "file_hash": "32854461044239be",
+      "git_sha": "2b7f5b64"
     },
     "trading_app/outcome_builder.py": {
       "audit_count": 6,
       "last_iter": 221,
-      "findings": 6,
-      "file_hash": "2410712ab7e947f8",
-      "git_sha": "73ab314a"
+      "findings": 1,
+      "file_hash": "37d4da0cf23cbebb",
+      "git_sha": "2b7f5b64"
     },
     "trading_app/strategy_validator.py": {
       "audit_count": 5,
       "last_iter": 191,
-      "findings": 5,
+      "findings": 1,
       "file_hash": "a3e48f5875d0297c",
       "git_sha": "af3df871"
     },
     "trading_app/execution_engine.py": {
       "audit_count": 5,
       "last_iter": 164,
-      "findings": 4,
-      "file_hash": "aab0db06d73080fb",
-      "git_sha": "89f8e97b"
+      "findings": 1,
+      "file_hash": "e6e90c67ed2389f8",
+      "git_sha": "354170bf"
     },
     "trading_app/live_config.py": {
       "audit_count": 5,
       "last_iter": 222,
-      "findings": 3,
+      "findings": 0,
       "file_hash": "351e3730fd2a9c26",
       "git_sha": "dc3a45c9"
     },
     "trading_app/db_manager.py": {
       "audit_count": 5,
       "last_iter": 225,
-      "findings": 3,
+      "findings": 1,
       "file_hash": "913fbbeda0e2df37",
       "git_sha": "526c2814"
     },
     "trading_app/prop_profiles.py": {
       "audit_count": 5,
       "last_iter": 202,
-      "findings": 4,
-      "file_hash": "980bc007c21441be",
-      "git_sha": "c4c3f2ae"
+      "findings": 1,
+      "file_hash": "b78d308cc36ee427",
+      "git_sha": "a6cec457"
     },
     "trading_app/lane_allocator.py": {
       "audit_count": 5,
       "last_iter": 199,
-      "findings": 5,
+      "findings": 1,
       "file_hash": "03e48a2d440e1ce5",
       "git_sha": "1e79c65d"
     },
     "session_orchestrator.py": {
       "audit_count": 4,
       "last_iter": 10,
-      "findings": 3,
+      "findings": 1,
       "file_hash": "",
       "git_sha": ""
     },
     "portfolio.py": {
       "audit_count": 4,
       "last_iter": 22,
-      "findings": 3,
+      "findings": 1,
       "file_hash": "",
       "git_sha": ""
     },
     "trading_app/strategy_discovery.py": {
       "audit_count": 4,
       "last_iter": 186,
-      "findings": 4,
+      "findings": 1,
       "file_hash": "cf1f270c17c3c7d9",
       "git_sha": "9d94241a"
     },
@@ -244,105 +244,105 @@
     "trading_app/prop_portfolio.py": {
       "audit_count": 4,
       "last_iter": 200,
-      "findings": 4,
+      "findings": 1,
       "file_hash": "c916e377a8d92766",
       "git_sha": "af3df871"
     },
     "pipeline/check_drift.py": {
       "audit_count": 4,
       "last_iter": 210,
-      "findings": 3,
-      "file_hash": "7efac3d02c93fbce",
-      "git_sha": "89350b44"
+      "findings": 0,
+      "file_hash": "e4c010288e5eea47",
+      "git_sha": "9fefd9fd"
     },
     "webhook_server.py": {
       "audit_count": 3,
       "last_iter": 9,
-      "findings": 3,
+      "findings": 1,
       "file_hash": "",
       "git_sha": ""
     },
     "performance_monitor.py": {
       "audit_count": 3,
       "last_iter": 10,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "",
       "git_sha": ""
     },
     "strategy_discovery.py": {
       "audit_count": 3,
       "last_iter": 24,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "",
       "git_sha": ""
     },
     "strategy_fitness.py": {
       "audit_count": 3,
       "last_iter": 22,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "",
       "git_sha": ""
     },
     "scripts/tools/generate_trade_sheet.py": {
       "audit_count": 3,
       "last_iter": 18,
-      "findings": 3,
+      "findings": 1,
       "file_hash": "4a3757710754afdd",
       "git_sha": "77c7ed43"
     },
     "trading_app/rolling_portfolio.py": {
       "audit_count": 3,
       "last_iter": 43,
-      "findings": 3,
+      "findings": 1,
       "file_hash": "391cf52c3063f141",
       "git_sha": "dc3a45c9"
     },
     "trading_app/portfolio.py": {
       "audit_count": 3,
       "last_iter": 217,
-      "findings": 2,
+      "findings": 0,
       "file_hash": "bdf103c4b27a20c3",
       "git_sha": "7955d5ad"
     },
     "scripts/tools/build_edge_families.py": {
       "audit_count": 3,
       "last_iter": 91,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "bbdeed9253304c16",
       "git_sha": "dc3a45c9"
     },
     "pipeline/paths.py": {
       "audit_count": 3,
       "last_iter": 207,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "d255cbc9d7e6471e",
       "git_sha": "c20716b6"
     },
     "pipeline/asset_configs.py": {
       "audit_count": 3,
       "last_iter": 216,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "95df2c060f618c67",
       "git_sha": "39a0a285"
     },
     "trading_app/pre_session_check.py": {
       "audit_count": 3,
       "last_iter": 201,
-      "findings": 3,
+      "findings": 1,
       "file_hash": "5e20846981b313ab",
       "git_sha": "09e4eabf"
     },
     "tradovate/order_router.py": {
       "audit_count": 2,
       "last_iter": 21,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "",
       "git_sha": ""
     },
     "projectx/order_router.py": {
       "audit_count": 2,
       "last_iter": 21,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "",
       "git_sha": ""
     },
@@ -356,182 +356,182 @@
     "trading_app/walkforward.py": {
       "audit_count": 2,
       "last_iter": 132,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "487320e8d9dd3942",
       "git_sha": "4b7445c5"
     },
     "config.py": {
       "audit_count": 2,
       "last_iter": 75,
-      "findings": 2,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "trading_app/live/position_tracker.py": {
       "audit_count": 2,
       "last_iter": 150,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "bb2a3f4d3f3b0a0f",
       "git_sha": "57ee332d"
     },
     "trading_app/paper_trader.py": {
       "audit_count": 2,
       "last_iter": 41,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "f1811b4fc98fadaa",
       "git_sha": "94b87e63"
     },
     "trading_app/mcp_server.py": {
       "audit_count": 2,
       "last_iter": 158,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "d8f7c121fd8be25b",
       "git_sha": "8bf3feb1"
     },
     "trading_app/risk_manager.py": {
       "audit_count": 2,
       "last_iter": 172,
-      "findings": 1,
-      "file_hash": "e763e28f13e9a3e7",
-      "git_sha": "af1989d6"
+      "findings": 0,
+      "file_hash": "511f33196693f476",
+      "git_sha": "72c8f259"
     },
     "scripts/tools/audit_behavioral.py": {
       "audit_count": 2,
       "last_iter": 89,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "1c4c5e2415919651",
       "git_sha": "324588bf"
     },
     "pipeline/run_pipeline.py": {
       "audit_count": 2,
       "last_iter": 140,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "e2418d7aeb52f91d",
       "git_sha": "9fe6b968"
     },
     "scripts/tools/select_family_rr.py": {
       "audit_count": 2,
       "last_iter": 89,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "92a33ec8a74e55c6",
       "git_sha": "dc3a45c9"
     },
     "report_edge_portfolio.py": {
       "audit_count": 2,
       "last_iter": 85,
-      "findings": 2,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "build_outcomes_fast.py": {
       "audit_count": 2,
       "last_iter": 98,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "prospective_tracker.py": {
       "audit_count": 2,
       "last_iter": 98,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "build_mes_outcomes_fast.py": {
       "audit_count": 2,
       "last_iter": 98,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "explore.py": {
       "audit_count": 2,
       "last_iter": 82,
-      "findings": 2,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "stress_test.py": {
       "audit_count": 2,
       "last_iter": 83,
-      "findings": 2,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "scripts/tools/refresh_data.py": {
       "audit_count": 2,
       "last_iter": 135,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "1f9dcbe5ea424d33",
       "git_sha": "d16dbb78"
     },
     "research/research_edge_structure.py": {
       "audit_count": 2,
       "last_iter": 109,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "05f1c20c87f2c1e1",
       "git_sha": "9fe6b968"
     },
     "research/research_1015_vs_1000.py": {
       "audit_count": 2,
       "last_iter": 109,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "e83519f1962cdbe4",
       "git_sha": "9fe6b968"
     },
     "trading_app/live/projectx/auth.py": {
       "audit_count": 2,
       "last_iter": 180,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "c4b1d9b45c80839b",
       "git_sha": "8a289cb7"
     },
     "trading_app/live/broker_factory.py": {
       "audit_count": 2,
       "last_iter": 220,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "0ab997929e3e15a7",
       "git_sha": "2a4fd850"
     },
     "trading_app/live/circuit_breaker.py": {
       "audit_count": 2,
       "last_iter": 226,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "a5f86f8e8861852a",
       "git_sha": "77b3feb1"
     },
     "pipeline/ingest_dbn_mgc.py": {
       "audit_count": 2,
       "last_iter": 223,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "cabdb58d20182ea1",
       "git_sha": "73ab314a"
     },
     "trading_app/live/multi_runner.py": {
       "audit_count": 2,
       "last_iter": 180,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "9adbc4e23c3744d7",
       "git_sha": "a0b3c24b"
     },
     "trading_app/live/bot_dashboard.py": {
       "audit_count": 2,
       "last_iter": 153,
-      "findings": 2,
-      "file_hash": "da33395a5762c746",
-      "git_sha": "b71e7919"
+      "findings": 1,
+      "file_hash": "9368c466a5561005",
+      "git_sha": "eb873635"
     },
     "trading_app/live/session_safety_state.py": {
       "audit_count": 2,
       "last_iter": 178,
-      "findings": 1,
-      "file_hash": "09fa3bf58e4116ac",
-      "git_sha": "a5b488d6"
+      "findings": 0,
+      "file_hash": "9e76796c837b77ca",
+      "git_sha": "72c8f259"
     },
     "pipeline/system_context.py": {
       "audit_count": 2,
       "last_iter": 208,
-      "findings": 2,
+      "findings": 1,
       "file_hash": "1ce0b8704673ad5d",
       "git_sha": "7fefb27e"
     },
@@ -769,21 +769,21 @@
     "scripts/tools/pipeline_status.py": {
       "audit_count": 1,
       "last_iter": 64,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "6aad70be0ddada21",
       "git_sha": "834e0750"
     },
     "pipeline/health_check.py": {
       "audit_count": 1,
       "last_iter": 67,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "b32e09ba2a5ef48d",
       "git_sha": "b4f9c7c4"
     },
     "pipeline/init_db.py": {
       "audit_count": 1,
       "last_iter": 69,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "9da53c64256339bb",
       "git_sha": "03224494"
     },
@@ -811,140 +811,140 @@
     "pipeline/log.py": {
       "audit_count": 1,
       "last_iter": 71,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "e4a82cfc4ed970f7",
       "git_sha": "431db3f0"
     },
     "pipeline/check_db.py": {
       "audit_count": 1,
       "last_iter": 71,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "54b53bb8e33fdb45",
       "git_sha": "0ff7e096"
     },
     "scripts/tools/assert_rebuild.py": {
       "audit_count": 1,
       "last_iter": 72,
-      "findings": 1,
-      "file_hash": "4a172e9881c4ebe8",
-      "git_sha": "a7ef4718"
+      "findings": 0,
+      "file_hash": "f54c272bba2a41ab",
+      "git_sha": "354170bf"
     },
     "scripts/infra/backup_db.py": {
       "audit_count": 1,
       "last_iter": 72,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "ec5d98364f5d1c9c",
       "git_sha": "cbd691f0"
     },
     "gen_repo_map.py": {
       "audit_count": 1,
       "last_iter": 73,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "sync_pinecone.py": {
       "audit_count": 1,
       "last_iter": 73,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "retire_e3_strategies.py": {
       "audit_count": 1,
       "last_iter": 73,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "refresh_data.py": {
       "audit_count": 1,
       "last_iter": 73,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "sensitivity_analysis.py": {
       "audit_count": 1,
       "last_iter": 74,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "gen_playbook.py": {
       "audit_count": 1,
       "last_iter": 74,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "meta_label.py": {
       "audit_count": 1,
       "last_iter": 75,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "features.py": {
       "audit_count": 1,
       "last_iter": 75,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "scripts/tools/rr_selection_analysis.py": {
       "audit_count": 1,
       "last_iter": 76,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "9e54de8a82286a02",
       "git_sha": "38762787"
     },
     "audit_integrity.py": {
       "audit_count": 1,
       "last_iter": 78,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "parallel_rebuild.py": {
       "audit_count": 1,
       "last_iter": 78,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "generate_promotion_candidates.py": {
       "audit_count": 1,
       "last_iter": 80,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "rolling_portfolio_assembly.py": {
       "audit_count": 1,
       "last_iter": 80,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "hypothesis_test.py": {
       "audit_count": 1,
       "last_iter": 81,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "detect_volume_spikes.py": {
       "audit_count": 1,
       "last_iter": 81,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
     "backfill_garch.py": {
       "audit_count": 1,
       "last_iter": 82,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "",
       "git_sha": ""
     },
@@ -1245,21 +1245,21 @@
     "research/discover.py": {
       "audit_count": 1,
       "last_iter": 113,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "8fc5acc65f97361b",
       "git_sha": "3792969a"
     },
     "research/research_wf_stress_keepers.py": {
       "audit_count": 1,
       "last_iter": 113,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "e88af5f4a3cd3874",
       "git_sha": "9699e88c"
     },
     "research/research_trend_day_mfe.py": {
       "audit_count": 1,
       "last_iter": 113,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "f241059be0cedaa1",
       "git_sha": "9fe6b968"
     },
@@ -1281,22 +1281,22 @@
       "audit_count": 1,
       "last_iter": 123,
       "findings": 1,
-      "file_hash": "e19a8da347a072d2",
-      "git_sha": "b8288909"
+      "file_hash": "831f22f689676bac",
+      "git_sha": "e13bbbcc"
     },
     "tests/test_trading_app/test_session_orchestrator.py": {
       "audit_count": 1,
       "last_iter": 124,
       "findings": 1,
-      "file_hash": "2b9ce81608004a4a",
-      "git_sha": "7955d5ad"
+      "file_hash": "740c4558ca1983e8",
+      "git_sha": "0c643abd"
     },
     "trading_app/live/bar_aggregator.py": {
       "audit_count": 1,
       "last_iter": 125,
       "findings": 0,
-      "file_hash": "ffa64c0fa0515645",
-      "git_sha": "6cba5118"
+      "file_hash": "b7a729f8d314e85b",
+      "git_sha": "97efa678"
     },
     "trading_app/live/tradovate/contract_resolver.py": {
       "audit_count": 1,
@@ -1322,14 +1322,14 @@
     "trading_app/live/cusum_monitor.py": {
       "audit_count": 1,
       "last_iter": 128,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "2a78f4c0df425878",
       "git_sha": "734ed1d0"
     },
     "trading_app/live/projectx/__init__.py": {
       "audit_count": 1,
       "last_iter": 128,
-      "findings": 1,
+      "findings": 0,
       "file_hash": "eafe8cc817a5a54f",
       "git_sha": "598147e9"
     },
@@ -1386,8 +1386,8 @@
       "audit_count": 1,
       "last_iter": 139,
       "findings": 1,
-      "file_hash": "d08550179f8c18da",
-      "git_sha": "b98df2ec"
+      "file_hash": "0e6fe2049e78ba6a",
+      "git_sha": "2b7f5b64"
     },
     "trading_app/live/rithmic/order_router.py": {
       "audit_count": 1,
@@ -1428,8 +1428,8 @@
       "audit_count": 1,
       "last_iter": 152,
       "findings": 1,
-      "file_hash": "f313013f000691fc",
-      "git_sha": "0e07a583"
+      "file_hash": "eacc2d93153ec13c",
+      "git_sha": "da2c0ad4"
     },
     "trading_app/live/bot_state.py": {
       "audit_count": 1,

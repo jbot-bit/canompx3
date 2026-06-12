@@ -421,8 +421,17 @@ rm -f docs/runtime/stages/ralph_iter_ITER.md
 Mark REJECTED, skip to Step 5. Do NOT try a second fix approach without a new plan.
 
 **If verification passes:**
+
+Tag = `[mechanical]` | `[judgment]` | `[mixed]`. **If the cluster's max severity is
+CRITICAL or HIGH, append the severity tag** — `[judgment][HIGH]` or `[judgment][CRITICAL]`.
+This flags capital-relevant fixes for the blocking adversarial push-gate: a REVERT verdict
+on a `[HIGH]`/`[CRITICAL]` commit makes `ralph_review.sh` exit non-zero, so `ralph.sh --push`
+skips and the fix stays local for the operator (`.claude/rules/adversarial-audit-gate.md`).
+The leading `[mechanical]`/`[judgment]`/`[mixed]` tag is unchanged — the severity tag is
+additive and does not alter review routing.
+
 ```bash
-git add <files> && git commit -m "[tag] fix: Ralph Loop iter ITER — <cluster-description> (<IDs>)
+git add <files> && git commit -m "[tag][SEVERITY-if-CRIT/HIGH] fix: Ralph Loop iter ITER — <cluster-description> (<IDs>)
 
 Cluster: N findings fixed (<type1>, <type2>)
 Doctrine: <integrity-guardian.md § X>
@@ -453,9 +462,40 @@ Verdict: [ACCEPT | REJECT | SKIPPED | NEEDS_REVIEW | DIMINISHING_RETURNS]
 Commit: [hash or NONE]
 Deferred debt: [N open items]
 Other clusters deferred: [brief list]
+Drift-check candidate: [NONE | proposed check_* name + path-glob it should cover]
 Next: [top candidate for next iteration — specific file:line if known]
 ================================
 ```
+
+### Drift-check candidate (self-improving flywheel — report-only)
+
+A finding instance is cheap to fix; the finding *class* recurs unless a drift-check retires
+it. After clustering, check whether this iteration's `finding_type` is a recurring class:
+
+```bash
+python -c "
+import json
+from pathlib import Path
+ledger = json.loads(Path('docs/ralph-loop/ralph-ledger.json').read_text())
+ft = '<FINDING_TYPE>'
+found = ledger.get('findings_by_type', {}).get(ft, {}).get('found', 0)
+print(f'RECURRING' if found >= 3 else 'one-off', f'(found={found})')
+"
+```
+
+Emit a `Drift-check candidate:` in the report when **either**:
+- the `finding_type` shows `found >= 3` in `findings_by_type` (recurring class), OR
+- the finding sits in `deferred-findings.md § Won't Fix` and is being re-confirmed (≥2 iterations).
+
+The candidate is a one-line proposal: a `check_*` name + the path-glob it should cover (e.g.
+`check_no_raw_duckdb_connect_repo_wide — pipeline/**,trading_app/**,scripts/**`). **Ralph does
+NOT write the check** — drift checks are capital guards, so authoring one is a human-gated
+follow-up. Ralph only surfaces the candidate so its own output shrinks its future surface.
+
+> **Grounded in the iter-228 incident:** `check_no_raw_duckdb_connect_in_live` covered only
+> `trading_app/live/`, so `account_survival.py` (a sibling) was unguarded and the same class
+> was re-found by hand. A path-scoped check that misses a sibling is exactly the gap a
+> repo-wide `Drift-check candidate:` proposal closes.
 
 ---
 

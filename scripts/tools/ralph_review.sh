@@ -146,9 +146,15 @@ REVIEW_OUTPUT=$("$CLAUDE_BIN" -p "$REVIEW_PROMPT" \
 echo "$REVIEW_OUTPUT" | tee -a "$REVIEW_LOG"
 echo "" | tee -a "$REVIEW_LOG"
 
-# Parse result
+# Parse result. REVERT is a BLOCKING verdict — exit non-zero so callers
+# (ralph.sh --push, CI) skip pushing a bad fix. FLAG/PASS stay exit 0
+# (advisory). Satisfies the independent-context mandate in
+# .claude/rules/adversarial-audit-gate.md: the Opus reviewer runs in a
+# separate `claude -p` process (not a sub-agent) and its REVERT now gates.
+REVIEW_EXIT=0
 if echo "$REVIEW_OUTPUT" | grep -q "REVERT"; then
     echo "  ⚠ REVIEW RESULT: REVERT RECOMMENDED — check $REVIEW_LOG" | tee -a "$REVIEW_LOG"
+    REVIEW_EXIT=1
 elif echo "$REVIEW_OUTPUT" | grep -q "FLAG"; then
     echo "  ⚠ REVIEW RESULT: SUSPECT COMMITS FLAGGED — check $REVIEW_LOG" | tee -a "$REVIEW_LOG"
 else
@@ -157,3 +163,4 @@ fi
 
 echo "  Review log: $REVIEW_LOG" | tee -a "$REVIEW_LOG"
 echo "════════════════════════════════════════════" | tee -a "$REVIEW_LOG"
+exit $REVIEW_EXIT
