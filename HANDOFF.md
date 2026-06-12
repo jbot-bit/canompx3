@@ -182,14 +182,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** b33a72e8 — feat(memory): MEMORY.md size guard (5th SessionStart check) + new_session CRLF fix
-- **Files changed:** 6 files
-  - `.claude/hooks/_memory_capture.py`
-  - `.claude/hooks/memory-capture-sessionstart.py`
-  - `.claude/rules/auto-memory-capture.md`
+- **Commit:** 3928edc2 — fix(dashboard): GO-LIVE blocked-reason — honest archived label, not false "BLOWN"
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `scripts/tools/new_session.sh`
-  - `tests/test_hooks/test_baton_staleness.py`
+  - `tests/test_trading_app/test_bot_dashboard_routes.py`
+  - `trading_app/live/bot_dashboard.html`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
