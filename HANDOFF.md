@@ -182,13 +182,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** fe32f8ce — feat(dashboard): vendor lightweight-charts locally — remove CDN single point of failure on live cockpit
-- **Files changed:** 5 files
+- **Commit:** 8f6a4ea0 — chore(stage): START_BOT flow fixes — Stage 1 checkpoint (vendor chart done), Stage 2 next
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_bot_dashboard_routes.py`
-  - `trading_app/live/bot_dashboard.html`
-  - `trading_app/live/bot_dashboard.py`
-  - `trading_app/live/vendor/lightweight-charts-5.2.0.standalone.production.js`
+  - `docs/runtime/stages/2026-06-12-startbot-trading-ready-flow-fixes.md`
+  - `stage0-chart-with-cdn-reachable.png`
+  - `stage1-chart-local-vendor.png`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

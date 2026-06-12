@@ -3994,7 +3994,7 @@ function renderAccounts(accounts) {
           // selector here — we reuse the canonical one. The hint surfaces the
           // selected account + a C11-tier note when it's not the Express account.
           const acctBlock = liveBlocked
-            || (!selectedAccountIsTradeable() ? "Select a tradeable broker account first." : "");
+            || (!selectedAccountIsTradeable() ? selectedAccountBlockedReason() : "");
           if (acctBlock) {
             goLiveBtn.disabled = true;
             goLiveBtn.title = acctBlock;
@@ -4213,7 +4213,7 @@ function updateLiveCta() {
   } else if (!lastOperatorState) {
     disabledReason = "Checking live gates...";
   } else if (!selectedAccountIsTradeable()) {
-    disabledReason = "No tradeable broker account selected — pick one in the account selector.";
+    disabledReason = selectedAccountBlockedReason();
   } else {
     disabledReason = blockedActionReason("start_live");
   }
@@ -5847,6 +5847,34 @@ function selectedAccountIsTradeable() {
   return tradeable.some(a => a.id === selectedAccountId);
 }
 
+// Honest blocked-reason for the GO LIVE gate. selectedAccountIsTradeable() is
+// false in THREE distinct situations the operator confused (Stage 2, 2026-06-12)
+// — they all rendered "No tradeable broker account selected — pick one" even
+// when an account WAS picked (it was just restricted/blown). Name the account
+// and its real status so the next action is obvious. Status vocabulary is the
+// canonical getAllAccounts() label set (tradeable/restricted/blown), not re-encoded.
+function selectedAccountBlockedReason() {
+  if (selectedAccountId == null) {
+    return "No broker account selected — pick one in the account selector.";
+  }
+  const all = lastEquityData ? getAllAccounts(lastEquityData) : [];
+  const acct = all.find(a => a.id === selectedAccountId);
+  if (!acct) {
+    // Selected id not in the current equity snapshot yet — feed not loaded.
+    return "Checking selected account status…";
+  }
+  const label = acct.name || acct.broker_display || `Account ${acct.id}`;
+  if (acct.status === "restricted") {
+    return `Selected account ${label} (#${acct.id}) is RESTRICTED, not tradeable — pick another.`;
+  }
+  if (acct.status === "tradeable") {
+    // Gate said not-tradeable yet snapshot says tradeable — a transient between
+    // the equity tick and the gate read. Don't claim a false status.
+    return `Re-checking selected account ${label} (#${acct.id})…`;
+  }
+  return `Selected account ${label} (#${acct.id}) is BLOWN, not tradeable — pick another.`;
+}
+
 // Funded (Express, XFA) vs Combine (evaluation) from the account name prefix.
 // TopStep self-labels EXPRESS-V2-… vs 50KTC-V2-…. C11 for topstep_50k_mnq_auto
 // is validated on the Express tier (gate #1) — a Combine selection gets a
@@ -5875,7 +5903,7 @@ window.attachHoldToFireLive = function(button, ring, wrap, acct) {
       // tradeable per the live equity feed. Blocks arming on a stale/blown/
       // unselected account — the routing bug this feature exists to prevent.
       if (!selectedAccountIsTradeable()) {
-        showToast("LIVE blocked", "No tradeable broker account selected — pick one in the account selector first.", "warning");
+        showToast("LIVE blocked", selectedAccountBlockedReason(), "warning");
         return;
       }
       // Audit Finding 1: if the account was AUTO-selected (tradeable[0] default or
