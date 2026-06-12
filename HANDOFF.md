@@ -181,18 +181,12 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-12
-- **Commit:** da2c0ad4 — fix(live): route all 11 trading_app/live/ duckdb connects through retry wrappers
-- **Files changed:** 9 files
-  - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-12-route-live-connects-through-retry-wrapper.md`
+- **Date:** 2026-06-13
+- **Commit:** eb873635 — fix(live): apply code-review fixes to DB-lock retry routing
+- **Files changed:** 3 files
   - `pipeline/check_drift.py`
   - `tests/test_pipeline/test_check_drift.py`
-  - `trading_app/live/bar_persister.py`
   - `trading_app/live/bot_dashboard.py`
-  - `trading_app/live/quote_persister.py`
-  - `trading_app/live/session_orchestrator.py`
-  - `trading_app/live/trade_journal.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
