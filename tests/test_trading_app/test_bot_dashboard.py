@@ -776,7 +776,7 @@ def test_action_start_pins_single_copy_live_pilot_command(monkeypatch, tmp_path)
     assert "--copies" in captured["cmd"]
     assert "1" in captured["cmd"]
     assert "--account-id" in captured["cmd"]
-    assert "23055112" in captured["cmd"]
+    assert "21944866" in captured["cmd"]  # EXPRESS-V2 confirmed 2026-06-12
     assert "--signal-only" not in captured["cmd"]
 
     log_file = bot_dashboard._bg_processes.pop("_session_logfile", None)
@@ -1122,7 +1122,7 @@ def test_run_preflight_subprocess_pins_single_copy_live_pilot(monkeypatch):
     assert "--copies" in captured["cmd"]
     assert "1" in captured["cmd"]
     assert "--account-id" in captured["cmd"]
-    assert "23055112" in captured["cmd"]
+    assert "21944866" in captured["cmd"]  # EXPRESS-V2 confirmed 2026-06-12
     assert "--preflight" in captured["cmd"]
     assert "topstep_50k_mnq_auto" in captured["cmd"]
 

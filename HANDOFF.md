@@ -182,10 +182,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 2c6bcd5c — docs(audit): Qwen next-step list fact-check — ~3/4 immediate items stale/by-design
-- **Files changed:** 3 files
+- **Commit:** ea04b440 — docs(stage): fix HANDOFF file-count + stage frontier line (review fixes)
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/audit/results/2026-06-12-qwen-next-step-factcheck.md`
   - `docs/runtime/stages/2026-06-12-startbot-trading-ready-flow-fixes.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout

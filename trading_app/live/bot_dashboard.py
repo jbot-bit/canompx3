@@ -78,11 +78,9 @@ LIVE_PILOT_COPIES = 1
 # UI disclosure. This constant is kept (not deleted) only so a caller that passes
 # no account_id still emits a valid --account-id; it is NOT the operator-facing
 # default.
-# Rationale: 23055112 = 50K Trading Combine (50KTC-V2) — the original hardcoded
-# pilot account, retained as the zero-arg fallback. The operator-facing default is
-# Express (21944866) via the dashboard selector; this fallback only fires when a
-# caller omits account_id entirely.
-LIVE_PILOT_ACCOUNT_ID = 23055112
+# Rationale: 21944866 = EXPRESS-V2 — the confirmed live target account
+# (operator-confirmed 2026-06-12; matches START_BOT.bat). Zero-arg fallback only.
+LIVE_PILOT_ACCOUNT_ID = 21944866
 
 
 def _as_mapping(value: object) -> dict[str, object]:
@@ -193,6 +191,13 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
                     val.kill()
                 except Exception:
                     pass
+    # Clear own state so a quick re-open sees a clean slate.
+    try:
+        from trading_app.live.bot_state import clear_state as _cs
+
+        _cs()
+    except Exception as exc:
+        log.warning("Shutdown: clear_state failed: %s", exc)
 
 
 app = FastAPI(title="Bot Dashboard", lifespan=_lifespan)
@@ -2965,14 +2970,14 @@ async def action_start(profile: str | None = None, mode: str = "signal", account
             mode_label = "DEMO"
         else:  # live
             cmd.extend(["--live", "--auto-confirm"])
-            # Guard: live launches must carry an explicit account — the Combine
-            # fallback (LIVE_PILOT_ACCOUNT_ID) must never fire silently on a
-            # real-money path. The FE confirm() guard and the preflight block
-            # both rely on account_id being set before reaching here.
-            assert account_id is not None, (
-                "live-mode launch reached action_start with account_id=None; "
-                "the dashboard selector or handoff carry must have dropped the id"
-            )
+            # Guard: live launches must carry an explicit account — the fallback
+            # constant must never fire silently on a real-money path. Asserts strip
+            # under Python -O, so raise explicitly.
+            if account_id is None:
+                raise RuntimeError(
+                    "live-mode launch reached action_start with account_id=None; "
+                    "the dashboard selector or handoff carry must have dropped the id"
+                )
             # Same builder, same account_id the preflight used → check [13] parity.
             cmd.extend(_live_pilot_cli_args(profile, account_id))
             mode_label = "LIVE"
@@ -2997,9 +3002,7 @@ async def action_start(profile: str | None = None, mode: str = "signal", account
             # (watch-out #9). No dashboard-side cache: the engine is the single
             # source of truth (institutional-rigor §10). We echo the resolved id
             # in the response only for the immediate launch ack.
-            launched_account = (
-                (account_id if account_id is not None else LIVE_PILOT_ACCOUNT_ID) if mode == "live" else None
-            )
+            launched_account = account_id if mode == "live" else None
             _clear_handoff()
             return {
                 "status": "started",
