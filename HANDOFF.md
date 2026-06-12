@@ -182,11 +182,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** c98022ad — fix(preflight): gate [11] per-lane SR-alarm quarantine — launch clean lanes
+- **Commit:** c832f5f6 — fix(dashboard): swallow Ctrl+C in run_dashboard — clean operator stop, no traceback
 - **Files changed:** 3 files
   - `HANDOFF.md`
-  - `scripts/tools/live_readiness_report.py`
-  - `tests/test_tools/test_live_readiness_report.py`
+  - `tests/test_trading_app/test_bot_dashboard_sse.py`
+  - `trading_app/live/bot_dashboard.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

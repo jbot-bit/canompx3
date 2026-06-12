@@ -23,6 +23,7 @@ from pipeline.calendar_filters import day_of_week, is_friday, is_nfp_day, is_ope
 from pipeline.cost_model import CostSpec, get_cost_spec
 from pipeline.daily_backfill import run_backfill_for_instrument
 from pipeline.db_config import configure_connection
+from pipeline.db_connect import open_read_only_with_retry
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH, LIVE_SIGNALS_DIR
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.live.bar_aggregator import Bar
@@ -1223,9 +1224,7 @@ class SessionOrchestrator:
         # Load ALL columns from the most recent daily_features row.
         # This gives filters yesterday's values as proxies for today.
         try:
-            import duckdb
-
-            with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+            with open_read_only_with_retry(GOLD_DB_PATH) as con:
                 configure_connection(con)
                 df = con.execute(
                     """

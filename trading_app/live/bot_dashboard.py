@@ -31,6 +31,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from pipeline.db_config import configure_connection
+from pipeline.db_connect import open_read_only_with_retry
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.live.alert_engine import read_operator_alerts, summarize_operator_alerts
@@ -557,7 +558,7 @@ def _journal_lock_status() -> dict[str, object]:
     if not JOURNAL_PATH.exists():
         return {"locked": False, "detail": "journal absent"}
     try:
-        con = duckdb.connect(str(JOURNAL_PATH), read_only=True)
+        con = open_read_only_with_retry(JOURNAL_PATH)
         con.close()
         return {"locked": False, "detail": "journal available"}
     except duckdb.IOException as exc:
@@ -998,7 +999,7 @@ def _collect_data_status() -> dict[str, object]:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
         results: dict[str, dict[str, object]] = {}
-        with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+        with open_read_only_with_retry(GOLD_DB_PATH) as con:
             configure_connection(con)
             for inst in ACTIVE_ORB_INSTRUMENTS:
                 row = con.execute("SELECT MAX(ts_utc)::DATE FROM bars_1m WHERE symbol = ?", [inst]).fetchone()
@@ -1707,7 +1708,7 @@ async def api_trades():
     if not JOURNAL_PATH.exists():
         return {"trades": [], "note": "No journal DB found"}
     try:
-        with duckdb.connect(str(JOURNAL_PATH), read_only=True) as con:
+        with open_read_only_with_retry(JOURNAL_PATH) as con:
             configure_connection(con)
             rows = con.execute(
                 """
@@ -1788,7 +1789,7 @@ async def api_trade_book():
 
     if JOURNAL_PATH.exists():
         try:
-            with duckdb.connect(str(JOURNAL_PATH), read_only=True) as con:
+            with open_read_only_with_retry(JOURNAL_PATH) as con:
                 configure_connection(con)
                 rows = con.execute(
                     """
@@ -1829,7 +1830,7 @@ async def api_trade_book():
 
     if GOLD_DB_PATH.exists():
         try:
-            with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+            with open_read_only_with_retry(GOLD_DB_PATH) as con:
                 configure_connection(con)
                 # LIMIT N+1 lets us detect truncation in one query (rows
                 # returned > N → truncated). Only when truncated do we run
@@ -3382,7 +3383,7 @@ async def _bars_watcher() -> None:
                 if not GOLD_DB_PATH.exists():
                     continue
                 try:
-                    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+                    with open_read_only_with_retry(GOLD_DB_PATH) as con:
                         configure_connection(con)
                         since = last_seen.get(inst)
                         if since is None:
@@ -3554,7 +3555,7 @@ def _query_bars_recent(
         else:
             db_upper = ring_oldest  # cap DB read at ring's oldest to avoid duplicate rows
             try:
-                with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+                with open_read_only_with_retry(GOLD_DB_PATH) as con:
                     configure_connection(con)
                     if since_dt is not None and db_upper is not None:
                         rows = con.execute(

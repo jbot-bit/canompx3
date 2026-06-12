@@ -16,6 +16,7 @@ from pathlib import Path
 import duckdb
 
 from pipeline.db_config import configure_connection
+from pipeline.db_connect import open_writer_with_retry
 
 log = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ class TradeJournal:
         self._db_path = Path(db_path)
         self.last_error: Exception | None = None
         try:
-            self._con = duckdb.connect(str(self._db_path))
+            self._con = open_writer_with_retry(self._db_path)
             configure_connection(self._con, writing=True)
             self._con.execute(LIVE_TRADES_SCHEMA)
             # Idempotent migration for journals created before 2026-05-18 baseline.

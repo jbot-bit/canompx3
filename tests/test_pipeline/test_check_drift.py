@@ -22,6 +22,7 @@ from pipeline.check_drift import (
     check_dow_classification_complete,
     check_hardcoded_mgc_sql,
     check_holdout_policy_declaration_consistency,
+    check_no_raw_duckdb_connect_in_live,
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
     check_prereg_present_for_recent_runs,
@@ -3637,3 +3638,57 @@ class TestSessionOrderCoversOrbLabels:
         monkeypatch.setattr(session_guard, "_SESSION_ORDER", truncated)
         violations = check_session_order_covers_orb_labels()
         assert any("NYSE_PREOPEN" in v and "_SESSION_ORDER" in v for v in violations), violations
+
+
+class TestNoRawDuckdbConnectInLive:
+    """Tests for check_no_raw_duckdb_connect_in_live.
+
+    The guard bans raw ``duckdb.connect(...)`` in ``trading_app/live/`` so every
+    live-capital connect routes through the ``pipeline.db_connect`` retry wrappers.
+    Injection tests prove the guard actually guards (integrity-guardian § 7).
+    """
+
+    def _make_live_dir(self, tmp_path, monkeypatch):
+        from pipeline import check_drift
+
+        live_dir = tmp_path / "trading_app" / "live"
+        live_dir.mkdir(parents=True)
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", tmp_path / "trading_app")
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        return live_dir
+
+    def test_real_live_dir_is_clean(self):
+        # The actual trading_app/live/ must have zero raw connects (this fix).
+        assert check_no_raw_duckdb_connect_in_live() == []
+
+    def test_catches_raw_connect(self, tmp_path, monkeypatch):
+        live_dir = self._make_live_dir(tmp_path, monkeypatch)
+        (live_dir / "persister.py").write_text(
+            "import duckdb\n\ndef f(db):\n    con = duckdb.connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_live()
+        assert len(violations) == 1
+        assert "persister.py:4" in violations[0]
+        assert "open_read_only_with_retry" in violations[0]
+
+    def test_wrapper_form_passes(self, tmp_path, monkeypatch):
+        live_dir = self._make_live_dir(tmp_path, monkeypatch)
+        (live_dir / "reader.py").write_text(
+            "from pipeline.db_connect import open_read_only_with_retry\n\n"
+            "def f(db):\n    with open_read_only_with_retry(db) as con:\n        return con\n"
+        )
+        assert check_no_raw_duckdb_connect_in_live() == []
+
+    def test_db_connect_wrapper_is_exempt(self, tmp_path, monkeypatch):
+        live_dir = self._make_live_dir(tmp_path, monkeypatch)
+        # The canonical wrapper module legitimately calls duckdb.connect — exempt.
+        (live_dir / "db_connect.py").write_text("import duckdb\n\ndef open_it(db):\n    return duckdb.connect(db)\n")
+        assert check_no_raw_duckdb_connect_in_live() == []
+
+    def test_missing_live_dir_no_crash(self, tmp_path, monkeypatch):
+        from pipeline import check_drift
+
+        # No trading_app/live/ at all → empty, no crash.
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", tmp_path / "trading_app")
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        assert check_no_raw_duckdb_connect_in_live() == []

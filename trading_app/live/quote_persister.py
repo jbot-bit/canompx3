@@ -24,6 +24,7 @@ import threading
 import duckdb
 
 from pipeline.db_config import configure_connection
+from pipeline.db_connect import open_writer_with_retry
 from trading_app.live.spread_accumulator import QuoteMinute
 
 log = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ class QuotePersister:
         ts_max = max(q.ts_utc for q in quotes)
 
         try:
-            con = duckdb.connect(db_path)
+            con = open_writer_with_retry(db_path)
             configure_connection(con, writing=True)
             con.execute(
                 "DELETE FROM live_quotes WHERE symbol = ? AND ts_utc >= ? AND ts_utc <= ?",

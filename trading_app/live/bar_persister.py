@@ -22,6 +22,7 @@ import threading
 import duckdb
 
 from pipeline.db_config import configure_connection
+from pipeline.db_connect import open_writer_with_retry
 from trading_app.live import bar_ring
 from trading_app.live.bar_aggregator import Bar
 
@@ -96,7 +97,7 @@ class BarPersister:
         ts_max = max(b.ts_utc for b in bars)
 
         try:
-            con = duckdb.connect(db_path)
+            con = open_writer_with_retry(db_path)
             configure_connection(con, writing=True)
             con.execute(
                 "DELETE FROM bars_1m WHERE symbol = ? AND ts_utc >= ? AND ts_utc <= ?",
