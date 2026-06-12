@@ -6,6 +6,14 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Codex Session - live-readiness stale-state plan (2026-06-13)
+- **Tool:** Codex.
+- **Scope:** User asked to update the plan and ensure we are not working stale after the live-readiness audit found C11/C12 blockers and a 2-lane book.
+- **Measured current state:** Clean `main` at `b7980acb` (ahead 7). `project_pulse.py --fast --format json` and `live_readiness_report.py --profile topstep_50k_mnq_auto --strict-zero-warn --format json --proof-pack-only` both exit nonzero. C11 has a profile fingerprint mismatch, C12 is invalid/mismatched, and both current deployed lanes have zero execution rows. `docs/runtime/lane_allocation/topstep_50k_mnq_auto.json` currently deploys only COMEX_SETTLE and US_DATA_1000; Tokyo is paused for SR alarm.
+- **Docs updated:** Added `docs/plans/active/2026-06/2026-06-13-live-readiness-stale-state-recovery.md` and a decision-ledger supersession entry `topstep-mnq-2-lane-blocked-baseline-2026-06-13`.
+- **Operational decision:** Treat older green/3-lane handoff and decision text as historical only. Current live launch, risk increase, multi-account expansion, and prop-firm/profile switching remain blocked until the plan's read-only checks and any operator-approved C11/C12 refresh remeasure green.
+- **Verification:** `git diff --check` and final `git status --short --branch` should be run after this doc-only update.
+
 ## Codex Session - environment connectivity check and repo-state MCP fix (2026-06-12)
 - **Tool:** Codex.
 - **Scope:** User requested a no-lip-service environment check. Loaded startup docs, ran Codex parity/doctor/preflight/pulse, smoked repo-local MCPs, and fixed concrete issues found.

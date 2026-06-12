@@ -4,7 +4,25 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
-- `topstep-mnq-single-copy-3-lane-pilot-2026-05-30` - The immediate
+- `topstep-mnq-2-lane-blocked-baseline-2026-06-13` - Supersedes the older
+  3-lane pilot wording below for current operations. Fresh local checks on
+  2026-06-13 measured `topstep_50k_mnq_auto` as a 2-lane blocked book:
+  `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` and
+  `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15` are the only deployed
+  lanes in `docs/runtime/lane_allocation/topstep_50k_mnq_auto.json`;
+  `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08` is paused for SR alarm. Fresh
+  `project_pulse.py --fast --format json` and `live_readiness_report.py
+  --profile topstep_50k_mnq_auto --strict-zero-warn --format json
+  --proof-pack-only` both exited nonzero: Criterion 11 has a profile
+  fingerprint mismatch, Criterion 12 is invalid/mismatched, and both deployed
+  lanes have zero execution rows. Live launch, risk increase, multi-account
+  expansion, and prop-firm/profile switching are blocked until the stale-state
+  recovery plan is completed. Plan:
+  `docs/plans/active/2026-06/2026-06-13-live-readiness-stale-state-recovery.md`.
+
+- `topstep-mnq-single-copy-3-lane-pilot-2026-05-30` - **SUPERSEDED FOR CURRENT
+  OPERATIONS by `topstep-mnq-2-lane-blocked-baseline-2026-06-13` above.** The
+  historical decision was: The immediate
   `topstep_50k_mnq_auto` live-pilot authority is MNQ-only, effective
   `--copies 1`, and exactly three active lanes:
   `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`,
