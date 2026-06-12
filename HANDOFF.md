@@ -182,11 +182,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** de85174b — fix(dashboard): no-store on / so chart/UI edits never serve stale-cached
-- **Files changed:** 3 files
+- **Commit:** 63b06aa8 — feat(tools): read-only memory-hygiene budget+clear-tier report
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `tests/test_live/test_dashboard_account_selection.py`
-  - `trading_app/live/bot_dashboard.py`
+  - `START_WORKTREE.bat`
+  - `docs/runtime/stages/2026-06-12-memory-hardening-always-on-recall.md`
+  - `scripts/tools/memory_hygiene.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

@@ -13,6 +13,23 @@ scope_lock:
 
 # Stage: Memory hardening + always-on recall
 
+## Checkpoint progress (Part A — 3 CPs, /clear between each)
+
+- **CP1 DONE** (commit `63b06aa8`): `scripts/tools/memory_hygiene.py` — read-only
+  budget + baton clear-tier report. Verified: budget OVER (26,194 B, byte-cutoff
+  binds first, first-dropped line 71, 48 over-long lines); tiers READY=12 /
+  LANDED-BUT-OPEN=29 / UNVERIFIED=102; `--print-clear` fully-commented; `--json`
+  parses; ruff clean. READY/LBO tiering falsified against `git merge-base`.
+- **CP2 NEXT** (`stage: 2`): write `tests/test_tools/test_memory_hygiene.py` —
+  load tool via importlib; tmp memory dir + tmp git repo with
+  `update-ref refs/remotes/origin/main` for deterministic ancestor checks. Cases:
+  byte-cutoff math, 200-line truncation point, over-long-line flag, primary-SHA
+  READY selection, open-work-marker→LANDED-BUT-OPEN, unmerged SHA→UNVERIFIED,
+  clear-block commented + READY-only. Then `pytest -q` green → commit
+  `test(tools): cover memory_hygiene budget + clear tiers` → `stage: 3` → /clear.
+- **CP3** (`stage: 3`): +1 budget-cue branch in `memory-capture-sessionstart.py`;
+  trim MEMORY.md < 24,400 B; write deferred-Part-B baton. → close stage.
+
 ## Task
 
 Implement Plan v4: (A) budget-hygiene reporting so the auto-memory `MEMORY.md`
