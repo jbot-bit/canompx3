@@ -765,6 +765,8 @@ def _build_strict_zero_warn_summary(
     live_stage_acceptance: dict[str, Any],
     profile_launch: dict[str, Any],
     automation_health: dict[str, Any],
+    blocked_strategy_ids: set[str],
+    blocked_reason_by_strategy: dict[str, str],
 ) -> dict[str, Any]:
     blockers: list[str] = []
     warnings: list[str] = []
@@ -792,22 +794,48 @@ def _build_strict_zero_warn_summary(
         )
 
     # SR alarms are reported once per active lane, carrying the lane id and the
-    # watch/unreviewed qualifier so the entry is operator-actionable. The strict
-    # gate intentionally blocks on ANY active alarm — watch-reviewed or not —
-    # because watch-adjudication only permits continued trading under multi-cyclic
-    # SR monitoring (Pepelyshev-Polunchenko 2015), it does not zero the warning for
-    # a fresh --live capital flip. An un-reviewed alarm is the *cause* of its lane's
-    # lifecycle block, so the two are collapsed into one entry rather than counted
-    # twice. The Criterion 12 aggregate below then covers only alarms on strategies
-    # NOT in the active set, preserving fail-closed coverage without double-counting.
+    # watch/unreviewed qualifier so the entry is operator-actionable. The verdict
+    # for an active alarm mirrors what the ENGINE actually does with the lane
+    # (session_orchestrator `_load_paused_lane_blocks` → `_block_strategy`), so the
+    # preflight gate and the launch behavior never disagree (Option C — one
+    # canonical source, `read_lifecycle_state`):
+    #
+    #   ALARM ∈ blocked_strategy_ids (no review, or review=pause) → the engine
+    #     QUARANTINES the lane (it will not trade it). The gate demotes it to a
+    #     launch WARNING so the operator can launch the remaining clean lanes
+    #     instead of being refused entirely. The warning carries
+    #     ADVISORY_WARNING_MARKER — the canonical opt-out — because
+    #     `is_launch_blocking_strict_warning` is default-deny: without the marker
+    #     the warning is promoted right back to a launch-blocker.
+    #   ALARM + review=watch (NOT in blocked_strategy_ids) → the engine TRADES the
+    #     lane under continued SR monitoring. Watch-adjudication permits *continued*
+    #     trading (Pepelyshev-Polunchenko 2015); it does NOT sanction a fresh, cold
+    #     --live capital flip. This still HARD-BLOCKS.
+    #   ALARM that is somehow neither in blocked_strategy_ids nor watch-reviewed
+    #     (a data-integrity anomaly) → falls through to the blocker path. Fail
+    #     direction: a false block is tolerated; a false pass is impossible — the
+    #     only lane spared is one the engine provably will not trade.
+    #
+    # Either way the lane is still counted in `alarmed_active_ids`: routing it to
+    # `warnings` instead of `blockers` must not unbalance the Criterion 12 residual
+    # check below (which compares the alarm count to len(alarmed_active_ids)).
+    # Quarantine is a routing change INSIDE the loop, never a set-subtraction.
     alarmed_active_ids: set[str] = set()
     for lane in active_lanes:
         strategy_id = str(lane.get("strategy_id") or "unknown")
         if str(lane.get("sr_status") or "").upper() == "ALARM":
             alarmed_active_ids.add(strategy_id)
             review_outcome = lane.get("sr_review_outcome")
-            review_note = "watch reviewed" if review_outcome == "watch" else "no watch review"
-            blockers.append(f"Active lane SR alarm ({review_note}): {strategy_id}")
+            if strategy_id in blocked_strategy_ids:
+                quarantine_reason = blocked_reason_by_strategy.get(
+                    strategy_id, "Criterion 12 SR ALARM — manual review required"
+                )
+                warnings.append(
+                    f"Active lane SR alarm quarantined: {strategy_id} ({quarantine_reason}) {ADVISORY_WARNING_MARKER}"
+                )
+            else:
+                review_note = "watch reviewed" if review_outcome == "watch" else "no watch review"
+                blockers.append(f"Active lane SR alarm ({review_note}): {strategy_id}")
         elif lane.get("lifecycle_blocked"):
             blockers.append(f"Active lane lifecycle blocked: {strategy_id}")
 
@@ -937,6 +965,8 @@ def build_live_readiness_report(
         live_stage_acceptance=live_stage_acceptance,
         profile_launch=profile_launch,
         automation_health=automation_health,
+        blocked_strategy_ids=set(lifecycle.get("blocked_strategy_ids", [])),
+        blocked_reason_by_strategy=blocked_reason_by_strategy,
     )
 
     report = {

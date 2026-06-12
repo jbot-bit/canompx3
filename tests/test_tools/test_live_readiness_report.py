@@ -855,15 +855,20 @@ def test_strict_zero_warn_blocks_mature_instrument_global_telemetry(
     assert any("not profile-scoped" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
 
 
-def test_strict_zero_warn_blocks_when_active_lane_blocked_and_sr_alarm(tmp_path: Path, monkeypatch) -> None:
+def test_strict_zero_warn_quarantines_active_lane_blocked_and_sr_alarm(tmp_path: Path, monkeypatch) -> None:
+    """An SR-ALARMed active lane that the engine will quarantine (∈
+    blocked_strategy_ids, here via an un-reviewed alarm with block_reason) is
+    demoted to a launch WARNING, not a hard blocker — the gate must mirror the
+    engine's per-lane quarantine so the operator can launch the clean lanes."""
     allocation_path = tmp_path / "lane_allocation.json"
     _install_happy_path(
         monkeypatch,
         allocation_path,
+        criterion12={"valid": True, "counts": {"ALARM": 1}, "state_age_days": 0},
         strategy_state={
             "blocked": True,
-            "block_source": "lifecycle",
-            "block_reason": "manual hold",
+            "block_source": "sr_alarm",
+            "block_reason": "Criterion 12 SR ALARM — manual review required",
             "sr_status": "ALARM",
             "sr_review_outcome": None,
         },
@@ -876,15 +881,19 @@ def test_strict_zero_warn_blocks_when_active_lane_blocked_and_sr_alarm(tmp_path:
 
     assert report["active_lanes"][0]["lifecycle_blocked"] is True
     assert report["active_lanes"][0]["sr_status"] == "ALARM"
-    assert report["strict_zero_warn"]["green"] is False
-    # An un-reviewed SR alarm IS the cause of the lifecycle block — it is reported
-    # once via the richer SR-alarm entry, not double-counted as a separate
-    # "lifecycle blocked" line for the same lane.
+    # Quarantine → launch reaches green; the alarmed lane is a WARNING, not a blocker.
+    assert report["strict_zero_warn"]["green"] is True
     blockers = report["strict_zero_warn"]["blockers"]
-    sr_alarm_blockers = [b for b in blockers if "sr alarm" in b.lower() and "SID_A" in b]
-    lifecycle_blockers = [b for b in blockers if "lifecycle blocked" in b.lower() and "SID_A" in b]
-    assert len(sr_alarm_blockers) == 1
-    assert lifecycle_blockers == []
+    warnings = report["strict_zero_warn"]["warnings"]
+    assert not any("SID_A" in b for b in blockers)
+    quarantine_warnings = [w for w in warnings if "quarantined" in w.lower() and "SID_A" in w]
+    assert len(quarantine_warnings) == 1
+    # Carries the canonical advisory marker so the default-deny gate spares it,
+    # and the named lifecycle reason flows through.
+    assert live_readiness_report.ADVISORY_WARNING_MARKER in quarantine_warnings[0]
+    assert "SR ALARM" in quarantine_warnings[0]
+    # No spurious Criterion 12 residual: the quarantined lane is still counted.
+    assert not any("alarm not on active lane" in b.lower() for b in blockers)
 
 
 def test_strict_zero_warn_blocks_any_active_sr_alarm_even_when_watch_reviewed(
@@ -911,6 +920,93 @@ def test_strict_zero_warn_blocks_any_active_sr_alarm_even_when_watch_reviewed(
     assert report["active_lanes"][0]["sr_review_outcome"] == "watch"
     assert report["strict_zero_warn"]["green"] is False
     assert any("watch reviewed" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+
+
+def test_strict_zero_warn_quarantines_sr_alarm_no_review(tmp_path: Path, monkeypatch) -> None:
+    """ALARM with no review → engine quarantines (block_source=sr_alarm) → WARNING,
+    launch green."""
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        criterion12={"valid": True, "counts": {"ALARM": 1}, "state_age_days": 0},
+        strategy_state={
+            "blocked": True,
+            "block_source": "sr_alarm",
+            "block_reason": "Criterion 12 SR ALARM — manual review required",
+            "sr_status": "ALARM",
+            "sr_review_outcome": None,
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["strict_zero_warn"]["green"] is True
+    warnings = report["strict_zero_warn"]["warnings"]
+    assert any("quarantined" in w.lower() and "SID_A" in w for w in warnings)
+    assert not any("SID_A" in b for b in report["strict_zero_warn"]["blockers"])
+
+
+def test_strict_zero_warn_quarantines_sr_alarm_review_pause(tmp_path: Path, monkeypatch) -> None:
+    """ALARM with review=pause → engine quarantines (block_source=sr_review_pause)
+    → WARNING, launch green."""
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        criterion12={"valid": True, "counts": {"ALARM": 1}, "state_age_days": 0},
+        strategy_state={
+            "blocked": True,
+            "block_source": "sr_review_pause",
+            "block_reason": "SR review outcome: pause",
+            "sr_status": "ALARM",
+            "sr_review_outcome": "pause",
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["strict_zero_warn"]["green"] is True
+    warnings = report["strict_zero_warn"]["warnings"]
+    quarantine = [w for w in warnings if "quarantined" in w.lower() and "SID_A" in w]
+    assert len(quarantine) == 1
+    assert "pause" in quarantine[0].lower()
+    assert not any("SID_A" in b for b in report["strict_zero_warn"]["blockers"])
+
+
+def test_strict_zero_warn_quarantine_no_spurious_c12_residual(tmp_path: Path, monkeypatch) -> None:
+    """A quarantined alarmed lane is still counted in alarmed_active_ids, so the
+    Criterion 12 residual (alarm_count vs active alarms) stays balanced and does
+    NOT spuriously fire a blocker for the lane just quarantined."""
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        # C12 reports exactly the one active alarm we quarantine — counts must match.
+        criterion12={"valid": True, "counts": {"ALARM": 1}, "state_age_days": 0},
+        strategy_state={
+            "blocked": True,
+            "block_source": "sr_alarm",
+            "block_reason": "Criterion 12 SR ALARM — manual review required",
+            "sr_status": "ALARM",
+            "sr_review_outcome": None,
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    blockers = report["strict_zero_warn"]["blockers"]
+    assert report["strict_zero_warn"]["green"] is True
+    assert not any("alarm not on active lane" in b.lower() for b in blockers)
 
 
 def test_strict_zero_warn_counts_one_active_alarm_once(tmp_path: Path, monkeypatch) -> None:

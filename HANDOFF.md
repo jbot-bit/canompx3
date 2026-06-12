@@ -182,7 +182,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 1902316e — fix(preflight): gate [11] never blocks with empty () reason — union blockers + launch-blocking warnings
+- **Commit:** 80b09710 — docs(handoff): sync ledger after peer gate-11 message fix (0ad6af4e)
 - **Files changed:** 1 files
   - `HANDOFF.md`
 
