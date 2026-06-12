@@ -385,3 +385,34 @@ class TestCumulativeToDelta:
         # The aggregator's in-progress bar should hold the delta (120), never 5_000_120.
         assert feed._agg._current is not None
         assert feed._agg._current.volume == 120
+
+    def test_price_only_quote_does_not_poison_cumulative_volume_baseline(self, feed):
+        """ProjectX can emit price-only quotes without ``volume`` between cumulative
+        readings. Those ticks must update OHLC with zero volume and must NOT reset
+        the cumulative baseline to the parse_quote missing-volume default. The live
+        failure pattern was: 1_884_587 -> missing-volume quote -> 1_884_594, which
+        previously became a fake ~1.88M delta and tripped the aggregator cap.
+        """
+        feed._on_quote_sync([{"lastPrice": 21000.0, "volume": 1_884_587}])  # baseline
+        assert feed._last_cum_volume == 1_884_587
+
+        feed._on_quote_sync(
+            [
+                {
+                    "bestBid": 21000.25,
+                    "bestAsk": 21000.75,
+                    "lastUpdated": "2026-06-12T16:08:35.3264062+00:00",
+                    "timestamp": "2026-06-12T16:08:35.256+00:00",
+                    "contract": "CON.F.US.MNQ.M26",
+                }
+            ]
+        )
+        assert feed._last_cum_volume == 1_884_587
+        assert feed._agg._current is not None
+        assert feed._agg._current.volume == 0
+        assert feed._agg._bad_tick_count == 0
+
+        feed._on_quote_sync([{"lastPrice": 21000.5, "volume": 1_884_594}])  # +7
+        assert feed._last_cum_volume == 1_884_594
+        assert feed._agg._current.volume == 7
+        assert feed._agg._bad_tick_count == 0

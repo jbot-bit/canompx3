@@ -197,13 +197,12 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Codex (WSL)
 - **Date:** 2026-06-13
-- **Commit:** eb873635 — fix(live): apply code-review fixes to DB-lock retry routing
-- **Files changed:** 3 files
-  - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift.py`
-  - `trading_app/live/bot_dashboard.py`
+- **Commit:** a0db7bc8 — fix(projectx): ignore price-only quote volume baseline
+- **Files changed:** 2 files
+  - `tests/test_trading_app/test_projectx_feed.py`
+  - `trading_app/live/projectx/data_feed.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

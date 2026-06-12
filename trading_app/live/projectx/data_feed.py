@@ -204,6 +204,18 @@ class ProjectXDataFeed(BrokerFeed):
             self._last_cum_volume = cum_volume
             return delta
 
+    def _quote_volume_delta(self, quote: dict, cum_vol: int) -> int:
+        """Return the per-tick volume delta for a GatewayQuote.
+
+        ProjectX sometimes emits price-only quote updates with no ``volume``
+        field. Those are valid price ticks, but they are NOT cumulative-volume
+        observations and must not reset the cumulative baseline. Treat them as
+        zero-volume ticks so price OHLC stays live while volume stays honest.
+        """
+        if quote.get("volume") is None:
+            return 0
+        return self._cum_to_delta(cum_vol)
+
     def _maybe_log_raw_quote_on_reset(self, quote: dict) -> None:
         """DIAGNOSTIC (2026-06-13, temporary): log the full raw quote dict when a
         cumulative-volume reset just fired, rate-limited to ~1/10s.
@@ -493,7 +505,7 @@ class ProjectXDataFeed(BrokerFeed):
                 continue
             try:
                 price, cum_vol = self.parse_quote(quote)
-                vol = self._cum_to_delta(cum_vol)
+                vol = self._quote_volume_delta(quote, cum_vol)
                 self._maybe_log_raw_quote_on_reset(quote)
                 now = datetime.now(UTC)
                 self._last_data_at = now
@@ -545,9 +557,10 @@ class ProjectXDataFeed(BrokerFeed):
                 continue
             try:
                 price, cum_vol = self.parse_quote(quote)
-                # _cum_to_delta is thread-safe (has internal lock) — safe to call on
-                # this foreign signalr thread before the call_soon_threadsafe bridge.
-                vol = self._cum_to_delta(cum_vol)
+                # _quote_volume_delta is thread-safe through _cum_to_delta's internal
+                # lock when a real cumulative field is present. Missing-volume quote
+                # updates are price-only and must not perturb that baseline.
+                vol = self._quote_volume_delta(quote, cum_vol)
                 # _maybe_log_raw_quote_on_reset is thread-safe (same lock).
                 self._maybe_log_raw_quote_on_reset(quote)
                 now = datetime.now(UTC)
