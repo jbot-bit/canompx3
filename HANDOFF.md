@@ -212,13 +212,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** 60243241 — @ fix(survival): route account_survival read connects through retry wrapper
-- **Files changed:** 5 files
+- **Commit:** 512bff37 — [bookkeeping] HANDOFF: record survival-sim retry-wrapper commit (60243241)
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-13-route-survival-sim-connects.md`
-  - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift.py`
-  - `trading_app/account_survival.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
