@@ -182,12 +182,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 63b06aa8 — feat(tools): read-only memory-hygiene budget+clear-tier report
-- **Files changed:** 4 files
+- **Commit:** 64fa45e7 — chore(stage): CP1 done, resume baton -> CP2 (memory-hygiene tests)
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `START_WORKTREE.bat`
   - `docs/runtime/stages/2026-06-12-memory-hardening-always-on-recall.md`
-  - `scripts/tools/memory_hygiene.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
