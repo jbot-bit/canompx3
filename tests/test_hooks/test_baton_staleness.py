@@ -202,3 +202,64 @@ def test_tier2_ignores_old_project_baton(repo_with_origin, tmp_path):
     mod = _load_helper()
     _patch_paths(mod, repo, mem)
     assert mod.scan_live_project_batons() == []
+
+
+# --- MEMORY.md size guard (5th SessionStart check) ------------------------
+
+
+def test_size_guard_silent_under_budget(tmp_path):
+    """A comfortably-small MEMORY.md returns None (no cue)."""
+    mod = _load_helper()
+    mem = tmp_path / "memory"
+    mem.mkdir()
+    (mem / "MEMORY.md").write_bytes(b"- [x](x.md) - hook\n" * 10)  # tiny
+    mod.MEMORY_DIR = mem
+    assert mod.check_memory_index_size() is None
+
+
+def test_size_guard_fires_on_oversized_bytes(tmp_path):
+    """Bytes >= _MEMORY_WARN_BYTES fires, reporting raw byte/line counts."""
+    mod = _load_helper()
+    mem = tmp_path / "memory"
+    mem.mkdir()
+    (mem / "MEMORY.md").write_bytes(b"x" * (mod._MEMORY_WARN_BYTES + 1) + b"\n")
+    mod.MEMORY_DIR = mem
+    result = mod.check_memory_index_size()
+    assert result is not None
+    assert result["bytes"] >= mod._MEMORY_WARN_BYTES
+
+
+def test_size_guard_fires_on_too_many_lines(tmp_path):
+    """Line count >= _MEMORY_WARN_LINES fires even when bytes are small."""
+    mod = _load_helper()
+    mem = tmp_path / "memory"
+    mem.mkdir()
+    (mem / "MEMORY.md").write_bytes(b"\n" * (mod._MEMORY_WARN_LINES + 5))
+    mod.MEMORY_DIR = mem
+    result = mod.check_memory_index_size()
+    assert result is not None
+    assert result["lines"] >= mod._MEMORY_WARN_LINES
+
+
+def test_size_guard_counts_raw_bytes_not_splitlines(tmp_path):
+    """CRLF must not be normalized away: a guard that counts decoded chars would
+    undercount on Windows and falsely PASS an over-budget file. Verify the guard
+    uses raw read_bytes() by feeding CRLF content whose byte length exceeds the
+    cap while its char length (post-CR-strip) would not."""
+    mod = _load_helper()
+    mem = tmp_path / "memory"
+    mem.mkdir()
+    # Each line is "a\r\n" = 3 bytes; choose a count so bytes cross the cap.
+    n = (mod._MEMORY_WARN_BYTES // 3) + 10
+    (mem / "MEMORY.md").write_bytes(b"a\r\n" * n)
+    mod.MEMORY_DIR = mem
+    result = mod.check_memory_index_size()
+    assert result is not None
+    assert result["bytes"] >= mod._MEMORY_WARN_BYTES
+
+
+def test_size_guard_fail_open_on_missing_file(tmp_path):
+    """No MEMORY.md -> None (fail-open), never raises."""
+    mod = _load_helper()
+    mod.MEMORY_DIR = tmp_path / "does-not-exist"
+    assert mod.check_memory_index_size() is None

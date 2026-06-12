@@ -55,6 +55,19 @@ _LIVE_TEMPLATE = (
     "updating the baton that describes it. Advisory: confirm, do not assume stale."
 )
 
+# MEMORY.md HOT-tier budget warning. Fires BEFORE the ~24.4KB load cap so the
+# index can be trimmed while there is still headroom — past the cap the loader
+# silently truncates and the dropped lines vanish from every session. This cues
+# Claude to JUDGE what to demote; it never auto-writes (per auto-memory-capture).
+_MEMORY_SIZE_TEMPLATE = (
+    "MEMORY.md near load cap ({kb:.1f}KB / {lines} lines — soft limit "
+    "{warn_kb:.0f}KB/{warn_lines}). The loader truncates the index around 24.4KB "
+    "and silently drops trailing lines from every session. Demote the oldest "
+    "CLOSED batons (✅ DONE / ARCHIVABLE) to MEMORY_ARCHIVE.md, leaving a 1-line "
+    "pointer only if follow-up is owed; collapse any content-carrying line to a "
+    "≤200-char pointer. Cold tier stays searchable via recall/pinecone/`ls`."
+)
+
 
 def _counts_nonzero(counts: dict) -> bool:
     if not isinstance(counts, dict):
@@ -95,6 +108,19 @@ def _staleness_context() -> str:
         live = []
     if live:
         parts.append(_LIVE_TEMPLATE.format(n=len(live), files=", ".join(live)))
+    try:
+        size = mc.check_memory_index_size()
+    except BaseException:
+        size = None
+    if size:
+        parts.append(
+            _MEMORY_SIZE_TEMPLATE.format(
+                kb=size["bytes"] / 1024.0,
+                lines=size["lines"],
+                warn_kb=mc._MEMORY_WARN_BYTES / 1024.0,
+                warn_lines=mc._MEMORY_WARN_LINES,
+            )
+        )
     return "\n\n".join(parts)
 
 

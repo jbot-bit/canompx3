@@ -118,6 +118,58 @@ exercises the REAL resolver. Tests: `tests/test_hooks/test_baton_staleness.py`.
 
 ---
 
+## MEMORY.md size guard + the HOT/COLD contract (5th SessionStart check)
+
+**Authority:** 2026-06-12 — `MEMORY.md` silently truncated. The Claude Code
+loader caps the always-loaded index at **~24.4KB** (tokenizer overhead lands the
+real byte-cut ~1.7KB before a raw-byte cut). When the file crossed it, the
+trailing lines — live deployed-lane state AND an open RESUME baton — **fell out
+of context every session with no error.** Silent + positional: the worst failure
+class, because the model can't know what it never saw.
+
+This is the official-memory-tool / claude-mem / MemGPT-Letta pattern, which this
+repo had **half-built**: a small always-loaded HOT index you retrieve *past*,
+backed by a searchable COLD store. The cold store already exists (637 topic files
++ `recall` / `pinecone-assistant` / `ls memory/`). The index was just mis-shaped —
+carrying *content* (single lines ran 1500-1900 chars) instead of *pointers*. The
+fix finishes the pattern; it does **not** add new infra.
+
+### The HOT/COLD contract (maintain automatically)
+
+- **HOT = `MEMORY.md`** — the always-loaded index. Holds ONLY:
+  - **`## Open batons`** — live/owed work (the `### Active live state` block stays
+    pinned at the top so it can never be the line that truncates).
+  - **`### Standing doctrine` + rigor/integrity/hygiene rollups** — always-on.
+  - Every line is a **≤200-char pointer** (`- [topic](file.md) — ≤12-word hook`).
+    Multi-link doctrine rollups (`→ [a] / [b] / [c]`) may exceed 200 chars
+    *only* because they bundle several pointers — never because one line stores
+    content. If a single finding needs >200 chars, the content belongs in its
+    topic file, not the index.
+- **COLD = `MEMORY_ARCHIVE.md` + the 637 topic files** — searchable, never loaded
+  wholesale. "Demoted" ≠ "forgotten": cold tier is reachable via
+  `recall` / `pinecone-assistant` / `ls memory/` on demand.
+- **Demotion trigger:** a baton that closes (`✅ DONE`, `✅ PUSHED`, `ARCHIVABLE`)
+  is demoted to `MEMORY_ARCHIVE.md` **the turn it closes**, leaving a 1-line
+  pointer in HOT *only if* follow-up is still owed (re-open condition, owed Stage,
+  etc.). Golden nuggets stay as permanent 1-line pointers.
+
+### The guard (advisory cue, never auto-write)
+
+`check_memory_index_size()` (in `_memory_capture.py`) reads `MEMORY.md` by **raw
+bytes** (`read_bytes()` — the cap is byte-based, and Windows CRLF translation
+would undercount a char-count → false-PASS). It fires when bytes ≥
+`_MEMORY_WARN_BYTES` (21KB) OR lines ≥ `_MEMORY_WARN_LINES` (180) — both **below**
+the ~24.4KB hard cap, so the cue lands while there is still headroom to act. A
+post-truncation warning is useless: the content is already gone.
+
+`memory-capture-sessionstart.py` emits the cue on the same `additionalContext`
+channel as the baton-drift cues (concatenated, runs every start). Like every
+other check it **only cues Claude to JUDGE** what to demote — it never auto-writes
+or auto-demotes (the load-bearing doctrine of this whole system). Fail-open: any
+read error → `None` → silent.
+
+---
+
 ## Lifecycle
 
 - **SessionEnd** (signal met) writes `memory-capture-pending.json`

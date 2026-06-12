@@ -16,7 +16,11 @@ DESCRIPTOR="${1:-$(date +%Y%m%d-%H%M%S)}"
 USER_PART="${USER:-$(whoami | tr -d '\r')}"
 BRANCH="session/${USER_PART}-${DESCRIPTOR}"
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
+# Strip trailing CR: on Windows `git rev-parse` stdout carries \r, which leaks
+# into WT_PATH as a literal `?` and makes `git worktree add` fail with
+# "could not create leading directories … Invalid argument" (n=1 2026-06-12).
+# whoami above is already stripped; this is the matching fix for git output.
+REPO_ROOT="$(git rev-parse --show-toplevel | tr -d '\r')"
 REPO_PARENT="$(dirname "$REPO_ROOT")"
 REPO_NAME="$(basename "$REPO_ROOT")"
 WT_PATH="${REPO_PARENT}/${REPO_NAME}-${DESCRIPTOR}"

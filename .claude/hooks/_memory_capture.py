@@ -209,6 +209,17 @@ MEMORY_DIR = _resolve_memory_dir()
 _BATON_MAX_FILES = 60
 _BATON_MAX_SHA_CHECKS = 8
 
+# MEMORY.md HOT-tier load-budget. The Claude Code loader truncates the index at
+# ~24.4KB (tokenizer overhead makes the real byte-cut land ~1.7KB earlier than a
+# raw-byte cut would). We warn BEFORE that hard cap so there is still headroom to
+# demote closed batons — a post-truncation warning is useless because the dropped
+# content is already gone by the time it shows. Bytes are the load-bearing metric
+# (the cap is byte-based); line count is a secondary signal that the index has
+# started carrying content instead of pointers. See
+# `.claude/rules/auto-memory-capture.md` § MEMORY.md size guard.
+_MEMORY_WARN_BYTES = 21_000
+_MEMORY_WARN_LINES = 180
+
 # A 7-40 hex SHA token (git's abbreviated..full range).
 _SHA_RE = re.compile(r"\b([0-9a-f]{7,40})\b")
 # Claim that an object is NOT integrated. The proximity of one of these phrases
@@ -340,6 +351,26 @@ def scan_live_project_batons() -> list[str]:
         return hits
     except BaseException:  # pragma: no cover - fail-open
         return []
+
+
+def check_memory_index_size() -> dict | None:
+    """Return {bytes, lines} iff MEMORY.md is nearing the HOT-tier load cap.
+
+    Reads the canonical index by raw bytes (the cap is byte-based, and Windows
+    CRLF translation would undercount a splitlines() char-count). Returns None
+    when the index is comfortably under budget or unreadable. Never raises —
+    fail-open per the SessionStart contract.
+    """
+    try:
+        path = MEMORY_DIR / "MEMORY.md"
+        raw = path.read_bytes()
+    except BaseException:  # pragma: no cover - fail-open (subsumes OSError)
+        return None
+    n_bytes = len(raw)
+    n_lines = raw.count(b"\n") + 1
+    if n_bytes >= _MEMORY_WARN_BYTES or n_lines >= _MEMORY_WARN_LINES:
+        return {"bytes": n_bytes, "lines": n_lines}
+    return None
 
 
 # ---------------------------------------------------------------------------

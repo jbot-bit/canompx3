@@ -182,10 +182,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 12384698 — fix(dashboard): honest GO-LIVE blocked-reason — name account + real status (Stage 2)
-- **Files changed:** 2 files
+- **Commit:** d8093ed4 — chore(stage): START_BOT flow fixes — Stage 2 checkpoint (GO-LIVE message honest), STOP for review
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `trading_app/live/bot_dashboard.html`
+  - `docs/runtime/stages/2026-06-12-startbot-trading-ready-flow-fixes.md`
+  - `stage2-golive-message.png`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
