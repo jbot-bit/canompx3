@@ -3,6 +3,7 @@
 task: Make START_BOT → dashboard live-launch flow clean/honest/trustworthy (V1–V5). Standalone DEFERRED (north star).
 mode: IMPLEMENTATION
 owner: claude (opus) — session 2026-06-12
+# Current frontier: Stage 2 (pending S2 commit); V5 DEFERRED — reproduce kill-9 before any fix
 
 ## Scope Lock
 - trading_app/live/bot_dashboard.html   (V1 chart vendor, V2 GO-LIVE message)
@@ -45,10 +46,31 @@ owner: claude (opus) — session 2026-06-12
 - BUT guarded by test `test_legacy_html_snapshot_exists` (test_bot_dashboard_signals_recent.py:100-104) asserting it EXISTS + >100KB as a Stage-1 ROLLBACK snapshot.
 - DECISION NEEDED: delete file + its test (lose rollback guarantee) OR keep. Surface to operator. Do NOT silently delete.
 
-### V5 clean-shutdown clear — GROUNDED
-- Boot cleanup exists (bot_dashboard.py:137-145) + in-request reconcile (:1649-1653), BOTH only clear if heartbeat age > SESSION_DEFINITELY_DEAD_AFTER_S.
-- `_lifespan` shutdown (:158-195) cancels SSE + terminates children but NEVER calls clear_state() → clean close leaves bot_state latched → stale flash on quick re-open.
-- FIX (Stage 4): clear own state on clean shutdown, guarded so a deliberately-surviving live child is not clobbered. Boot reconcile stays backstop.
+### V5 clean-shutdown clear — ⚠️ DIAGNOSIS OVERTURNED 2026-06-12 (was WRONG)
+- ORIGINAL V5 root-cause (BELOW, struck) was FALSE. Re-audit found the producer
+  ALREADY clears its own state on every clean exit:
+  `scripts/run_live_session.py:752-762` `finally:` → `clear_state()` — runs on
+  operator STOP too (SIGTERM→KeyboardInterrupt→finally, see :740-751). The dashboard
+  spawns exactly this driver (`bot_dashboard.py:2953` `-m scripts.run_live_session`).
+  So bot_state is the SESSION CHILD's truth file and the child cleans it up.
+- Therefore: a dashboard-side `_lifespan` clear (original V5) would patch a NON-OWNER;
+  an orchestrator-side clear would be DEAD DUPLICATE of run_live_session:760. BOTH the
+  stage-file V5 scope and the first revised plan are WITHDRAWN as ungrounded.
+- The "stale flash on quick re-open" symptom is NOT root-caused. Live hypotheses
+  (UNVERIFIED): (1) `kill -9` / dashboard `terminate()`→`kill()` (:189-194) skips the
+  child's `finally` so its clear never runs — MOST LIKELY; (2) teardown race (dashboard
+  polls in the window before unlink); (3) Stage-0 misattribution of the 120s/300s
+  heartbeat backstop window (by-design, not a bug).
+- ALTITUDE CHECK (whether-before-how): V5 is a COSMETIC ghost-flash with THREE existing
+  mitigations (run_live_session:760 clear + boot reconcile :137-147 + api_status
+  reconcile :1647-1652). No capital at risk. Per the operator baton
+  (`project_startbot_flow_stages345_NEXT_2026_06_12.md`) Stages 3/4/5 are DEFERRED.
+  Do NOT root-cause-drill this ahead of the live-capital batons. If/when picked up:
+  REPRODUCE first (clean STOP vs kill-9 vs quick-reopen) — do not implement on a guess.
+- ~~OLD (FALSE): `_lifespan` shutdown never calls clear_state → bot_state latched →
+  stale flash. FIX: clear on dashboard shutdown guarded vs surviving live child.~~
+  (The guard also guarded a fictional case — the live child is a tracked non-detached
+  Popen the shutdown loop always terminates; nothing deliberately survives.)
 
 ### Refresh open-question — RESOLVED = PHANTOM (drop, per plan)
 - 420s instrumented window: ZERO fetch() polls, but EventSource EXISTS. Refresh is SSE, not polling — fetch-counter watched wrong channel.

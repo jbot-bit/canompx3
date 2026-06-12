@@ -182,11 +182,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 3928edc2 — fix(dashboard): GO-LIVE blocked-reason — honest archived label, not false "BLOWN"
+- **Commit:** 2c6bcd5c — docs(audit): Qwen next-step list fact-check — ~3/4 immediate items stale/by-design
 - **Files changed:** 3 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_bot_dashboard_routes.py`
-  - `trading_app/live/bot_dashboard.html`
+  - `docs/audit/results/2026-06-12-qwen-next-step-factcheck.md`
+  - `docs/runtime/stages/2026-06-12-startbot-trading-ready-flow-fixes.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
