@@ -12,17 +12,16 @@ import subprocess
 import sys
 from datetime import UTC, date, datetime, timedelta
 
-import duckdb
-
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.db_config import configure_connection
+from pipeline.db_connect import open_read_only_with_retry, open_writer_with_retry
 from pipeline.dst import compute_trading_day_utc_range
 from pipeline.paths import GOLD_DB_PATH
 
 
 def get_last_ingested_date(db_path: str, symbol: str):
     """Return the datetime of the most recent bar for symbol, or None."""
-    con = duckdb.connect(db_path, read_only=True)
+    con = open_read_only_with_retry(db_path)
     configure_connection(con)
     try:
         row = con.execute("SELECT MAX(ts_utc) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()
@@ -44,7 +43,7 @@ def _target_day_has_bars(db_path: str, symbol: str, trading_day: date) -> bool:
     un-ingested target day (original Gap A, audit 2026-06-06).
     """
     td_start, td_end = compute_trading_day_utc_range(trading_day)
-    con = duckdb.connect(db_path, read_only=True)
+    con = open_read_only_with_retry(db_path)
     configure_connection(con)
     try:
         row = con.execute(
@@ -104,7 +103,7 @@ def _patch_atr_percentiles(db_path: str, instrument: str) -> None:
     compute. This post-pass fills NULLs using the full history via single-row
     UPDATEs (avoids DuckDB FK constraints that block CTE-based UPDATEs).
     """
-    con = duckdb.connect(db_path)
+    con = open_writer_with_retry(db_path)
     configure_connection(con)
     patched = 0
     try:

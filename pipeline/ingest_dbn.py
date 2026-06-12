@@ -36,10 +36,10 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import databento as db
-import duckdb
 import pandas as pd
 
 from pipeline.asset_configs import get_asset_config, list_instruments, require_dbn_available
+from pipeline.db_connect import open_writer_with_retry
 from pipeline.ingest_dbn_mgc import (
     CheckpointManager,
     check_merge_integrity,
@@ -221,7 +221,7 @@ def main():
     # =========================================================================
     con = None
     if not args.dry_run:
-        con = duckdb.connect(str(GOLD_DB_PATH))
+        con = open_writer_with_retry(str(GOLD_DB_PATH))
         from pipeline.db_config import configure_connection
 
         configure_connection(con, writing=True)

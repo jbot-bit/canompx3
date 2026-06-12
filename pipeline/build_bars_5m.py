@@ -31,6 +31,7 @@ from datetime import date, datetime, timedelta
 import duckdb
 
 from pipeline.asset_configs import get_asset_config, list_instruments
+from pipeline.db_connect import open_writer_with_retry
 from pipeline.log import get_logger
 
 # Add project root to path
@@ -344,7 +345,7 @@ def main():
         logger.error(f"FATAL: Database not found: {GOLD_DB_PATH}")
         sys.exit(1)
 
-    with duckdb.connect(str(GOLD_DB_PATH)) as con:
+    with open_writer_with_retry(str(GOLD_DB_PATH)) as con:
         from pipeline.db_config import configure_connection
 
         configure_connection(con, writing=True)

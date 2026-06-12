@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 from pipeline.asset_configs import get_asset_config, list_instruments
 from pipeline.calendar_filters import day_of_week, is_friday, is_monday, is_nfp_day, is_opex_day, is_tuesday
 from pipeline.cost_model import CostSpec, get_cost_spec, pnl_points_to_r
+from pipeline.db_connect import open_writer_with_retry
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
     DST_CLEAN_SESSIONS,
@@ -2078,8 +2079,6 @@ def verify_daily_features(
 
 
 def main():
-    import duckdb
-
     parser = argparse.ArgumentParser(description="Build daily_features from bars_1m and bars_5m")
     parser.add_argument("--instrument", type=str, required=True, help=f"Instrument ({', '.join(list_instruments())})")
     parser.add_argument("--start", type=str, required=True, help="Start date YYYY-MM-DD")
@@ -2116,7 +2115,7 @@ def main():
         logger.error(f"FATAL: Database not found: {GOLD_DB_PATH}")
         sys.exit(1)
 
-    with duckdb.connect(str(GOLD_DB_PATH)) as con:
+    with open_writer_with_retry(str(GOLD_DB_PATH)) as con:
         from pipeline.db_config import configure_connection
 
         configure_connection(con, writing=True)

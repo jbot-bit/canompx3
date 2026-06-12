@@ -728,9 +728,10 @@ def build_outcomes(
 
     Returns count of rows written.
     """
-    import duckdb
     import numpy as np
     import pandas as pd
+
+    from pipeline.db_connect import open_writer_with_retry
 
     if instrument is None:
         raise ValueError(
@@ -744,7 +745,7 @@ def build_outcomes(
 
     cost_spec = get_cost_spec(instrument)
 
-    with duckdb.connect(str(db_path)) as con:
+    with open_writer_with_retry(str(db_path)) as con:
         from pipeline.db_config import configure_connection
 
         configure_connection(con, writing=True)

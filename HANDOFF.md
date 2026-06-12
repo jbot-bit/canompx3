@@ -14,6 +14,11 @@
 - **Operational decision:** Treat older green/3-lane handoff and decision text as historical only. Current live launch, risk increase, multi-account expansion, and prop-firm/profile switching remain blocked until the plan's read-only checks and any operator-approved C11/C12 refresh remeasure green.
 - **Verification:** `git diff --check` and final `git status --short --branch` should be run after this doc-only update.
 
+## Claude Session — EOD-backfill retry routing Stage 1 LANDED (2026-06-13 ~02:30)
+- **Tool:** Claude Code. Followed the parked Stage-1 work below to completion. Committed `abaf7cce` (rebased onto origin/main): all 6 raw `duckdb.connect()` sites in the EOD-backfill chain (`pipeline/{daily_backfill,ingest_dbn,build_bars_5m,build_daily_features}.py` + `trading_app/outcome_builder.py`) now route through `pipeline.db_connect` retry wrappers. Acquisition-only swaps; dead `duckdb` imports swept where the connect was the only use. Verify: ruff clean, 5 modules import OK, 0 raw connects remain, test_db_connect 5/5, read-only gold.db smoke OK, check_drift 189/189, diff self-audited against 4 adversarial claims.
+- **NOT a launch gate** — pure lock-resilience. No live-arming path touched (Tier B left alone).
+- **▶ Stage 2 DEFERRED (operator chose push-stage1-defer-stage2):** add `check_eod_backfill_uses_retry_wrapper()` drift guard over the 5 EOD-chain files (+ re-assert `configure_connection` survives, closing the `check_configure_connection_coverage` hole that keys on the now-removed `duckdb.connect(` literal) + injection test in `test_check_drift.py` + T1/T2 delegation/retry tests in `test_daily_backfill.py`. Plan: `C:/Users/joshd/.claude/plans/1-relaunch-the-bot-swift-pretzel.md`.
+
 ## Codex Session - environment connectivity check and repo-state MCP fix (2026-06-12)
 - **Tool:** Codex.
 - **Scope:** User requested a no-lip-service environment check. Loaded startup docs, ran Codex parity/doctor/preflight/pulse, smoked repo-local MCPs, and fixed concrete issues found.
@@ -22,6 +27,14 @@
 - **Environment truth:** Core WSL repo/env is functional (`.venv-wsl` present, Codex binary present, repo root writable outside sandbox, git visible). `gold-db`, `strategy-lab`, and `research-catalog` MCP smoke calls worked. Current in-process `mcp__repo_state__` handle stayed closed after killing stale PID 1701; a fresh Codex/tool session should reconnect to the patched server.
 - **Non-env live-state truth:** `project_pulse.py --fast` is connected but exits nonzero because live-readiness is blocked: C11 profile fingerprint mismatch, C12 SR state invalid/mismatched, and two deployed lanes have zero execution rows. Not a connectivity failure.
 - **Known warnings left:** `HANDOFF.md` still does not match canonical action-queue render; active stage count is 14.
+
+## Claude Session — STOOD DOWN from tonight's live launch (Codex drives) (2026-06-13 ~01:50)
+- **Tool:** Claude Code. **Operator decision: Codex drives tonight's MNQ live launch; Claude stands down to avoid a two-agent capital collision.**
+- **Why:** Two agents were independently driving the SAME `topstep_50k_mnq_auto` MNQ live launch. They operate on **SEPARATE databases on separate filesystems** (verified): Codex = WSL `/home/joshd/canompx3/gold.db` (ext4 `/dev/sdd`, daily_features was stale at 2026-06-05, running `refresh_data.py --instrument MNQ` to advance it); Claude = Windows `C:/Users/joshd/canompx3/gold.db` (NTFS, daily_features fresh to 2026-06-11). NO gold.db write-collision occurred (different files), but two drivers arming one account = capital risk → one driver only.
+- **Claude's parked state (nothing lost, NOT committed):** working tree has the **EOD-backfill retry-routing Stage 1** uncommitted — `pipeline/{daily_backfill,ingest_dbn,build_bars_5m,build_daily_features}.py` + `trading_app/outcome_builder.py` route raw `duckdb.connect()` through the canonical retry wrappers (mirrors landed live-side `da2c0ad4`). **Adversarial-audit gate PASSED** (independent evidence-auditor, 5-point trace: bare native conn returned; read_only flags preserved; no broken `duckdb.` refs; no double-close; retry scoped to lock-class IOError only). py_compile OK ×5. A `git commit` attempt was BLOCKED by pre-commit drift ("DRIFT DETECTED" after Check 55; direct `check_drift.py` runs exited 255 — env/local, NOT a Codex DB lock since DBs are separate). HEAD unchanged at `c658d6b4`. **This work is NOT a launch gate** — it's lock-resilience; land it later in a clean window.
+- **For Codex / launch:** Claude regenerated C11/C12 on the **Windows** DB earlier (`refresh_control_state --profile topstep_50k_mnq_auto --force` → C11 valid gate_ok=True operational 100% as_of 2026-06-13; C12 2 lanes CONTINUE) and got Windows preflight **15/15** in `--preflight` (demo) mode. That result is on the Windows DB only — irrelevant to Codex's WSL launch path. Codex must regen C11/C12 on ITS DB after its refresh lands (DB-identity rebuild invalidates the C11/C12 envelope — known cascade).
+- **⚠ Flag (Codex's call, separate trees):** Windows daily_features (06-11) is FRESHER than the WSL copy Codex is refreshing (was 06-05). Worth a sanity check on which DB is canonical truth before arming real capital.
+- **Claude touched gold.db how:** read-only MCP queries + one `refresh_control_state --force` regen on the **Windows** DB (Tier-B capital-state write, the documented self-heal START_BOT runs anyway). No live arming. Stood down before any further DB activity.
 
 ## Codex Session - daily bug scan survival sweep guard tightened (2026-06-11)
 - **Tool:** Codex.
@@ -197,12 +210,17 @@
 - **Dashboard main-merge follow-up (Codex, 2026-06-01):** Merged `origin/main` into the dashboard live-pilot branch in an isolated worktree, kept the retired standalone live-pilot script/test deleted, and preserved the dashboard as the operator path.
 
 ## Last Session
-- **Tool:** Codex (WSL)
+- **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** a0db7bc8 — fix(projectx): ignore price-only quote volume baseline
-- **Files changed:** 2 files
-  - `tests/test_trading_app/test_projectx_feed.py`
-  - `trading_app/live/projectx/data_feed.py`
+- **Commit:** abaf7cce — fix(pipeline): route EOD backfill connects through lock-retry wrapper [Stage 1/2]
+- **Files changed:** 7 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/2026-06-13-route-eod-backfill-connects-through-retry-wrapper.md`
+  - `pipeline/build_bars_5m.py`
+  - `pipeline/build_daily_features.py`
+  - `pipeline/daily_backfill.py`
+  - `pipeline/ingest_dbn.py`
+  - `trading_app/outcome_builder.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
