@@ -5621,6 +5621,43 @@ def check_no_hardcoded_scratch_db() -> list[str]:
     return violations
 
 
+def _raw_duckdb_connect_violations(content: str, rel: Path, message: str) -> list[str]:
+    """Canonical raw-``duckdb.connect`` matcher shared by every connect-ban guard.
+
+    Given one file's ``content`` and its repo-relative path ``rel``, return one
+    violation line per raw connect, each suffixed with ``message``. The matcher
+    catches three raw forms: ``duckdb.connect(``, an aliased ``import duckdb as
+    <x>`` then ``<x>.connect(``, and ``from duckdb import connect`` then a bare
+    ``connect(``. Wrapper calls (``open_*_with_retry``) are never matched.
+
+    Single implementation so the live and bot-concurrent guards cannot drift
+    apart (inline-copy parity-drift class, n≥3). Each caller owns only its own
+    file-selection scope and exempt list.
+    """
+    direct = re.compile(r"\bduckdb\.connect\s*\(")
+    alias_import = re.compile(r"^\s*import\s+duckdb\s+as\s+(\w+)", re.MULTILINE)
+    from_import = re.compile(r"^\s*from\s+duckdb\s+import\s+(?:[^\n]*\b)?connect\b", re.MULTILINE)
+
+    patterns = [direct]
+    # If duckdb is imported under an alias, ban `<alias>.connect(` too.
+    for am in alias_import.finditer(content):
+        patterns.append(re.compile(rf"\b{re.escape(am.group(1))}\.connect\s*\("))
+    # If `connect` is imported by name, ban a bare `connect(` call.
+    if from_import.search(content):
+        patterns.append(re.compile(r"(?<![.\w])connect\s*\("))
+
+    violations = []
+    seen_lines = set()
+    for pattern in patterns:
+        for m in pattern.finditer(content):
+            line_no = content[: m.start()].count("\n") + 1
+            if line_no in seen_lines:
+                continue
+            seen_lines.add(line_no)
+            violations.append(f"  {rel}:{line_no} — {message}")
+    return violations
+
+
 def check_no_raw_duckdb_connect_in_live() -> list[str]:
     """Live-capital path must use pipeline.db_connect retry wrappers, not raw connect.
 
@@ -5632,14 +5669,13 @@ def check_no_raw_duckdb_connect_in_live() -> list[str]:
 
     Fail direction: a false BLOCK is a documented annoyance; the only false-PASS
     is a raw connect the regex misses — guarded by the injection test in
-    ``tests/test_pipeline/test_check_drift.py``. The matcher catches three raw
-    forms: ``duckdb.connect(``, an aliased ``import duckdb as <x>`` then
-    ``<x>.connect(``, and ``from duckdb import connect`` then a bare ``connect(``.
+    ``tests/test_pipeline/test_check_drift.py``. Matching is delegated to the
+    shared ``_raw_duckdb_connect_violations`` matcher.
     """
     violations = []
-    direct = re.compile(r"\bduckdb\.connect\s*\(")
-    alias_import = re.compile(r"^\s*import\s+duckdb\s+as\s+(\w+)", re.MULTILINE)
-    from_import = re.compile(r"^\s*from\s+duckdb\s+import\s+(?:[^\n]*\b)?connect\b", re.MULTILINE)
+    message = (
+        "raw duckdb connect in live path; use pipeline.db_connect.open_read_only_with_retry()/open_writer_with_retry()"
+    )
     live_dir = TRADING_APP_DIR / "live"
     if not live_dir.exists():
         return violations
@@ -5650,25 +5686,56 @@ def check_no_raw_duckdb_connect_in_live() -> list[str]:
             content = py_file.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        patterns = [direct]
-        # If duckdb is imported under an alias, ban `<alias>.connect(` too.
-        for am in alias_import.finditer(content):
-            patterns.append(re.compile(rf"\b{re.escape(am.group(1))}\.connect\s*\("))
-        # If `connect` is imported by name, ban a bare `connect(` call.
-        if from_import.search(content):
-            patterns.append(re.compile(r"(?<![.\w])connect\s*\("))
-        seen_lines = set()
-        for pattern in patterns:
-            for m in pattern.finditer(content):
-                line_no = content[: m.start()].count("\n") + 1
-                if line_no in seen_lines:
-                    continue
-                seen_lines.add(line_no)
-                rel = py_file.relative_to(PROJECT_ROOT)
-                violations.append(
-                    f"  {rel}:{line_no} — raw duckdb connect in live path; "
-                    f"use pipeline.db_connect.open_read_only_with_retry()/open_writer_with_retry()"
-                )
+        rel = py_file.relative_to(PROJECT_ROOT)
+        violations.extend(_raw_duckdb_connect_violations(content, rel, message))
+    return violations
+
+
+def check_no_raw_duckdb_connect_in_eod_chain() -> list[str]:
+    """EOD backfill chain must use pipeline.db_connect retry wrappers, not raw connect.
+
+    The nightly EOD backfill (``daily_backfill`` + the write-children it spawns:
+    ``ingest_dbn``, ``build_bars_5m``, ``build_daily_features``,
+    ``outcome_builder``) opens gold.db while a peer process may hold the writer
+    lock. A raw ``duckdb.connect(...)`` fails on the first lock-class IOError
+    instead of waiting out transient contention — the recurring "db lock that
+    always happens" that crashed EOD shutdown 2026-06-09. Every connect in these
+    modules must route through ``open_read_only_with_retry`` /
+    ``open_writer_with_retry`` (``pipeline.db_connect``). This guard locks in the
+    Stage-1 conversion (commit ``2b7f5b64``) so a future raw connect cannot
+    silently regress the chain.
+
+    Fail direction: a false BLOCK is a documented annoyance; the only false-PASS
+    is a raw connect the regex misses — guarded by the injection tests in
+    ``tests/test_pipeline/test_check_drift.py``. Matching is delegated to the
+    shared ``_raw_duckdb_connect_violations`` matcher (same as the live guard).
+
+    Scope is an explicit file allowlist (not a directory scan) because the chain
+    spans both ``pipeline/`` and ``trading_app/`` — a directory rule would over-
+    or under-reach. New chain modules are added here deliberately.
+    """
+    violations = []
+    message = (
+        "raw duckdb connect in EOD backfill chain; "
+        "use pipeline.db_connect.open_read_only_with_retry()/open_writer_with_retry()"
+    )
+    eod_chain_files = (
+        "pipeline/daily_backfill.py",
+        "pipeline/ingest_dbn.py",
+        "pipeline/build_bars_5m.py",
+        "pipeline/build_daily_features.py",
+        "trading_app/outcome_builder.py",
+    )
+    for rel_str in eod_chain_files:
+        py_file = PROJECT_ROOT / rel_str
+        if not py_file.exists():
+            continue
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        rel = py_file.relative_to(PROJECT_ROOT)
+        violations.extend(_raw_duckdb_connect_violations(content, rel, message))
     return violations
 
 
@@ -16967,6 +17034,7 @@ CHECKS = [
     ),
     ("No hardcoded scratch DB defaults in active code", check_no_hardcoded_scratch_db, False, False),
     ("No raw duckdb.connect() in trading_app/live", check_no_raw_duckdb_connect_in_live, False, False),
+    ("No raw duckdb.connect() in EOD backfill chain", check_no_raw_duckdb_connect_in_eod_chain, False, False),
     ("db_reader cached connection enforcement", check_db_reader_cached_connection, False, False),
     ("Drift check shared DB connection enforcement", check_drift_shared_db_connection, False, False),
     ("No broad rglob in drift checks", check_no_broad_rglob_in_drift_checks, False, False),

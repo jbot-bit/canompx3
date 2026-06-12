@@ -22,6 +22,7 @@ from pipeline.check_drift import (
     check_dow_classification_complete,
     check_hardcoded_mgc_sql,
     check_holdout_policy_declaration_consistency,
+    check_no_raw_duckdb_connect_in_eod_chain,
     check_no_raw_duckdb_connect_in_live,
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
@@ -3721,3 +3722,78 @@ class TestNoRawDuckdbConnectInLive:
         monkeypatch.setattr(check_drift, "TRADING_APP_DIR", tmp_path / "trading_app")
         monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
         assert check_no_raw_duckdb_connect_in_live() == []
+
+
+class TestNoRawDuckdbConnectInEodChain:
+    """Tests for check_no_raw_duckdb_connect_in_eod_chain.
+
+    The guard bans raw ``duckdb.connect(...)`` in the 5 EOD backfill-chain
+    modules so every connect routes through the ``pipeline.db_connect`` retry
+    wrappers — locking in the Stage-1 conversion (commit ``2b7f5b64``) against
+    silent regression. Injection tests prove the guard actually guards
+    (integrity-guardian § 7). Scope is a file allowlist, so the tests write a
+    real allowlisted path (``pipeline/daily_backfill.py``) under a tmp root.
+    """
+
+    def _set_root(self, tmp_path, monkeypatch):
+        from pipeline import check_drift
+
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        (tmp_path / "pipeline").mkdir(parents=True)
+        (tmp_path / "trading_app").mkdir(parents=True)
+
+    def test_real_chain_is_clean(self):
+        # The actual EOD chain must have zero raw connects (Stage-1 conversion).
+        assert check_no_raw_duckdb_connect_in_eod_chain() == []
+
+    def test_catches_raw_connect(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "pipeline" / "daily_backfill.py").write_text(
+            "import duckdb\n\ndef f(db):\n    con = duckdb.connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_eod_chain()
+        assert len(violations) == 1
+        assert "daily_backfill.py:4" in violations[0]
+        assert "open_read_only_with_retry" in violations[0]
+
+    def test_wrapper_form_passes(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "pipeline" / "ingest_dbn.py").write_text(
+            "from pipeline.db_connect import open_writer_with_retry\n\n"
+            "def f(db):\n    with open_writer_with_retry(db) as con:\n        return con\n"
+        )
+        assert check_no_raw_duckdb_connect_in_eod_chain() == []
+
+    def test_catches_aliased_import(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "pipeline" / "build_bars_5m.py").write_text(
+            "import duckdb as d\n\ndef f(db):\n    con = d.connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_eod_chain()
+        assert len(violations) == 1
+        assert "build_bars_5m.py:4" in violations[0]
+
+    def test_catches_from_import_connect(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "trading_app" / "outcome_builder.py").write_text(
+            "from duckdb import connect\n\ndef f(db):\n    con = connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_eod_chain()
+        assert len(violations) == 1
+        assert "outcome_builder.py:4" in violations[0]
+
+    def test_wrapper_call_not_flagged_under_from_import(self, tmp_path, monkeypatch):
+        # `from duckdb import connect` present, but the call is the wrapper —
+        # the bare-connect ban must not false-positive on open_*_with_retry().
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "pipeline" / "build_daily_features.py").write_text(
+            "from duckdb import connect  # noqa: F401\n"
+            "from pipeline.db_connect import open_read_only_with_retry\n\n"
+            "def f(db):\n    with open_read_only_with_retry(db) as con:\n        return con\n"
+        )
+        assert check_no_raw_duckdb_connect_in_eod_chain() == []
+
+    def test_missing_file_no_crash(self, tmp_path, monkeypatch):
+        # None of the allowlisted files exist under the tmp root → empty, no crash.
+        self._set_root(tmp_path, monkeypatch)
+        assert check_no_raw_duckdb_connect_in_eod_chain() == []
