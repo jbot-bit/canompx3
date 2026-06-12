@@ -51,6 +51,7 @@ for /f "usebackq tokens=1,* delims==" %%k in (`python "%~dp0scripts\tools\worktr
 
 if "%DECISION%"=="" (
     echo [ERROR] preflight produced no decision — aborting.
+    pause
     endlocal & exit /b 5
 )
 
@@ -71,6 +72,7 @@ if "%DRYRUN%"=="1" (
 if "%DECISION%"=="REFUSE_HOT" (
     echo [REFUSED] worktree is dirty or a live Claude session holds its lease.
     echo           Pick another descriptor or resolve the peer session first.
+    pause
     endlocal & exit /b 3
 )
 
@@ -93,38 +95,61 @@ if "%DECISION%"=="NEW" (
     python "%~dp0scripts\tools\worktree_manager.py" reap-graveyards --execute >nul 2>&1
     git fetch origin --quiet
     git worktree add -b "!BRANCH!" "!WTPATH!" origin/main
-    if errorlevel 1 (
+    :: NOTE: !errorlevel! (delayed), NOT bare/percent form. Inside this ( ... )
+    :: block %errorlevel% / `if errorlevel` are frozen at PARSE time (the block's
+    :: entry value, 0) and would NOT catch a real `git worktree add` failure —
+    :: the launch would proceed into a non-existent worktree. Delayed expansion
+    :: (line 20 EnableDelayedExpansion) reads the LIVE value. MS/ss64 confirmed.
+    if !errorlevel! neq 0 (
         :: Branch may already exist (e.g. the dead worktree's branch). Retry
         :: attaching to it WITHOUT -b, mirroring create_worktree:381-385.
         echo   WARNING: branch '!BRANCH!' already exists -- reattaching to it (not a fresh origin/main checkout)
         git worktree add "!WTPATH!" "!BRANCH!"
-        if errorlevel 1 (
-            echo [ERROR] git worktree add failed.
+        if !errorlevel! neq 0 (
+            echo [ERROR] git worktree add failed for both origin/main and existing branch '!BRANCH!'.
+            echo         Run this .bat from a terminal to see git's error above, or pick another descriptor.
+            pause
             endlocal & exit /b 4
         )
     )
-    :: Per-worktree venv isolation (Stage 1, 2026-06-03). Each worktree gets its
-    :: OWN .venv so a peer's `uv sync` can never strip this tree's dev group.
-    :: uv resolves a RELATIVE .venv from the workspace root (the worktree), so a
-    :: bare `uv sync` from inside !WTPATH! with UV_PROJECT_ENVIRONMENT UNSET makes
-    :: an isolated env. Never use an absolute path — uv overwrites it per-project.
-    :: Doctrine: .claude/rules/worktree-venv-isolation.md
-    where uv >nul 2>&1
-    if errorlevel 1 (
-        echo [WARN] 'uv' not on PATH — skipping isolated venv bootstrap; worktree shares canonical venv.
-    ) else (
-        echo Bootstrapping isolated venv in !WTPATH!\.venv ...
-        set "UV_PROJECT_ENVIRONMENT="
-        pushd "!WTPATH!"
-        uv sync --locked --group dev
-        if errorlevel 1 (
-            echo [WARN] isolated venv bootstrap failed — worktree falls back to shared canonical venv.
+    :: Per-worktree venv isolation — OPT-IN only (set CANOMPX3_WT_VENV=1).
+    :: OFF by default: `uv sync --locked --group dev` is the slow, fragile step —
+    :: it can take minutes and hit `Access is denied` on locked .pyd/.dll when many
+    :: worktrees share env state (.claude/rules/worktree-venv-isolation.md). The
+    :: worktree works fine on the shared canonical venv without it, so keeping it
+    :: off the hot path makes the default double-click fast and reliable.
+    if /I "!CANOMPX3_WT_VENV!"=="1" (
+        where uv >nul 2>&1
+        if !errorlevel! neq 0 (
+            echo [WARN] 'uv' not on PATH — skipping isolated venv bootstrap; worktree shares canonical venv.
+        ) else (
+            echo Bootstrapping isolated venv in !WTPATH!\.venv ...
+            set "UV_PROJECT_ENVIRONMENT="
+            pushd "!WTPATH!"
+            uv sync --locked --group dev
+            if !errorlevel! neq 0 echo [WARN] isolated venv bootstrap failed — worktree falls back to shared canonical venv.
+            popd
         )
-        popd
     )
 )
 
 :: --- launch Claude in the worktree (guards fire normally) ------------------
-echo Launching Claude in !WTPATH! ...
-start "%WT_TITLE%" /d "!WTPATH!" claude.exe
+:: Same-window launch (mirrors claude.bat:33's bare `claude.exe`), NOT `start`.
+:: `start` opens a SEPARATE window then this launcher exits instantly — from
+:: Explorer that reads as a flash-and-vanish. Running claude.exe directly keeps
+:: THIS window as the Claude session ("one double-click -> one workspace
+:: terminal"). session-start.py + worktree_guard hooks fire on claude.exe
+:: startup regardless of window mode, so isolation guards are NOT bypassed.
+echo ============================================
+echo   Launching Claude in this window:
+echo   !WTPATH!
+echo   Branch: !BRANCH!  (commits here can't touch origin/main)
+echo ============================================
+cd /d "!WTPATH!"
+if !errorlevel! neq 0 (
+    echo [ERROR] could not cd into worktree '!WTPATH!' — not launching.
+    pause
+    endlocal & exit /b 6
+)
+claude.exe
 endlocal & exit /b 0

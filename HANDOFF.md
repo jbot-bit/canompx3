@@ -182,9 +182,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 755a9847 — @ docs(handoff): correct stale HEAD SHA stamp + record O15/O30 outcomes backfill
-- **Files changed:** 1 files
+- **Commit:** de85174b — fix(dashboard): no-store on / so chart/UI edits never serve stale-cached
+- **Files changed:** 3 files
   - `HANDOFF.md`
+  - `tests/test_live/test_dashboard_account_selection.py`
+  - `trading_app/live/bot_dashboard.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
