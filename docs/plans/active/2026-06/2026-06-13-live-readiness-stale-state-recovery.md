@@ -57,6 +57,18 @@ Measured in WSL at `/home/joshd/canompx3` on local date 2026-06-13.
   70%, and Criterion 12 requires Shiryaev-Roberts monitoring of deployed
   strategy live R streams.
 
+### Same-Day Remediation Update
+
+- **MEASURED**: `paper_trade_logger --sync` backfilled 128 paper trades:
+  81 for COMEX_SETTLE and 47 for US_DATA_1000.
+- **MEASURED**: after backfill, refreshed C12 was `CONTINUE` for COMEX_SETTLE
+  and `ALARM` for US_DATA_1000.
+- **MEASURED**: the US_DATA_1000 lane was moved from active `lanes[]` to
+  `paused[]` in both canonical allocation files with the measured SR alarm
+  reason.
+- **MEASURED**: after the COMEX-only allocation refresh, C11 passed and C12
+  counted `{'CONTINUE': 1}`.
+
 ## Disconfirmed Or Quarantined Claims
 
 - **UNSUPPORTED CURRENTLY**: "current book is a green 3-lane pilot." Older

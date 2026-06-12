@@ -24,7 +24,9 @@
       "avg_orb_pts": 29.1,
       "p90_orb_pts": 49.8,
       "risk_cap_pts": 37.35
-    },
+    }
+  ],
+  "paused": [
     {
       "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15",
       "instrument": "MNQ",
@@ -38,17 +40,16 @@
       "trailing_wr": 0.504,
       "months_negative": 1,
       "session_regime": "HOT",
-      "status": "DEPLOY",
+      "status": "PAUSE",
       "status_reason": "Session HOT (+0.0615), ExpR=+0.2303, N=119",
+      "reason": "SR ALARM on refreshed paper-trade stream (SR=41.60 > threshold=31.96, N=47) — dropped from active live launch candidate on 2026-06-13. Re-add only after SR returns CONTINUE or fresh manual review converts this to an explicit live exception.",
       "chordia_verdict": "PASS_CHORDIA",
       "chordia_audit_age_days": 28,
       "c8_oos_status": null,
       "avg_orb_pts": 79.9,
       "p90_orb_pts": 143.2,
       "risk_cap_pts": 107.4
-    }
-  ],
-  "paused": [
+    },
     {
       "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
       "status": "PAUSE",
