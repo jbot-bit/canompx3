@@ -558,7 +558,11 @@ def _journal_lock_status() -> dict[str, object]:
     if not JOURNAL_PATH.exists():
         return {"locked": False, "detail": "journal absent"}
     try:
-        con = open_read_only_with_retry(JOURNAL_PATH)
+        # Point-in-time lock DETECTOR: attempts=1 so a held lock is reported
+        # immediately rather than backed off ~95s. The retry wrapper still gives
+        # canonical-path compliance + an identical exception surface; only this
+        # detector wants the instantaneous answer (dashboard status, polled).
+        con = open_read_only_with_retry(JOURNAL_PATH, attempts=1)
         con.close()
         return {"locked": False, "detail": "journal available"}
     except duckdb.IOException as exc:

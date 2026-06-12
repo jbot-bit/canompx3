@@ -5632,10 +5632,14 @@ def check_no_raw_duckdb_connect_in_live() -> list[str]:
 
     Fail direction: a false BLOCK is a documented annoyance; the only false-PASS
     is a raw connect the regex misses — guarded by the injection test in
-    ``tests/test_pipeline/test_check_drift.py``.
+    ``tests/test_pipeline/test_check_drift.py``. The matcher catches three raw
+    forms: ``duckdb.connect(``, an aliased ``import duckdb as <x>`` then
+    ``<x>.connect(``, and ``from duckdb import connect`` then a bare ``connect(``.
     """
     violations = []
-    pattern = re.compile(r"\bduckdb\.connect\s*\(")
+    direct = re.compile(r"\bduckdb\.connect\s*\(")
+    alias_import = re.compile(r"^\s*import\s+duckdb\s+as\s+(\w+)", re.MULTILINE)
+    from_import = re.compile(r"^\s*from\s+duckdb\s+import\s+(?:[^\n]*\b)?connect\b", re.MULTILINE)
     live_dir = TRADING_APP_DIR / "live"
     if not live_dir.exists():
         return violations
@@ -5646,13 +5650,25 @@ def check_no_raw_duckdb_connect_in_live() -> list[str]:
             content = py_file.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        for m in pattern.finditer(content):
-            line_no = content[: m.start()].count("\n") + 1
-            rel = py_file.relative_to(PROJECT_ROOT)
-            violations.append(
-                f"  {rel}:{line_no} — raw duckdb.connect() in live path; "
-                f"use pipeline.db_connect.open_read_only_with_retry()/open_writer_with_retry()"
-            )
+        patterns = [direct]
+        # If duckdb is imported under an alias, ban `<alias>.connect(` too.
+        for am in alias_import.finditer(content):
+            patterns.append(re.compile(rf"\b{re.escape(am.group(1))}\.connect\s*\("))
+        # If `connect` is imported by name, ban a bare `connect(` call.
+        if from_import.search(content):
+            patterns.append(re.compile(r"(?<![.\w])connect\s*\("))
+        seen_lines = set()
+        for pattern in patterns:
+            for m in pattern.finditer(content):
+                line_no = content[: m.start()].count("\n") + 1
+                if line_no in seen_lines:
+                    continue
+                seen_lines.add(line_no)
+                rel = py_file.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel}:{line_no} — raw duckdb connect in live path; "
+                    f"use pipeline.db_connect.open_read_only_with_retry()/open_writer_with_retry()"
+                )
     return violations
 
 

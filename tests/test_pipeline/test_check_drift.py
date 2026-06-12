@@ -3679,6 +3679,35 @@ class TestNoRawDuckdbConnectInLive:
         )
         assert check_no_raw_duckdb_connect_in_live() == []
 
+    def test_catches_aliased_import(self, tmp_path, monkeypatch):
+        live_dir = self._make_live_dir(tmp_path, monkeypatch)
+        (live_dir / "aliased.py").write_text(
+            "import duckdb as d\n\ndef f(db):\n    con = d.connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_live()
+        assert len(violations) == 1
+        assert "aliased.py:4" in violations[0]
+
+    def test_catches_from_import_connect(self, tmp_path, monkeypatch):
+        live_dir = self._make_live_dir(tmp_path, monkeypatch)
+        (live_dir / "fromimp.py").write_text(
+            "from duckdb import connect\n\ndef f(db):\n    con = connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_live()
+        assert len(violations) == 1
+        assert "fromimp.py:4" in violations[0]
+
+    def test_wrapper_call_not_flagged_under_from_import(self, tmp_path, monkeypatch):
+        # `from duckdb import connect` present, but the call is the wrapper —
+        # the bare-connect ban must not false-positive on open_*_with_retry().
+        live_dir = self._make_live_dir(tmp_path, monkeypatch)
+        (live_dir / "mixed.py").write_text(
+            "from duckdb import connect  # noqa: F401\n"
+            "from pipeline.db_connect import open_read_only_with_retry\n\n"
+            "def f(db):\n    with open_read_only_with_retry(db) as con:\n        return con\n"
+        )
+        assert check_no_raw_duckdb_connect_in_live() == []
+
     def test_db_connect_wrapper_is_exempt(self, tmp_path, monkeypatch):
         live_dir = self._make_live_dir(tmp_path, monkeypatch)
         # The canonical wrapper module legitimately calls duckdb.connect — exempt.
