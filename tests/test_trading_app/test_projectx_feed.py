@@ -2,12 +2,13 @@
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from trading_app.live.bar_aggregator import Bar
 from trading_app.live.broker_base import BrokerFeed
+from trading_app.live.projectx import data_feed as data_feed_module
 from trading_app.live.projectx.data_feed import (
     _MAX_STALE_BEFORE_RECONNECT,
     _STALE_TIMEOUT,
@@ -309,6 +310,33 @@ class TestCumulativeToDelta:
         assert feed._cum_to_delta(50) == 0  # reset detected, re-baselined
         assert feed._last_cum_volume == 50
         assert feed._cum_to_delta(60) == 10
+
+    def test_reset_sets_diagnostic_flag_and_logs_raw_quote(self, feed):
+        """DIAGNOSTIC (2026-06-13): a negative-delta reset must set _last_reset_fired
+        so the caller logs the raw quote; a normal climb and the first-quote baseline
+        must NOT set it. The helper logs once then rate-limits, and clears the flag."""
+        # Normal climb: no reset flag.
+        feed._cum_to_delta(100)  # first reading (baseline) — must NOT flag
+        assert feed._last_reset_fired is False
+        feed._cum_to_delta(130)  # +30 climb — must NOT flag
+        assert feed._last_reset_fired is False
+        # Reset: flag set.
+        feed._cum_to_delta(1)  # 130 → 1 drop — reset fires
+        assert feed._last_reset_fired is True
+        # Helper logs the raw quote and clears the flag.
+        with patch.object(data_feed_module.log, "info") as mock_info:
+            feed._maybe_log_raw_quote_on_reset({"lastPrice": 100.0, "volume": 1})
+            assert mock_info.called
+        assert feed._last_reset_fired is False
+        # Rate-limit: a second reset within 10s does not re-log.
+        feed._cum_to_delta(2)  # 1 → 2 is a +1 climb (not a reset) — no flag
+        assert feed._last_reset_fired is False
+        feed._cum_to_delta(1)  # 2 → 1 drop — reset fires again
+        assert feed._last_reset_fired is True
+        with patch.object(data_feed_module.log, "info") as mock_info2:
+            feed._maybe_log_raw_quote_on_reset({"lastPrice": 100.0, "volume": 1})
+            assert not mock_info2.called  # rate-limited within 10s window
+        assert feed._last_reset_fired is False  # flag still cleared even when rate-limited
 
     @pytest.mark.asyncio
     async def test_realistic_per_minute_volume_via_async_quote_path(self):

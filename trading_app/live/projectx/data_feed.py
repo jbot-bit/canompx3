@@ -14,6 +14,7 @@ import asyncio
 import logging
 import os
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -95,6 +96,16 @@ class ProjectXDataFeed(BrokerFeed):
         # docs/audit/2026-06-10-data-pipeline-gap-report.md Defect A.
         self._last_cum_volume: int | None = None
         self._cum_volume_lock = threading.Lock()
+        # DIAGNOSTIC (2026-06-13, temporary): the live MNQ feed oscillates the
+        # cumulative-volume field between the true session total (~1.28M) and a
+        # `1` sentinel, ping-ponging _cum_to_delta's reset branch against the
+        # aggregator's per-tick cap. To learn WHAT the `1` is (lastSize vs a real
+        # volume field), _cum_to_delta sets _last_reset_fired when it re-baselines
+        # on a negative delta; the caller (which has the raw quote dict) logs the
+        # full quote, rate-limited via _last_reset_log_ts. Remove once the feed
+        # schema is confirmed and the delta fix lands. Guarded by _cum_volume_lock.
+        self._last_reset_fired: bool = False
+        self._last_reset_log_ts: float = 0.0
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -186,9 +197,34 @@ class ProjectXDataFeed(BrokerFeed):
                     cum_volume,
                 )
                 self._last_cum_volume = cum_volume
+                # DIAGNOSTIC (2026-06-13): mark that a reset just fired so the
+                # caller logs the raw quote (it has the dict; we only see the int).
+                self._last_reset_fired = True
                 return 0
             self._last_cum_volume = cum_volume
             return delta
+
+    def _maybe_log_raw_quote_on_reset(self, quote: dict) -> None:
+        """DIAGNOSTIC (2026-06-13, temporary): log the full raw quote dict when a
+        cumulative-volume reset just fired, rate-limited to ~1/10s.
+
+        Called from BOTH quote paths (_on_quote async + _on_quote_sync foreign
+        thread) so the capture has no parity gap. Reads/clears _last_reset_fired
+        and reads/updates _last_reset_log_ts under _cum_volume_lock (same lock
+        _cum_to_delta uses to set the flag). Logged at INFO so it surfaces under
+        the live bot's INFO level (run_live_session.py). No-op when no reset fired
+        or when within the rate-limit window. Remove with the delta fix.
+        """
+        with self._cum_volume_lock:
+            if not self._last_reset_fired:
+                return
+            self._last_reset_fired = False
+            now = time.monotonic()
+            if now - self._last_reset_log_ts < 10.0:
+                return
+            self._last_reset_log_ts = now
+        # Log outside the lock — formatting a dict shouldn't hold the feed lock.
+        log.info("RAW QUOTE on cumulative-volume reset (diagnostic): %r", quote)
 
     def flush(self, symbol: str = "") -> Bar | None:
         """Force-close current bar at session end.
@@ -458,6 +494,7 @@ class ProjectXDataFeed(BrokerFeed):
             try:
                 price, cum_vol = self.parse_quote(quote)
                 vol = self._cum_to_delta(cum_vol)
+                self._maybe_log_raw_quote_on_reset(quote)
                 now = datetime.now(UTC)
                 self._last_data_at = now
                 self._quote_count += 1
@@ -511,6 +548,8 @@ class ProjectXDataFeed(BrokerFeed):
                 # _cum_to_delta is thread-safe (has internal lock) — safe to call on
                 # this foreign signalr thread before the call_soon_threadsafe bridge.
                 vol = self._cum_to_delta(cum_vol)
+                # _maybe_log_raw_quote_on_reset is thread-safe (same lock).
+                self._maybe_log_raw_quote_on_reset(quote)
                 now = datetime.now(UTC)
                 # on_tick is thread-safe (has internal lock)
                 bar = self._agg.on_tick(price, vol, now)
