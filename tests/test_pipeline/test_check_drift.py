@@ -24,6 +24,7 @@ from pipeline.check_drift import (
     check_holdout_policy_declaration_consistency,
     check_no_raw_duckdb_connect_in_eod_chain,
     check_no_raw_duckdb_connect_in_live,
+    check_no_raw_duckdb_connect_in_survival_sim,
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
     check_prereg_present_for_recent_runs,
@@ -3797,3 +3798,79 @@ class TestNoRawDuckdbConnectInEodChain:
         # None of the allowlisted files exist under the tmp root → empty, no crash.
         self._set_root(tmp_path, monkeypatch)
         assert check_no_raw_duckdb_connect_in_eod_chain() == []
+
+
+class TestNoRawDuckdbConnectInSurvivalSim:
+    """Tests for check_no_raw_duckdb_connect_in_survival_sim.
+
+    The guard bans raw ``duckdb.connect(...)`` in the survival-sim consumer
+    (``trading_app/account_survival.py``) so every connect routes through the
+    ``pipeline.db_connect`` retry wrappers — a dedicated sibling of the live and
+    eod_chain guards (account_survival is NOT in the EOD chain, so it gets its own
+    accurately-scoped guard). Injection tests prove the guard actually guards
+    (integrity-guardian § 7). Scope is a file allowlist, so the tests write the
+    real allowlisted path (``trading_app/account_survival.py``) under a tmp root.
+    """
+
+    def _set_root(self, tmp_path, monkeypatch):
+        from pipeline import check_drift
+
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        (tmp_path / "trading_app").mkdir(parents=True)
+
+    def test_real_consumer_is_clean(self):
+        # The actual survival-sim consumer must have zero raw connects.
+        assert check_no_raw_duckdb_connect_in_survival_sim() == []
+
+    def test_catches_raw_connect(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "trading_app" / "account_survival.py").write_text(
+            "import duckdb\n\ndef f(db):\n    con = duckdb.connect(db, read_only=True)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_survival_sim()
+        assert len(violations) == 1
+        assert "account_survival.py:4" in violations[0]
+        assert "open_read_only_with_retry" in violations[0]
+
+    def test_wrapper_form_passes(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "trading_app" / "account_survival.py").write_text(
+            "import duckdb  # noqa: F401  (kept for DuckDBPyConnection type hints)\n"
+            "from pipeline.db_connect import open_read_only_with_retry\n\n"
+            "def f(db):\n    con = open_read_only_with_retry(str(db))\n    return con\n"
+        )
+        assert check_no_raw_duckdb_connect_in_survival_sim() == []
+
+    def test_catches_aliased_import(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "trading_app" / "account_survival.py").write_text(
+            "import duckdb as d\n\ndef f(db):\n    con = d.connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_survival_sim()
+        assert len(violations) == 1
+        assert "account_survival.py:4" in violations[0]
+
+    def test_catches_from_import_connect(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "trading_app" / "account_survival.py").write_text(
+            "from duckdb import connect\n\ndef f(db):\n    con = connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_survival_sim()
+        assert len(violations) == 1
+        assert "account_survival.py:4" in violations[0]
+
+    def test_wrapper_call_not_flagged_under_from_import(self, tmp_path, monkeypatch):
+        # `from duckdb import connect` present, but the call is the wrapper —
+        # the bare-connect ban must not false-positive on open_*_with_retry().
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "trading_app" / "account_survival.py").write_text(
+            "from duckdb import connect  # noqa: F401\n"
+            "from pipeline.db_connect import open_read_only_with_retry\n\n"
+            "def f(db):\n    con = open_read_only_with_retry(str(db))\n    return con\n"
+        )
+        assert check_no_raw_duckdb_connect_in_survival_sim() == []
+
+    def test_missing_file_no_crash(self, tmp_path, monkeypatch):
+        # The allowlisted file does not exist under the tmp root → empty, no crash.
+        self._set_root(tmp_path, monkeypatch)
+        assert check_no_raw_duckdb_connect_in_survival_sim() == []

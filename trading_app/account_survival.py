@@ -27,6 +27,7 @@ import duckdb
 
 from pipeline.cost_model import get_cost_spec, risk_in_dollars
 from pipeline.db_config import configure_connection
+from pipeline.db_connect import open_read_only_with_retry
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import apply_tight_stop
 from trading_app.derived_state import (
@@ -726,7 +727,7 @@ def _load_profile_daily_scenarios(
     profile = get_profile(profile_id)
     lane_defs = get_profile_lane_definitions(profile_id)
 
-    con = duckdb.connect(str(db), read_only=True)
+    con = open_read_only_with_retry(str(db))
     configure_connection(con)
     try:
         instruments = sorted({lane["instrument"] for lane in lane_defs})
@@ -1361,7 +1362,7 @@ def sweep_survival_cap(
     strategy_ids = [s.strategy_id for s in _pf.strategies]
 
     db = db_path or GOLD_DB_PATH
-    con = duckdb.connect(str(db), read_only=True)
+    con = open_read_only_with_retry(str(db))
     configure_connection(con)
     per_cap: list[dict] = []
     try:
@@ -1511,7 +1512,7 @@ def evaluate_per_account_survival(
     strategy_ids = [s.strategy_id for s in _pf.strategies]
 
     db = db_path or GOLD_DB_PATH
-    con = duckdb.connect(str(db), read_only=True)
+    con = open_read_only_with_retry(str(db))
     configure_connection(con)
     # Compute one verdict per DISTINCT contract count, then fan out to accounts.
     verdict_by_count: dict[int, dict] = {}

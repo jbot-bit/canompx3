@@ -5739,6 +5739,50 @@ def check_no_raw_duckdb_connect_in_eod_chain() -> list[str]:
     return violations
 
 
+def check_no_raw_duckdb_connect_in_survival_sim() -> list[str]:
+    """Survival-sim consumer must use pipeline.db_connect retry wrappers, not raw connect.
+
+    ``trading_app/account_survival.py`` opens gold.db read-only to replay
+    historical prop-survival scenarios (``_load_profile_daily_scenarios``,
+    ``sweep_survival_cap``, ``evaluate_per_account_survival``). These run while a
+    peer process (the live bot or the EOD backfill) may hold the writer lock, so a
+    raw ``duckdb.connect(...)`` fails on the first lock-class IOError instead of
+    waiting out transient contention — the same "db lock that always happens" the
+    EOD-chain guard addresses. Every connect must route through
+    ``open_read_only_with_retry`` / ``open_writer_with_retry``
+    (``pipeline.db_connect``).
+
+    This is a SEPARATE guard from ``check_no_raw_duckdb_connect_in_eod_chain``
+    because ``account_survival.py`` is NOT in the EOD nightly chain — folding it
+    into that allowlist would mislabel the scope. Matching is delegated to the
+    shared ``_raw_duckdb_connect_violations`` matcher (same as the live and
+    eod_chain guards), so the three guards cannot drift apart (inline-copy
+    parity-drift class, n>=3).
+
+    Fail direction: a false BLOCK is a documented annoyance (route the connect
+    through the wrapper anyway); the only false-PASS is a raw connect the regex
+    misses — guarded by the injection tests in
+    ``tests/test_pipeline/test_check_drift.py``.
+    """
+    violations = []
+    message = (
+        "raw duckdb connect in survival-sim consumer; "
+        "use pipeline.db_connect.open_read_only_with_retry()/open_writer_with_retry()"
+    )
+    survival_sim_files = ("trading_app/account_survival.py",)
+    for rel_str in survival_sim_files:
+        py_file = PROJECT_ROOT / rel_str
+        if not py_file.exists():
+            continue
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        rel = py_file.relative_to(PROJECT_ROOT)
+        violations.extend(_raw_duckdb_connect_violations(content, rel, message))
+    return violations
+
+
 def check_db_reader_cached_connection() -> list[str]:
     """Check #63: ui/db_reader.py must use cached DB connections, not connection-per-query.
 
@@ -17035,6 +17079,7 @@ CHECKS = [
     ("No hardcoded scratch DB defaults in active code", check_no_hardcoded_scratch_db, False, False),
     ("No raw duckdb.connect() in trading_app/live", check_no_raw_duckdb_connect_in_live, False, False),
     ("No raw duckdb.connect() in EOD backfill chain", check_no_raw_duckdb_connect_in_eod_chain, False, False),
+    ("No raw duckdb.connect() in survival-sim consumer", check_no_raw_duckdb_connect_in_survival_sim, False, False),
     ("db_reader cached connection enforcement", check_db_reader_cached_connection, False, False),
     ("Drift check shared DB connection enforcement", check_drift_shared_db_connection, False, False),
     ("No broad rglob in drift checks", check_no_broad_rglob_in_drift_checks, False, False),
