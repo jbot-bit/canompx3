@@ -212,15 +212,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** abaf7cce — fix(pipeline): route EOD backfill connects through lock-retry wrapper [Stage 1/2]
-- **Files changed:** 7 files
-  - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-13-route-eod-backfill-connects-through-retry-wrapper.md`
-  - `pipeline/build_bars_5m.py`
-  - `pipeline/build_daily_features.py`
-  - `pipeline/daily_backfill.py`
-  - `pipeline/ingest_dbn.py`
-  - `trading_app/outcome_builder.py`
+- **Commit:** 9fefd9fd — fix(drift): add EOD-chain raw-duckdb-connect guard [Stage 2/2]
+- **Files changed:** 2 files
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
