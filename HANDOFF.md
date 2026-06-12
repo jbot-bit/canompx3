@@ -182,9 +182,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** ed7dfdd3 — test(tools): cover memory_hygiene budget + clear tiers
-- **Files changed:** 2 files
+- **Commit:** 42855935 — fix(tools): count MEMORY.md raw bytes (CRLF) + CRLF regression tests
+- **Files changed:** 4 files
   - `HANDOFF.md`
+  - `docs/runtime/stages/2026-06-12-memory-hardening-always-on-recall.md`
+  - `scripts/tools/memory_hygiene.py`
   - `tests/test_tools/test_memory_hygiene.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout

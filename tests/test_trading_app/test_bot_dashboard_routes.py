@@ -488,3 +488,45 @@ def test_sessions_market_open_false_on_weekend_gap(client, monkeypatch):
     body = resp.json()
     assert body.get("error") is None
     assert body["market_open"] is False
+
+
+# ---------- vendored lightweight-charts (Stage 1, 2026-06-12) ----------
+#
+# The chart library is served locally from /vendor/lightweight-charts.js so the
+# capital-critical cockpit chart never depends on an external CDN. These tests
+# lock: (1) the route serves the byte-identical SRI-pinned build, (2) the JS
+# global is present, (3) the HTML no longer references unpkg.
+
+import hashlib  # noqa: E402
+
+_LWC_EXPECTED_BYTES = 196203
+_LWC_EXPECTED_SHA384_B64 = "q1KYLSKHgBnW5tWYGGR8+6YV4/iPy31dILoF2I1OD7XiVUvHEp/TaxIQVmB0j3R2"
+
+
+def test_vendor_lightweight_charts_route_serves_pinned_build(client):
+    """Route returns 200, JS media type, and the byte-identical audited build."""
+    import base64
+
+    resp = client.get("/vendor/lightweight-charts.js")
+    assert resp.status_code == 200
+    assert "javascript" in resp.headers["content-type"]
+    body = resp.content
+    assert len(body) == _LWC_EXPECTED_BYTES, "vendored file must match the SRI-pinned byte count"
+    digest = base64.b64encode(hashlib.sha384(body).digest()).decode()
+    assert digest == _LWC_EXPECTED_SHA384_B64, "vendored bytes must match the pinned sha384 SRI hash"
+    # The standalone build assigns the global the cockpit depends on.
+    assert b"window.LightweightCharts=" in body
+
+
+def test_vendor_lightweight_charts_cache_immutable(client):
+    """Version-pinned content => served with a long immutable cache header."""
+    resp = client.get("/vendor/lightweight-charts.js")
+    assert resp.status_code == 200
+    assert "immutable" in resp.headers.get("cache-control", "")
+
+
+def test_dashboard_html_uses_local_vendor_not_cdn():
+    """The dashboard HTML must reference the local vendor path, not unpkg CDN."""
+    html = bot_dashboard.DASHBOARD_HTML.read_text(encoding="utf-8")
+    assert '<script src="/vendor/lightweight-charts.js"' in html
+    assert "unpkg.com" not in html, "CDN dependency must be fully removed from the cockpit"

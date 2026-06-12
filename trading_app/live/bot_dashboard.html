@@ -10,17 +10,18 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
   Lightweight Charts v5.2.0 (TradingView, Apache-2.0).
-  SRI computed 2026-05-14 against unpkg's standalone production build (196203 bytes).
-  If unpkg rebuilds 5.2.0 the hash will mismatch and the browser refuses the script;
-  ChartCockpit detects window.LightweightCharts === undefined and shows an operator-
-  visible "chart unavailable" notice instead of crashing the page
-  (institutional-rigor § 6: no silent failures).
+  Vendored locally and served from same-origin /vendor/lightweight-charts.js
+  (Stage 1, 2026-06-12) so the capital-critical cockpit chart never depends on
+  an external CDN (unpkg) being reachable — the prior CDN dependency silently
+  emptied the chart whenever unpkg was offline/firewalled. The vendored file is
+  byte-identical to the SRI-pinned unpkg build (196203 bytes, sha384
+  q1KYLSKHgBnW5tWYGGR8+6YV4/iPy31dILoF2I1OD7XiVUvHEp/TaxIQVmB0j3R2); same-origin
+  serving makes SRI unnecessary. ChartCockpit still detects
+  window.LightweightCharts === undefined and shows an operator-visible "chart
+  unavailable" notice instead of crashing (institutional-rigor § 6: no silent
+  failures) — kept as defense-in-depth.
 -->
-<script
-  src="https://unpkg.com/lightweight-charts@5.2.0/dist/lightweight-charts.standalone.production.js"
-  integrity="sha384-q1KYLSKHgBnW5tWYGGR8+6YV4/iPy31dILoF2I1OD7XiVUvHEp/TaxIQVmB0j3R2"
-  crossorigin="anonymous"
-  defer></script>
+<script src="/vendor/lightweight-charts.js" defer></script>
 <style>
   :root {
     --bg: #0a0e13;

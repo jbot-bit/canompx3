@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 import duckdb
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 from starlette.types import ASGIApp
@@ -3878,6 +3878,28 @@ async def api_events_stream(request: Request):
             await _sse_lazy_stop_if_idle()
 
     return EventSourceResponse(_generator())
+
+
+VENDOR_DIR = Path(__file__).parent / "vendor"
+LWC_VENDOR_FILE = VENDOR_DIR / "lightweight-charts-5.2.0.standalone.production.js"
+
+
+@app.get("/vendor/lightweight-charts.js")
+async def vendor_lightweight_charts():
+    # Locally-vendored TradingView Lightweight Charts v5.2.0 (Apache-2.0),
+    # byte-identical to the SRI-pinned unpkg build (196203 bytes, sha384
+    # q1KYLSKHgBnW5tWYGGR8+6YV4/iPy31dILoF2I1OD7XiVUvHEp/TaxIQVmB0j3R2).
+    # Vendored so the capital-critical cockpit chart never depends on an
+    # external CDN being reachable (Stage 1, 2026-06-12). Version-pinned
+    # content => safe to cache aggressively; a version bump changes the path.
+    if LWC_VENDOR_FILE.exists():
+        return FileResponse(
+            LWC_VENDOR_FILE,
+            media_type="application/javascript",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+    log.error("Vendored lightweight-charts missing at %s", LWC_VENDOR_FILE)
+    return JSONResponse(status_code=404, content={"error": "vendored chart library missing"})
 
 
 @app.get("/", response_class=HTMLResponse)
