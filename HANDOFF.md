@@ -182,7 +182,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** a1058820 — docs(handoff): sync last-session ledger to 991779a4 (Stages 3/4/5)
+- **Commit:** 1902316e — fix(preflight): gate [11] never blocks with empty () reason — union blockers + launch-blocking warnings
 - **Files changed:** 1 files
   - `HANDOFF.md`
 
