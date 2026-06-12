@@ -83,3 +83,25 @@ Verify after each. Drift + targeted tests. Final preflight 15/15 with selection,
   ZERO unpkg requests, 7 canvases (matches Stage 0 CDN-reachable baseline). Screenshot
   `stage1-chart-local-vendor.png`.
 - NEXT = Stage 2 (GO-LIVE message split, bot_dashboard.html:4214-4215 — front-end only, low risk).
+
+## CHECKPOINT — Stage 2 IN PROGRESS (GO-LIVE message split, 2026-06-12)
+- New helper `selectedAccountBlockedReason()` (bot_dashboard.html, next to
+  `selectedAccountIsTradeable()`): splits the `!selectedAccountIsTradeable()` block
+  into none-selected vs selected-but-restricted/blown vs feed-not-loaded; names the
+  account + its canonical status (tradeable/restricted/BLOWN via getAllAccounts label set).
+- SCOPE NOTE (anti-creep): the same stale generic message existed at THREE GO-LIVE
+  surfaces — topbar button (:4216), card button (:3997), AND the at-fire-time hard
+  guard toast (:5906, the most important — fires when the operator pressed+held 2s
+  expecting LIVE). All three now call the helper. Fixing one would leave the others
+  lying. Still front-end only, no capital/behavior change — the boolean gate
+  (`selectedAccountIsTradeable`) is unchanged; only the message it shows got honest.
+- Edge fix found by browser smoke: the status==="tradeable"-but-gate-false branch
+  said "is tradeable, not tradeable" (contradiction). Now "Re-checking…" (transient
+  between equity tick and gate read), no false status claim.
+- VERIFIED (Playwright :8137, real browser): all 4 branches produce honest
+  account-named messages (none / RESTRICTED / BLOWN / feed-not-loaded); the page's
+  ACTUAL helper is wired into the live render path (live topbar showed
+  "Checking selected account status…" from real feed, NOT the old lie). Screenshot
+  `stage2-golive-message.png`. NOTE: module-scope `let` globals can't be injected via
+  `window.` — verified branch logic via exact-replica + confirmed live wiring.
+- NEXT after S2 commit: STOP per operator (checkpoint). S4 (self-clean) is next stage.
