@@ -530,3 +530,41 @@ def test_dashboard_html_uses_local_vendor_not_cdn():
     html = bot_dashboard.DASHBOARD_HTML.read_text(encoding="utf-8")
     assert '<script src="/vendor/lightweight-charts.js"' in html
     assert "unpkg.com" not in html, "CDN dependency must be fully removed from the cockpit"
+
+
+# ---------- GO-LIVE blocked-reason vocabulary (Stage 2, 2026-06-12) ----------
+#
+# selectedAccountBlockedReason() (bot_dashboard.html) branches on acct.status,
+# which is produced ONLY by _classify_account(). Code-review fix 2026-06-12: an
+# earlier draft fell through to a confident "BLOWN" label for the `archived`
+# status and a comment claimed a (tradeable/restricted/blown) vocabulary that
+# does not exist — the backend cannot tell "blown" from "hidden", so the honest
+# label is "not tradeable". These tests bind the HTML branch logic to the
+# EXECUTED canonical vocabulary so neither side can drift back to the false claim.
+
+
+def test_classify_account_vocabulary_is_exactly_three_no_blown():
+    """The canonical status set is {tradeable, restricted, archived} — never 'blown'."""
+    seen = {
+        bot_dashboard._classify_account(can_trade, is_visible)
+        for can_trade in (True, False)
+        for is_visible in (True, False)
+    }
+    assert seen == {"tradeable", "restricted", "archived"}
+    assert "blown" not in seen
+
+
+def test_blocked_reason_branches_on_real_statuses_not_false_blown():
+    """selectedAccountBlockedReason() must branch on the real statuses and must
+    not assert a confident 'is BLOWN' (the backend cannot prove blown vs hidden)."""
+    html = bot_dashboard.DASHBOARD_HTML.read_text(encoding="utf-8")
+    fn_start = html.index("function selectedAccountBlockedReason()")
+    fn_body = html[fn_start : fn_start + 1200]
+    # Branches on the two distinguishable statuses; archived falls through.
+    assert 'acct.status === "restricted"' in fn_body
+    assert 'acct.status === "tradeable"' in fn_body
+    # The false-confidence claim removed: no "is BLOWN" assertion (archived
+    # means blown OR hidden — report the honest "not tradeable").
+    assert "is BLOWN" not in fn_body
+    # The honest archived fall-through wording is present.
+    assert "not tradeable (blown or inactive)" in fn_body

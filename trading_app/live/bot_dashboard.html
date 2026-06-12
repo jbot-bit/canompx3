@@ -5850,9 +5850,11 @@ function selectedAccountIsTradeable() {
 // Honest blocked-reason for the GO LIVE gate. selectedAccountIsTradeable() is
 // false in THREE distinct situations the operator confused (Stage 2, 2026-06-12)
 // — they all rendered "No tradeable broker account selected — pick one" even
-// when an account WAS picked (it was just restricted/blown). Name the account
-// and its real status so the next action is obvious. Status vocabulary is the
-// canonical getAllAccounts() label set (tradeable/restricted/blown), not re-encoded.
+// when an account WAS picked (it was just restricted/inactive). Name the account
+// and its real status so the next action is obvious. Status vocabulary is exactly
+// the canonical _classify_account() set: tradeable / restricted / archived
+// (bot_dashboard.py:2424 — `archived` = "blown or hidden", the API cannot tell
+// them apart from can_trade+is_visible, so we must NOT claim a confident "BLOWN").
 function selectedAccountBlockedReason() {
   if (selectedAccountId == null) {
     return "No broker account selected — pick one in the account selector.";
@@ -5872,7 +5874,9 @@ function selectedAccountBlockedReason() {
     // the equity tick and the gate read. Don't claim a false status.
     return `Re-checking selected account ${label} (#${acct.id})…`;
   }
-  return `Selected account ${label} (#${acct.id}) is BLOWN, not tradeable — pick another.`;
+  // status === "archived": blown OR merely hidden/inactive — the backend can't
+  // distinguish them, so report the honest "not tradeable", not a false "BLOWN".
+  return `Selected account ${label} (#${acct.id}) is not tradeable (blown or inactive) — pick another.`;
 }
 
 // Funded (Express, XFA) vs Combine (evaluation) from the account name prefix.

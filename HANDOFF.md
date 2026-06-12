@@ -182,11 +182,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** d8093ed4 — chore(stage): START_BOT flow fixes — Stage 2 checkpoint (GO-LIVE message honest), STOP for review
-- **Files changed:** 3 files
+- **Commit:** b33a72e8 — feat(memory): MEMORY.md size guard (5th SessionStart check) + new_session CRLF fix
+- **Files changed:** 6 files
+  - `.claude/hooks/_memory_capture.py`
+  - `.claude/hooks/memory-capture-sessionstart.py`
+  - `.claude/rules/auto-memory-capture.md`
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-12-startbot-trading-ready-flow-fixes.md`
-  - `stage2-golive-message.png`
+  - `scripts/tools/new_session.sh`
+  - `tests/test_hooks/test_baton_staleness.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
