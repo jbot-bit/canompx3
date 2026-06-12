@@ -182,10 +182,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** ea04b440 — docs(stage): fix HANDOFF file-count + stage frontier line (review fixes)
-- **Files changed:** 2 files
+- **Commit:** 991779a4 — fix(dashboard): Stages 3/4/5 — assert→raise, clear_state shutdown, account 21944866
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-12-startbot-trading-ready-flow-fixes.md`
+  - `docs/runtime/stages/2026-06-12-startbot-stages345-v3-v5-gate13.md`
+  - `tests/test_trading_app/test_bot_dashboard.py`
+  - `trading_app/live/bot_dashboard.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
