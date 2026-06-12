@@ -3882,9 +3882,19 @@ async def api_events_stream(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
+    # no-store: the dashboard HTML carries no version hash, so a browser's
+    # heuristic cache (no ETag/Last-Modified => the browser MAY reuse a stored
+    # copy on a plain reload) silently serves a STALE page after an edit lands
+    # on disk — the operator sees a "reverted" chart/UI even though disk and
+    # server are current. Forcing no-store makes every load reflect the disk
+    # file. Ref: RFC 9111 (HTTP Caching) §4.2.2 (heuristic freshness applies
+    # when no explicit expiration is present) and §5.2.2.5 (no-store).
     if DASHBOARD_HTML.exists():
-        return DASHBOARD_HTML.read_text(encoding="utf-8")
-    return "<h1>Dashboard HTML not found</h1>"
+        return HTMLResponse(
+            DASHBOARD_HTML.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-store, must-revalidate"},
+        )
+    return HTMLResponse("<h1>Dashboard HTML not found</h1>", status_code=404)
 
 
 # ── Server launch ─────────────────────────────────────────────────────────────

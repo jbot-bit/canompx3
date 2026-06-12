@@ -139,3 +139,20 @@ def test_preflight_and_launch_cmds_carry_identical_account_id(monkeypatch):
     launch_id = launch_args[launch_args.index("--account-id") + 1]
 
     assert preflight_id == launch_id == str(EXPRESS)
+
+
+# ── index route cache policy ──────────────────────────────────────────────────
+
+
+def test_index_html_is_no_store():
+    """The dashboard HTML has no version hash, so a browser's heuristic cache
+    (RFC 9111 §4.2.2) would serve a stale page after an on-disk edit — the
+    operator's "the fix reverted" symptom. The route must send no-store
+    (RFC 9111 §5.2.2.5) so every load reflects the current disk file."""
+    from fastapi.testclient import TestClient
+
+    client = TestClient(bd.app)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    cache_control = resp.headers.get("cache-control", "")
+    assert "no-store" in cache_control, cache_control
