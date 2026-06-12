@@ -16,10 +16,21 @@ scope_lock:
 ## Checkpoint progress (Part A — 3 CPs, /clear between each)
 
 - **CP1 DONE** (commit `63b06aa8`): `scripts/tools/memory_hygiene.py` — read-only
-  budget + baton clear-tier report. Verified: budget OVER (26,194 B, byte-cutoff
-  binds first, first-dropped line 71, 48 over-long lines); tiers READY=12 /
-  LANDED-BUT-OPEN=29 / UNVERIFIED=102; `--print-clear` fully-commented; `--json`
-  parses; ruff clean. READY/LBO tiering falsified against `git merge-base`.
+  budget + baton clear-tier report. Verified: budget OVER (26,268 B raw on-disk,
+  byte-cutoff binds first, first-dropped line 69, 48 over-long lines); tiers
+  READY=12 / LANDED-BUT-OPEN=29 / UNVERIFIED=102; `--print-clear` fully-commented;
+  `--json` parses; ruff clean. READY/LBO tiering falsified against `git merge-base`.
+  (NB: the original CP1 note read "26,194 B / line 71" — that was the pre-CRLF-fix
+  CRLF-stripped undercount; corrected here after the byte-count fix below.)
+- **CRLF byte-count fix** (parked by the peer at CP2, done as a follow-on): the
+  tool counted bytes from `splitlines()`-decoded text, stripping the `\r` of every
+  CRLF line → 74-byte undercount on the real Windows `MEMORY.md` (false-PASS
+  direction for a budget guard). Fix: `budget_report` counts `read_bytes()` raw;
+  `_first_dropped_line` walks `splitlines(keepends=True)` true terminators. Real-
+  file proof: reported == on-disk (26,268). +2 CRLF regression tests; also fixed a
+  latent Windows bug in the peer's `test_byte_cutoff_binds_before_line_cutoff`
+  (`write_text` silently CRLF-translated the fixture; switched to `write_bytes`).
+  Full suite 15/15, drift 188/0, ruff clean.
 - **CP2 NEXT** (`stage: 2`): write `tests/test_tools/test_memory_hygiene.py` —
   load tool via importlib; tmp memory dir + tmp git repo with
   `update-ref refs/remotes/origin/main` for deterministic ancestor checks. Cases:

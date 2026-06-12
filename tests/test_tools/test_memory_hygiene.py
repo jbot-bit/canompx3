@@ -118,15 +118,18 @@ def test_line_cutoff_binds_when_bytes_stay_small(tmp_path):
 def test_byte_cutoff_binds_before_line_cutoff(tmp_path):
     mod = _load_tool()
     _bind_memory(mod, tmp_path)
-    # 100 fat lines (300 bytes each + newline) blows past 25 KB before line 200.
-    fat = "y" * 300
-    (tmp_path / "MEMORY.md").write_text("\n".join(fat for _ in range(100)))
+    # 100 fat lines blow past 25 KB before line 200. write_bytes (NOT write_text)
+    # so the on-disk newline is a deterministic 1-byte LF — write_text would let
+    # Windows text-mode translate \n -> \r\n (302 B/line), making expected_line
+    # platform-dependent. The tool reads RAW bytes, so the test must pin them.
+    fat = b"y" * 300
+    (tmp_path / "MEMORY.md").write_bytes(b"\n".join(fat for _ in range(100)))
     report = mod.budget_report()
     assert report["over_byte_budget"] is True
     dropped = report["first_dropped"]
     assert dropped is not None
     assert dropped["by"] == "bytes"
-    # Each line is 301 bytes (300 + newline); cutoff at 25,000 -> ceil(25000/301)+1.
+    # Interior line = 301 bytes (300 + LF); cutoff at 25,000 -> (25000//301)+1.
     expected_line = (mod.HARD_BYTE_CUTOFF // 301) + 1
     assert dropped["line"] == expected_line
     assert dropped["line"] < mod.LINE_BUDGET  # bytes bound first, not lines
@@ -280,3 +283,39 @@ def test_clear_block_empty_when_no_ready(repo_with_origin, tmp_path):
     batons = mod.tier_all_batons()
     block = mod._render_clear_block(batons)
     assert "nothing safe to clear" in block
+
+
+# --------------------------------------------------------------------------- #
+# CRLF byte-count regression (the real MEMORY.md on Windows uses CRLF).
+# Grounded against the official cutoff "first 200 lines OR 25KB" — the loader
+# sees RAW on-disk bytes, so a CRLF `\r` must be counted. The pre-fix tool
+# stripped `\r` via splitlines(), UNDER-reporting size = false-PASS direction.
+# Fixtures write explicit bytes so the CRLF survives regardless of platform.
+# --------------------------------------------------------------------------- #
+def test_byte_count_matches_raw_on_disk_crlf(tmp_path):
+    mod = _load_tool()
+    _bind_memory(mod, tmp_path)
+    md = tmp_path / "MEMORY.md"
+    md.write_bytes(b"\r\n".join(b"- line %d" % i for i in range(40)) + b"\r\n")
+    report = mod.budget_report()
+    # The tool must report the file as it sits on disk — \r included.
+    assert report["bytes"] == len(md.read_bytes())
+
+
+def test_first_dropped_line_crlf_byte_cutoff(tmp_path):
+    mod = _load_tool()
+    _bind_memory(mod, tmp_path)
+    md = tmp_path / "MEMORY.md"
+    # Few FAT CRLF lines so the BYTE cutoff (25 KB) is crossed well before the
+    # 200-line cutoff — otherwise the line branch would mask the byte branch.
+    fat = b"y" * 200  # 202 bytes/line incl. \r\n
+    n_lines = 150  # 150 * 202 = 30,300 > HARD_BYTE_CUTOFF, in < 200 lines
+    md.write_bytes(b"\r\n".join(fat for _ in range(n_lines)) + b"\r\n")
+    report = mod.budget_report()
+    dropped = report["first_dropped"]
+    assert dropped is not None
+    assert dropped["by"] == "bytes"
+    assert dropped["line"] < mod.LINE_BUDGET  # bytes bound first
+    # CRLF line is 202 bytes; cutoff at 25,000 -> ceil-style boundary.
+    expected_line = (mod.HARD_BYTE_CUTOFF // 202) + 1
+    assert dropped["line"] == expected_line

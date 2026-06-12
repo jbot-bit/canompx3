@@ -95,19 +95,22 @@ _HEADLINE_ANCHOR_RE = re.compile(
 )
 
 
-def _first_dropped_line(lines: list[str]) -> tuple[int, int] | None:
+def _first_dropped_line(raw_bytes: bytes) -> tuple[int, int] | None:
     """Return (line_no, kind) of the first line silently dropped at load.
 
     kind: 0 = byte cutoff reached first, 1 = line cutoff reached first.
     Returns None if the whole index loads (within both budgets). line_no is
     1-based — the FIRST line the session never sees.
+
+    Walks the RAW on-disk bytes via `splitlines(keepends=True)` so each physical
+    line carries its TRUE terminator (`\\r\\n`, `\\n`, or none on a final
+    unterminated line). The earlier `+1`-per-line heuristic undercounted CRLF
+    files (it assumed a 1-byte terminator), which is the false-PASS direction for
+    a budget warning — fixed to count the file as the loader actually sees it.
     """
     running_bytes = 0
-    for idx, line in enumerate(lines, start=1):
-        # +1 for the newline that joins this line to the next (the file is
-        # newline-joined; the last line may lack one, but we over-count by at
-        # most 1 byte which is the safe direction for a budget warning).
-        running_bytes += len(line.encode("utf-8")) + 1
+    for idx, physical in enumerate(raw_bytes.splitlines(keepends=True), start=1):
+        running_bytes += len(physical)
         if running_bytes > HARD_BYTE_CUTOFF:
             return (idx, 0)
         if idx > LINE_BUDGET:
@@ -138,10 +141,14 @@ def budget_report() -> dict:
             "exists": False,
             "path": str(MEMORY_MD),
         }
-    raw = MEMORY_MD.read_text(encoding="utf-8", errors="ignore")
+    raw_bytes = MEMORY_MD.read_bytes()
+    raw = raw_bytes.decode("utf-8", errors="ignore")
     lines = raw.splitlines()
-    n_bytes = len(raw.encode("utf-8"))
-    dropped = _first_dropped_line(lines)
+    # Count the file as the loader sees it — RAW on-disk bytes, NOT the
+    # CRLF-stripped re-encode of splitlines() (which undercounts CRLF files by
+    # one byte per line: the false-PASS direction for a budget guard).
+    n_bytes = len(raw_bytes)
+    dropped = _first_dropped_line(raw_bytes)
     overlong = _overlong_lines(lines)
     return {
         "exists": True,
