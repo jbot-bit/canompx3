@@ -182,12 +182,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 42855935 — fix(tools): count MEMORY.md raw bytes (CRLF) + CRLF regression tests
-- **Files changed:** 4 files
+- **Commit:** fe32f8ce — feat(dashboard): vendor lightweight-charts locally — remove CDN single point of failure on live cockpit
+- **Files changed:** 5 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-12-memory-hardening-always-on-recall.md`
-  - `scripts/tools/memory_hygiene.py`
-  - `tests/test_tools/test_memory_hygiene.py`
+  - `tests/test_trading_app/test_bot_dashboard_routes.py`
+  - `trading_app/live/bot_dashboard.html`
+  - `trading_app/live/bot_dashboard.py`
+  - `trading_app/live/vendor/lightweight-charts-5.2.0.standalone.production.js`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
