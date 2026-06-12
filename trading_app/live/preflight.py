@@ -711,9 +711,27 @@ def _check_live_readiness_report(ctx: PreflightContext) -> CheckResult:
                     msg += f"; +{len(blocking_warnings) - 3} more"
                 return CheckResult(False, f"FAILED: live readiness has blocking strict warnings ({msg})")
             return CheckResult(True, "OK (strict_zero_warn green)")
-        msg = "; ".join(str(blocker) for blocker in blockers[:3])
-        if len(blockers) > 3:
-            msg += f"; +{len(blockers) - 3} more"
+        # green=False draws from BOTH blockers AND launch-blocking warnings — the
+        # canonical summary sets green=False whenever EITHER is non-empty
+        # (live_readiness_report.py: green = not blockers and not
+        # launch_blocking_strict_warnings(...)). Reporting only `blockers` produced
+        # an empty "()" reason whenever a launch-blocking WARNING (not a blocker)
+        # drove green false — the 2026-06-12 00:06 gate-[11] silent FAIL.
+        reasons = [str(blocker) for blocker in blockers]
+        reasons += [str(warning) for warning in blocking_warnings]
+        if not reasons:
+            # Defensive never-empty fallback. UNREACHABLE from the canonical summary
+            # (green=False ⟹ blockers or launch-blocking warnings non-empty); guards
+            # corrupted/mocked input only. A capital gate must never block with an
+            # empty reason (institutional-rigor §6 — no silent failures).
+            reasons = [
+                f"green={strict.get('green')!r}; no blockers or launch-blocking "
+                f"warnings enumerated — inspect live_readiness_report for profile "
+                f"{ctx.profile_id}"
+            ]
+        msg = "; ".join(reasons[:3])
+        if len(reasons) > 3:
+            msg += f"; +{len(reasons) - 3} more"
         if ctx.demo:
             return CheckResult(True, f"WARN: live readiness not green for demo ({msg})")
         return CheckResult(False, f"FAILED: live readiness not green ({msg})")

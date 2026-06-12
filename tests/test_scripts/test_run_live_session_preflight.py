@@ -881,6 +881,133 @@ def test_live_readiness_report_blocking_warnings_block_live(monkeypatch):
     assert "Automation health" in result.message
 
 
+def test_live_readiness_report_green_false_warning_only_names_reason(monkeypatch):
+    """green=False driven by a launch-blocking WARNING with EMPTY blockers must
+    name the warning — never an empty "()" reason.
+
+    This is the reachable state behind the 2026-06-12 00:06 gate-[11] silent
+    FAIL: the canonical summary set green=False from a launch-blocking warning
+    (blockers stayed empty), but the consumer built its message from `blockers`
+    only → "live readiness not green ()". (This asserts the empty-reason CLASS
+    the FAIL exposed, NOT a claim about which warning 00:06 specifically was.)
+    """
+    blocking_warning = "Automation health not green: CanonMPX_TopstepTelemetry_SignalOnly=FAILED"
+
+    def _fake_report(**_kwargs):
+        return {"strict_zero_warn": {"green": False, "blockers": [], "warnings": [blocking_warning]}}
+
+    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
+    ctx = _make_copy_trading_ctx(
+        profile_id="topstep_50k_mnq_auto",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = False
+
+    result = rls._check_live_readiness_report(ctx)
+
+    assert result.passed is False
+    assert "Automation health" in result.message
+    assert "()" not in result.message  # the bug: empty reason
+
+
+def test_live_readiness_report_green_false_empty_lists_defensive_fallback(monkeypatch):
+    """Defensive never-empty guard: green=False with EMPTY blockers AND EMPTY
+    warnings.
+
+    This state is UNREACHABLE from the canonical summary — there green=False
+    implies blockers or launch-blocking warnings is non-empty. It guards
+    corrupted/mocked input only. The message must still name green= and the
+    profile, never empty.
+    """
+
+    def _fake_report(**_kwargs):
+        return {"strict_zero_warn": {"green": False, "blockers": [], "warnings": []}}
+
+    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
+    ctx = _make_copy_trading_ctx(
+        profile_id="topstep_50k_mnq_auto",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = False
+
+    result = rls._check_live_readiness_report(ctx)
+
+    assert result.passed is False
+    assert "()" not in result.message
+    assert "green=" in result.message
+    assert "topstep_50k_mnq_auto" in result.message
+
+
+def test_live_readiness_report_green_false_combines_blockers_and_warnings(monkeypatch):
+    """green=False with BOTH blockers and launch-blocking warnings → the message
+    names both sources (combined-source assertion)."""
+    blocker = "Criterion 11 strict: max_90d_dd over budget"
+    blocking_warning = "Automation health not green: CanonMPX_TopstepTelemetry_SignalOnly=FAILED"
+
+    def _fake_report(**_kwargs):
+        return {"strict_zero_warn": {"green": False, "blockers": [blocker], "warnings": [blocking_warning]}}
+
+    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
+    ctx = _make_copy_trading_ctx(
+        profile_id="topstep_50k_mnq_auto",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = False
+
+    result = rls._check_live_readiness_report(ctx)
+
+    assert result.passed is False
+    assert "Criterion 11" in result.message
+    assert "Automation health" in result.message
+
+
+def test_live_readiness_report_green_true_message_unchanged(monkeypatch):
+    """Regression guard: the happy path (green=True) message is untouched."""
+
+    def _fake_report(**_kwargs):
+        return {"strict_zero_warn": {"green": True, "blockers": [], "warnings": []}}
+
+    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
+    ctx = _make_copy_trading_ctx(
+        profile_id="topstep_50k_mnq_auto",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = False
+
+    result = rls._check_live_readiness_report(ctx)
+
+    assert result.passed is True
+    assert "strict_zero_warn green" in result.message
+
+
+def test_live_readiness_report_demo_green_false_warning_only_warns_with_reason(monkeypatch):
+    """Demo branch mirror: green=False warning-only → WARN (passed True) with a
+    non-empty message naming the warning."""
+    blocking_warning = "Automation health not green: CanonMPX_TopstepTelemetry_SignalOnly=FAILED"
+
+    def _fake_report(**_kwargs):
+        return {"strict_zero_warn": {"green": False, "blockers": [], "warnings": [blocking_warning]}}
+
+    monkeypatch.setattr("scripts.tools.live_readiness_report.build_live_readiness_report", _fake_report)
+    ctx = _make_copy_trading_ctx(
+        profile_id="topstep_50k_mnq_auto",
+        requested_account_id=None,
+        requested_copies=1,
+    )
+    ctx.demo = True
+
+    result = rls._check_live_readiness_report(ctx)
+
+    assert result.passed is True
+    assert "WARN" in result.message
+    assert "Automation health" in result.message
+    assert "()" not in result.message
+
+
 def test_repo_drift_gate_blocks_dirty_live_repo(monkeypatch):
     monkeypatch.setattr(
         rls.subprocess,

@@ -182,12 +182,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 991779a4 — fix(dashboard): Stages 3/4/5 — assert→raise, clear_state shutdown, account 21944866
-- **Files changed:** 4 files
+- **Commit:** a1058820 — docs(handoff): sync last-session ledger to 991779a4 (Stages 3/4/5)
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-12-startbot-stages345-v3-v5-gate13.md`
-  - `tests/test_trading_app/test_bot_dashboard.py`
-  - `trading_app/live/bot_dashboard.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
