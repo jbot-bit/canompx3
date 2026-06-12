@@ -182,10 +182,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 56fc5c59 — Drop Tokyo lane from topstep_50k_mnq_auto (SR ALARM) — both allocation files
-- **Files changed:** 2 files
-  - `docs/runtime/lane_allocation.json`
-  - `docs/runtime/lane_allocation/topstep_50k_mnq_auto.json`
+- **Commit:** 97efa678 — @ fix(live): reject cumulative-feed volume + repair 1037 corrupt MNQ bars
+- **Files changed:** 5 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/2026-06-12-mnq-live-bar-volume-corruption-repair.md`
+  - `docs/runtime/stages/2026-06-12-o15-o30-outcomes-backfill.md`
+  - `tests/test_trading_app/test_bar_aggregator.py`
+  - `trading_app/live/bar_aggregator.py`
+- **Post-commit (data-layer, no code):** ran canonical O15/O30 `orb_outcomes` backfill for MNQ/MES/MGC (`trading_app.outcome_builder`, checkpoint-incremental). Interior gap days filled; remaining unfilled days proven legit-empty (O5=0 too → no qualifying ORB setup). Freshness MAX unchanged (latest days are no-setup days). gold.db is local-only (gitignored) — zero source changes. Drift 188/0.
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
