@@ -168,6 +168,20 @@ def test_run_dashboard_accepts_loopback_variants():
             mocked.assert_called_once()
 
 
+def test_run_dashboard_swallows_keyboard_interrupt():
+    """Ctrl+C (uvicorn re-raises the captured signal as KeyboardInterrupt) must
+    exit cleanly, not propagate a traceback to the operator's console."""
+    from trading_app.live import bot_dashboard as bd
+
+    with patch(
+        "trading_app.live.bot_dashboard.uvicorn.run",
+        side_effect=KeyboardInterrupt,
+    ) as mocked:
+        # Must NOT raise — a clean operator stop, not a crash.
+        bd.run_dashboard(host="127.0.0.1", port=18080)
+        mocked.assert_called_once()
+
+
 def test_orb_levels_for_instrument_returns_nulls_when_no_lane(monkeypatch):
     from trading_app.live import bot_dashboard as bd
 

@@ -3938,7 +3938,18 @@ def run_dashboard(host: str = "127.0.0.1", port: int = PORT) -> None:
             f"Refusing to start dashboard on non-localhost host {host!r}: "
             f"SSE + kill endpoint leak live position state over LAN."
         )
-    uvicorn.run(app, host=host, port=port, log_level="warning", workers=1)
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="warning", workers=1)
+    except KeyboardInterrupt:
+        # Ctrl+C is a normal, operator-initiated stop — not a crash. uvicorn's
+        # signal handler re-raises the captured signal, which surfaces here as
+        # KeyboardInterrupt and would otherwise print a multi-frame traceback.
+        # The FastAPI ``_lifespan`` shutdown (SSE-watcher cancel, child-process
+        # terminate, bot_state clear) has already run on uvicorn's own shutdown
+        # path before this point, so teardown is unchanged — we only swallow the
+        # cosmetic top-frame re-raise and log one clean line. Mirrors the proven
+        # pattern in scripts/run_live_session.py.
+        log.info("Dashboard stopped.")
 
 
 _DASHBOARD_PID_FILE = Path(tempfile.gettempdir()) / "canompx3" / "bot_dashboard.pid"

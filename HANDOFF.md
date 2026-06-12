@@ -182,9 +182,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-12
-- **Commit:** 80b09710 — docs(handoff): sync ledger after peer gate-11 message fix (0ad6af4e)
-- **Files changed:** 1 files
+- **Commit:** c98022ad — fix(preflight): gate [11] per-lane SR-alarm quarantine — launch clean lanes
+- **Files changed:** 3 files
   - `HANDOFF.md`
+  - `scripts/tools/live_readiness_report.py`
+  - `tests/test_tools/test_live_readiness_report.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
