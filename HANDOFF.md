@@ -6,6 +6,15 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Codex Session - environment connectivity check and repo-state MCP fix (2026-06-12)
+- **Tool:** Codex.
+- **Scope:** User requested a no-lip-service environment check. Loaded startup docs, ran Codex parity/doctor/preflight/pulse, smoked repo-local MCPs, and fixed concrete issues found.
+- **Fixes made:** Added missing `.claude/hooks/drain-nudge-sessionstart.py` reference to `.codex/HOOKS.md`, clearing Codex parity drift. Patched `scripts/tools/repo_state_mcp_server.py` wrapper helpers to forward positional args so `get_system_context`, `get_project_pulse`, and `get_startup_packet` no longer raise `TypeError`; tightened `tests/test_tools/test_repo_state_mcp_server.py` to assert forwarded args.
+- **Verification:** `python3 scripts/infra/codex_parity.py --format text` PASS. `python3 scripts/infra/codex_local_env.py doctor --platform wsl` PASS after network escalation; sandbox-only run failed on PyPI DNS for `parso`. Focused repo-state MCP tests PASS `8/8`; `py_compile` PASS; `git diff --check` PASS; direct stdio MCP runner initialized and returned `get_system_context` + `get_project_pulse` from patched code.
+- **Environment truth:** Core WSL repo/env is functional (`.venv-wsl` present, Codex binary present, repo root writable outside sandbox, git visible). `gold-db`, `strategy-lab`, and `research-catalog` MCP smoke calls worked. Current in-process `mcp__repo_state__` handle stayed closed after killing stale PID 1701; a fresh Codex/tool session should reconnect to the patched server.
+- **Non-env live-state truth:** `project_pulse.py --fast` is connected but exits nonzero because live-readiness is blocked: C11 profile fingerprint mismatch, C12 SR state invalid/mismatched, and two deployed lanes have zero execution rows. Not a connectivity failure.
+- **Known warnings left:** `HANDOFF.md` still does not match canonical action-queue render; active stage count is 14.
+
 ## Codex Session - daily bug scan survival sweep guard tightened (2026-06-11)
 - **Tool:** Codex.
 - **Grounding packet:** `python scripts/tools/daily_bug_scan.py --since 2026-06-09T23:00:40.749Z --base-ref origin/main --include-local-head --max-commits 5 --format json` returned verification mode `static_only` (`no repo-managed interpreter detected`), detached `HEAD` `81234156`, and five candidate commits. Actionable bug came from candidate `7f6e52fad1e045536ca4c8142b95bbcb26857133` (`wip(survival)...UNTESTED`).

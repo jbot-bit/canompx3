@@ -113,10 +113,10 @@ def _resolve_task_route(task_text: str | None = None, task_id: str | None = None
     return json.loads(render_route_json(route, candidates))
 
 
-def _build_pulse_report(**kwargs):
+def _build_pulse_report(*args, **kwargs):
     from scripts.tools.project_pulse import build_pulse
 
-    return build_pulse(**kwargs)
+    return build_pulse(*args, **kwargs)
 
 
 def _format_pulse_report_json(report) -> str:
@@ -146,10 +146,10 @@ def _get_project_pulse(
     return json.loads(_format_pulse_report_json(report))
 
 
-def _build_system_context_snapshot(**kwargs):
+def _build_system_context_snapshot(*args, **kwargs):
     from pipeline.system_context import build_system_context
 
-    return build_system_context(**kwargs)
+    return build_system_context(*args, **kwargs)
 
 
 def _evaluate_policy(snapshot, action):
@@ -188,10 +188,10 @@ def _get_context_view(view_name: str) -> dict[str, object]:
     return _build_context_view_payload(view_name)
 
 
-def _build_startup_brief_payload(**kwargs):
+def _build_startup_brief_payload(*args, **kwargs):
     from pipeline.system_brief import build_system_brief
 
-    return build_system_brief(**kwargs)
+    return build_system_brief(*args, **kwargs)
 
 
 def _get_startup_packet(

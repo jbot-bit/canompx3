@@ -23,6 +23,7 @@ when behavior is needed in Codex, copy or adapt it into `.codex/hooks/` or
 - `.claude/hooks/context-gauge.py`
 - `.claude/hooks/data-first-guard.py`
 - `.claude/hooks/discovery-loop-guard.py`
+- `.claude/hooks/drain-nudge-sessionstart.py`
 - `.claude/hooks/head-flip-guard.py`
 - `.claude/hooks/intent-router.py`
 - `.claude/hooks/judgment-review-nudge.py`

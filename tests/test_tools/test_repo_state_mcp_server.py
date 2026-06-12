@@ -49,7 +49,15 @@ def test_get_project_pulse_uses_json_formatter() -> None:
     ):
         payload = repo_state_mcp_server._get_project_pulse()
 
-    build_pulse_mock.assert_called_once()
+    build_pulse_mock.assert_called_once_with(
+        repo_state_mcp_server.PROJECT_ROOT,
+        fast=True,
+        deep=False,
+        no_cache=False,
+        skip_drift=False,
+        skip_tests=False,
+        tool_name="repo-state-mcp",
+    )
     format_json_mock.assert_called_once_with(fake_report)
     assert payload["git_branch"] == "main"
     assert payload["counts"]["broken"] == 0
@@ -64,7 +72,12 @@ def test_get_system_context_with_action_returns_snapshot_and_decision() -> None:
     ):
         payload = repo_state_mcp_server._get_system_context(action="orientation")
 
-    snapshot_mock.assert_called_once()
+    snapshot_mock.assert_called_once_with(
+        repo_state_mcp_server.PROJECT_ROOT,
+        context_name="generic",
+        active_tool="repo-state-mcp",
+        active_mode="read-only",
+    )
     decision_mock.assert_called_once_with(snapshot, "orientation")
     assert payload == {"snapshot": {"branch": "main"}, "decision": {"allowed": True}}
 
@@ -87,5 +100,13 @@ def test_get_startup_packet_uses_system_brief() -> None:
     ) as brief_mock:
         payload = repo_state_mcp_server._get_startup_packet(task_text="audit hooks", briefing_level="read_only")
 
-    brief_mock.assert_called_once()
+    brief_mock.assert_called_once_with(
+        repo_state_mcp_server.PROJECT_ROOT,
+        task_text="audit hooks",
+        task_id=None,
+        briefing_level="read_only",
+        context_name="generic",
+        active_tool="repo-state-mcp",
+        active_mode="read-only",
+    )
     assert payload["task_id"] == "repo_workflow_audit"
