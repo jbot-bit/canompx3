@@ -2,33 +2,33 @@
   "mcpServers": {
     "repo-state": {
       "type": "stdio",
-      "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
+      "command": "C:/Users/joshd/canompx3/.venv/Scripts/python.exe",
       "args": [
-        "scripts/tools/repo_state_mcp_server.py"
+        "C:/Users/joshd/canompx3/scripts/tools/repo_state_mcp_server.py"
       ],
       "env": {}
     },
     "research-catalog": {
       "type": "stdio",
-      "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
+      "command": "C:/Users/joshd/canompx3/.venv/Scripts/python.exe",
       "args": [
-        "scripts/tools/research_catalog_mcp_server.py"
+        "C:/Users/joshd/canompx3/scripts/tools/research_catalog_mcp_server.py"
       ],
       "env": {}
     },
     "strategy-lab": {
       "type": "stdio",
-      "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
+      "command": "C:/Users/joshd/canompx3/.venv/Scripts/python.exe",
       "args": [
-        "scripts/tools/strategy_lab_mcp_server.py"
+        "C:/Users/joshd/canompx3/scripts/tools/strategy_lab_mcp_server.py"
       ],
       "env": {}
     },
     "gold-db": {
       "type": "stdio",
-      "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
+      "command": "C:/Users/joshd/canompx3/.venv/Scripts/python.exe",
       "args": [
-        "trading_app/mcp_server.py"
+        "C:/Users/joshd/canompx3/trading_app/mcp_server.py"
       ],
       "env": {}
     },

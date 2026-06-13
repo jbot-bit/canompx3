@@ -211,11 +211,17 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-06-13
-- **Commit:** dcb87063 — fix(pulse): missing core dep is an env artifact, not a BROKEN data signal
-- **Files changed:** 2 files
+- **Date:** 2026-06-14
+- **Commit:** 086eb04d — feat(control-state): self-classifying C11/C12 staleness message + doctrine belt
+- **Files changed:** 8 files
+  - `.claude/rules/c11-c12-staleness-is-expected.md`
   - `HANDOFF.md`
+  - `docs/runtime/stages/2026-06-13-self-classifying-c11-c12-staleness.md`
   - `scripts/tools/project_pulse.py`
+  - `tests/test_trading_app/test_account_survival.py`
+  - `tests/test_trading_app/test_lifecycle_state.py`
+  - `trading_app/account_survival.py`
+  - `trading_app/derived_state.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
