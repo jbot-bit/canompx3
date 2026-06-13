@@ -23,9 +23,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import duckdb
-
 # Add project root to path
+from pipeline.db_connect import open_read_only_with_retry
 from pipeline.db_contracts import deployable_validated_relation
 from pipeline.paths import DAILY_DBN_DIR, GOLD_DB_PATH
 
@@ -61,7 +60,7 @@ def collect_db_metrics(db_path: Path) -> dict:
 
     result["size_mb"] = round(db_path.stat().st_size / (1024 * 1024), 2)
 
-    con = duckdb.connect(str(db_path), read_only=True)
+    con = open_read_only_with_retry(str(db_path), attempts=3, max_delay=4.0)
     try:
         tables = con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='main'").fetchall()
         result["tables"] = [t[0] for t in tables]
@@ -224,7 +223,7 @@ def collect_contract_history(db_path: Path, instrument: str = "MGC") -> list[dic
     if not db_path.exists():
         return []
 
-    con = duckdb.connect(str(db_path), read_only=True)
+    con = open_read_only_with_retry(str(db_path), attempts=3, max_delay=4.0)
     try:
         rows = con.execute(
             """
@@ -271,7 +270,7 @@ def collect_data_quality(db_path: Path) -> dict:
     if not db_path.exists():
         return result
 
-    con = duckdb.connect(str(db_path), read_only=True)
+    con = open_read_only_with_retry(str(db_path), attempts=3, max_delay=4.0)
     try:
         count = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]
         if count == 0:
@@ -334,7 +333,7 @@ def collect_strategy_metrics(db_path: Path) -> dict:
     if not db_path.exists():
         return result
 
-    con = duckdb.connect(str(db_path), read_only=True)
+    con = open_read_only_with_retry(str(db_path), attempts=3, max_delay=4.0)
     try:
         tables = [
             t[0]

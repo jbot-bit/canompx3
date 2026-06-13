@@ -22,6 +22,7 @@ from pipeline.check_drift import (
     check_dow_classification_complete,
     check_hardcoded_mgc_sql,
     check_holdout_policy_declaration_consistency,
+    check_no_raw_duckdb_connect_in_bot_concurrent_paths,
     check_no_raw_duckdb_connect_in_eod_chain,
     check_no_raw_duckdb_connect_in_live,
     check_no_raw_duckdb_connect_in_survival_sim,
@@ -3874,3 +3875,89 @@ class TestNoRawDuckdbConnectInSurvivalSim:
         # The allowlisted file does not exist under the tmp root → empty, no crash.
         self._set_root(tmp_path, monkeypatch)
         assert check_no_raw_duckdb_connect_in_survival_sim() == []
+
+
+class TestNoRawDuckdbConnectInBotConcurrentPaths:
+    """Tests for check_no_raw_duckdb_connect_in_bot_concurrent_paths.
+
+    The guard bans raw ``duckdb.connect(...)`` in the bot-concurrent read paths
+    (``pipeline/dashboard.py`` + ``trading_app/ai/corpus.py``) so every connect
+    routes through the ``pipeline.db_connect`` retry wrapper — a dedicated sibling
+    of the live, eod_chain, and survival-sim guards (neither file is in the EOD
+    chain or the survival-sim consumer, so they get their own accurately-scoped
+    guard). Injection tests prove the guard actually guards (integrity-guardian
+    § 7). Scope is a 2-file allowlist; the tests write the real allowlisted paths
+    under a tmp root.
+    """
+
+    def _set_root(self, tmp_path, monkeypatch):
+        from pipeline import check_drift
+
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        (tmp_path / "pipeline").mkdir(parents=True)
+        (tmp_path / "trading_app" / "ai").mkdir(parents=True)
+
+    def test_real_paths_are_clean(self):
+        # The actual dashboard.py + corpus.py must have zero raw connects.
+        assert check_no_raw_duckdb_connect_in_bot_concurrent_paths() == []
+
+    def test_catches_raw_connect_dashboard(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "pipeline" / "dashboard.py").write_text(
+            "import duckdb\n\ndef f(db):\n    con = duckdb.connect(str(db), read_only=True)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_bot_concurrent_paths()
+        assert len(violations) == 1
+        assert "dashboard.py:4" in violations[0]
+        assert "open_read_only_with_retry" in violations[0]
+
+    def test_catches_raw_connect_corpus(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "trading_app" / "ai" / "corpus.py").write_text(
+            "import duckdb\n\ndef f(db):\n    con = duckdb.connect(db, read_only=True)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_bot_concurrent_paths()
+        assert len(violations) == 1
+        assert "corpus.py:4" in violations[0]
+
+    def test_wrapper_form_passes(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "pipeline" / "dashboard.py").write_text(
+            "from pipeline.db_connect import open_read_only_with_retry\n\n"
+            "def f(db):\n    con = open_read_only_with_retry(str(db), attempts=3, max_delay=4.0)\n    return con\n"
+        )
+        assert check_no_raw_duckdb_connect_in_bot_concurrent_paths() == []
+
+    def test_catches_aliased_import(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "pipeline" / "dashboard.py").write_text(
+            "import duckdb as d\n\ndef f(db):\n    con = d.connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_bot_concurrent_paths()
+        assert len(violations) == 1
+        assert "dashboard.py:4" in violations[0]
+
+    def test_catches_from_import_connect(self, tmp_path, monkeypatch):
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "trading_app" / "ai" / "corpus.py").write_text(
+            "from duckdb import connect\n\ndef f(db):\n    con = connect(db)\n    return con\n"
+        )
+        violations = check_no_raw_duckdb_connect_in_bot_concurrent_paths()
+        assert len(violations) == 1
+        assert "corpus.py:4" in violations[0]
+
+    def test_wrapper_call_not_flagged_under_from_import(self, tmp_path, monkeypatch):
+        # `from duckdb import connect` present, but the call is the wrapper —
+        # the bare-connect ban must not false-positive on open_*_with_retry().
+        self._set_root(tmp_path, monkeypatch)
+        (tmp_path / "trading_app" / "ai" / "corpus.py").write_text(
+            "from duckdb import connect  # noqa: F401\n"
+            "from pipeline.db_connect import open_read_only_with_retry\n\n"
+            "def f(db):\n    con = open_read_only_with_retry(db, attempts=3, max_delay=4.0)\n    return con\n"
+        )
+        assert check_no_raw_duckdb_connect_in_bot_concurrent_paths() == []
+
+    def test_missing_files_no_crash(self, tmp_path, monkeypatch):
+        # Neither allowlisted file exists under the tmp root → empty, no crash.
+        self._set_root(tmp_path, monkeypatch)
+        assert check_no_raw_duckdb_connect_in_bot_concurrent_paths() == []

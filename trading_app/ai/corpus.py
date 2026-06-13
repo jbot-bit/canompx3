@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 
 from pipeline.cost_model import COST_SPECS
+from pipeline.db_connect import open_read_only_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +112,7 @@ def get_schema_definitions(db_path: str) -> str:
 
     Returns a formatted string describing all tables and their columns.
     """
-    import duckdb
-
-    con = duckdb.connect(db_path, read_only=True)
+    con = open_read_only_with_retry(db_path, attempts=3, max_delay=4.0)
     try:
         tables = con.execute(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name"
@@ -137,9 +136,7 @@ def get_schema_definitions(db_path: str) -> str:
 
 def get_db_stats(db_path: str) -> str:
     """Get row counts per table for context."""
-    import duckdb
-
-    con = duckdb.connect(db_path, read_only=True)
+    con = open_read_only_with_retry(db_path, attempts=3, max_delay=4.0)
     try:
         tables = con.execute(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name"
