@@ -212,12 +212,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** 67c22cec — @ fix(db): route bot-concurrent read connects through retry wrapper
-- **Files changed:** 4 files
-  - `pipeline/check_drift.py`
-  - `pipeline/dashboard.py`
-  - `tests/test_pipeline/test_check_drift.py`
-  - `trading_app/ai/corpus.py`
+- **Commit:** 09803a36 — @ chore(stages): close 4 verified-complete stale stage files
+- **Files changed:** 5 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/2026-06-11-per-account-daily-loss-belts.md`
+  - `docs/runtime/stages/2026-06-13-mnq-cumvol-oscillation-capture.md`
+  - `docs/runtime/stages/2026-06-13-route-eod-backfill-connects-through-retry-wrapper.md`
+  - `docs/runtime/stages/2026-06-13-route-survival-sim-connects.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
