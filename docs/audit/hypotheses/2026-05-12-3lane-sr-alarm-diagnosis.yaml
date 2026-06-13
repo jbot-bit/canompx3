@@ -47,7 +47,7 @@ authority:
     - "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
     - "docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md"
     - "docs/institutional/literature/harvey_liu_2015_backtesting.md"
-    - "docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md"
+    - "docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md"
     - "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
     - "docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md"
   notes:
@@ -183,7 +183,7 @@ grounding:
         those cases, never DEAD. Honest declaration of underpowered tier
         is the correct output, not a workaround.
     - source_file: "resources/changepoint_polunchenko_pepelyshev_2015.pdf"
-      extract: "docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md"
+      extract: "docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md"
       page_or_section: "Score-based Shiryaev-Roberts recursion + ARL recalibration"
       use: >
         Canonical authority for the SR statistic. trading_app/live/sr_monitor.py
@@ -297,7 +297,7 @@ hypotheses:
       Per lane: PEAK_DECAYED if current_sr_stat / sr_stat_peak < 0.10
       AND recent_10_mean_r > 0 (alarm trigger no longer reflects current
       health). Otherwise: ALARM_STILL_LIVE.
-    theory_citation: "docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md"
+    theory_citation: "docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md"
 
   - id: 2
     name: "F2 (per lane) — Rolling-60-trade decomposition (Step 2)"
@@ -330,7 +330,7 @@ hypotheses:
       UNVERIFIED_INSUFFICIENT_POWER if rolling-60 window has N<30 OR OOS
         power<50% per RULE 3.3.
     theory_citation: >
-      docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md;
+      docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md;
       docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md;
       .claude/rules/backtesting-methodology.md RULE 3.3 + RULE 13.
 
@@ -426,7 +426,7 @@ hypotheses:
         mechanism components per F1-F4.
       UNVERIFIED_INSUFFICIENT_POWER if cross-lane data insufficient.
     theory_citation: >
-      docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md
+      docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md
       (ARL recalibration); .claude/rules/pooled-finding-rule.md (per-cell breakdown).
 
 verdict_taxonomy:

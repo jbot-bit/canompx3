@@ -37,7 +37,7 @@ authority:
     - "docs/institutional/literature/fitschen_2013_ch3_breakouts.md"
     - "docs/institutional/literature/chordia_et_al_2018.md"
     - "docs/institutional/literature/harvey_liu_2015_backtesting.md"
-    - "docs/institutional/literature/aronson_2007_evidence_based_ta.md"
+    - "docs/institutional/literature/aronson_2007_ebta_data_snooping.md"
     - "memory/feedback_per_lane_breakdown_required.md"
     - "memory/feedback_pooled_not_lane_specific.md"
   notes:
