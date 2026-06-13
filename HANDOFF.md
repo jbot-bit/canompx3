@@ -212,11 +212,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** a201c9ce — test(survival): re-baseline 2 stale D-3 goldens + freeze fail-closed proof on synthetic fixture
-- **Files changed:** 3 files
+- **Commit:** 91f887aa — @ fix(mcp): pin 4 local MCP servers to project venv via ${CLAUDE_PROJECT_DIR}
+- **Files changed:** 2 files
+  - `.mcp.json`
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-13-d3-rebaseline-and-freeze-goldens.md`
-  - `tests/test_trading_app/test_account_survival.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
