@@ -212,9 +212,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** 512bff37 — [bookkeeping] HANDOFF: record survival-sim retry-wrapper commit (60243241)
-- **Files changed:** 1 files
-  - `HANDOFF.md`
+- **Commit:** 67c22cec — @ fix(db): route bot-concurrent read connects through retry wrapper
+- **Files changed:** 4 files
+  - `pipeline/check_drift.py`
+  - `pipeline/dashboard.py`
+  - `tests/test_pipeline/test_check_drift.py`
+  - `trading_app/ai/corpus.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
