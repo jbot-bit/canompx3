@@ -339,6 +339,138 @@ swept; the conclusion is the aggregate, not a picked cell.
 ## Reproduction (A3)
 
 ```bash
-# regenerates research/output/mgc_lane_variable_sweep.csv (needs gold.db unlocked)
-# (inline scan — see session transcript; reads orb_outcomes JOIN daily_features, Mode-A split)
+# Regenerate the grid from current gold.db (script committed 2026-06-14, replacing
+# the original inline scan — RULE 11 audit-trail closure):
+python research/mgc_lane_variable_sweep.py
+# Verify the verdict invariants hold (0 cells t>=3.0; 0 N>=100 cells t>=2.5;
+# top deployable cell US_DATA_830 G6 ~ t2.36):
+python research/mgc_lane_variable_sweep.py --verify
 ```
+
+**Reproduction note (2026-06-14):** A3 was originally an inline transcript scan;
+`research/mgc_lane_variable_sweep.py` was written + committed this session to make
+it auditable. The committed reproducer pools all `confirm_bars` per cell (matching
+the original — E1 spans cb=1..5, E2 is cb=1 only) and applies a min-IS-N≥50
+admission floor. Regenerated from current gold.db it yields **624 cells** (vs the
+original 612 — the delta is gold.db backfill since 2026-06-13, which is why the
+script's `--verify` asserts the verdict *invariants*, not byte-identity to the
+mutable-DB snapshot). All verdict-bearing facts are stable across the backfill.
+
+---
+
+# Validation verdict — the two "open paths" are CLOSED (2026-06-14)
+
+**Scope:** the A3 section left two "honest next moves" open (pooled US_DATA_830,
+theory-first Pathway-B) and asked to plan/validate them. This section is that
+validation. Applying the institutional-researcher framework (truth-check →
+de-tunnel → edge → brutal-filter → decision) **before** building shows both paths,
+as literally described, are blocked or futile. The deliverable is a grounded
+**decision**, not two prereg LOCKs. All gates below were executed/read this
+session, not asserted.
+
+## Path 1 — Pooled US_DATA_830 (4 correlated cells) → **DEAD**
+
+Two independent kills, either sufficient:
+
+1. **MinBTL K-budget fails at 4 declared trials.** MGC clean horizon = 2.70yr →
+   `N_max = 3`. A 4-cell pool declares N=4, which needs 2.77yr > 2.70yr.
+   - Evidence: `python scripts/tools/estimate_k_budget.py --instrument MGC --n-trials 4`
+     → `Verdict: FAIL — Bailey horizon violated` (N=1 → `PASS`). Authority:
+     `pre_registered_criteria.md` Criterion 2 (Bailey 2013).
+
+2. **The "4 cells" are STRICT NESTED SUBSETS, not independent evidence.** Verified
+   from `research/output/mgc_lane_variable_sweep.csv` (US_DATA_830 O30 E2 RR2.0):
+   NO_FILTER N=906 ⊃ ORB_G4 773 ⊃ ORB_G6 569 ⊃ ORB_G8 412, with a **byte-identical
+   OOS slice** (oosN=92, oos=+0.098) across all four. Pooling them re-counts one
+   nested trade population at four filter thresholds — closer to double-counting
+   than power-gain. The honest unit is the trading day; the days overlap
+   completely, so the clustered-by-day t **cannot rise off 2.36 by pooling**.
+   NO_FILTER is the *weakest* member (t=1.67); the G6 size filter *lifts* it to
+   t=2.36 — so the structure is the **G6 size-filter × US_DATA_830 interaction**,
+   not US_DATA_830 generically.
+
+The handoff's framing of "pool the 4 cells" as a *power* win is the biggest
+misinterpretation: pooling buys naive-N (already discounted by the clustered-t),
+not independent power. This is post-hoc rescue of a sub-threshold effect.
+
+## Path 2 — Theory-first Pathway-B (t≥3.00 with-theory bar) → **UNVERIFIED & BLOCKED**
+
+The Harris US-8:30 data-release continuation mechanism is real and grounds *why*
+the cell could work, but two independent gates block the t≥3.00 access it depends
+on:
+
+1. **Check 69 / Amendment 3.4 (PROVISIONAL) forbids a new `theory_grant: true`.**
+   A new prereg dated ≥2026-05-23 with `theory_grant: true` must carry an escape
+   field OR cite a literature extract naming the *specific filter/cell class* as
+   alpha. The Harris extract (`harris_2002_…md:94-105`) is **generic**
+   ("fundamental volatility = unanticipated value changes"); the string
+   `US_DATA_830` is the repo's mechanism-implication editorial (line 105), **not a
+   Harris quote**. It grounds a mechanism; it does **not** name
+   `US_DATA_830 O30 E2 RR2.0 ORB_G6` as alpha. Strict-Option-A escape unavailable.
+   Authority: `pipeline/check_drift.py:3914-4013`.
+
+2. **The t≥3.00 bar is itself only INDIRECT/STUB-grounded today.** Criterion 4
+   flags it as grounded one-step-removed via Chordia p5;
+   `harvey_liu_zhu_2015_cross_section.md` is a STUB pending re-ground (audit IMP-1).
+   The criteria text forbids accepting any 3.00≤t<3.79 with-theory candidate until
+   HLZ grounding is promoted INDIRECT→DIRECT. Authority:
+   `pre_registered_criteria.md:111-117`.
+
+So the path is forced to the **no-theory t≥3.79 bar**, which needs 2.58× more clean
+data than MGC's 2.70yr horizon provides. It cannot clear standalone on current
+data — UNVERIFIED, not rescuable by relabeling.
+
+## Self-audit corrections to the handoff (caught this session)
+
+- **The named object is BOTH-direction-pooled.** The A3 grid's headline
+  `US_DATA_830 O30 E2 RR2.0 ORB_G6` t=2.363 is the **both-direction** cell (N=569,
+  verified). Isolating the **long-only** deployable slice drops it to **t=2.004**
+  (N=299); short-only is t=1.308 (N=270). A standalone "long" object lands *further*
+  from the bar than the handoff implies. Either framing is < 3.79.
+- **Reproducer pools all `confirm_bars`.** E1 spans cb=1..5 (5 confirmation-timing
+  variants of nearly the same trades → ~5× N inflation); E2 is cb=1 only. The
+  clustered-by-day t discounts this; it does not rescue any cell.
+
+## Edge reclassification (CONDITIONAL — where edge actually lives)
+
+MGC US_DATA_830 30min-E2 is a **consistent weak contributor** (+0.075 to +0.107R,
+4/4 positive years, OOS-positive) — exactly `deployable_expected=False`. Its correct
+role is **R8 portfolio-confluence / allocator-weighted input**, NOT an R1 standalone
+signal. This is the data-grounded proof of why MGC is `deployable_expected=False`:
+real edges, too small to clear the multiplicity bar standalone.
+
+## De-tunnel (alternative roles considered)
+
+- **Standalone signal (R1):** tested by A3 — no t≥2.5 cell at deployable N.
+  Rejected.
+- **Filter/overlay on a deployed MNQ lane:** different object; not what the data
+  found. Open but separate, not pursued here.
+- **Portfolio-confluence input (R8):** the CONDITIONAL home (above).
+- **Execution-layer (entry-timing) use:** untested; lower priority.
+
+## Decision
+
+- **Path 1 = DEAD** (MinBTL N_max=3 + nested-subset/clustered-t-doesn't-pool).
+- **Path 2 = UNVERIFIED & BLOCKED** (Check 69 forces t≥3.79; data insufficient at
+  2.70yr horizon).
+- **Reclassify** MGC US_DATA_830-30min-E2 as a portfolio-confluence input, not
+  standalone-deployable.
+- **No prereg LOCK written.** A `theory_grant:false` K=1 single-cell confluence
+  test (the ONE gate-legal experiment — passes MinBTL at N=1, honest prior
+  t≈2.0–2.4 < 3.79 → CONFLUENCE-ONLY) is **available but deferred**: per this
+  doc's own redirect, marginal MGC research hours rank below the live-MNQ capital
+  batons, and MGC will not deploy until ~2027 regardless.
+
+### What this verdict explicitly refused
+No `theory_grant:true` prereg (Check 69 wall). No 4-declared-trial pooled prereg
+(MinBTL N_max=3 fail). No post-hoc t-bar relaxation or OOS re-tuning. No
+`validated_setups` write (canonical read-only layers only).
+
+**Verified gates (file:line):** K-budget `estimate_k_budget.py --instrument MGC
+--n-trials {1,4}` (ran live: N=1 PASS, N=4 FAIL); Check 69
+`pipeline/check_drift.py:3914-4013`; Harris generic-citation
+`docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md:94-105`;
+t≥3.00 INDIRECT/STUB `docs/institutional/pre_registered_criteria.md:111-117`;
+G-filter price-level caveat `pre_registered_criteria.md:926`; nested-subset +
+direction split verified from `research/output/mgc_lane_variable_sweep.csv` via
+`research/mgc_lane_variable_sweep.py`.

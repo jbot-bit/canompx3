@@ -212,9 +212,15 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-14
-- **Commit:** 67c50631 — [bookkeeping] HANDOFF: auto-update last-session pointer to 610f44fa
-- **Files changed:** 1 files
+- **Commit:** 61518d3c — MGC trend-day runner: DEAD + no-pigeonhole lane sweep (real-but-marginal)
+- **Files changed:** 7 files
   - `HANDOFF.md`
+  - `docs/audit/results/2026-06-14-mgc-trend-day-tail-descriptive.md`
+  - `docs/runtime/stages/2026-06-14-mgc-trend-day-tail-descriptive.md`
+  - `research/mgc_trend_day_exit_sweep.py`
+  - `research/mgc_trend_day_tail_descriptive.py`
+  - `tests/test_research/test_mgc_exit_sweep.py`
+  - `tests/test_research/test_mgc_trend_day_trail.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
