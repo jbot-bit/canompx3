@@ -212,10 +212,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-14
-- **Commit:** fb09a625 — fix(mcp): use literal abs paths for 4 local MCP servers (revert env-template)
-- **Files changed:** 2 files
-  - `.mcp.json`
+- **Commit:** 610f44fa — @ docs(hygiene): fix dead lit refs + advance HANDOFF + drop completed D-3 stage
+- **Files changed:** 4 files
   - `HANDOFF.md`
+  - `docs/audit/hypotheses/2026-04-20-participation-optimum-universality-v1.yaml`
+  - `docs/audit/hypotheses/2026-05-12-3lane-sr-alarm-diagnosis.yaml`
+  - `docs/runtime/stages/2026-06-10-d3-task2-mae-basis-sizing-fix.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
