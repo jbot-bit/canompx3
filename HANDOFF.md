@@ -212,7 +212,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** 394a157f — docs(handoff): tidy Last Session block to match 91f887aa mcp-pin commit
+- **Commit:** 59925400 — docs(handoff): advance Last Session pointer to 394a157f
 - **Files changed:** 1 files
   - `HANDOFF.md`
 

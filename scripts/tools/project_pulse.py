@@ -328,6 +328,21 @@ def _is_db_locked(e: Exception) -> bool:
     return "being used by another process" in msg or "Cannot open file" in msg
 
 
+def _is_missing_core_dep(e: Exception) -> bool:
+    """True when a collector failed because a core dependency (e.g. duckdb)
+    is absent from the running interpreter.
+
+    ``build_pulse`` runs in-process, so when ``build_brief`` is invoked from a
+    python that lacks the project venv (the harness interpreter), the collectors'
+    lazy ``import duckdb`` raises ImportError. That is an ENVIRONMENT condition
+    — the wrong interpreter is running the check — not a data-health failure.
+    Like ``_is_db_locked`` it must reclassify away from category=broken so the
+    brief does not cry wolf about healthy data. Keyed on exception TYPE, not
+    message, so a genuine logic bug (KeyError/ValueError) still surfaces.
+    """
+    return isinstance(e, ImportError)
+
+
 # ---------------------------------------------------------------------------
 # Collectors — each returns list[PulseItem], never raises
 # ---------------------------------------------------------------------------
@@ -799,6 +814,15 @@ def collect_staleness(root: Path, db_path: Path) -> list[PulseItem]:
                     summary="DB locked — staleness check skipped",
                 )
             )
+        elif _is_missing_core_dep(e):
+            items.append(
+                PulseItem(
+                    category="paused",
+                    severity="low",
+                    source="staleness",
+                    summary="venv not active — staleness check skipped (run via .venv python)",
+                )
+            )
         else:
             items.append(
                 PulseItem(
@@ -1016,6 +1040,15 @@ def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
                     severity="low",
                     source="fitness",
                     summary="DB locked — fitness check skipped",
+                )
+            )
+        elif _is_missing_core_dep(e):
+            items.append(
+                PulseItem(
+                    category="paused",
+                    severity="low",
+                    source="fitness",
+                    summary="venv not active — fitness check skipped (run via .venv python)",
                 )
             )
         else:
@@ -1342,6 +1375,15 @@ def collect_deployment_state(
                     summary="DB locked — deployment state check skipped",
                 )
             )
+        elif _is_missing_core_dep(e):
+            items.append(
+                PulseItem(
+                    category="paused",
+                    severity="low",
+                    source="deployment",
+                    summary="venv not active — deployment state check skipped (run via .venv python)",
+                )
+            )
         else:
             items.append(
                 PulseItem(
@@ -1489,16 +1531,25 @@ def collect_lifecycle_control(db_path: Path) -> tuple[dict | None, dict | None, 
 
         lifecycle = read_lifecycle_state(db_path=db_path)
     except Exception as e:
+        if _is_db_locked(e):
+            summary = "DB locked — lifecycle state check skipped"
+            category, severity = "paused", "low"
+        elif _is_missing_core_dep(e):
+            summary = "venv not active — lifecycle state check skipped (run via .venv python)"
+            category, severity = "paused", "low"
+        else:
+            summary = f"Lifecycle state error: {type(e).__name__}: {e}"
+            category, severity = "broken", "medium"
         return (
             None,
             None,
             None,
             [
                 PulseItem(
-                    category="broken",
-                    severity="medium",
+                    category=category,
+                    severity=severity,
                     source="lifecycle",
-                    summary=f"Lifecycle state error: {type(e).__name__}: {e}",
+                    summary=summary,
                 )
             ],
         )
@@ -1944,6 +1995,15 @@ def collect_fitness_deep(db_path: Path) -> tuple[dict, list[PulseItem]]:
                     severity="low",
                     source="fitness",
                     summary="DB locked — deep fitness check skipped",
+                )
+            )
+        elif _is_missing_core_dep(e):
+            items.append(
+                PulseItem(
+                    category="paused",
+                    severity="low",
+                    source="fitness",
+                    summary="venv not active — deep fitness check skipped (run via .venv python)",
                 )
             )
         else:
