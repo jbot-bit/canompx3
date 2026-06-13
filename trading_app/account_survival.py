@@ -35,6 +35,7 @@ from trading_app.derived_state import (
     build_db_identity,
     build_profile_fingerprint,
     build_state_envelope,
+    classify_state_reason,
     get_git_head,
     validate_state_envelope,
 )
@@ -1656,12 +1657,18 @@ def check_survival_report_gate(
 
     state = read_survival_report_state(profile_id, db_path=db_path, today=today)
     if not bool(state["valid"]):
-        reason = str(state.get("reason") or "invalid state")
-        return False, f"BLOCKED: Criterion 11 state {reason}. Re-run account survival."
+        raw_reason = state.get("reason")
+        reason = str(raw_reason or "invalid state")
+        _, guidance = classify_state_reason(str(raw_reason) if raw_reason is not None else None)
+        return False, f"BLOCKED: Criterion 11 state {reason}. {guidance}"
 
     summary = state["summary"]
     if not isinstance(summary, dict):
-        return False, "BLOCKED: Criterion 11 state missing summary payload. Re-run account survival."
+        # valid envelope but malformed payload — a structural DEFECT, not routine
+        # staleness. Route through the classifier (which returns DEFECT for this
+        # unrecognized reason) so the wording matches its sibling above.
+        _, guidance = classify_state_reason("missing summary payload")
+        return False, f"BLOCKED: Criterion 11 state missing summary payload. {guidance}"
 
     try:
         as_of_date = date.fromisoformat(str(summary["as_of_date"]))

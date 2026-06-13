@@ -1401,6 +1401,8 @@ def _collect_control_items_from_lifecycle(
     lifecycle: dict,
 ) -> tuple[dict | None, dict | None, dict | None, list[PulseItem]]:
     """Project unified lifecycle truth into pulse summaries and actionable items."""
+    from trading_app.derived_state import classify_state_reason
+
     items: list[PulseItem] = []
     survival_summary = lifecycle.get("criterion11")
     sr_summary = lifecycle.get("criterion12")
@@ -1409,6 +1411,9 @@ def _collect_control_items_from_lifecycle(
 
     if isinstance(survival_summary, dict):
         if not survival_summary.get("gate_ok"):
+            # gate_msg is already self-classifying — check_survival_report_gate runs
+            # classify_state_reason and appends the EXPECTED-regen vs DEFECT guidance.
+            # Pass it through verbatim; re-classifying here would double-stamp the cue.
             items.append(
                 PulseItem(
                     category="broken",
@@ -1468,16 +1473,19 @@ def _collect_control_items_from_lifecycle(
             sr_summary = None
         elif not sr_summary.get("valid"):
             reason = sr_summary.get("reason")
-            is_stale = isinstance(reason, str) and reason.startswith("stale")
+            # Split fingerprint/identity-drift (EXPECTED, regen-don't-debug) from a true
+            # legacy/corruption DEFECT. The same classifier drives C11 — one taxonomy for
+            # both criteria (read_criterion12_state shares validate_state_envelope).
+            _klass, _sr_guidance = classify_state_reason(str(reason) if reason is not None else None)
             items.append(
                 PulseItem(
                     category="broken",
                     severity="high",
                     source="sr_monitor",
                     summary=(
-                        "Criterion 12 SR state is stale — refresh control state"
-                        if is_stale
-                        else "Criterion 12 SR state mismatched/legacy — refresh control state"
+                        f"Criterion 12 SR state invalidated — {_sr_guidance}"
+                        if _klass == "EXPECTED_STALE"
+                        else f"Criterion 12 SR state DEFECT (legacy/corruption) — {_sr_guidance}"
                     ),
                     detail=str(reason) if reason is not None else None,
                     action=(f"python scripts/tools/refresh_control_state.py --profile {sr_summary.get('profile_id')}"),

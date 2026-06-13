@@ -254,3 +254,57 @@ def validate_state_envelope(
         return False, f"stale state: {age_days}d old > {max_age_days}d", None
 
     return True, None, envelope
+
+
+# Reasons that mean "fingerprint/identity invalidated BY DESIGN → regen, don't debug".
+# These come from two layers and must both be owned here:
+#   * envelope layer (validate_state_envelope above): the five identity-drift reasons.
+#   * read layer (account_survival.read_survival_report_state /
+#     lifecycle_state.read_criterion12_state): "missing" = no state file yet, which
+#     refresh_control_state simply creates.
+# Exact-match (not substring `in`) because "profile mismatch" ⊂ "profile fingerprint
+# mismatch" — a loose membership test would misclassify the longer reason.
+_EXPECTED_STALE_EXACT = frozenset(
+    {
+        "profile mismatch",
+        "profile fingerprint mismatch",
+        "lane_ids mismatch",
+        "db identity mismatch",
+        "code fingerprint mismatch",
+        "missing",  # read-layer: no state file yet → regen creates it
+    }
+)
+# Interpolated reasons (carry a numeric suffix) → prefix-match, e.g. "stale state: 3d old > 1d".
+_EXPECTED_STALE_PREFIXES = ("stale state:",)
+
+
+def classify_state_reason(reason: str | None) -> tuple[str, str]:
+    """Map ANY C11/C12 state reason → (klass, operator_guidance).
+
+    klass ∈ {"EXPECTED_STALE", "DEFECT"} — the enum term deliberately matches the
+    doctrine/memory word "EXPECTED" (no third synonym like "REGEN" in the code).
+
+    EXPECTED_STALE = control state invalidated by a routine cause (fingerprint/identity
+    drift on DB rebuild / lane-narrow / code change, or no state file yet) → regen via
+    refresh_control_state, do NOT debug.
+
+    DEFECT = legacy/missing-field/wrong-schema/unreadable/corruption → regen first
+    (refresh_control_state runs and fails closed on a persistent defect), but it IS a
+    real bug if it survives the regen. Unknown/None → DEFECT (fail-closed: never wave an
+    unrecognized reason through as routine staleness).
+
+    The returned klass is ADVISORY to the human only — nothing gates regen on it
+    (refresh_control_state regenerates on ANY not-valid state regardless of class).
+    """
+    if reason in _EXPECTED_STALE_EXACT or (reason and reason.startswith(_EXPECTED_STALE_PREFIXES)):
+        return (
+            "EXPECTED_STALE",
+            "EXPECTED fail-closed staleness - regen via "
+            "`python scripts/tools/refresh_control_state.py --profile <id>`, don't debug",
+        )
+    return (
+        "DEFECT",
+        "control-state DEFECT (schema/corruption/unreadable) - regen via "
+        "`refresh_control_state.py --profile <id>` first; if it STILL blocks, investigate "
+        "(it's a real bug, not routine staleness)",
+    )

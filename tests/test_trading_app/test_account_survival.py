@@ -28,6 +28,7 @@ from trading_app.account_survival import (
     read_survival_report_state,
     simulate_survival,
 )
+from trading_app.derived_state import classify_state_reason
 from trading_app.prop_profiles import get_profile
 
 
@@ -1851,3 +1852,157 @@ def test_persist_sweep_raises_when_base_report_missing(tmp_path, monkeypatch):
     )
     with pytest.raises(FileNotFoundError):
         asv._persist_sweep_into_c11_envelope("topstep_50k_mnq_auto", sweep)
+
+
+# --- classify_state_reason: the canonical self-classifying control-state taxonomy ---
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        # envelope-layer identity/fingerprint drift
+        "profile mismatch",
+        "profile fingerprint mismatch",
+        "lane_ids mismatch",
+        "db identity mismatch",
+        "code fingerprint mismatch",
+        # interpolated freshness reason (prefix-matched)
+        "stale state: 3d old > 1d",
+        "stale state: 90d old > 14d",
+        # read-layer: no state file yet -> regen creates it
+        "missing",
+    ],
+)
+def test_classify_state_reason_expected_stale(reason):
+    klass, guidance = classify_state_reason(reason)
+    assert klass == "EXPECTED_STALE"
+    assert "EXPECTED" in guidance
+    assert "refresh_control_state" in guidance
+    assert "don't debug" in guidance
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        # envelope-layer defects
+        "legacy state: missing schema_version",
+        "legacy state: missing canonical_inputs.code_fingerprint",
+        "legacy state: missing freshness.as_of_date",
+        "wrong state_type: sr_monitor",
+        "wrong schema_version: 0",
+        "invalid canonical_inputs",
+        "invalid freshness",
+        "invalid freshness metadata",
+        # read-layer defects
+        "unreadable: Expecting value: line 1 column 1 (char 0)",
+        "invalid state payload",
+        "legacy state: missing versioned envelope",
+        "invalid state envelope",
+        # unknown / garbage / None -> fail-closed to DEFECT
+        "some unrecognized reason",
+        "",
+        None,
+    ],
+)
+def test_classify_state_reason_defect(reason):
+    klass, guidance = classify_state_reason(reason)
+    assert klass == "DEFECT"
+    assert "DEFECT" in guidance
+    assert "investigate" in guidance
+    assert "refresh_control_state" in guidance  # regen-first flow still names the tool
+    assert "don't debug" not in guidance  # DEFECT must NOT tell the operator to skip debugging
+
+
+def test_classify_state_reason_substring_trap_guard():
+    """'profile mismatch' must not be misclassified by the longer 'profile fingerprint mismatch'."""
+    assert classify_state_reason("profile mismatch")[0] == "EXPECTED_STALE"
+    assert classify_state_reason("profile fingerprint mismatch")[0] == "EXPECTED_STALE"
+    # A non-reason that merely CONTAINS an expected token must not leak through as EXPECTED.
+    assert classify_state_reason("the profile mismatch was investigated")[0] == "DEFECT"
+
+
+def test_classify_state_reason_none_does_not_raise():
+    """None must classify as DEFECT without a None.startswith crash."""
+    klass, _ = classify_state_reason(None)
+    assert klass == "DEFECT"
+
+
+# --- gate messages self-classify (consume the canonical classifier) ---
+
+
+def test_gate_message_expected_stale_says_regen_dont_debug(tmp_path, monkeypatch):
+    """A db-identity (EXPECTED-stale) mismatch -> message tells the operator to regen, not debug."""
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_a, **_k: _canonical_inputs()
+    )
+    report_path = get_survival_report_path("topstep_50k_mnq_auto")
+    stale_inputs = {**_canonical_inputs(), "db_identity": "stale-db-identity"}
+    report_path.write_text(
+        json.dumps(
+            _survival_envelope(
+                as_of_date="2026-04-09",
+                operational_pass_probability=0.78,
+                gate_pass=True,
+                canonical_inputs=stale_inputs,
+            )
+        )
+    )
+
+    ok, msg = check_survival_report_gate("topstep_50k_mnq_auto", today=date(2026, 4, 10))
+
+    assert ok is False
+    assert "db identity mismatch" in msg  # literal reason preserved
+    assert "EXPECTED" in msg
+    assert "refresh_control_state" in msg
+    assert "don't debug" in msg
+
+
+def test_gate_message_defect_says_investigate_not_dont_debug(tmp_path, monkeypatch):
+    """A legacy-envelope (DEFECT) state -> message says investigate, names regen, never 'don't debug'."""
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_a, **_k: _canonical_inputs()
+    )
+    report_path = get_survival_report_path("topstep_50k_mnq_auto")
+    report_path.write_text(
+        json.dumps(
+            {
+                "summary": {"profile_id": "topstep_50k_mnq_auto", "as_of_date": "2026-04-09"},
+                "rules": asdict(_rules()),
+                "metadata": {"source_days": 5},
+            }
+        )
+    )
+
+    ok, msg = check_survival_report_gate("topstep_50k_mnq_auto", today=date(2026, 4, 10))
+
+    assert ok is False
+    assert "legacy state: missing versioned envelope" in msg  # literal reason preserved
+    assert "DEFECT" in msg
+    assert "investigate" in msg
+    assert "refresh_control_state" in msg
+    assert "don't debug" not in msg
+
+
+def test_gate_message_missing_summary_payload_is_defect(tmp_path, monkeypatch):
+    """The valid-but-non-dict-summary defensive guard -> DEFECT framing (consistent sibling wording).
+
+    read_survival_report_state coerces a non-dict summary to {} (so the guard is
+    belt-and-suspenders, unreachable under the canonical read contract). We feed a
+    valid state whose summary is genuinely not a dict to exercise the guard directly.
+    """
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    get_survival_report_path("topstep_50k_mnq_auto").write_text("{}")  # so the report_path.exists() check passes
+    monkeypatch.setattr(
+        "trading_app.account_survival.read_survival_report_state",
+        lambda *_a, **_k: {"valid": True, "reason": None, "summary": "not-a-dict"},
+    )
+
+    ok, msg = check_survival_report_gate("topstep_50k_mnq_auto", today=date(2026, 4, 10))
+
+    assert ok is False
+    assert "missing summary payload" in msg
+    assert "DEFECT" in msg
+    assert "investigate" in msg
+    assert "don't debug" not in msg

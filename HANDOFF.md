@@ -212,9 +212,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** 59925400 — docs(handoff): advance Last Session pointer to 394a157f
-- **Files changed:** 1 files
+- **Commit:** dcb87063 — fix(pulse): missing core dep is an env artifact, not a BROKEN data signal
+- **Files changed:** 2 files
   - `HANDOFF.md`
+  - `scripts/tools/project_pulse.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex

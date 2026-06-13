@@ -127,3 +127,44 @@ def test_read_lifecycle_state_includes_opportunity_awareness(monkeypatch):
     state = lifecycle_state.read_lifecycle_state("topstep_50k", today=date(2026, 5, 13))
 
     assert state["opportunity_awareness"] == opportunity_state
+
+
+def test_project_pulse_c12_branch_uses_classifier_for_both_classes():
+    """Same classify_state_reason drives the C12 pulse branch — one taxonomy, both criteria.
+
+    A fingerprint-mismatch C12 reason reads EXPECTED-regen; a legacy-envelope C12 reason
+    reads DEFECT. Proves finding #9 (C11 and C12 share one reason vocabulary + classifier).
+    """
+    from scripts.tools.project_pulse import _collect_control_items_from_lifecycle
+
+    def _pulse_c12_item(reason: str):
+        lifecycle = {
+            "criterion11": None,
+            "criterion12": {
+                "profile_id": "topstep_50k_mnq_auto",
+                "available": True,
+                "valid": False,
+                "reason": reason,
+                "counts": {},
+                "status_by_strategy": {},
+            },
+            "pauses": None,
+            "strategy_states": {},
+        }
+        _s, _sr, _p, items = _collect_control_items_from_lifecycle(lifecycle)
+        sr_items = [i for i in items if i.source == "sr_monitor"]
+        assert len(sr_items) == 1
+        return sr_items[0]
+
+    # EXPECTED-stale: code fingerprint mismatch -> regen, don't debug.
+    expected = _pulse_c12_item("code fingerprint mismatch")
+    assert "invalidated" in expected.summary
+    assert "EXPECTED" in expected.summary
+    assert "don't debug" in expected.summary
+    assert "DEFECT" not in expected.summary
+
+    # DEFECT: legacy envelope -> investigate, never 'don't debug'.
+    defect = _pulse_c12_item("legacy state: missing versioned envelope")
+    assert "DEFECT" in defect.summary
+    assert "investigate" in defect.summary
+    assert "don't debug" not in defect.summary
