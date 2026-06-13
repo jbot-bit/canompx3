@@ -2,7 +2,7 @@
   "mcpServers": {
     "repo-state": {
       "type": "stdio",
-      "command": "python",
+      "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
       "args": [
         "scripts/tools/repo_state_mcp_server.py"
       ],
@@ -10,7 +10,7 @@
     },
     "research-catalog": {
       "type": "stdio",
-      "command": "python",
+      "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
       "args": [
         "scripts/tools/research_catalog_mcp_server.py"
       ],
@@ -18,7 +18,7 @@
     },
     "strategy-lab": {
       "type": "stdio",
-      "command": "python",
+      "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
       "args": [
         "scripts/tools/strategy_lab_mcp_server.py"
       ],
@@ -26,7 +26,7 @@
     },
     "gold-db": {
       "type": "stdio",
-      "command": "C:/Users/joshd/canompx3/.venv/Scripts/python.exe",
+      "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
       "args": [
         "trading_app/mcp_server.py"
       ],

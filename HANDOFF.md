@@ -212,13 +212,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** 09803a36 — @ chore(stages): close 4 verified-complete stale stage files
-- **Files changed:** 5 files
+- **Commit:** a201c9ce — test(survival): re-baseline 2 stale D-3 goldens + freeze fail-closed proof on synthetic fixture
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-06-11-per-account-daily-loss-belts.md`
-  - `docs/runtime/stages/2026-06-13-mnq-cumvol-oscillation-capture.md`
-  - `docs/runtime/stages/2026-06-13-route-eod-backfill-connects-through-retry-wrapper.md`
-  - `docs/runtime/stages/2026-06-13-route-survival-sim-connects.md`
+  - `docs/runtime/stages/2026-06-13-d3-rebaseline-and-freeze-goldens.md`
+  - `tests/test_trading_app/test_account_survival.py`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
