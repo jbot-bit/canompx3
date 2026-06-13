@@ -212,9 +212,8 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-13
-- **Commit:** 91f887aa — @ fix(mcp): pin 4 local MCP servers to project venv via ${CLAUDE_PROJECT_DIR}
-- **Files changed:** 2 files
-  - `.mcp.json`
+- **Commit:** 394a157f — docs(handoff): tidy Last Session block to match 91f887aa mcp-pin commit
+- **Files changed:** 1 files
   - `HANDOFF.md`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
