@@ -101,6 +101,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/prereg-session-time-verify.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-edit-guard.py",
             "timeout": 5
           }

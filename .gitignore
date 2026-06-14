@@ -121,6 +121,7 @@ live_signals.jsonl
 .claude/hooks/.data-first-state.json
 .claude/hooks/.risk-tier-state.json
 .claude/hooks/.token-budget-state.json
+.claude/hooks/.prereg-session-time-verify-state.json
 memory/
 
 # Windows junk

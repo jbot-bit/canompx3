@@ -212,15 +212,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-06-14
-- **Commit:** 61518d3c — MGC trend-day runner: DEAD + no-pigeonhole lane sweep (real-but-marginal)
-- **Files changed:** 7 files
+- **Commit:** 009e122d — MGC A3 lane-sweep: committed reproducer + both open paths CLOSED
+- **Files changed:** 4 files
   - `HANDOFF.md`
   - `docs/audit/results/2026-06-14-mgc-trend-day-tail-descriptive.md`
-  - `docs/runtime/stages/2026-06-14-mgc-trend-day-tail-descriptive.md`
-  - `research/mgc_trend_day_exit_sweep.py`
-  - `research/mgc_trend_day_tail_descriptive.py`
-  - `tests/test_research/test_mgc_exit_sweep.py`
-  - `tests/test_research/test_mgc_trend_day_trail.py`
+  - `research/mgc_lane_variable_sweep.py`
+  - `research/output/mgc_lane_variable_sweep.csv`
 
 ## Current Codex Follow-up - Live Readiness And Drift Fast Closeout
 - **Tool:** Codex
